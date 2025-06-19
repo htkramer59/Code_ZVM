@@ -1,0 +1,260 @@
+/*---------------------------------------------------------------+
+| Function : Ask RSCS things and catch the response              |
+|                                                                |
+| File     : RSCS     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : RSCS     <node> <rscs command>                      |
+|                     <node> is optional, if available in        |
+|                            VMLINK NAMES                        |
+|                            Can be 'ALL', all nodes will be     |
+|                            collected from VMLINK NAMES         |
+|                     <rscs command> any valid rscs command      |
+|                            See HELP RSCS                       |
+|                                                                |
+| Comments : Issue: EXECLOAD RSCS EXEC * = REXX                  |
+|            That makes the code available as PIPE stage         |
+|            The values of DELAY and NORESPEXP have been moved   |
+|            to GLOBALV, to change them issue:                   |
+|               GLOBALV SELECT RSCS SETLP DELAY <delayvalue>     |
+|               GLOBALV SELECT RSCS SETLP NORESPEXP <values>     |
+|            Norespexp must be shortest form of the CP cmd and   |
+|            its length separated by semicolons (;).             |
+|                                                                |
+| Sample   : VMLINK NAMES                                        |
+|      :nick.C2       :ip.11.54.4.16 :lpar.XXXC2 :status.active  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200603 09:21:45                                   |
+| Changes  : .                                                   |
+|            20220912 H.T.Kramer : Adapted for LONG outputs      |
+|                       of CP commands                           |
+|            20220131 H.T.Kramer : Now capturing the rc of       |
+|                       CP commands                              |
+|            20210201 H.T.Kramer : Adapted to strip output of    |
+|                       the CP commands issued at other nodes.   |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline
+Parse Source . . myfn myft .
+If cmdline='?' Then Do
+/*---------------------------------------------------------------+
+| Show some help                                                 |
++---------------------------------------------------------------*/
+                    'VMFCLEAR'
+                    'PIPE (NAME RSCS.EXEC:49 END ?)',
+                        '< 'myfn myft' *',      /* Read my self     */
+                        '| tolabel Parse',      /* Up to here       */
+                        '| cons'                /* and display      */
+                    Exit
+                    End
+/*---------------------------------------------------------------+
+| The defaults are defined here                                  |
++---------------------------------------------------------------*/
+def_delay='1'                  /* Wait time in seconds */
+def_norespexp='TRAN 4;PUR 3'   /* CP cmds where we dont expect rc/response */
+delay=Value('DELAY',,'LASTING RSCS')
+If delay='' Then Do
+                 Say 'Setting DELAY to default: 'def_delay' secs'
+                 dummy=Value('DELAY',def_delay,'LASTING RSCS')
+                 delay=def_delay
+                 End
+norespexp=Value('NORESPEXP',,'LASTING RSCS')
+If norespexp='' Then Do
+                 Say 'Setting NORESPEXP to default: 'def_norespexp
+                 dummy=Value('NORESPEXP',def_norespexp,'LASTING RSCS')
+                 norespexp=def_norespexp
+                 End
+Call ExecOrRexx
+Call Prepare
+Call CheckInput
+/*---------------------------------------------------------------+
+| Here we start issuing the commands                             |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET MSG IUCV'
+Address COMMAND 'CP SET CPCONIO IUCV'
+rrc=0
+Do n=1 To node.0
+  If cpq & \noresp Then Call RscsCP
+                   Else Call RscsCMD
+End n
+Address COMMAND 'CP SET CPCONIO 'cp_cpconio
+Address COMMAND 'CP SET MSG 'cp_msg
+Exit rrc
+ 
+ 
+RscsCMD:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If long Then longcde=''
+        Else longcde='| specs w2;* | change w1.1 ~:~~'
+nodepref='CMD 'node.n
+pipecmd' (NAME RSCS.EXEC:99 END ?)',
+    'literal +'delay,                         /* Set this         */
+    '| delay',                                /* Wait here        */
+    '| g: gate',                              /* Wait for input   */
+    '?',                                      /* 2nd pipe         */
+    'starmsg CP SMSG RSCS 'nodepref cmdline,  /* Ask rscs         */
+    '| g:',                                   /* Conn 2 gate      */
+    '| specs 17;* 1',
+    '| if: if pick anycase w1.1 \== ~FROM~',
+    '|    specs ~From 'currnode':~ 1 1;* nw',
+    '| if:',
+    longcde,
+    '| 'output                                /* Show/hand over   */
+  If rc=0 & rrc='RRC' Then rrc=0
+nodepref=''
+Return
+ 
+ 
+RscsCP:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If long Then longcde=''
+        Else longcde='| specs fs : w2.1 1 f3;* nw | change w1.1 ~:~~'
+nodepref='CMD 'node.n
+pipecmd' (NAME RSCS.EXEC:124 END ?)',
+    'starmsg CP SMSG RSCS 'nodepref cmdline,  /* Ask rscs         */
+    '| l: locate anycase ~RETURN CODE~',      /* Set this         */
+    '| g: gate',                              /* Wait for input   */
+    '? l:',                                   /* 2nd pipe         */
+    '| g:',                                   /* Conn 2 gate      */
+    '| specs 17;* 1',
+    '| if: if pick anycase w1.1 \== ~FROM~',
+    '|    specs ~From 'currnode':~ 1 1;* nw',
+    '| if:',
+    longcde,
+    '| 'output                                /* Show/hand over   */
+  If rc=0 & rrc='RRC' Then rrc=0
+nodepref=''
+Return
+ 
+ 
+Check_Nodes:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+asknode=Word(cmdline,1)
+pipecmd' (NAME RSCS.EXEC:146 END ?)',
+    'stem node.',                               /* Take these       */
+    '| buffer',
+    '| locate anycase ~'asknode'~',
+    '| specs w2.1',                             /* Keep this        */
+    '| stem node.'                              /* Store them       */
+If node.0=0 Then Do
+                 node.0=1
+                 node.1=currnode
+                 End
+                 Else cmdline=Subword(cmdline,2)
+Return
+ 
+ 
+CheckInput:
+/*---------------------------------------------------------------+
+| Check out what was entered                                     |
++---------------------------------------------------------------*/
+If Wordpos('LONG',cmdline)<>0 Then Do
+                                   long=1
+                                   Parse Value cmdline With cmdline '(' cmdlopt '(' .
+                                   cmdline=cmdline '(' cmdlopt
+                                   End
+                              Else long=0
+If Wordpos('ALL',cmdline)=1 Then Do
+                            pipecmd' (NAME RSCS.EXEC:165 END ?)',
+                                'stem node.',   /* Take these       */
+                                '| buffer',     /* Prevent loop     */
+                                '| specs w2.1', /* Keep this        */
+                                '| stem node.'  /* Store as         */
+                            cmdline=Subword(cmdline,2)
+                            End
+                            Else Call Check_Nodes
+/*---------------------------------------------------------------+
+| Working the commands to their short forms                      |
++---------------------------------------------------------------*/
+noresp=0
+pipecmd' (NAME RSCS.EXEC:181 END ?)',
+   'var norespexp',                              /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs w1.1 1',                             /* Keep this        */
+   '| stem short.',                              /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2.1 1',                             /* Keep this        */
+   '| stem form.'                                /* Hand 2 rexx      */
+If Wordpos('CP',cmdline)<>0 Then Do
+                                 cpq=1
+                                 cmd=Word(cmdline,2)
+                                 Do s=1 To short.0
+                                   pipecmd' (NAME RSCS.EXEC:192 END ?)',
+                                      'var cmd',                            /* Take this        */
+                                      '| pick 1.'form.s' == ~'short.s'~',   /* Make selection   */
+                                      '| count lines',                      /* Count them       */
+                                      '| var noresp'                        /* Hand 2 rexx      */
+                                   If noresp Then Leave s
+                                 End s
+                                 End
+                            Else cpq=0
+Return
+ 
+ 
+ExecOrRexx:
+/*---------------------------------------------------------------+
+| How are we called...                                           |
++---------------------------------------------------------------*/
+Select
+When myft='REXX' Then Do
+            pipecmd='CALLPIPE'
+            output='*:'
+            End
+When myft='EXEC' Then Do
+            pipecmd='PIPE'
+            output='cons'
+            End
+Otherwise Exit 29
+End
+Return
+ 
+ 
+Prepare:
+/*---------------------------------------------------------------+
+| Prepping for other nodes...                                    |
++---------------------------------------------------------------*/
+pipecmd' (NAME RSCS.EXEC:224 END ?)',
+    '< VMLINK NAMES *',                         /* Read this        */
+    '| pick 1.1 \== ~*~',
+    '| strip',
+    '| join * x40',
+    '| split anycase before string ~:NICK.~',
+    '| locate anycase ~LPAR~',                  /* Find these       */
+    '| split before string ~:~',                /* Split here       */
+    '| pick anycase fs . f1 == ~:NICK~ or',     /* Select these     */
+    '                    f1 == ~:LPAR~',        /* ...and these     */
+    '| specs fs . f2',                          /* Keep this        */
+    '| join 1 x40',                             /* Join pairs       */
+    '| sort w1.1',
+    '| stem node.',                             /* Store as         */
+    '?',                                        /* 2nd pipe         */
+    'cp QUERY USERID',                          /* Ask cp           */
+    '| specs w3.1',                             /* Keep this        */
+    '| var currnode',                           /* Save as          */
+    '| specs -2;-1',
+    '| var shortnode',
+    '?',                                        /* 3rd pipe         */
+    'cp QUERY SET',                             /* Ask cp           */
+    '| split at ,',                             /* Split into recs  */
+    '| strip',                                  /* Remove spaces    */
+    '| pick w1.1 == ~MSG~ or',                     /* Select this      */
+           'w1.1 == ~CPCONIO~ or',                 /* Select this      */
+           'w1.1 == ~VMCONIO~',                    /* Select this      */
+    '| spec ~/CP_~ 1 w1.1 n ~/~ n w2.1 n',        /* Keep this        */
+    '| varload'                                    /* Store as         */
+If Wordpos(currnode,cmdline)<>0 Then own=1
+                                Else own=0
+Return

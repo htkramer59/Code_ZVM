@@ -1,0 +1,28 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add, delete, replace or show the MACHINE stmt       |
+|                                                                |
+| File     : DM_MACH  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_MACH  <machine type>                             |
+|          : MACHINE  <machine type>                             |
+|            <machine type> can be specified as QRY to display   |
+|                           the current type.                    |
+|                           If specified as DEL the machine type |
+|                           will be removed                      |
+|                           QRY will display curren setting      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240707 10:05:11                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

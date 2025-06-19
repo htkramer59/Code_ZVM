@@ -1,0 +1,6 @@
+*                                                                               
+* List of userids or wildcard which are allowed to talk to the proxy            
+*                                                                               
+ICU*                                                                            
+CLDCONB1                                                                        
+SLD* SLB*                                                                       

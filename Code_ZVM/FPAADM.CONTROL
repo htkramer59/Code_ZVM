@@ -1,0 +1,8 @@
+* The admins we need on the filepools
+admins=HERMAN HERALD CHRIS JOHAN ARJEN BACKUP
+* The servers where we are running the filepools
+fpservers=VMSERVS VMSERVU VMSERVP
+* The filepool names...
+filepools=VMSYS   VMSYSU  VMPS<shortnode>
+* The console statement we need, the $ are used as ' or "
+console=$CP SPOOL CONS CONPARK START EOF NAME $Userid()$ CONSLOG$

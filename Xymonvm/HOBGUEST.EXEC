@@ -1,0 +1,144 @@
+/*---------------------------------------------------------------+
+| Function : Show client/guest CPU usage                         |
+|                                                                |
+| File     : HOBGUEST EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBGUEST .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220103 14:12:28                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBGUEST.EXEC:27 END ?)',
+    'rexxvars 1 toload',
+    '| varload'
+ 
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status           /*  Send the result in status to bb */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOBGUEST.EXEC:38 END ?)',
+                 'var status',
+                 '| split at x15',
+                 '| strip',
+                 '| cons'
+              End
+Exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBGUEST.EXEC:51 END ?)',
+    'fcx USER (SORT %CPU',
+    '| strip',                                  /* Remove space     */
+    '| frlabel >>Mean>>',                       /* Start from here  */
+    '| drop first 1',                           /* Ignore label     */
+    '| change ~...~0~',
+    '| specs w1.2 1 x40 n',                     /* Adjust           */
+    '| spec a: w2.1 .',                         /* Rework to        */
+           'print a pic zzz9v.99 1',            /*   nnn.nn         */
+           'fieldseperator blank field 1;* nw', /*     without zeros*/
+    '| specs w2.1 1.8 ~:~ nw  w1.1 nw.7 right', /* Re-shuffle       */
+    '| f: fanout ',                             /* Duplicate recs   */
+    '| join * x15',                             /* Make 1 record    */
+    '| var lstat ',                             /* Store as         */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| specs',                                  /* Totalise         */
+            'printonly eof',                    /* .                */
+            'b: w3.1 .',                        /* .                */
+            'set #0+=b',                        /* .                */
+            'eof',                              /* .                */
+            'print #0 picture zzz9v.99 1',      /* .                */
+    '| var maxcpu'                              /* Store as         */
+color = 'green'
+msg = color TimeStamp('TZ') cr cr
+status = 'status' machine||'.guests' msg||lstat cr
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCGUEST'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'GetDomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||Domainame
+If fqdn='Y' then machine=fullname
+            else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBGUEST.EXEC:137 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

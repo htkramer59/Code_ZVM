@@ -1,0 +1,105 @@
+#! /bin/bash
+function days2epoch {
+#
+# Convert a date to days since the epoch
+#
+ chdate=$1
+ secs_epoch=`date +%s -d $chdate`
+ days_epoch=$(($secs_epoch/$secsday))
+}
+
+#
+# The list of servers with certificates
+#
+def_list="cldconb1 cldcono1 cldcono2 cldcona1 cldcona2 cldconp1 cldconp2 xymonsrv"
+cert='/etc/apache2/ssl.crt/server.crt'
+#
+# Seconds in a day and start warning 2 weeks ahead expiry
+# 
+secsday=86400
+warn=15
+if [ "$1" == "?" ] ; then
+	clear
+	echo
+	echo $0
+	echo
+	echo "Function:"
+	echo
+	echo "Get the end dates of the SSL certificates"
+	echo "for a list of servers"
+	echo
+	echo "Current list of servers:"	
+	echo "$def_list"
+	echo	
+	echo "Depends on: ssh and openssl"
+	echo
+	exit
+fi
+if [ -z $1 ] ; then
+	list=$def_list
+	else
+	list=$*
+fi
+#
+# Today
+#
+now=`date -I`
+days2epoch $now
+days1=$days_epoch
+head='name.... fqdn........... ip........ port .end_date days warnings'
+#
+# Now loop thru the list of servers
+#
+clear
+echo "Run at: $now" 
+echo $head
+for node in $list ; do 
+	#
+	# Are we running on a server in the list?
+	#
+	if [ `hostname` == "$node" ] ; then
+		sshornot=''
+		else	
+		sshornot='ssh '$node
+	fi
+	#
+	# Now ask ssl the details
+	#
+	exist=`$sshornot ls $cert 2>/dev/null | grep -c $cert`
+	if [ $exist == 0 ] ; then 
+	port='...'
+	ssldate='>> No certificate <<'
+	daysleft=''
+	ipdata=`ping -c1 $node | head -n1 | cut -d\  -f2-3 | tr -d \(\)`
+	else
+	port='443'
+	ssldate=`$sshornot sudo openssl x509 -in $cert -enddate | head -n1 | cut -d\= -f2`
+	#
+	# Convert to iso-date
+	#
+	ssldate=`date -d"$ssldate" -I`
+	#
+	# Get hostname and ip-address
+	#
+	ipdata=`ping -c1 $node | head -n1 | cut -d\  -f2-3 | tr -d \(\)`
+	days2epoch $ssldate
+ 	days2=$days_epoch
+	#
+	# Calculate the no of days left
+	#
+	daysleft=$(($days2-$days1))
+	#
+	# Are we close to expiry date?
+	#
+	if [ $daysleft -le $warn ] ; then
+		warning='Change certificate a.s.a.p.'
+		else
+		warning=''
+	fi
+	#
+	#
+	# Show the results
+	daysleft=`right $daysleft 3 0`
+	fi
+	echo $node $ipdata $port $ssldate $daysleft $warning
+done

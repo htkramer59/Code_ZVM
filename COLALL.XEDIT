@@ -1,0 +1,292 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1991                  */
+/*--------------------------------------------------------------*/
+/*  Routine designed for COL to display groups                  */
+/*  such as GML :c tags within a table                          */
+/*      .... A modified ALL command.....                        */
+/*                                                              */
+/*  Format is:  COLALL  <rtarget>                               */
+/*--------------------------------------------------------------*/
+Trace 'o'
+ 
+parse arg targparm                /* Parse the target      */
+parse source . . . . . fname .
+'COMMAND EXTRACT /LINE/SIZE/'
+startline = line.1
+If targparm = ''  Then signal novalue  /* Is this 'RESET'? */
+/* test for start-stop target */
+tag_show = 'Y'
+push targparm                     /* No, parse the target  */
+'MACRO PARSE 1 DBLSTRING'         /* With parse macro      */
+rcparse = rc                      /* Parse error case      */
+extra = targparm                  /*   set up error msg    */
+If rc = 5  Then signal invdel
+If rc^=0 Then signal badparm
+pull nbl
+If nbl^=1 Then signal badparm
+/* get the target parms  */
+pull targstart targlen starttarpos starttarlen endtarpos endtarlen
+If endtarpos > 0 Then endtarget=substr(targparm,endtarpos-1,endtarlen+2)
+ Else endtarget = ''
+/*                       Get the actual target and remainder */
+If starttarpos < 2 | starttarlen < 0 Then        /* Invalid text entry */
+  Do
+   'COMMAND MSGMODE ON'
+   'COMMAND EMSG NO START TAG ENTERED PRIOR TO "/"'
+    Exit 2
+  End
+target=substr(targparm,starttarpos-1,starttarlen+2)
+extra=delstr(targparm,targstart,targlen)
+ 
+'COMMAND EXTRACT /POINT *'   /* was this a call from COL? */
+start = 0
+stop  = size.1 + 1
+If point.0 > 0 Then Do i = 1 To point.0
+  If Word(point.i,3) = 'COLSTRT' Then Do
+   'COMMAND LOCATE .COLSTRT COMMAND EXTRACT /LINE'
+    start = line.1
+  End
+  If Word(point.i,3) = 'COLEND' Then Do
+   'COMMAND LOCATE .COLEND COMMAND EXTRACT /LINE'
+    stop = line.1
+  End
+End
+ 
+'COMMAND EXTRACT /SCOPE/'
+'COMMAND SET SCOPE ALL'           /* Get the entire file   */
+'COMMAND PRESERVE'
+'COMMAND SET VARBLANK OFF'
+'COMMAND SET VERIFY OFF'          /* Scrap unwanted output */
+If endtarget = '' Then Call I target
+'COMMAND LOCATE :'start
+'COMMAND LOCATE' target           /* Is the target there?  */
+lrc = rc
+'COMMAND EXTRACT /LINE'
+If lrc ^= 0 | line.1 >= stop Then Do      /* No, exit quickly      */
+ 'COMMAND LOCATE :'startline
+ 'COMMAND MSGMODE ON'
+ 'COMMAND EMSG ALL546E Start Target' target 'not found'
+ 'COMMAND RESTORE'
+ 'COMMAND SET SCOPE' scope.1
+  exit 2
+End
+ 
+/* find the correct end target string to end the group */
+'COMMAND LOCATE' endtarget        /* Is the end target there?  */
+lrc = rc
+'COMMAND EXTRACT /LINE'
+If lrc ^= 0 | line.1 >= stop Then Do       /* No, exit quickly      */
+ 'COMMAND MSGMODE ON'
+ 'COMMAND EMSG ALL546E Ending Target' endtarget 'not found'
+ 'COMMAND RESTORE'
+ 'COMMAND SET SCOPE' scope.1
+ exit 2
+end
+/* At this point the target has been verified and located at */
+/* least once.  Now we loop looking for more.                */
+  'COMMAND LOCATE :'start
+  'COMMAND SET SELECT 0 :'stop     /* Reset all select levels*/
+  'COMMAND LOCATE :'start
+  'COMMAND SET MSGMODE OFF'
+  'COMMAND SET WRAP OFF'
+  'COMMAND SET DISPLAY 0 0'        /* And show chosen lines  */
+  'COMMAND SET SCOPE ALL'
+   end_addr = start
+   Do until rc^=0             /* ... loop until no more */
+    'COMMAND LOCATE' target          /* find start target within range */
+     lrc = rc
+    'COMMAND EXTRACT /LINE/'         /* This is new current    */
+     If lrc ^= 0 | line.1 >= stop Then Leave
+     target_addr = line.1
+    'COMMAND LOCATE :'Max(target_addr,end_addr)
+    'COMMAND LOCATE' endtarget       /* find end target        */
+     lrc = rc
+    'COMMAND EXTRACT /LINE/'         /* This is new current    */
+     end_addr = line.1
+     If lrc ^= 0 | line.1 >= stop Then Leave
+    'COMMAND LOCATE :'target_addr
+     If target_addr = end_addr Then
+       'COMMAND SET SELECT 1 1'
+     Else
+       'COMMAND SET SELECT 1 :'end_addr
+     If rc ^= 0 Then Leave
+     If tag_show = 'Y' Then Do
+       'COMMAND LOCATE :'end_addr
+       'COMMAND EXTRACT /LINE'
+       'COMMAND SET SELECT 1 1'
+       End
+    'COMMAND LOCATE :'target_addr
+   End
+'COMMAND RESTORE'
+'COMMAND SET DISPLAY 1 1'        /* And show chosen lines  */
+'COMMAND SET SCOPE DISPLAY'      /* Force SCOPE DISPLAY    */
+exit
+ 
+NOVALUE:
+'COMMAND PRESERVE'
+'COMMAND SET VERIFY OFF'
+'COMMAND SET SCOPE ALL'          /* Get all the file lines */
+'COMMAND TOP'
+'COMMAND SET SELECT 0 *'
+'COMMAND RESTORE'
+'COMMAND SET DISPLAY 0 0'        /* New display level      */
+'COMMAND SET SCOPE DISPLAY'      /* an scope setting.      */
+exit
+ 
+INVDEL:
+'COMMAND EMSG ALL580E Invalid string : shift-out (SO)',
+'is not a valid delimiter.'
+exit 5
+ 
+I:Procedure expose endtarget tag_show target
+Parse Arg atarget
+/*-----------------------------------------------------------*/
+/*                                                           */
+/* The following strings define the end of groups.           */
+/*                                                           */
+/* For Example:   GML/BookMaster end of a CELL (:C)          */
+/*                within a table is defined by               */
+/*                another ":C" or ":ROW" or ":ETABLE" ...    */
+/*                                                           */
+/*                Set a REXX variable named                  */
+/*                c (matching the GML tag :c)                */
+/*                to equal the text for the end of the group.*/
+/*                                                           */
+/*                The "_endtag" variable specifies if the    */
+/*                end tag is to be displayed                 */
+/*-----------------------------------------------------------*/
+/*  Script, GML and BookMaster groups                        */
+/*-------------------------------------x----------------------*/
+/* address            */ address_endtag ="Y"; address ="eaddress"
+/* annotation         */ annot_endtag   ="Y"; annot   ="eannot"
+/* APL                */ apl_endtag     ="Y"; apl     ="eapl"
+/* binary number      */ bin_endtag     ="Y"; bin     ="ebin"
+/* table cell         */ c_endtag       ="N"; c       ="c row etable ethd ec tcap"
+/* caution            */ caution_endtag ="Y"; caution ="ecaution"
+/* character graphic  */ cgraphic_endtag="Y"; cgraphic="ecgraphic"
+/* character          */ char_endtag    ="Y"; char    ="echar"
+/* title citation     */ cit_endtag     ="Y"; cit     ="ecit"
+/* cover letter       */ cletter_endtag ="Y"; cletter ="eletter"
+/* code list          */ codel_endtag   ="Y"; codel   ="ecodel"
+/* component list     */ compl_endtag   ="Y"; compl   ="ecompl"
+/* danger             */ danger_endtag  ="Y"; danger  ="edanger"
+/* definition desc    */ dd_endtag      ="N"; dd      ="dt edl"
+/* dialog             */ dialog_endtag  ="Y"; dialog  ="edialog"
+/* directory          */ direct_endtag  ="Y"; direct  ="edirect"
+/* definition list    */ dl_endtag      ="Y"; dl      ="edl"
+/* definition term    */ dt_endtag      ="N"; dt      ="dd"
+/* inline formula     */ f_endtag       ="N"; f       ="ef"
+/* figure             */ fig_endtag     ="Y"; fig     ="efig"
+/* figure list        */ figlist_endtag ="Y"; figlist ="efiglist"
+/* figure list entry  */ fle_endtag     ="Y"; fle     ="efle"
+/* footnote           */ fn_endtag      ="Y"; fn      ="efn"
+/* glossary descr     */ gd_endtag      ="N"; gd      ="gt egl"
+/* glossary list      */ gl_endtag      ="Y"; gl      ="egl"
+/* glossary term      */ gt_endtag      ="N"; gt      ="gd"
+/* grid               */ grid_endtag    ="Y"; grid    ="egrid"
+/* header             */ h_endtag       ="N"; h       ="h"
+/* hexadecimal number */ hex_endtag     ="Y"; hex     ="ehex"
+/* highlighted phrases*/ hp_endtag      ="Y"; hp      ="ehp"
+/* of a list          */ li_endtag      ="N"; li      ="li lp eol esl eul edl egl"
+/* labeled box        */ lblbox_endtag  ="Y"; lblbox  ="elblbox"
+/* language element   */ len_endtag     ="Y"; len     ="elen"
+/* lines              */ line_endtag    ="Y"; line    ="eline"
+/* long quote         */ lq_endtag      ="Y"; lq      ="elq"
+/* maintenance proc   */ map_endtag     ="Y"; map     ="emap"
+/* map quick fix      */ mapqfix_endtag ="Y"; mapqfix ="emapqfix"
+/* marked deletion    */ md_endtag      ="Y"; md      ="emd"
+/* message list       */ msgl_endtag    ="Y"; msgl    ="emsgl"
+/* message variable   */ mv_endtag      ="Y"; mv      ="emv"
+/* note list          */ notel_endtag   ="Y"; notel   ="enotel"
+/* notices            */ notices_endtag ="Y"; notices ="enotices"
+/* note               */ nt_endtag      ="Y"; nt      ="ent"
+/* ordered list       */ ol_endtag      ="Y"; ol      ="eol"
+/* parameter list     */ parml_endtag   ="Y"; parml   ="eparml"
+/* parts assembly     */ partsasm_endtag="Y"; partsasm="epartsasm"
+/* programming keyword*/ pk_endtag      ="Y"; pk      ="epk"
+/* prolog             */ prolog_endtag  ="Y"; prolog  ="eprolog"
+/* process specific   */ psc_endtag     ="Y"; psc     ="epsc"
+/* partial tbl of cont*/ ptoc_endtag    ="Y"; ptoc    ="eptoc"
+/* programming variabl*/ pv_endtag      ="Y"; pv      ="epv"
+/* quote              */ q_endtag       ="Y"; q       ="eq"
+/* qualification      */ qualif_endtag  ="Y"; qualif  ="equalif"
+/* question           */ question_endtag="Y"; question="equestion"
+/* revision bar       */ rev_endtag     ="Y"; rev     ="erev"
+/* revision control wd*/ revcw_endtag   ="Y"; revcw   ="erevcw"
+/* point figures      */ revpf_endtag   ="Y"; revpf   ="erevpf"
+/* point pages        */ revpp_endtag   ="Y"; revpp   ="erevpp"
+/* point tables       */ revpt_endtag   ="Y"; revpt   ="erevpt"
+/* slug               */ revslug_endtag ="Y"; revslug ="erevslug"
+/* reference key      */ rk_endtag      ="Y"; rk      ="erk"
+/* row                */ row_endtag     ="N"; row     ="erow row etable"
+/* schedule           */ schedule_endtag="Y"; schedule="eschedule"
+/* screen             */ screen_endtag  ="Y"; screen  ="escreen"
+/* security notice    */ snotice_endtag ="Y"; snotice ="esnotice"
+/* simple     list    */ sl_endtag      ="Y"; sl      ="esl"
+/* step               */ step_endtag    ="Y"; step    ="estep"
+/* subscript          */ sub_endtag     ="Y"; sub     ="esub"
+/* superscript        */ sup_endtag     ="Y"; sup     ="esup"
+/* synopsis           */ synopsis_endtag="Y"; synopsis="esynopsis"
+/* table              */ table_endtag   ="Y"; table   ="etable"
+/* table of contents  */ tce_endtag     ="Y"; tce     ="etce"
+/* table description  */ tdesc_endtag   ="Y"; tdesc   ="etdesc"
+/* table heading      */ thd_endtag     ="Y"; thd     ="ethd"
+/* table footing      */ tft_endtag     ="Y"; tft     ="etft"
+/* title              */ title_endtag   ="Y"; title   ="etitle"
+/* title page         */ titlep_endtag  ="Y"; titlep  ="etitlep"
+/* table list entry   */ tle_endtag     ="Y"; tle     ="etle"
+/* table list         */ tlist_endtag   ="Y"; tlist   ="etlist"
+/* table note         */ tnote_endtag   ="N"; tnote   ="etnote"
+/* table of contents  */ toc_endtag     ="Y"; toc     ="etoc"
+/* test point         */ tp_endtag      ="Y"; tp      ="etp"
+/* unordered  list    */ ul_endtag      ="Y"; ul      ="eul"
+/* edition notice     */ vnotice_endtag ="Y"; vnotice ="evnotied"
+/* warning            */ warning_endtag ="Y"; warning ="ewarning"
+/* example            */ xmp_endtag     ="Y"; xmp     ="exmp"
+/* example phrase     */ xph_endtag     ="Y"; xph     ="exph"
+/*-----------------------------------------------------------*/
+/*  REXX tags                                                */
+/*-----------------------------------------------------------*/
+/*  do - end group    */ do_endtag     ="Y"; do     ="end "
+/*  select            */ select_endtag ="Y"; select ="end "
+/*-----------------------------------------------------------*/
+/*  SAS tags                                                 */
+/*-----------------------------------------------------------*/
+/*  DATA step         */ data_endtag   ="N"; data   ="data proc run cards"
+/*  PROC step         */ proc_endtag   ="N"; proc   ="data proc run cards"
+/*-----------------------------------------------------------*/
+word1 = Word(Strip(Translate(atarget,' ','/')),1)
+tag   = Substr(word1,2)
+tag2  = Strip(Translate(tag,' ','.'))
+Select
+  When Symbol(word1) = "VAR" Then Do
+    endtarget = '/'Value(word1)'/'
+    tag_show = Value(word1'_endtag')
+   End
+  When Symbol(tag) = "VAR" Then Do
+    delimiter = Substr(word1,1,1)
+    endtarget = '/'delimiter
+    Do i = 1 to Words(Value(tag))
+      If i > 1 Then endtarget = endtarget'|/'delimiter
+      endtarget = endtarget||Word(Value(tag),i)'/'
+    End
+    tag_show = Value(tag'_endtag')
+   End
+  When Symbol(tag2) = "VAR" Then Do
+    delimiter = Substr(word1,1,1)
+    endtarget = '/'delimiter
+    Do i = 1 to Words(Value(tag2))
+      If i > 1 Then endtarget = endtarget'|/'delimiter
+      endtarget = endtarget||Word(Value(tag2),i)'/'
+    End
+    tag_show = Value(tag2'_endtag')
+   End
+  Otherwise Do
+    endtarget = atarget   /* default end target = start target */
+    tag_show = 'Y'
+   End
+End
+Return

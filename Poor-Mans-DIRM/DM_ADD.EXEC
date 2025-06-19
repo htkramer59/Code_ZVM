@@ -1,0 +1,96 @@
+/*---------------------------------------------------------------+
+| Function : Add a user id to the directory                      |
+|                                                                |
+| File     : DM_ADD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <uid>    DIRECT watch the syntax!!                  |
+|            <dirfnft>                                           |
+|            DM_CHUID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_AMD   EXEC                                       |
+|                                                                |
+| Called   : DM_ADD   <uid> <filetype>                           |
+|          : ADD      <uid> <filetype>                           |
+|                           preferably DIRECT                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240626 17:13:46                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid . sfm .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting 'uid sfm
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check if the userid already exists                             |
++---------------------------------------------------------------*/
+If DM_CKUID(uid) Then Exit 988
+If sfm='' Then sfm='A'
+/*---------------------------------------------------------------+
+| Check if the input file is present                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_ADD.EXEC:46 END ?)',
+   'literal 'uid' DIRECT 'ws,                   /* Take this        */
+   '| statew',                                   /* Check            */
+   '| count lines',                              /* Count results    */
+   '| var infile'                                /* Return as boolean*/
+If \infile Then Call Exit 780
+/*---------------------------------------------------------------+
+| Read the file and remove the AMD statements                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_ADD.EXEC:55 END ?)',
+   '< 'uid' DIRECT 'ws,                         /* Read input       */
+   '| specs 1.72 1.72',                          /* Adjust records   */
+   '| n: nlocate anycase ~AMD~',                 /* Take these out   */
+   '| append literal *',
+   '| stem newid.',                              /* Hand 2 rexx      */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| stem amd.'                                 /* Hand 2 rexx      */
+wfm=DM_VMLNK('SOURCEDIR')
+If rc<>0 Then Call Exit '98'
+/*---------------------------------------------------------------+
+| Create the new user direct file                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_ADD.EXEC:68 END ?)',
+   '< 'dirfnft wfm,                              /* Take this        */
+   '| append stem newid.',                       /* Add new id       */
+   '| specs 1.72 1.80',                          /* Adjust records   */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+wfm=DM_VMLNK('SOURCEDIR DET')
+/*---------------------------------------------------------------+
+| Check if the syntax is correct & put online if correct         |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+/*---------------------------------------------------------------+
+| Add the minidisks if AMD stmts were present                    |
++---------------------------------------------------------------*/
+Do a=1 To amd.0
+   Address CMS 'DM_AMD 'uid Subword(amd.a,2)
+   If rc<>0 Then Call Exit rc
+End a
+Address CMS 'RENAME 'uid' DIRECT 'ws' DIRECT 'uid ws||'0'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

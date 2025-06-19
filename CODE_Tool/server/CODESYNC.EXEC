@@ -1,0 +1,41 @@
+/*---------------------------------------------------------------+
+| Function : Synchronise the code to other nodes/lpars           |
+|                                                                |
+| File     : CODESYNC EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <input files>                                       |
+|            VMARC    MODULE                                     |
+|                                                                |
+| Called   : CODESYNC .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220415 16:30:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg who fn ft '(' proj
+Parse Source . . myfn myft .
+reply=0
+/*---------------------------------------------------------------+
+| Access the project and status                                  |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK OUT (ONLY(CODE) QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . ofm .
+        Else Exit 0
+Address CMS 'VMLINK 'proj' (ONLY(CODE) QUIET .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else Exit 0
+Say 'VMARC PACK 'fn ft ofm' SYNCH 'proj ofm
+Address CMS 'ERASE 'fn proj ofm
+Address CMS 'VMARC PACK 'fn ft wfm fn proj ofm
+If rc=0 Then reply=1
+/*---------------------------------------------------------------+
+| Release the project                                            |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK OUT <DET (ONLY(CODE) QUIET'
+Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) QUIET'
+Exit reply

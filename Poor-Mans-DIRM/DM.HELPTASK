@@ -1,0 +1,98 @@
+(c) Copyright Remarkable 2024
+  
+ 
+ 
+                                    DM (Poor Man's DirMaint) task menu
+ 
+ 
+DM       ACC              ACC      ›%Change the account code                             
+DM       ACI              ACI      ›%Change the acigroup info                            
+DM       ADD              ADD      ›%Add a user id to the directory                      
+DM       AMD              AMD      ›%Add a minidisk to a user                            
+DM       BATCH            BATCH    ›%Do some batch processing                            
+DM       CHNGID           CHNGID   ›%Rename a user id                                    
+DM       CHV              CHV      ›%Change the virtual address of a MDISK               
+DM       CLASS            CLASS    ›%Show, Add, Del, Repl CP Classes for a user          
+DM       CLONE            CLONE    ›%Clone an MDISK                                      
+DM       CMD              CMD      ›%Resize a minidisk                                   
+DM       CMS              CMS      ›%Issue CMS commands on the server                    
+DM       CP               CP       ›%Issue CP commands on the server                     
+DM       CPU              CPU      ›%Add or delete CPU statements                        
+DM       CRYPTO           CRYPTO   ›%Add, Delete, Show crypto details for userid         
+DM       DATEF            DATEF    ›%Add or change the DATEFORMAT statement              
+DM       DM               DM       ›%Poor man's dirmaint for a monolithic directory      
+DM       DM_ACCNT         DM_ACCNT ›%Change the account code                             
+DM       DM_ACI           DM_ACI   ›%Change the acigroup info                            
+DM       DM_ADD           DM_ADD   ›%Add a user id to the directory                      
+DM       DM_AMD           DM_AMD   ›%Add a minidisk to a user                            
+DM       DM_BATCH         DM_BATCH ›%Do some batch processing                            
+DM       DM_CHID          DM_CHID  ›%Rename a user id                                    
+DM       DM_CHV           DM_CHV   ›%Change the virtual address of a MDISK               
+DM       DM_CKMDK         DM_CKMDK ›%Check if an MDISK exists                            
+DM       DM_CKUID         DM_CKUID ›%Check if a userid exists                            
+DM       DM_CLASS         DM_CLASS ›%Show, Add, Del, Repl CP Classes for a user          
+DM       DM_CLONE         DM_CLONE ›%Clone an MDISK                                      
+DM       DM_CMD           DM_CMD   ›%Resize a minidisk                                   
+DM       DM_CMS           DM_CMS   ›%Issue CMS commands on the server                    
+DM       DM_CP            DM_CP    ›%Issue CP commands on the server                     
+DM       DM_CPU           DM_CPU   ›%Add or delete CPU statements                        
+DM       DM_CRYPT         DM_CRYPT ›%Add, Delete, Show crypto details for userid         
+DM       DM_DATEF         DM_DATEF ›%Add or change the DATEFORMAT statement              
+DM       DM_DMD           DM_DMD   ›%Delete a MDISK from a User                          
+DM       DM_FORMT         DM_FORMT ›%Format a new created mdisk or deleted mdisk         
+DM       DM_GET           DM_GET   ›%Get a copy of a directory of a user id              
+DM       DM_GETID         DM_GETID ›%Get the details for a user id                       
+DM       DM_INCLU         DM_INCLU ›%Add or change the INCLUde statement                 
+DM       DM_INDEX         DM_INDEX ›%Create or get info from the index                   
+DM       DM_IOPRI         DM_IOPRI ›%Show, Add, Delete or Change IOPRIORITY stmt         
+DM       DM_IPL           DM_IPL   ›%Add or change the INCLUde statement                 
+DM       DM_LBY           DM_LBY   ›%Add, Change or Remove LOGONBY statement             
+DM       DM_LINK          DM_LINK  ›%Add or remove a LINK stament                        
+DM       DM_MACH          DM_MACH  ›%Add, delete, replace or show the MACHINE stmt       
+DM       DM_MAP           DM_MAP   ›%Create a MDISKMAP                                   
+DM       DM_MDISK         DM_MDISK ›%Change a mode or password for a MDISK               
+DM       DM_MMDSK         DM_MMDSK ›%Copy MDISK statement to an other user               
+DM       DM_NMSAV         DM_NMSAV ›%Add, Delete or Query NAMESAVE stmts                 
+DM       DM_ONLIN         DM_ONLIN ›%Test the new directory and put it online            
+DM       DM_OPTIO         DM_OPTIO ›%Add, Change, Deleter or Query OPTION stmt           
+DM       DM_PRIOR         DM_PRIOR ›%Set the PRIORITY for a user/identity                
+DM       DM_PURGE         DM_PURGE ›%Delete a USER from the DIRECTORY                    
+DM       DM_REPL          DM_REPL  ›%Replace copy of a directory of a user id            
+DM       DM_RNDOM         DM_RNDOM ›%Generate a random 8 char. password                  
+DM       DM_RQST          DM_RQST  ›%Poor man's dirmaint for a monolithic directory      
+DM       DM_SEARC         DM_SEARC ›%Search in the source directory and display          
+DM       DM_SECU          DM_SECU  ›%Change, Delete or Add secuser 2 console stmt        
+DM       DM_SETPW         DM_SETPW ›%Change the password                                 
+DM       DM_STOR          DM_STOR  ›%Change STORAGE or MAXSTORAGE                        
+DM       DM_TMD           DM_TMD   ›%Move a minidisk from 1 user to an other             
+DM       DM_VMLNK         DM_VMLNK ›%Routine for LINK/DETACH of disk                     
+DM       DM_XALOG         DM_XALOG ›%Show, Add or delete XAUTOLOG statements             
+DM       DMC              DMC      ›%Client part of DM (Poor Mans DirMaint)              
+DM       DMCLIENT         DMCLIENT ›%Talk 2 the server and receive output                
+DM       DMD              DMD      ›%Delete a MDISK from a User                          
+DM       DMGETVAR         DMGETVAR ›%Get variables from our caller 2 layer up and        
+DM       DMSERVER         DMSERVER ›%Server code for Poor Man's Dirmaint                 
+DM       FORMAT           FORMAT   ›%Format a new created mdisk or deleted mdisk         
+DM       GET              GET      ›%Get a copy of a directory of a user id              
+DM       GLOBALV          GLOBALV  ›%Set or display the show switch                      
+DM       INCLU            INCLU    ›%Add or change the INCLUde statement                 
+DM       INDEX            INDEX    ›%Create or get info from the index                   
+DM       IOPRIOR          IOPRIOR  ›%Show, Add, Delete or Change IOPRIORITY stmt         
+DM       IPL              IPL      ›%Add or change the INCLUde statement                 
+DM       LINK             LINK     ›%Add or remove a LINK stament                        
+DM       LOGONBY          LOGONBY  ›%Add, Change or Remove LOGONBY statement             
+DM       MACHINE          MACHINE  ›%Add, delete, replace or show the MACHINE stmt       
+DM       MAP              MAP      ›%Create a MDISKMAP                                   
+DM       MAX              MAX      ›%Change STORAGE or MAXSTORAGE                        
+DM       MDISK            MDISK    ›%Change a mode or password for a MDISK               
+DM       MMDISK           MMDISK   ›%Copy MDISK statement to an other user               
+DM       NAME             NAME     ›%Add, Delete or Query NAMESAVE stmts                 
+DM       OPTION           OPTION   ›%Add, Change, Deleter or Query OPTION stmt           
+DM       PRIOR            PRIOR    ›%Set the PRIORITY for a user/identity                
+DM       PURGE            PURGE    ›%Delete a USER from the DIRECTORY                    
+DM       RELOAD           RELOAD   ›%Server code for Poor Man's Dirmaint                 
+DM       REPL             REPL     ›%Replace copy of a directory of a user id            
+DM       SEC              SEC      ›%Change, Delete or Add secuser 2 console stmt        
+DM       SETPW            SETPW    ›%Change the password                                 
+DM       TMD              TMD      ›%Move a minidisk from 1 user to an other             
+DM       XAU              XAU      ›%Show, Add or delete XAUTOLOG statements             

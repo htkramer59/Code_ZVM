@@ -1,0 +1,351 @@
+/*---------------------------------------------------------------+
+| Function : Check the USER DIRECT when no DIRMAINT available    |
+|                                                                |
+| File     : QSNODIRM  EXEC                                      |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSNODIRM REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSNODIRM <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSNODIRM  REPORT   |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* Stem 2 append to */
+stemname='report.'                               /* Stem of caller   */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSNODIRM.EXEC:40 END ? .EXEC:41)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose header and collect some variable                       |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNODIRM.EXEC:51 END ?)',
+   'literal 'TimeStamp(),                        /* Compose header   */
+   '| var nodirm_header 1',                      /* .                */
+   '| join * x40',                               /* .                */
+   '| var nodirm_header',                        /* .                */
+   '?',                                          /* .                */
+   'var vmlinkquiet 1',                          /* Getting vars     */
+   '| var vmlinkquiet',                          /* .                */
+   '?',                                          /* .                */
+   'var nodirm_fn 1',                            /* .                */
+   '| var nodirm_fn',                            /* .                */
+   '?',                                          /* .                */
+   'var labxlink 1',                             /* .                */
+   '| var labxlink',                             /* .                */
+   '?',                                          /* .                */
+   'var rpw_list 1',                             /* .                */
+   '| specs fs . f2;*',                          /* .                */
+   '| var rpw_list'                              /* .                */
+/*---------------------------------------------------------------+
+| Obtaining the contents of the monolithic directory             |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK USERDIR (ONLY(QSCAN) 'vmlinkquiet' .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (NAME QSNODIRM.EXEC:75 END ?)',
+     '< 'nodirm_fn wfm,                          /* Read directory   */
+     '| specs 1.72',                             /* Chop of numbers  */
+     '| strip',                                  /* Remove spaces    */
+     '| pick 1.1 \== ~~ and 1.1 \== ~*~',        /* Remove comments,e*/
+     '| stem dir.',                              /* Store as         */
+     '?',                                        /* 2nd PIPE         */
+     'cms LISTFILE 'nodirm_fn wfm' (NOH ISODATE',  /* Get filedate     */
+     '| var checked',                            /* Store as         */
+     '?',                                        /* 3rd PIPE         */
+     'cms VMLINK USERDIR (QUERY ONLY(QSCAN)',    /* Ask cms          */
+     '| locate anycase ~:PRODUCT~',              /* Find this        */
+     '| specs w2;*',                             /* Keep this        */
+     '| var location'                            /* Store as         */
+Address CMS 'VMLINK USERDIR <DET> (ONLY(QSCAN) 'vmlinkquiet
+Address CMS 'VMLINK RPWLIST (ONLY(QSCAN) 'vmlinkquiet' .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (NAME QSNODIRM.EXEC:93 END ?)',
+     '< RPWLIST DATA 'wfm,                       /* Read this file   */
+     '| specs w1.1',                             /* Keep this        */
+     '| append var rpw_list',                    /* Add this         */
+     '| split',                                  /* Split into recs  */
+     '| sort unique',                            /* Remove dups      */
+     '| stem rpwlist.'                           /* Store as         */
+Address CMS 'VMLINK RPWLIST <DET> (ONLY(QSCAN) 'vmlinkquiet
+Call Add2Output 'checked,Input file used from 'location
+Call Check_User_Pw
+Call Check_Md_Pw
+Call Check_CP_Class
+Call Check_Options
+Call Check_Xlink_Label
+/*---------------------------------------------------------------+
+| Hand output back to caller                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNODIRM.EXEC:110 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var nodirm_header',               /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Hand back        */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Adding stuff to an existing stem                               |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSNODIRM.EXEC:130 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* Split here       */
+     '| stem work. append'                       /* Add 2 stem       */
+Drop input
+Return
+ 
+ 
+Check_CP_Class:
+/*---------------------------------------------------------------+
+| Check the cp classes issued, other than G                      |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNODIRM.EXEC:143 END ?)',
+   'stem dir.',                                  /* Take these       */
+   '| pick anycase w1.1 == ~USER~ or',           /* Filter these     */
+                  'w1.1 == ~IDENTITY~',          /* .                */
+   '| pick w6.1 \== ~~',                         /* Remove empties   */
+   '| specs w2.1 1 w6.1 nw',                     /* Keep id & classes*/
+   '| f: fanout',                                /* Dupl records     */
+   '| specs w1.1 1.9',                           /* Add a space      */
+   '| j: juxtapose',                             /* Join them        */
+   '| specs w2.1 1 w1.1 nw.8',                   /* Rework records   */
+   '| sort w1.1 ',                               /* Sort on class    */
+   '| join keylen 1',                            /* Join on class    */
+   '| pick w1.1 \== ~G~',                        /* Ignore this one  */
+   '| stem cpclass.',                            /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2.1 1',                             /* Keep classes     */
+   '| deblock 1',                                /* Create 1 rec/char*/
+   '| j:'                                        /* Conn 2 juxtapose */
+temp.0=0
+Do c=1 To cpclass.0
+   temp=cpclass.c
+   'PIPE (NAME QSNODIRM.EXEC:164 END ?)',
+      'var temp',                                /* Take thes        */
+      '| f: fanout',                             /* Duplicate records*/
+      '| specs w1.1 1 ~:~ n',                    /* Add a colon      */
+      '| fi: faninany',                          /* Take in others   */
+      '| preface literal ',                      /* Add empty        */
+      '| stem temp. append',                     /* Add 2 stem       */
+      '? f:',                                    /* Conn 2 fanout    */
+      '| specs w2;*',                            /* Keep this        */
+      '| split',                                 /* Split at space   */
+      '| specs w1.1 1.9',                        /* Add a space      */
+      '| snake 6',                               /* Make 6 columns   */
+      '| fi:'                                    /* Conn 2 faninany  */
+End c
+Call Add2Output 'temp.,; ;CP Class usage other than G'
+Return
+ 
+ 
+Check_Options:
+/*---------------------------------------------------------------+
+| Check the options handed out                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNODIRM.EXEC:186 END ?)',
+   'stem dir.',                                  /* Take these       */
+   '| pick anycase w1.1 == ~USER~ or',           /* Filter out       */
+                  'w1.1 == ~IDENTITY~ or',       /* ...these         */
+                  'w1.1 == ~PROFILE~ or',        /* .                */
+                  'w1.1 == ~OPTION~',            /* .                */
+   '| join * x40',                               /* Make 1 record    */
+   '| split anycase before string ~USER~',       /* Split at         */
+   '| split anycase before string ~IDENTITY~',   /* ...these         */
+   '| split anycase before string ~PROFILE~',    /* .                */
+   '| locate anycase ~OPTION~',                  /* Do they have...  */
+   '| change ~MAXCONN ~MAXCONN_~',               /* Adjust these     */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs w2.1 1.9',                           /* Add a space      */
+   '| j: juxtapose',                             /* Join them        */
+   '| specs w2.1 1.20 w1.1 nw.8',                /* Rework layout    */
+   '| sort 1.20',                                /* Sort on option   */
+   '| join keylen 20',                           /* Join on option   */
+   '| stem opt.',                                /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| split anycase before string ~OPTION~',     /* Split here       */
+   '| pick anycase w1.1 == ~OPTION~',            /* Keep these       */
+   '| split',                                    /* Split them       */
+   '| j:'                                        /* Conn 2 juxtapose */
+temp.0=0
+Do o=1 To opt.0
+   temp=opt.o
+   'PIPE (NAME QSNODIRM.EXEC:213 END ?)',
+      'var temp',                                /* Take these       */
+      '| f: fanout',                             /* Duplicate records*/
+      '| specs w1.1 1 ~:~ n',                    /* Add a colon      */
+      '| fi: faninany',                          /* Take in others   */
+      '| preface literal ',                      /* Add empty        */
+      '| stem temp. append',                     /* Add 2 stem       */
+      '? f:',                                    /* Conn 2 fanout    */
+      '| specs w2;*',                            /* Keep this        */
+      '| split',                                 /* Split            */
+      '| specs w1.1 1.9',                        /* Add a space      */
+      '| snake 6',                               /* Make 6 columns   */
+      '| fi:'                                    /* Conn 2 faninany  */
+End o
+Call Add2Output 'temp.,CP Directory options:'
+Return
+ 
+ 
+ 
+Check_Md_pw:
+/*---------------------------------------------------------------+
+| Check the mdisk passwords if they are not too trivial          |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNODIRM.EXEC:236 END ?)',
+   'stem dir.',                                  /* Take these       */
+   '| pick anycase w1.1 == ~USER~ or',           /* .                */
+                  'w1.1 == ~IDENTITY~ or',       /* .                */
+                  'w1.1 == ~PROFILE~ or',        /* .                */
+                  'w1.1 == ~SUBCONFIG~ or',      /* .                */
+                  'w1.1 == ~MDISK~',             /* .                */
+   '| join * x40',                               /* Make 1 record    */
+   '| split anycase before string ~USER~',       /* Split at these   */
+   '| split anycase before string ~IDENTITY~',   /* .                */
+   '| split anycase before string ~PROFILE~',    /* .                */
+   '| split anycase before string ~SUBCONFIG~',  /* .                */
+   '| locate anycase ~MDISK~',                   /* Select these     */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs w2.1 1.9',                           /* Add a space      */
+   '| j: juxtapose',                             /* Join them        */
+   '| specs w1.1 1.8',                           /* Rework layout    */
+           'w3.1 nw.4 right',                    /* .                */
+           'w4.1 nw.6 right',                    /* .                */
+           'w5.1 nw.10 right',                   /* .                */
+           'w6.1 nw.10 right',                   /* .                */
+           'w7.1 nw.6',                          /* .                */
+           'w8.1 nw.2',                          /* .                */
+           'w9.1 nw.8',                          /* .                */
+           'w10.1 nw.8',                         /* .                */
+           'w11.1 nw.8',                         /* .                */
+   '| stem mdisk.',                              /* Store as         */
+   '| pick w9.1 \== ~~',                         /* Keep non-empties */
+   '| stem mdiskpw.',                            /* Hand 2 recc      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| split anycase before string ~MDISK~',      /* Split here       */
+   '| pick anycase w1.1 == ~MDISK~',             /* Keep these       */
+   '| j:'                                        /* Conn 2 juxtapose */
+Call CheckPw 'w8.1 READ'
+Call CheckPw 'w9.1 WRITE'
+Call CheckPw 'w10.1 MULTI'
+Return
+ 
+ 
+CheckPw:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Upper Arg start warning .
+find.0=0
+'PIPE (NAME QSNODIRM.EXEC:281 END ?)',
+   'stem mdiskpw.',                              /* Take these       */
+   '| l: lookup anycase 'start' w1.1 details',   /* Compare them     */
+   '| stem find.',                               /* Store findings   */
+   '?',                                          /* 2nd pipe         */
+   'stem rpwlist.',                              /* Take these       */
+   '| l:'                                        /* Conn 2 lookup    */
+If find.0<>0 Then Call Add2Output 'find.,; ;Trivial 'warning' password'
+Return
+ 
+ 
+Check_Xlink_Label:
+/*---------------------------------------------------------------+
+| Check the xlink and label areas                                |
++---------------------------------------------------------------*/
+xllab.0=0
+Parse Value labxlink With ':' . '.' . fbasize ';' . eckdsize ':' . '.' ignore
+'PIPE (NAME QSNODIRM.EXEC:298 END ?)',
+   'stem mdisk.',                                /* Take these       */
+   '| specs w1.6 1',                             /* Keep this        */
+   '| pick w6.1 \== ~$$$$$$~ and',               /* Ignore these     */
+          'w6.1 \== ~$$LNX1~',                   /* .                */
+   '| l: lookup w1.1 w1.1',                      /* Compare          */
+   '?',                                          /* 2nd PIPE         */
+   'var ignore',                                 /* Take this        */
+   '| split',                                    /* Split            */
+   '| l:',                                       /* Conn 2 lookup    */
+   '| pick w4.1 \== ~0~ and w5.1 \== ~END~',     /* Ignore these     */
+   '| change ~FB-512~'fbasize-1'~',              /* Replace these    */
+   '| change ~9336~'fbasize-1'~',                /* .                */
+   '| change ~3390~'eckdsize-1'~',               /* .                */
+   '| change ~3380~'eckdsize-1'~',               /* .                */
+   '| if: if pick w4 >= ~0~ and',                /* If this is the   */
+                 'w4.1 < w3.1',                  /* ....case         */
+   '|        specs w1.1 1.8',                    /* Add a warning    */
+                  'w2.1 nw.4',                   /* .                */
+                  'w4;* nw',                     /* .                */
+                  '~Warning start is <~ nw',     /* .                */
+                  'w3.1 nw',                     /* .                */
+   '| if:',                                      /* Conn 2 if        */
+   '| locate anycase ~WARNING~',                 /* Keep these       */
+   '| stem xllab.'                               /* Store them       */
+If xllab.0<>0 Then Call Add2Output 'xllab.,; ;Overlay ofXLINK/Label area'
+Return
+ 
+ 
+Check_User_Pw:
+/*---------------------------------------------------------------+
+| Check if the user passwords are not too trivial                |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNODIRM.EXEC:331 END ?)',
+   'stem dir.',                                  /* Take these       */
+   '| pick anycase w1.1 == ~USER~ or',           /* Select these     */
+                  'w1.1 == ~IDENTITY~',          /* .                */
+   '| specs w2.1 1.8 w3.1 nw.8',                 /* Keep id and pw   */
+   '| pick anycase w2.1 \== ~NOLOG~ and',        /* Ignore these     */
+                  'w2.1 \== ~LBYONLY~ and',      /* .                */
+                  'w2.1 \== ~AUTONLY~',          /* .                */
+   '| p: pick w1.1 == w2.1',                     /* Select these     */
+   '| specs w1.1 1 ~<< userid and password are equal~ nw',   /* Naughty...       */
+   '| stem idpweq.',                             /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| l: lookup anycase w2.1 w1.1 details',      /* Compare          */
+   '| specs w1.1 1 ~<< Trivial password~ nw',    /* Add warning      */
+   '| stem trivpw.',                             /* Store them       */
+   '?',                                          /* 2nd pipe         */
+   'stem rpwlist.',                              /* Take these       */
+   '| l:'                                        /* Conn 2 lookup    */
+If idpweq.0<>0 Then Call Add2Output 'idpweq.,; ;Faulty passwords found for users/identities'
+If trivpw.0<>0 Then Call Add2Output 'trivpw.,; ;Trivial passwords found for users/identities'
+Return

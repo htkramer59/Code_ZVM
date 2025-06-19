@@ -1,0 +1,145 @@
+/*---------------------------------------------------------------+
+| Function : Change a mode or password for a MDISK               |
+|                                                                |
+| File     : DM_MDISK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_RNDOM EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_MDISK <uid> <cuu> <mode> <rpw> <wpw> <mpw>       |
+| Called   : MDISK    <uid> <cuu> <mode> <rpw> <wpw> <mpw>       |
+|                                                                |
+| Comments : Use = to keep the current password                  |
+|                \ to delete the password                        |
+|                % to generate a password                        |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240706 16:05:24                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu newmode newrpw newwpw newmpw .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Check some settings                                            |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Initialise some variables                                      |
++---------------------------------------------------------------*/
+modes='R RR W WR M MR MW'
+suffix='V S E D VS VE VD VSD VED SD ED'
+/*---------------------------------------------------------------+
+| Get the userid and directory                                   |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Check if the MDISK exists                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MDISK.EXEC:49 END ?)',
+   'stem uid.',                                  /* Take this        */
+   '| cons',
+   '| pick anycase w2.1 == ~MDISK~ and',         /* Select this      */
+                 '(w3.1 == ~'cuu'~ or',          /* .                */
+                  'w3.1 == ~'Strip(cuu,L,0)'~ or',   /* .                */
+                  'w3.1 == ~'Right(cuu,4,0)'~)', /* .                */
+   '| var curmdisk',                             /* Hand 2 rexx      */
+   '| count lines',                              /* Count lines      */
+   '| var mdskok'                                /* Hand 2 rexx      */
+If \mdskok Then Call Exit 200
+/*---------------------------------------------------------------+
+| Do some checking on the input                                  |
++---------------------------------------------------------------*/
+Parse Value curmdisk With . . . . . curmode currpw curwpw curmpw .
+If newmode='=' Then newmode=curmode
+               Else Call CheckMode
+If newrpw='=' Then newrpw=currpw
+If newwpw='=' Then newwpw=curwpw
+If newmpw='=' Then newwpw=curmpw
+If newrpw='\' Then newrpw=''
+If newwpw='\' Then newwpw=''
+If newmpw='\' Then newmpw=''
+If newrpw='%' Then Call GenPw 'newrpw'
+If newwpw='%' Then Call GenPw 'newwpw'
+If newmpw='%' Then Call GenPw 'newmpw'
+newrpw=Substr(newrpw,1,8)
+newwpw=Substr(newwpw,1,8)
+newmpw=Substr(newmpw,1,8)
+newmdisk=Subword(curmdisk,1,7) newmode newrpw newwpw newmpw
+/*---------------------------------------------------------------+
+| Write the directory                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MDISK.EXEC:82 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'curmdisk'~ ~'newmdisk'~',         /* Replace old one  */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put it online                                        |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+GenPw:
+/*---------------------------------------------------------------+
+| Generate a password if needed                                  |
++---------------------------------------------------------------*/
+Parse Arg varname .
+Address CMS 'DM_RNDOM'
+'PIPE (NAME DM_MDISK.EXEC:110 END ?)',
+   'var newpw',                                  /* Take this        */
+   '| var 'varname                               /* Hand 2 rexx as   */
+Return
+ 
+ 
+CheckMode:
+/*---------------------------------------------------------------+
+| Combine all available modes                                    |
++---------------------------------------------------------------*/
+mode.0=0
+Do n=1 To Words(modes)
+   nmode=Word(modes,n)
+   'PIPE (NAME DM_MDISK.EXEC:123 END ?)',
+      'var nmode',                               /* Take this        */
+      '| split',                                 /* Split into recs  */
+      '| j: juxtapose',                          /* Combine records  */
+      '| join * x40',                            /* Make 1 record    */
+      '| stem mode. append',                     /* Add 2 stem       */
+      '?',                                       /* 2nd pipe         */
+      'var suffix',                              /* Take this        */
+      '| split',                                 /* Split into recs  */
+      '| j:'                                     /* Conn 2 juxtapose */
+End n
+'PIPE (NAME DM_MDISK.EXEC:134 END ?)',
+   'stem mode.',                                 /* Take these       */
+   '| append var modes',                         /* Add this         */
+   '| split',                                    /* Split            */
+   '| sort',                                     /* Sort them        */
+   '| join * x40',                               /* Make 1 record    */
+   '| var modes'                                 /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Check if the requested mode is possible                        |
++---------------------------------------------------------------*/
+If Wordpos(newmode,modes)=0 Then Call Exit 220
+Return

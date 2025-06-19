@@ -1,0 +1,86 @@
+Topic 1: Selecting the Location for a New Minidisk
+----------------------------------------------------
+ 
+Commands GETD and GETV do not prompt, the smallest fitting gap will will be
+taken to place the new MDISK.  Refer to the "Related" section (PF11) to learn
+about all possible GET prefix commands.
+ 
+ 
+When Prompted:
+ All Gaps at least as big as the asked MDISK-size are shown.
+ 
+ The 3270 screen will be split in 3 parts:
+  +---------------------------+---------------------------+
+  |  Available gaps, part1    |  Available gaps, part2    |
+  | volser start   end  size  | volser start   end  size  |
+  | VMESA1 00012 00025 00013  | VMESA3 00112 00225 00113  |
+  | VMESA1 00342 00061 00020  | VMESA1 01342 01161 00120  |
+  | ......                    | ......                    |
+  | PFkey descriptions        | PFkey descriptions        |
+  +---------------------------+---------------------------+
+  | Source directory                                      |
+  | MDISK 191 3390 1111 12 xxxxx M READ WRITE MULTI       |
+  | ......                                                |
+  | PFkey descriptions for main window                    |
+  +-------------------------------------------------------+
+ 
+ You place cursor on the wanted GAP and press a PF-key:
+   PF2:  Take the whole GAP for the new MDISK
+   PF11: Allocate out of this gap the new MDISK with requested size
+   PF23: Allocate out of this gap the new MDISK with requested size, but
+         allocate the Mdisk from the upper part of the GAP.
+   PF12: leave gapselection without selecting a GAP.
+ 
+Practical EXAMPLE:
+   Q: add an MDISK 192 for USER ZORRO
+   A: -> DRM              * start DRM
+      -> PF2+ZORRO 191    * find USER ZORRO, mdisk 191
+      -> "                * enter " in PREFIX (Duplicate MDISK 191 line)
+      -> ..192..          * modify the copied MDISK statement:
+                            (change size to size wanted for new 192 MDISK
+                            (change 191 to 192, add new passwords, ...)
+      -> GET              * enter "GET" in prefix to find location for 192
+      -> PF11             * select GAP for 192 via cursor and PF11
+  -----> thats it for this sample, it's so simple
+   Q: what to do next if I want to format it
+      -> Press PF24 (or type SAVE in cmdline + Press PF12)
+         * DRM places directory online
+      -> type FRMT in prefix area + Press enter
+         * DRM LINKs to the disk, tests if ACCESS would work
+         * If ACCESS works you'd get a warning msg (maybe you typed
+           FRMT on an existing Mdisk
+         * Else CMS' FORMAT command will prompt you as usual.
+ 
+ Note: To select volumes from a group you predefined, use the "Filter"
+       PF-key (PF9).  The "Related" section (PF11) contains more information
+       about "Dynamic GAPFILE filtering".
+ 
+ Note: DRM does not like 'mixed' DASD very much: it'll work, but you have to
+       think of the following:
+       DRM will sort the GAPFILE to find smallest GAP first, but for example:
+       gapsize=000010 on 3380 is much bigger than gapsize=000512 on 3370, so
+       the sort order does not look perfect.
+       But, when DRM automatically picks a gap for the new MDISK, it only
+       selects gaps of the same DEVTYPE as specified in the MDISK statement,
+       hence it will select a valid gap.
+       On the MDISK card, you can code the devtype as * or ? to request a gap
+       on any devtype available in the Gapfile.
+          For example GETD on MDISK 999 * 234 005 VMXXXX RR could return
+          create an MDISK of 5 cyls on 3380 or 3390 but also of 5 blocks
+          on a 3370 dasd.
+ 
+.cs 7 on
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER or PF1
+ 
+ 
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM DRM     (ALL
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips, README
+.cs 7 off

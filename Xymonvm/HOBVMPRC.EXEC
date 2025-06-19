@@ -1,0 +1,192 @@
+/*---------------------------------------------------------------+
+| Function : Reporting on processes                              |
+|                                                                |
+| File     : HOBVMPRC EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBVMPRC .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211223 16:24:10                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMPRC.EXEC:26 END ?)',
+   'rexxvars 1 toload',
+   '| varload'
+ 
+If test Then pipeout='| CONS'
+        Else pipeout='> HOBVM500 CLIENT A'
+Call Get_Users             /*  Get the number of users         */
+If mode='CLIENT' Then Do
+  If Datatype(Word(proc,1))='NUM' Then Do
+    vm_count=Word(proc,1)  /*  Check If first word is numeric */
+    proc=Subword(proc,2)   /*  If it is, use it in vm count  */
+    End
+  Else vm_count=0
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+  If \test Then Call Init_Open_Socket    /*  Initialize and Open the socket  */
+  Call Collect_Info_Client /*  Execute the test                */
+  If \test Then Do
+                Call Send status             /*  Send the result in status to bb */
+                Call Close_Term_Socket   /*  Close and terminate the socket  */
+                End
+           Else Do
+                'PIPE (NAME HOBVMPRC.EXEC:49 END ?)',
+                   'var status',
+                   '| split at x15',
+                   '| strip',
+                   '| cons'
+                End
+  End
+  Else Call Collect_Info_Server
+Exit
+ 
+ 
+Collect_Info_Client:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+color='green'
+/*  Check the output of Q USERS to get the number of            */
+/*  virtual machines logged on.                                 */
+'PIPE (NAME HOBVMPRC.EXEC:67 END ?)',
+   'cp QUERY USERS',
+   '| specs w1.1',
+   '| var numvms'
+If vm_count=0 Then Nop
+              Else If numvms > vm_count Then color='yellow'
+/*---------------------------------------------------------------+
+| From here to return needs to be reworked...                    |
++---------------------------------------------------------------*/
+vm_tbl=''
+Do i=1 to words(proc)
+  machcheck=word(proc,i)   /*  Machine name to look for  */
+  found=0
+  Do j=1 to qnames.0
+    If wordpos(machcheck,qnames.j) > 0 Then Do
+      found=1
+      Leave j
+      End
+    End
+  If found=1 Then vm_tbl=vm_tbl||'&green' machcheck 'Logged on'||cr
+  Else Do
+    color='red'
+    vm_tbl=vm_tbl||'&red'   machcheck 'Not logged on'||cr
+    End
+  End
+status='status' machine'.procs' color date() time() ,
+       'There are 'numvms' users logged on.'||cr||vm_tbl
+return
+ 
+ 
+Collect_Info_Server:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMPRC.EXEC:101 END ?)',
+   'stem qnames.',
+   '| sort',
+   '| specs w1.1 1.10',
+   '| snake 4',
+   '| preface literal [UserID]',
+   '| append literal ',
+   pipeout
+return
+ 
+Get_Users:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMPRC.EXEC:115 END ?)',
+   'cp QUERY NAMES',
+   '| split at ,',
+   '| strip',
+   '| pick w1.1 \== ~VSM~ and w3.1 \== ~TCPIP~',
+   '| specs w1.1 1.10',
+   '| sort',
+   '| stem qnames.'
+return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCVMPRC'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'GetDomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||Domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+    mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBVMPRC.EXEC:184 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

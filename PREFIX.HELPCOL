@@ -1,0 +1,299 @@
+.cs 0 on
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+ Command line prefix area commands (adjacent to COL command line):
+ -----------------------------------------------------------------
+ 
+ COL prefix commands are used to control the COL Command line and special
+ COL features.  They are entered in the XEDIT prefix area adjacent to the
+ COL command line.  The prefix area is identified in the default XEDIT
+ setup with "=" signs.
+ 
+    ===== ?????????????????????????????????????????????????????????
+ 
+For Example:
+ 
+    Undo  ?????????????????????????????????????????????????????????
+ 
+Will undo the last COL command.
+ 
+    PIC   ?????????????????????????????????????????????????????????
+ 
+Will show the blank columns.
+ 
+    DEMO  ?????????????????????????????????????????????????????????
+ 
+Will give a COL demonstration.
+ 
+Command line prefix area commands include:
+-----------------------------------------
+.cs 0 off
+.cs 6 on
+    Undo   Undo the results of the last COL command as well as any
+           other changes made since the last COL command entry.
+           If the undo option has not been turned on, the first
+           entry of this command turns on the option.  Subsequent
+           calls will then undo the results of the last command.
+    Reset  The COL command line is reset to the command line symbols
+           and any COL PENDING condition is reset.
+    DEMO   Gives a demonstration.
+    No     Turn off the undo option.
+    ?      Re-display last command
+    =      Re-execute last command
+    @      Execute all delayed prefix block commands.
+    T      Reset Truncation setting to value when COL was called
+    V      Reset Verify setting to value when COL was called
+    Z      Reset Zone setting to value when COL was called
+    Sx     Set command line Symbol to x
+           EXAMPLE: S?
+    Bx     Set command line Blank character to x
+           EXAMPLE: B$
+    PERIO  Set the decimal indicator for the SUM command to period
+           EXAMPLE: 1,234,567.89
+    COMMA  Set the decimal indicator to comma
+           EXAMPLE: 1.234.567,89
+    FRENC  Set the decimal indicator to French
+           EXAMPLE: 1 234 567.89 or 1 234 567,89
+    DIGnn  Set the REXX Numeric Digits setting for the Sum command to nn
+    prefix Apply the prefix command to all lines that contain text
+           that matches the text contained in the COL command line.
+    STORE  Start saving COL commands into a file named COL CMDLOG A
+    NOSTO  Stop saving COL commands
+    ALL    Show blocks of text that start with the text entered in the
+           COL command line
+    TRigh  Right justify text between all tabs
+    TLeft  Left  justify text between all tabs
+    TCent  Center text between all tabs
+    TBoth  Justify both left and right between all tabs
+    PICtu  Place a picture of blank columns in the command line
+    \      Reverse the order of the lines
+    TRANs  Transpose the columns and lines
+    ATABx  Automatically tab text using the character "x" and the
+           longest length of each field to define the tab columns.
+    COMPx  Compress text using the character "x".
+    TSn    Set the tab spaces to "n" for automatic tabbing.
+    TABx   Tab text using the character "x" to the XEDIT Tab Columns
+    MSx    Set math symbol to x
+    ASx    Set answer symbol to x
+ 
+  Any other command is passed to XEDIT
+.cs 6 off
+                  Prefix Command
+                  --------------
+ 
+.cs 1 on
+*    Use the ALL command in conjunction with text entered on the COL
+     command line to show blocks of text.  The blocks of text are
+     predefined.  Refer to the COL User's Guide for details.
+ 
+     Example:
+ 
+     ALL   :c 1??????????????????????????????????????????
+     show all GML/BookMaster cell 1 blocks including all of
+     the text in those blocks.
+ 
+.cs 1 off
+.cs 2 on
+*    Use the TRANspose command to transpose columns and lines. Set the
+     XEDIT Tabs to the column positions by entering a ";" in the COL
+     command line or on a separate line at the top of the column.
+ 
+     Example:
+ 
+     TRAN  ??????????;???????????????????????????????????
+           1234      1234.2
+           aaaaaaaa  aaaaa
+           bbbbbbbb  bbbbbb
+ 
+     where the ";" indicates XEDIT's tab settings
+ 
+     yields:
+           1234      aaaaaaaa  bbbbbbbb
+           1234.2    aaaaa     bbbbbb
+ 
+     Note: Since XEDIT limits the number of tab positions to 28, you may,
+           as an alternative to using XEDIT's tab setting, define your
+           own column positions by placing a text line containing semi-
+           colons (;) at the top of the column.
+ 
+     TRAN  ??????????????????????????????????????????????
+                     ;
+           1234      1234.2
+           aaaaaaaa  aaaaa
+           bbbbbbbb  bbbbbb
+ 
+.cs 2 off
+.cs 3 on
+*    Use the PICture command to determine which columns contain blanks
+     or which columns contain specified text strings.  To find blank
+     columns you would enter the following.
+ 
+     Example:
+ 
+     PIC   ??????????????????????????????????????????????
+           1234      1234.2
+           aaaaaaaa  aaaaa
+           bb        bbbbbbbb
+ 
+     yields a command line picture of column text width as follows:
+           ????????  ????????
+ 
+     To find which columns contain text strings, enter your desired
+     text string after the PIC command or in the COL command line.
+ 
+     Example:
+ 
+     PIC.  ??????????????????????????????????????????????
+           1234      1234.2
+           aaaaaaaa  aaaaa
+           bb        bbbbbbbb
+ 
+     yields a command line picture of columns containing a period as
+     follows:
+                         ?
+ 
+     Example:
+ 
+     PIC   234???????????????????????????????????????????
+           1234      1234.2
+           aaaaaaaa  aaaaa
+           bb        bbbbbbbb
+ 
+     yields a command line picture of columns containing a 234 as follows:
+            ???       ???
+ 
+.cs 3 off
+.cs 4 on
+*    Use the back slash command to reverse the order of the lines
+     within the column.
+ 
+     Example:
+ 
+     \     ??????????????????????????????????????????????
+           1234      1234.2
+           aaaaaaaa  aaaaa
+           bb        bbbbbbbb
+ 
+     yields:
+           bb        bbbbbbbb
+           aaaaaaaa  aaaaa
+           1234      1234.2
+ 
+.cs 4 off
+.cs 5 on
+                     Text Alignment Prefix Commands
+                     ------------------------------
+ 
+    ATABx  Automatically tab text using the character "x" and the
+           longest length of each field to define the tab columns.
+    COMPx  Compress text using the character "x".
+    TSn    Set the tab spaces to "n" for automatic tabbing.
+    TABx   Tab text using the character "x" to the XEDIT Tab Columns
+    TRigh  Right justify text between all tabs
+    TLeft  Left  justify text between all tabs
+    TCent  Center text between all tabs
+    TBoth  Justify both left and right between all tabs
+ 
+     Example when using Script tabs defined as in ".ti ^ 05"
+             although this application is not limited to Script tabs.
+ 
+ *   ATAB^ ??????????????????????????????????????????????
+     ===== ^811^1211^Williams^544.40^5386
+     ===== ^811^1357^Carson^^8356
+ 
+     yields:
+     =====   811  1211  Williams  544.40  5386
+     =====   811  1357  Carson            8356
+ 
+ 
+*    TAB ^ ??????????????????????????????????????????????
+     will tab to the XEDIT tab columns if the XEDIT tabs are defined.
+     If the tabs are not defined you may use COL as follows:
+ 
+     TAB^  ????;???????;?????;?????????;??????????;??????
+           ^811^1211^Williams^544.40^5386
+           ^811^^Carson^^8356
+ 
+     yields:
+               811     1211  Williams  544.40     5386
+               811           Carson               8356
+ 
+ 
+*    COMP^ ??????????????????????????????????????????????
+     is the inverse operation of ATAB or TAB.  The XEDIT tabs must
+     be defined.  If the tabs are not set you may use COL as follows:
+ 
+     COMP^ ??;????;?????;?????????;???????;??????????????
+             811  1211  Williams  544.40  5386
+             811        Carson            8356
+ 
+     yields:
+           ^811^1211^Williams^544.40^5386
+           ^811^^Carson^^8356
+ 
+*    TS 5  ??????????????????????????????????????????????
+     sets the auto tab spacing to 5.  Default is 2 spaces.
+     The default may be changed in PROFCOL XEDIT as TAB_SPACE = 5.
+ 
+*    TR    ;????????????;?????????????;??????????;???????
+           Williams     544.40        5386
+           Carson       12589.22      12
+     where the ";" indicates XEDIT's tab settings.
+ 
+     yields:
+                Williams        544.40       5386
+                  Carson      12589.22         12
+ 
+*    TL    ;????????????;?????????????;??????????;???????
+                Williams        544.40       5386
+                  Carson      12589.22         12
+     where the ";" indicates XEDIT's tab settings.
+ 
+     yields:
+           Williams      544.40       5386
+           Carson        12589.22     12
+ 
+*    TC    ;????????????;?????????????;??????????;???????
+           Williams      544.40       5386
+           Carson        12589.22     12
+     where the ";" indicates XEDIT's tab settings.
+ 
+     yields:
+             Williams       544.40       5386
+              Carson       12589.22       12
+ 
+*    TB    ;????????????;?????????????;??????????;???????
+     where the ";" indicates XEDIT's tab settings will take
+     strings of text and justify to both left and right tab positions.
+ 
+.cs 5 off
+.cs 7 on
+                         COL PREFIX COMMANDS
+ 
+For detailed information on a command or task, place the cursor under the
+topic of your choice and press ENTER or the PF1 key.
+ 
+ 
+COL PREFIX (ALL         List all prefix commands.
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+COL PREFIX (FORM        Transpose Columns into Lines and back.
+COL PREFIX (DESC        ALL prefix command to edit blocks of text.
+COL PREFIX (OPT         Reverse the order of lines within the column.
+ 
+COL PREFIX (NOTE        Text Alignment prefix commands.
+COL PREFIX (NOTE          ATAB   Auto Text Alignment.
+COL PREFIX (NOTE          TS     Auto Text Spacing.
+COL PREFIX (NOTE          TAB    Manual Text Alignment.
+COL PREFIX (NOTE          COMP   Compress Text.
+COL PREFIX (NOTE          TRigh  Right justify text between all tabs.
+COL PREFIX (NOTE          TLeft  Left  justify text between all tabs.
+COL PREFIX (NOTE          TCent  Center text between all tabs.
+COL PREFIX (NOTE          Both   Justify both left and right.
+.cs 7 off

@@ -1,0 +1,144 @@
+       Using the FREEMAP
+    --------------------------
+ 
+ As mentioned before, the FREEMAP is built by DRM from the MDISKMAP file
+ it is supposed to make it easier for you to defragment dasd devices.
+ Defragmentation means moving minidisks, DRM requires that you have DIRMAINT
+ installed and, optionally DFSMS.  Without DIRMAINT moves have to be dome by
+ hand.
+    +------------------------------------------------------------------+
+    | Beware:  currently, the FREEMAP is not supported for FBA         |
+    | devices:  the map becomes too big:  one character per FBA block. |
+    | At 50 chars per line, 300000 blocks already cost 6000 map lines. |
+    +------------------------------------------------------------------+
+ 
+ The FREEMAP might look like:
+  +--------------------------------------------------------------------------+
+  | *-Volser Devt     Size  Free:  Total (pct)      Max  Avg/gap   NbGaps    |
+  | *--------------------------------------------------------------------    |
+  | * VMPK01 3390     3339           120 (4%)       35       13        9     |
+  | * VMSRES 3390     3339           203 (6%)       50       14       15     |
+  | * VMT001 3390     3339           246 (7%)       75       19       13     |
+  | * VMT002 3390     3339            32 (1%)       25       11        3     |
+  | * VMT003 3390     3339            60 (2%)       36       12        5     |
+  | * VMT004 3390     3339            91 (3%)       26        7       14     |
+  | * 230RES 3390     1113             0 (0%)        0        0        0     |
+  | *--------------------------------------------------------------------    |
+  | VMPK01 3390 Size 3339 Free: total -907- (27%) max -746-  avg/gap -91-    |
+  |        |0....+....1....+....2....+....3....+....4....+....| Gap sizes    |
+  |      0 |:CCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD|              |
+  |     50 |DDDDDDDDDDDDDDDDDDDDDDDDDDDDefghijkllmnopqrstuvvvv|              |
+  |    100 |vvvvvvvvvvvvvvv__MAINT210_490__vvvvvvvvvvvvvvvvvvv|              |
+  |    150 |vvvvvvvvvvvvvvv__MAINT210_490__vvvvvvvvvvvvvvvvvvv|              |
+  |    200 |vvvvvvvvvvvvvvvvvvvvvvvvXXXwyzabbbb     aaaaBBBBBB|  5           |
+  |    250 |bbbb           AAAAAAAAAAAAAAAAAAAAAAAAA   aaaaaab|  11 3        |
+  | ..............                                                           |
+  |PF 4=DIRMaint MOVE  5=DFSMS Move  9=Qmdisk 10=FindGap 11=Filel 12=-> mdisk|
+  +--------------------------------------------------------------------------+
+ 
+ Remark that:
+  - The freemap starts with an overview of the DASDs, how big they are,
+    how much free space they hold.  We call this the "TOC"
+  - Then a visual representation for each volser follows.  Each cylinder
+    of the volume is represented by one character.  Cylinders not allocated -
+    we call them gaps, just as DIRMAP- are represented by a blank.  We call
+    this the "map area"
+  - By default, minidisks that are "hard to move" are represented by a special
+    character (such as a $ or :) examples: MAINT 190, $SPOOL$, any minidisk
+    starting at cylinder 0.  Minidisks of logged on users are represented by
+    uppercase letters, others by lowercase characters.  So in general, only
+    lowercase area's can be moved easily.
+    This can be tailored by editing tags in the DRM NAMES file.
+  - By default again, whena minidisk spans a complete range of 50 cylinders,
+    the onwer and address is shown (MAINT210 490 for example).  This may be
+    less "good looking" but it is practical.  Anyway, yiu can avoid this by
+    tailoring the DRM NAMES file.
+ 
+ Usage:
+  PF9 or PF11 is the key you probably will use most
+   PF11 performs the same function as PF9, except that it FILELISTs
+   the minidisk if a minidisk is pointed to.
+   - when the cursor is on a volume in the "TOC" hit PF9 to jump to the Freemap
+     of that volser.
+   - when the cursor is "map area" DRM will find out what mdisk/gap the cursor
+     points too.  When pointing to a minidisk, DRM optionally links to the
+     minidisk and will also tell how full the minidisk is and if the minidisk
+     is being LINKed to.
+      Cyl 306 on VMPK01 is part of KRIS 0191: 294-307 = 14 cyls (97% full)
+      .. mdisk usage:  KRIS 0191 R/W; GUY 0291 R/O
+   - When the cursor is on a line of the map area, but not in the map area
+     itself, such on under the cylinder numbers (eg under "150"), DRM will
+     XEDIT the MDISKMAP and locate the minidisk that includes the cylinder
+     (150 in our example).
+   - When write "userid cuu" in FREEMAP's cmdline and press PF9 (with the
+     cursor still in the cms line: then DRM will find "userid cuu" in the
+     freemap (we use CP's Q MDISK command to find where the mdisk is defined,
+     and locate that spot in the freemap)
+ 
+ After you queried an MDISK, you can want to move it away:
+  - Position the cursor on a gap and press
+     - PF4 to prepare a move with DIRMAINT
+     - PF5 to prepare a move with DFSMS (also uses DIRMAINT, but faster)
+    In both cases DRM shows the DIRMAINT or DFSMS command and you have to press
+    the PF-key again to actually execute the indicated command.  When the
+    command is started, DRM updates the FREEMAP & MDISKMAP to reflect the move:
+      + signs tell that the new mdisk place is being used now
+      - signs indicate that the area will become free (if the move ends OK)
+        (Usage note 1 explains how to refresh the map)
+ 
+ Other Pfkeys:
+  - PF10: As a help to find a free place, you can use PF10 to find a gap to
+    move the queried minidisk too.
+  - PF12: You can always press PF12 to return to the last queried minidisk.
+    This appears very useful to return to the area that you are making free.
+ NOTES:
+  1. DRM does not check that the move successfully ends.  DRM updates the maps,
+     but never marks the old place of minidisks as "free".  To get a new image
+     of free space, you have to refresh the maps:
+     - quit the FREEMAP; quit the MDISKMAP so you should be back editing the
+       source Directory.
+     - then type "DIRM" and press PF4 to request DIRAMINT for a refresh
+ 
+  2. You can change to command being shown.  For example, with a DIRMAINT move,
+     you can request a smaller/bigger minidisk than what DRM prepared.
+     DRM will reflect the new size when it updates the map.  It is permitted to
+     CMDISK into a gap smaller than the original Mdisk (if you adapt the
+     prepared command).
+     You can even change a DIRM CMDISK into a DIRM DMDISK command as to remove
+     a minidisk.  DRM will then flag the old area as free.
+     But - as I'm short on PF-keys (and time to write REXX) - to delete an
+     mdisk to have to prepare a "move".  That is:
+          - you press PF9 to find the mdisk details
+          - you place the cursor on a gap area, press PF4
+          - change the prepared DIRM CMDISK into a DMDISK and press PF4
+ 
+  3. It is not dangerous to work with somewhat outdated maps, where some places
+     seem free but are in fact occupied by a mindisk.  When you request a move
+     to a place that is not free, DIRMAINT and DFSMS will fail the move.
+ 
+  4. When you use DFSMS MOVE commands to move minidisks, DFSMS sends a results
+     file back to your reader.  Not that it is really required, but, you can
+     want to check these results files.  DRM includes the CHKSMS EXEC to makes
+     this task easier (no need to PEEK the results files one by one.
+     PROFDRM makes that CHKSMS is called when you hit PF24 in the FREEMAP
+ 
+ 
+ 
+**** For more details, refer to the "RELATED" section (press PF11) ***
+.cs 7 on
+(c) Copyright International Business Machines Corporation 1985, 2012.
+    All Rights Reserved.
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER
+ 
+ 
+CMS DRM     (ALL        Overview ›&- An overview of DRM
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips
+.cs 7 off

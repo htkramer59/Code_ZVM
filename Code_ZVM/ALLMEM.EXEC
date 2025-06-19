@@ -1,0 +1,393 @@
+/*---------------------------------------------------------------+
+| Function : Show memory usage per system/lpar                   |
+|                                                                |
+| File     : ALLMEM   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <myfn>   ALLNODES                                   |
+|            <myfn>   DETAILS                                    |
+|            RMCMD    EXEC                                       |
+|                                                                |
+| Called   : ALLMEM   <what> ( <options>                         |
+|            <what>     If a ? entered Help will be displayed    |
+|            <options>  If this contains SSI, the SSI complex    |
+|                       will be questioned and displayed.        |
+|                       If this contains DATA, this will send    |
+|                       back data to the invoking LPAR over      |
+|                       RSCS.                                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220622 13:26:46                                   |
+| Changes  : .                                                   |
+|            20220908 H.T.Kramer : Add numeric digits to         |
+|                     prevent problems with calculations         |
+|            20220624 H.T.Kramer : Added a check for RMCMD.      |
+|            20220623 H.T.Kramer : Fixed some smallm problems    |
+|                     with SSI, changed output                   |
+|            20220622 H.T.Kramer : Complete rewrite also for     |
+|                     SSI                                        |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what . '(' options
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Help function                                                  |
++---------------------------------------------------------------*/
+If what='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME ALLMEM.EXEC:41 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show             */
+             Call Exit
+             End
+numeric digits 64
+/*---------------------------------------------------------------+
+| Get the node id and shortnode name                             |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLMEM.EXEC:51 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Determine the content of the options                           |
++---------------------------------------------------------------*/
+If Wordpos(options,'SSI')<>0 Then ssi=1
+                             Else ssi=0
+If Wordpos(options,'DATA')<>0 Then snd=1
+                              Else snd=0
+If ssi Then Call SSI_Code
+       Else Call RSCS_Code
+/*---------------------------------------------------------------+
+| As caller we are going to process and present the data         |
++---------------------------------------------------------------*/
+If \snd Then Do
+             Call Link_Status
+             Call Process_Data
+             Call Present_Data
+             Call Link_Status 'DET'
+             End
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say exrc errmsg
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Process_Data:
+/*---------------------------------------------------------------+
+| Processing the collected data                                  |
++---------------------------------------------------------------*/
+If ssi Then ssispec=''
+       Else ssispec='| specs w2;* 1'
+'PIPE (NAME ALLMEM.EXEC:91 END ?)',
+   '< 'myfn' ALLNODES 'wfm,                      /* Read this file   */
+   '| nlocate ~RMCMD~',                          /* Remove these     */
+   '| pick 1.1 \== ~ ~',                         /* ..and these      */
+        'and 1.1 \== ~*~',                       /* .                */
+   ssispec,                                      /* Specific 4 ssi   */
+   '| sort 1.23',                                /* Sort on label    */
+   '| specs 1.23 1 ~;~ nw 24;* nw',              /* Add a semicolon  */
+   '| f: fanout',                                /* Duplicate records*/
+   '| join keylen 24',                           /* Join on labels   */
+   '| specs 4;* 1',                              /* Keep this        */
+   '| stem out.',                                /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs fs ; substr w1.1 of f2',             /* Keep this        */
+   '| sort unique',                              /* Remove duplicates*/
+   '| join * x40',                               /* Make 1 record    */
+   '| var hdr',                                  /* Hand 2 rexx      */
+   '| split',                                    /* Split them       */
+   '| specs ~CHANGE /~ 1 w1.1 n ~//~ n',         /* Compose pipe...  */
+   '| join * x4F',                               /* Add vert.bar     */
+   '| specs x4F 1 1;* n',                        /* Start w vert.bar */
+   '| var remlpar'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Process the LPAR names into a usable hdr                       |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLMEM.EXEC:116 END ?)',
+    'var hdr',                                   /* Take this        */
+    '| split',                                   /* Split here       */
+    '| specs pad _ w1.1 1.17 right',             /* Adjust layout    */
+    '| join * x40',                              /* Make 1 record    */
+    '| specs 1;* 23',                            /* Move to right    */
+    '| var hdr'                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Produce an output file to present                              |
++---------------------------------------------------------------*/
+legend='; ;Legend:;'||,
+       'Resident pages %:  prefixed with !!=Please check, ++=between 100 & 110%, +++=over 110%;'||,
+       'Overcommit %    :  prefixed with !!=Please check, ++=between 100 & 150%, +++=over 200%;'||,
+       'Note: Storage/memory numbers are in MegaBytes'
+'PIPE (NAME ALLMEM.EXEC:130 END ?)',
+    'stem out.',                                 /* Take these       */
+    remlpar,                                     /* Do this          */
+    '| change ~;~~',                             /* Remove these     */
+    '| change w1.1 ~Storage~; ;Storage~',
+    '| change w1.3 ~Resident pages %~; ;Resident pages %~',
+    '| preface var hdr',                         /* Add header       */
+    '| preface literal 'TimeStamp(),             /* Add timestamp    */
+    '| append var legend',
+    '| split at ;',
+    '| > 'myfn' DETAILS 'wfm                     /* Send 2 file      */
+Return
+ 
+ 
+Present_Data:
+/*---------------------------------------------------------------+
+| Presenting the processed data and clean up...                  |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'myfn' DETAILS 'wfm' (WIDTH 500'
+'PIPE (NAME ALLMEM.EXEC:149 END ?)',
+    'literal ERASE 'myfn' ALLNODES 'wfm';',
+            'ERASE 'myfn' DETAILS  'wfm,
+    '| split at ;',
+    '| cms',
+    '| hole'
+Return
+ 
+ 
+SSI_Code:
+/*---------------------------------------------------------------+
+| For lpars in an SSI we do this                                 |
++---------------------------------------------------------------*/
+Call Link_Status
+'PIPE (NAME ALLMEM.EXEC:163 END ?)',
+   'cp QUERY SSI',                               /* Ask cp           */
+   '| frlabel SLOT',                             /* From here        */
+   '| pick w3.1 == ~Joined~',                    /* Select these     */
+   '| specs w2.1 1',                             /* Keep this        */
+   '| stem lpar.'                                /* Hand 2 rexx      */
+If lpar.0=0 Then Do
+          lpar.0=1
+          lpar.1=node
+          End
+Do l=1 To lpar.0
+   Call Collect_Info
+End l
+Call Link_Status 'DET'
+Return
+ 
+ 
+Link_Status:
+/*---------------------------------------------------------------+
+| Link/Access and detach the status (work) directory             |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+If what='' Then Do
+           Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+           If rc=0 Then Parse Upper Pull . . wfm .
+                   Else wfm='A'
+           End
+           Else Do
+           If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+           End
+Return
+ 
+ 
+RSCS_Code:
+/*---------------------------------------------------------------+
+| Check if we can find RMCMD before we continue                  |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLMEM.EXEC:200 END ?)',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Call Exit '1128 No RMCMD available'
+/*---------------------------------------------------------------+
+| When we are running thru RSCS we do this                       |
++---------------------------------------------------------------*/
+lpar.0=1
+lpar.1=node
+If snd Then Call Collect_Info
+       Else Do
+       Call Link_Status
+       Address CMS 'RMCMD cms 'myfn' (DATA , , , FILE , 'myfn' ALLNODES 'wfm
+       If rc<>0 Then Call Exit rc 'Probably no RSCS running'
+       Call Link_Status 'DET'
+       End
+Return
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| The collecting bit of the code                                 |
++---------------------------------------------------------------*/
+If ssi Then Do
+       ssipart='AT 'lpar.l' CMD CP'
+       pipout='| >> 'myfn' ALLNODES 'wfm
+       End
+       Else Do
+       ssipart=''
+       pipout='| cons'
+       l=1
+       lpar.0=1
+       lpar.1=node
+       End
+/*---------------------------------------------------------------+
+| A very long pipe but....split into sections...read comments    |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLMEM.EXEC:238 END ?)',
+   'cp 'ssipart' QUERY STORAGE',                 /* Ask cp           */
+   '| specs w6.1 1',                             /* Keep these       */
+           'w9.1 nw',                            /* .                */
+           'w12.1 nw',                           /* .                */
+           'w15.1 nw',                           /* .                */
+   '| siconv w1.1 g2m 12.2',                     /* Conver to Mb     */
+            'w2.1 g2m 12.2',                     /* .                */
+            'w3.1 g2m 12.2',                     /* .                */
+            'w4.1 g2m 12.2',                     /* .                */
+   '| change ~M~~',                              /* Remove M sign    */
+   '| specs a: w1.1 .',                          /* Adjust layout    */
+           'b: w2.1 .',                          /* .                */
+           'c: w3.1 .',                          /* .                */
+           'd: w4.1 .',                          /* .                */
+           'set #0:=a+d',                        /* Add defined&resrv*/
+           'print a  pict ---------9.99 nw',     /* .                */
+           'print b  pict ---------9.99 nw',     /* .                */
+           'print c  pict ---------9.99 nw',     /* .                */
+           'print d  pict ---------9.99 nw',     /* .                */
+           'print #0 pict ---------9.99 nw',     /* .                */
+   '| var storinfo',                             /* Hand 2 rexx      */
+   '| specs ~Storage Defined:~ 1',               /* Add labels       */
+            'w1.1 nw',                           /* .                */
+            '~;Increment:~ nw',                  /* .                */
+            'w2.1 nw',                           /* .                */
+            '~;Standby:~ nw',                    /* .                */
+            'w3.1 nw',                           /* .                */
+            '~;Reserved:~ nw',                   /* .                */
+            'w4.1 nw',                           /* .                */
+            '~;Defined+Reserved:~ nw',           /* .                */
+            'w5.1 nw',                           /* .                */
+   '| fi: faninany',                             /* Take in others   */
+   '| split at ;',                               /* Split here       */
+   '| specs fs : pad 0 recno 1.2 right',         /* Add record no    */
+                'pad space  f1 nw.20',           /* .4 later processi*/
+                '~'lpar.l'~ nw.8',               /* .                */
+                'f2 nw.12 right',                /* .                */
+   pipout,                                       /* Write/append     */
+   '?',                                          /* 2nd pipe         */
+   'cp 'ssipart' IND ACTIVE',                    /* Ask cp           */
+   '| specs a: w1.1 .',                          /* Remove leading 0 */
+           'b: w3.1 .',                          /* .                */
+           'c: w5.1 .',                          /* .                */
+           'd: w7.1 .',                          /* .                */
+           'print a pict ---9 1',                /* .                */
+           'print b pict ---9 nw',               /* .                */
+           'print c pict ---9 nw',               /* .                */
+           'print d pict ---9 nw',               /* .                */
+   '| specs ~Users:~ 1',                         /* Add labels       */
+           'w1.1 nw.5 right',                    /* .                */
+           '~;Active:~ nw',                      /* .                */
+           'w2.1 nw.4 right',                    /* .                */
+           '~;Eligible:~ nw',                    /* .                */
+           'w3.1 nw.4 right',                    /* .                */
+           '~;Dormant:~ nw',                     /* .                */
+           'w4.1 nw.4 right',                    /* .                */
+   '| fi:',                                      /* Conn 2 faninany  */
+   '?',                                          /* 3rd pipe         */
+   'cp 'ssipart' QUERY NAMES',                   /* Ask cp           */
+   '| split at ,',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| pick w1.1 \== ~VSM~ and',                  /* Ignore this one  */
+          'w3.1 \== ~TCPIP~',                    /* .                */
+   '| pick w3.1 \== ~SSI~',                      /* These aren't here*/
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs w1.1 1.9',                           /* Adjust record    */
+   '| j: juxtapose',                             /* Join with others */
+   '| join keylen 8',                            /* Join on user id  */
+   '| sort unique',                              /* Remove duplicates*/
+   '| specs fs = w1.1 1',                        /* Adjust layout    */
+                'substr f2 of w4.1 nw',          /* .                */
+                'substr f2 of w10.1 nw',         /* .                */
+   '| siconv w2.1 g2m 12',                       /* Convert G 2 M    */
+   '| change w2.1 ~M~~',                         /* Remove M sign    */
+   '| specs w1.1 1.8',                           /* Adjust layout    */
+           'w2.1 nw.6 right',                    /* .                */
+           'w3.1 nw.6 right',                    /* .                */
+   '| specs printonly eof',                      /* Add up memory and*/
+           'a: w2.1 .',                          /* .resident pages  */
+           'b: w3.1 .',                          /* .                */
+           'set (#0+=a;#1+=b)',                  /* .                */
+           'eof',                                /* .                */
+           'print #0 picture -------9.99 1',     /* .                */
+           'print #1 nw',                        /* .                */
+   '| specs w1.1 1',                             /* Rework pages 2   */
+           'a: w2.1 .',                          /* .Mb              */
+           'set #0:=(a*4)/1024',                 /* .                */
+           'print #0 pict --------9.99 nw',      /* .                */
+   '| var usrinfo',                              /* Hand 2 rexx      */
+   '| specs ~Defined Memory users:~ 1',          /* Add labels       */
+           'w1.1 nw',                            /* .                */
+           '~;Resident pages users:~ nw',        /* .                */
+           'w2.1 nw',                            /* .                */
+   '| fi:',                                      /* Conn 2 faninany  */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~'ssipart' IND USER~ 1 w1.1 nw',     /* Compose cmds     */
+   '| cp',                                       /* Issue them       */
+   '| strip',                                    /* Remove spaces    */
+   '| nlocate ~IPLSYS=~',                        /* Ignore this      */
+   '| nlocate ~NPREF~',                          /* ...this          */
+   '| nlocate ~CPU ~',                           /* ....and this     */
+   '| j:',                                       /* Conn 2 juxtapose */
+   '?',                                          /* 4th pipe         */
+   'cp 'ssipart' QUERY ALLOC PAGE',              /* Ask cp           */
+   '| pick w1.1 == ~USABLE~',                    /* Select this      */
+   '| specs w2.2 1',                             /* Keep this        */
+   '| siconv w1.1 k2b 12',                       /* Convert to number*/
+            'w2.1 k2b 12',                       /* .                */
+   '| specs a: w1.1 .',                          /* Conver 2 Mb      */
+           'b: w2.1 .',                          /* .                */
+           'set (#0:=(a*4)/1024;#1:=(b*4)/1024)',   /* .                */
+           'print #0 pict --------9.99 1',       /* .                */
+           'print #1 pict --------9.99 nw',      /* .                */
+   '| var paginfo',                              /* Hand 2 rexx      */
+   '| specs ~Pages avail. on disk:~ 1',          /* Add labels       */
+           'w1.1 nw',                            /* .                */
+           '~;Pages in use on disk:~ nw',        /* .                */
+           'w2.1 nw',                            /* .                */
+   '| fi:'                                       /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Some rework                                                    |
++---------------------------------------------------------------*/
+lpar.l=Substr(lpar.l,1,8)
+storinfo=Reverse(Word(Reverse(storinfo),1))
+Parse Value paginfo With pagavail pagondisk .
+Parse Value usrinfo With definstor respages .
+overc=Format((definstor/storinfo)*100,3,2)
+respag=Format(((respages+pagondisk)/storinfo)*100,3,2)
+Select
+When respag>75  & respag<=100 Then respag='!! 'respag
+When respag>100 & respag<=110 Then respag='++ 'respag
+When respag>110 Then respag='+++ 'respag
+Otherwise Nop
+End
+Select
+When overc>75  & overc<=100 Then overc='!! 'overc
+When overc>100 & overc<=150 Then overc='++ 'overc
+When overc>200 Then overc='+++ 'overc
+Otherwise Nop
+End
+txt=Substr('Resident pages %',1,20) lpar.l Right(respag,12)';'||,
+    Substr('Overcommit %',1,20) lpar.l Right(overc,12)
+'PIPE (NAME ALLMEM.EXEC:381 END ?)',
+    'var txt',                                   /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs pad 0 recno from 14 1.2 right 1;* nw',   /* Adjust a bit     */
+    pipout                                       /* Append/Write???  */
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Create a timestamp                                             |
++---------------------------------------------------------------*/
+Return Date(S) Time() myfn

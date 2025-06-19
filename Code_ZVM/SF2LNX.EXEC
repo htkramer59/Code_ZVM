@@ -1,0 +1,24 @@
+/**/
+Parse Upper Arg fn ft fm id 'AT' node .
+If fn='' Then Exit 28
+If ft='' Then Exit 28
+If fm='' | fm='.' Then fm='A'
+If id='' Then Exit 28
+'PIPE (End ?)',
+   'cp QUERY VIRTUAL PRT',
+   '| pick w2.1 == ~TO~',
+   '| specs w3.1 1',
+   '| var origto',
+   '?',
+   'CP TAG QUERY DEV PRT',
+   '| drop first 1',
+   '| append literal  ',
+   '| join *',
+   '| var origtag'
+ 
+Address COMMAND 'CP TAG DEV PRT 'node id
+If node<>'' Then id='RSCS'
+Address COMMAND 'CP  SPOOL PRT 'id
+Address CMS 'PRINT 'fn ft fm
+Address COMMAND 'CP SPOOL PRT 'origto
+Address COMMAND 'CP TAG DEV PRT 'origtag

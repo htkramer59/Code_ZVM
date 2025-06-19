@@ -1,0 +1,76 @@
+ SPLMGR Spool Manager                                                           
+                                                                                
+ This tool can help you maintaining the spool area of your systems.             
+ The tool is controlled by a control file called SPLMGR NAMES.                  
+ You can select to:                                                             
+     * clean up files you are not interested in                                 
+     * move console files to a collector id                                     
+     * show the allocation of the spool areas                                   
+     * show a file count per user id                                            
+     * show the files and their space usage in the various spool areas and      
+            peek, purge or move them to a collector                             
+     * Show the space usage of the DUMP area's in spool                         
+     * Show the NSSes and their occupancy in the spool areas                    
+                                                                                
+ The output will be shown in XEDIT files.                                       
+                                                                                
+                                                                                
+ Files    : SPLMGR   NAMES    Control file                                      
+            RSCS     EXEC     Comms with RSCS                                   
+            SICONV   REXX     Convert SI units                                  
+            SFLIST   MODULE   tool to peek files                                
+            SPLMGR   <files>  Various output files                              
+                                                                                
+                                                                                
+ Called   : SPLMGR                                                              
+                                                                                
+                                                                                
+ Controlling the code:                                                          
+                                                                                
+ The code is controlled using SPLMGR NAMES file, which will be explained        
+ here:                                                                          
+     *                                                                          
+     * Display informational messages yes/no                                    
+     :info.yes                                                                  
+     *                                                                          
+     * Identify how we obtain the info thru RSCS or SSI AT                      
+     :type.rscs                                                                 
+     *:type.ssi                                                                 
+     *                                                                          
+     * Identify the nodes we want to investigate                                
+     * Specify: * and the code will obtain all the nodes                        
+     :nodes.*                                                                   
+     *:nodes.R1LB2 R1LB2                                                        
+     *                                                                          
+     * Do we want to clean spool files yes/no                                   
+     :clean.no                                                                  
+     *                                                                          
+     * Identify the files we want thrown away (wildcards are ok)                
+     :clean_files.CODE *;* CODE;* REFUSED                                       
+     *                                                                          
+     * Do we want the console files collected yes/np                            
+     :console.no                                                                
+     *                                                                          
+     * Who needs to receive the console files                                   
+     :collector.conpark                                                         
+     *                                                                          
+     * Do you want an overview of SPOOL ALLOC yes/no                            
+     :q_alloc.yes                                                               
+     *                                                                          
+     * Do you want to see a filecount of spool files/user yes/np                
+     :files.yes                                                                 
+     *                                                                          
+     * Do you want to see all the spool files yes/no                            
+     :spool.yes                                                                 
+     *                                                                          
+     * Which queues do you want to inspect                                      
+     :queues.RDR PRT PUN                                                        
+     *                                                                          
+     * Do you want an overview of user DUMP space yes/no                        
+     :dump.yes                                                                  
+     *                                                                          
+     * Do you want an overview of the NSSes in SPOOL yes/no                     
+     :nss.yes                                                                   
+     *                                                                          
+     * The list of files we want execloaded, separated by ;                     
+     :loadlist.rscs exec * = rexx;splmgr exec * = xedit                         

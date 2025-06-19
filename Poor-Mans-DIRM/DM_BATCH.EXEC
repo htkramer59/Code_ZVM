@@ -1,0 +1,79 @@
+/*---------------------------------------------------------------+
+| Function : Do some batch processing                            |
+|                                                                |
+| File     : DM_BATCH EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_BATCH <input filename>                           |
+|          : BATCH    <input filename>                           |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240629 11:28:07                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Some basic checking                                            |
++---------------------------------------------------------------*/
+If fn='' Then Call Exit '28'
+If ft='' Then ft='BATCH'
+fm=ws
+/*---------------------------------------------------------------+
+| Check if the file exists/is writable                           |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_BATCH.EXEC:41 END ?)',
+   'literal 'fn ft fm,                           /* Take this        */
+   '| statew',                                   /* Check this       */
+   '| count lines',                              /* Count output     */
+   '| var fileok'                                /* Store as boolean */
+If \fileok Then Call Exit '500'
+/*---------------------------------------------------------------+
+| Read input file and ignore comments and empty lines            |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_BATCH.EXEC:50 END ?)',
+  '< 'fn ft fm,                                  /* Read this        */
+  '| pick 1.1 \== ~*~ and',                      /* Ignore the       */
+         '1.1 \== ~ ~ and',                      /* .following       */
+         '1.1 \== ~~',                           /* .                */
+  '| stem cmd.'                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Process the commands one by one                                |
++---------------------------------------------------------------*/
+Do c=1 To cmd.0
+    Address CMS 'DM_RQST 'cmd.c
+    If rc=0 Then flag='* 'Date('S') Time() cmd.c
+            Else flag='* 'cmd.c' failed 'rc
+    cmd.c=flag
+End c
+/*---------------------------------------------------------------+
+| Write the log file                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_BATCH.EXEC:68 END ?)',
+   'stem cmd.',                                  /* Take this        */
+   '| > 'fn ft fm                                /* Write 2 file     */
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

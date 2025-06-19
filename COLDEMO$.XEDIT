@@ -1,0 +1,221 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*--------------------------------------------------------------*/
+/*  This Routine is used by COL XEDIT in conjunction with COL   */
+/*   "STEP" option when stacking commands for COL execution.    */
+/*   For Example:                                               */
+/*                                                              */
+/*       Queue 'COLPCM x     :dt?????????????????'              */
+/*       Queue 'COLCMD       /a20????????????????'              */
+/*       Queue 'COLPCM all   ????????????????????'              */
+/*       Queue 'COLCMD       ????eeeeeeeeeeeeeeee'              */
+/*       Queue 'COLCMD       ????ssssssssssssssss'              */
+/*       Queue 'COLPCM x     :dt?????????????????'              */
+/*       Queue 'COLCMD       d20?????????????????'              */
+/*       Queue 'COLXED ALL'                                     */
+/*       Queue 'ECOL'                                           */
+/*       'COL /:edl/ NOEXIT NOPROF STEP'                        */
+/*                                                              */
+/*   When STEP is selected, this macro sets up a psuedo         */
+/*   COL screen showing the current edit status of the file     */
+/*   and plugs in the current COL commands in reserved lines    */
+/*   for the user to see.                                       */
+/*                                                              */
+/*  The user may press ENTER to step through the sequence or    */
+/*           press PF3/15 to exit                               */
+/*                                                              */
+/*--------------------------------------------------------------*/
+ 
+'COMMAND SET IMPCMSCP ON'
+'GLOBALV SELECT COLMENU GET DEMONAME'
+'GLOBALV SELECT COLMENU GET DEMOTYPE'
+'GLOBALV SELECT COLMENU GET DEMOMODE'
+'GLOBALV SELECT COLMENU GET DEMOID'
+ 
+'MAKEBUF'
+ Parse Arg step
+'PRESERVE'
+'EXTRACT /CURLINE/CMDLINE/PREFIX/LRECL/ZONE/TRUNC/VERSHIFT/PREFIX/COLOR *'
+ 
+ Do i = 1 to color.0
+   Parse Var color.i . color exthi h .
+   color.i = color exthi h
+ End
+ 
+ 
+'SET CMDLINE OFF'              /* Basic setup */
+ 
+'SET PF03 EXITDEMO'
+'SET PF15 EXITDEMO'
+'SET COLOR CURLINE' Word(color.4,1) /* hide the current line */
+'SET TEXT ON'
+'SET VERIFY 1' Min(lrecl.1,73)
+'COMMAND RIGHT' vershift.1
+ Parse Var step symbol +1 . +1  blank_character +1 type rest
+ xcmd = '====>'
+ colprf = '     '
+ 
+ Select               /* Set up the COL command line and prefix area */
+   When type = 'COLCMD' Then Do
+     colcommand = Strip(rest)
+   End
+   When type = 'COLPRF' Then Do
+     Parse Var rest prefix prftarget
+      'GLOBALV SELECT COL GET CMDLINE'
+      'GLOBALV SELECT COL GET PENDING'
+     If pending = 'Y' Then colcommand = Translate(cmdline,symbol,' ')
+       Else colcommand = ''
+     If prftarget ^= '' Then Do
+      'COMMAND EXTRACT /LINE'
+       return_line = line.1
+      'COMMAND LOCATE' prftarget
+      'COMMAND EXTRACT /LINE'
+      'COMMAND SET NONDISP  '
+      'COMMAND SET PEND ON' "09"x||prefix
+      'COMMAND LOCATE :'line.1
+      'COMMAND LOCATE :'return_line
+     End
+     Else colprf = Substr(prefix,1,5)
+   End
+   When type = 'COLPCM' Then Do
+     Parse Var rest prefix rest
+     colprf     = Substr(prefix,1,5)
+     colcommand = Strip(rest)
+   End
+   When type = 'COLXED' Then Do
+    'GLOBALV SELECT COL GET CMDLINE'
+    'GLOBALV SELECT COL GET PENDING'
+     If pending = 'Y' Then colcommand = Translate(cmdline,symbol,' ')
+       Else colcommand = ''
+     xcmd = Overlay(rest,xcmd,7)
+   End
+   When type = 'COLXCM' Then Do
+     Parse Var rest text '{' xcommand '}' ctext
+     If text = '' Then colcommand = Strip(ctext)
+       Else colcommand = Strip(text)
+     xcmd = Overlay(xcommand,xcmd,7)
+     colcommand = Strip(colcommand)
+     End
+   When type = 'COLMAT' Then Do
+     Parse Var rest text '{' xcommand '}' ctext
+     If text = '' Then colcommand = Strip(ctext)
+       Else colcommand = Strip(text)
+     xcmd = Overlay(xcommand,xcmd,7)
+     colcommand = Strip(colcommand)
+     End
+   When type = 'ECOL' Then Do
+     colcommand = ''
+     xcmd = Overlay('ECOL End of Demonstration',xcmd,7)
+   End
+   Otherwise colcommand = rest
+   End
+ 
+/* Set up for lrecl, zones and shift rights */
+ 
+ If zone.1 > 1 Then colcommand = Copies(' ',zone.1 -1)||colcommand
+ colcommand = Substr(colcommand,1,Min(lrecl.1,zone.2,trunc.1,73),symbol)
+ If vershift.1 > 0 Then colcommand = Substr(colcommand,vershift.1 +1)
+ 
+ If blank_character ^= '' Then colcommand = Translate(colcommand,' ',blank_character)
+ 
+/* add prefix stuff */
+ 
+ If prefix.2 = 'LEFT'
+   Then colcommand = colprf' 'colcommand
+   Else colcommand = Substr(colcommand,1,73)' 'colprf
+ 
+'SET RESERVED' curline.1 color.3 colcommand
+'CURSOR SCREEN' curline.2
+ 
+ Select                    /* Set up the XEDIT command line text */
+   When cmdline.1 = 'TOP' Then Do
+     xcmd = Overlay('(PRESS ENTER/PF3)',xcmd,63)
+    'SET RESERVED 2' color.2 xcmd
+   End
+   When cmdline.1 = 'ON'  Then Do
+    'SET RESERVED -2' color.2 xcmd
+    'SET RESERVED -1' color.11 Right('(PRESS ENTER/PF3)',79)
+   End
+   When cmdline.1 = 'BOTTOM' Then Do
+     xcmd = Overlay('(PRESS ENTER/PF3)',xcmd,63)
+    'SET RESERVED -1' color.2 xcmd
+   End
+   Otherwise End
+ 
+If demoname ^= '' Then Call Info_Window
+'COMMAND READ'
+ exit_rc = 0
+ 
+If demoname ^= '' Then Call Info_Window_Remove
+ 
+ Do Queued()
+   Pull line
+   If line = 'EXITDEMO' Then exit_rc = 3
+ End
+ 
+  If prftarget ^= '' Then Do
+   'COMMAND LOCATE' prftarget
+   'COMMAND SET PEND OFF'
+  End
+ 
+'SET RESERVED' curline.1 'OFF'
+'SET RESERVED 1 OFF'
+'SET RESERVED -1 OFF'
+'SET RESERVED -2 OFF'
+'DROPBUF'
+'RESTORE'
+'top'
+ 
+ Exit exit_rc
+ 
+Info_Window_Remove:
+  If info.0 = 0 Then Return
+  wline = sline
+  Do i = 1 to info.0 + 2
+   'COMMAND SET RESERVED' wline 'OFF'
+    wline = wline + 1
+  End
+Return
+ 
+Info_Window:
+ 'GLOBALV SELECT COLMENU GET DEMOSTEP'
+ 'GLOBALV SELECT COLMENU SET DEMOSTEP' demostep + 1
+Address Command 'SET CMSTYPE HT'
+info.0 = 0
+ 'pipe <' demoname demotype demomode,
+      '| FIND /*' demoid'.'demostep'_',
+      '| spec w 3.99 1',
+      '| stem info.'
+  If rc ^= 0 Then Do until data.0 = 0  /* if no pipes do it the hard way */
+    'EXECIO * DISKR' demoname demotype demomode '(FIND ?/*' demoid'.'demostep' ? STEM DATA.'
+     If data.0 = 2 Then Do
+       info.0 = info.0 + 1
+       i = info.0
+       info.i = Substr(data.1,Wordindex(data.1,3))
+     End
+     If data.0 = 0 Then 'EXECIO * DISKR' demoname demotype demomode '(FINIS'
+  End
+  Address Command 'SET CMSTYPE RT'
+  If info.0 = 0 Then Return   /* no info windo if no pipes available*/
+ 
+  sline = -info.0 -5
+  wline = sline
+  Do i = 1 to info.0   /* lets find the longest line */
+    info.i = Strip(Substr(info.i,1,Length(info.i)-2),'T')
+    If i = 1 Then max = Length(info.i)
+      Else max = Max(Length(info.i),max)
+  End
+  text = 'ac'x||Copies('bf'x,max + 2)||'bc'x
+ 'COMMAND SET RESERVED' wline 'WHITE NOHIGH' text
+  wline = wline + 1
+  Do i = 1 to info.0
+    text = '| 'Substr(info.i,1,max)' |'
+   'COMMAND SET RESERVED' wline 'WHITE NOHIGH' text
+    wline = wline + 1
+  End
+  text = 'ab'x||Copies('bf'x,max + 2)||'bb'x
+ 'COMMAND SET RESERVED' wline 'WHITE NOHIGH' text
+Return

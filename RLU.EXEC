@@ -1,0 +1,228 @@
+/*---------------------------------------------------------------+
+| Function : Make a rdrlist or printerlist for other users       |
+|                                                                |
+| File     : PLU      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PLU      <user id>                                  |
+|            RLU      <user id>   (only if the alias exists)     |
+|                                                                |
+| Comments : Depends on SFS alias and requires CP classes        |
+|            Printerlist is a RDRLIST-like presentation of       |
+|            files in the Print queue.                           |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180924 15:18:57                                   |
+| Changes  : .                                                   |
+|            20220510 H.T.Kramer : Changed a little bit          |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid . '(' switch .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Determine how this code was called                             |
++---------------------------------------------------------------*/
+Select
+ When myfn='PLU' & myft='XEDIT' & switch='PEEK'  Then Call PluPeek 'PEEK'
+ When myfn='PLU' & myft='XEDIT' & switch='PURGE' Then Call PluPeek 'PURGE'
+ When myfn='PLU' & myft='EXEC'  & switch=''      Then Call RunExec
+ When myfn='PLU' & myft='XEDIT' & switch=''      Then Call RunXedit
+ When myfn='RLU' & myft='EXEC'  & switch=''      Then Call RunExec
+ When myfn='RLU' & myft='XEDIT' & switch=''      Then Call RunXedit
+ Otherwise Exit 999
+ End
+Exit
+ 
+ 
+PluPeek:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+'PIPE (NAME PLU.EXEC:45 END ?) rexxvars 1 toload | varload'
+/*---------------------------------------------------------------+
+| Get the file, invoke peek and return the file                  |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE'                          /* Get some details*/
+curpos=line.1                                   /* Where were we   */
+':'cursor.3                                     /* Set as current  */
+/*---------------------------------------------------------------+
+| Get the details from the line...                               |
++---------------------------------------------------------------*/
+'EXTRACT /CURLINE'
+Parse Value curline.3 With spown spid . . . . . status .
+If spown=Userid() & qid<>'RDR' Then myself=1
+                               Else myself=0
+If status<>'OPEN-' Then Do
+         Select
+         When what='PEEK'  Then Call PeekFile
+         When what='PURGE' Then Call PurgeFile
+         Otherwise Nop
+         End
+     End
+     Else 'EMSG Can not process OPEN files'
+/*---------------------------------------------------------------+
+| Set the file as it was                                         |
++---------------------------------------------------------------*/
+':'curpos
+Return
+ 
+ 
+PeekFile:
+/*---------------------------------------------------------------+
+| Get the file, peek it and return it                            |
++---------------------------------------------------------------*/
+     If \myself Then 'PIPE (NAME PLU.EXEC:78 END ?)',
+                       'CP TRANSFER 'uid qid spid' TO 'Userid()' RDR ',
+                       '| cons',
+                       '| specs w3.1 ',
+                       '| var newspid'
+                       Else newspid=spid
+     Address CMS 'PEEK 'newspid' (FOR *'
+     If \myself Then Do
+     'PIPE (NAME PLU.EXEC:86 END ?)',
+        'CP TRANSFER 'Useird()' RDR 'newspid spown qid,
+        '| hole'
+     'CAPPEND    ****'
+Return
+ 
+ 
+PurgeFile:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME PLU.EXEC:97 END ?)',
+    '(end ?) CP PURGE 'uid qid spid,
+    '| hole'
+':'cursor.3                                     /* Set as current  */
+'CAPPEND  *** File purged ***'
+Return
+ 
+ 
+RunXedit:
+'PIPE (NAME PLU.EXEC:106 END ?) rexxvars 1 toload | varload'
+/*---------------------------------------------------------------+
+| Invoking XEDIT...minimal settings                              |
++---------------------------------------------------------------*/
+'CMDLINE TOP'
+'CURLINE ON 4'
+'SCALE ON 3'
+'NUM ON'
+'SET PF1  ONLY HELP'
+'SET PF13 ONLY HELP'
+'SET PF2'
+'SET PF14'
+'SET PF3  ONLY QQUIT'
+'SET PF15 ONLY QQUIT'
+'SET PF4'
+'SET PF16'
+'SET PF5'
+'SET PF17'
+'SET PF6'
+'SET PF18'
+'SET PF7  BEFORE BACKWARD'
+'SET PF19 BEFORE BACKWARD'
+'SET PF8  BEFORE FORWARD'
+'SET PF20 BEFORE FORWARD'
+'SET PF9  ONLY PLU (PURGE'
+'SET PF21 ONLY PLU (PURGE'
+'SET PF10 ONLY :1'
+'SET PF22 ONLY :1'
+'SET PF11 ONLY PLU (PEEK'                       /* Set PF11...     */
+'SET PF23 ONLY PLU (PEEK'                       /* Set PF13...     */
+'SET PF12 ONLY QQUIT'
+'SET PF24 ONLY QQUIT'
+pfline='1=Hlp 2=    3=Quit 4=    5=    6=    7=Bck 8=Fwd 9=Purge 10=Top 11=Peek 12=Quit'
+'SET RESERVED -1 WHITE NONE NOHIGH 'pfline
+Return
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| Running as EXEC...                                             |
++---------------------------------------------------------------*/
+If uid='' Then uid=Userid()
+'PIPE (NAME PLU.EXEC:148 END ?)',
+      'cp QUERY MDISK USER 'uid' 0 DIR',        /* Check the id    */
+      '| find HCPQMD040E',                      /* Look 4 this     */
+      '| count lines',                          /* How many        */
+      '| var idexist',                          /* Store here      */
+      '?',                                      /* 2nd pipe        */
+      'cms EXECMAP 'myfn' REXX',             /* Ask CMS          */
+      '| drop first 1',                      /* Ignore header    */
+      '| count lines',                       /* Count findings   */
+      '| if: if pick 1.1 == ~1~',            /* Check this       */
+      '|     specs ~EXECDROP 'myfn' REXX~ 1', /* Compose cmd    */
+      '|     cms',                           /* Issue cmd      */
+      '| if:',                               /* Comm 2 if        */
+      '| var exldd'                          /* Hand 2 rexx      */
+Address CMS 'EXECLOAD 'myfn myft' * =       XEDIT'
+If \idexist Then Do
+/*---------------------------------------------------------------+
+| Id does not exist...end process                                |
++---------------------------------------------------------------*/
+         Say 'User id 'uid' does NOT EXIST'
+         Exit 28
+         End
+/*---------------------------------------------------------------+
+| How are we called...                                           |
++---------------------------------------------------------------*/
+Select
+ When myfn = 'PLU' Then qid='PRT'
+ When myfn = 'RLU' Then qid='RDR'
+ Otherise Exit 99
+ End
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Compose workfile name...                                       |
++---------------------------------------------------------------*/
+workfile=uid myfn'-LST 'wfm
+/*---------------------------------------------------------------+
+| Stack some things...                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME PLU.EXEC:188 END ?)',
+   'CP QUERY 'qid uid' ALL ISODATE',   /* Ask CP          */
+   '| t: take 1',                      /* Take header     */
+   '| specs 1;* 7',                    /* Redo header     */
+   '| specs ~SET RESERVED 3 BLUE NONE NOHIGH~ 1 1;* nw',
+   '| stack',                          /* Take in changed */
+   '? t:',                             /* Conn 2 take     */
+   '| sort w8.2 d',                    /* Sort date/time  */
+   '| > 'workfile                      /* Store in file   */
+pfline='1=Hlp 2=    3=Quit 4=    5=    6=    7=Bck 8=Fwd 9=Purge 10=Top 11=Peek 12=Quit'
+Queue 'SET RESERVED -1 WHITE NONE NOHIGH 'pfline
+Queue 'CMDLINE TOP'
+Queue 'SCALE ON 3'
+Queue 'CURLINE ON 4'
+Queue 'RECFM V'
+Queue 'LRECL 120'
+Queue 'TRUNC *'
+Queue 'VERIFY 1 *'
+Queue 'PREF NULLS LEFT'
+Queue 'COLOR FILEAREA YELLOW'
+Queue 'SET PF3  QQUIT'
+Queue 'SET PF15 QQUIT'
+Queue 'SET PF12 QQUIT'
+Queue 'SET PF24 QQUIT'
+Queue 'SET PF9  ONLY PLU (PURGE'
+Queue 'SET PF21 ONLY PLU (PURGE'
+Queue 'SET PF11 ONLY PLU (PEEK'
+Queue 'SET PF23 ONLY PLU (PEEK'
+Queue 'SCALE OFF'
+Queue 'NUM ON'
+Queue ':1'
+Address CMS 'XEDIT 'workfile' (WIDTH 140 PROFILE 'myfn
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME PLU.EXEC:223 END ?)',
+    'CMS ERASE 'workfile,
+    '| HOLE'
+Address CMS 'EXECDROP 'myfn' XEDIT'
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return

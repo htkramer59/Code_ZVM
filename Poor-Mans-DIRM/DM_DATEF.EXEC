@@ -1,0 +1,130 @@
+/*---------------------------------------------------------------+
+| Function : Add or change the DATEFORMAT statement              |
+|                                                                |
+| File     : DM_DATEF EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_DATEF <uid> <dateformat>                         |
+|          : DATEF    <uid> <dateformat>                         |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 13:14:19                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid dateformat .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check the input                                                |
++---------------------------------------------------------------*/
+validinput='QRY DEL FULLDATE ISODATE SHORTDATE SYSDEFAULT'
+If Wordpos(dateformat,validinput)=0 Then Call Exit 558
+/*---------------------------------------------------------------+
+| Get the uid and the directory                                  |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_DATEF.EXEC:43 END ?)',
+    'stem uid.',                                 /* Take these       */
+    '| pick anycase w2.1 == ~DATEFORMAT~',       /* Select this      */
+    '| var curdatef',                            /* Hand 2 rexx      */
+    '| count lines',                             /* How many         */
+    '| var datef'                                /* Store as boolean */
+/*---------------------------------------------------------------+
+| Take action on the input                                       |
++---------------------------------------------------------------*/
+Select
+When dateformat='QRY' Then Call ShowDateF
+When dateformat='DEL' Then Call DelDateF
+Otherwise Do
+          If datef Then Call ReplDateF
+                   Else Call AddDateF
+          End
+End
+/*---------------------------------------------------------------+
+| Put all online                                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowDateF:
+/*---------------------------------------------------------------+
+| Show the DATEFORMAT                                            |
++---------------------------------------------------------------*/
+dateformat=Word(curdatef,3)
+Say Date('S') Time() myfn myft' Dateformat for 'uid' is: 'dateformat
+Call Exit
+Return
+ 
+ 
+ReplDateF:
+/*---------------------------------------------------------------+
+| Replace the existing DATEFORMAT with a new one                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_DATEF.EXEC:90 END ?)',
+   'var curdatef',                               /* Take this        */
+   '| specs w1.2 1 ~'dateformat'~ nw',           /* Rework record    */
+   '| var newdatef'                              /* Hand 2 rexx      */
+'PIPE (NAME DM_DATEF.EXEC:94 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'curdatef'~ ~'newdatef'~',         /* Replace...       */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+Return
+ 
+ 
+AddDateF:
+/*---------------------------------------------------------------+
+| Add a DATEFORMAT statement                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_DATEF.EXEC:106 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~IPL~',               /* Find this        */
+   '| var curipl',                               /* Hand 2 rexx      */
+   '| specs 1;* 1 ~;'Copies(' ',8)'DATEFORMAT 'dateformat'~ nw',   /* Compose new one  */
+   '| var newipl'                                /* Hand 2 rexx      */
+'PIPE (NAME DM_DATEF.EXEC:112 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'curipl'~ ~'newipl'~',             /* Replace          */
+   '| split at ;',                               /* Split here       */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+Return
+ 
+ 
+DelDateF:
+/*---------------------------------------------------------------+
+| Remove the DATEFORMAT statement                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_DATEF.EXEC:125 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| nlocate anycase ~'curdatef'~',             /* Ignore this one  */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write to file    */
+return

@@ -1,0 +1,30 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    V    V    Does the VERIFY setting to the columns at the position of
+ or VVVVVV    the "V" characters or the first "V" and the last "V".
+ 
+    H    H    Does the VERIFY HEX setting to the columns at the position
+ or HHHHHH    of the "H" characters or the first "H" and the last "H".
+ 
+To reset the verify setting back to the value it had upon entering
+COL, enter V in the COL prefix area, as shown below.
+ 
+V==== ?????????????????????????????????????????????????????????????????
+.cs 7 on
+                     COLumn Edit Convenience Commands
+ 
+Place the cursor under any character of the task you are interested in
+and press PF1 or the ENTER key.
+ 
+ 
+COL MISCCMDS (ALL       V,H    Set Verify including Hex capability
+COL MISCCMD4 (ALL       Z      Set Zone for Xedit
+COL MISCCMD2 (ALL       T      Set Truncation Column
+COL MISCCMD3 (ALL       ;      Set Tabs
+.cs 7 off

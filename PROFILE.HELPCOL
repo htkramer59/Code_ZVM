@@ -1,0 +1,105 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+COL PROFILE:
+------------
+ 
+        PROFCOL XEDIT is an optional profile for COL.
+        This profile may be used to change the:
+ 
+        -  default command line symbol
+        -  default blank character symbol
+        -  default prefix marker symbol indicating the range for COL
+        -  default auto tab spaces
+        -  set the undo option on
+        -  set the return to last screen option on (for PREFIXH2)
+        -  set the automatic exit feature when ENTER is pressed off
+        -  set the scale off
+        -  set nulls and fullread on
+        -  set automatic exit on pressing ENTER off
+        -  set return to last screen ON/OFF when using PREFIXH2
+        -  set other XEDIT options.
+        -  set character used for the period in the SUM command
+        -  set REXX numeric digits for the SUM command
+        -  specify the color and location of the COL information area
+        -  turn off the COL information area
+ 
+        A sample profile named PROFCOL SAMPLE is provided with the COL
+        package.  The commands to change the command line symbol, blank
+        character symbol and the prefix marker are shown in the example.
+        Commands to change the auto exit option when ENTER is pressed but
+        no screen changes have been made as well as the return to last
+        screen options are included.  XEDIT commands to turn off the
+        scale, turn nulls on and fullread on are shown but are commented
+        out using REXX type comments.  Normal defaults are SCALE ON,
+        FULLREAD OFF and NULLS OFF.  NULLS OFF and FULLREAD OFF are
+        desirable for most applications.  You may place any XEDIT command
+        in this profile.  The profile is read and executed by REXX, so it
+        is possible to use REXX statements in the profile.
+ 
+/*  EXAMPLE PROFILE FOR COL                                   */
+/*                                                            */
+/*  This is an example of the OPTIONAL profile for COL        */
+/*  This profile is supported for CMS release 4 and greater.  */
+/*  Options are 'ON' or 'OFF'                                 */
+ 
+    SYMBOL         = '?'     /* The COL COMMAND LINE symbol   */
+    BLANK_CHAR     = ' '     /* The blank character symbol    */
+    PREFIXSYMBOL   = '<<->>' /* The prefix marker             */
+    UNDO_OPTION    = 'ON'    /* Activate the undo option      */
+    TARGET         = '1'     /* default target (depth) which  */
+                             /*  could be changed to "*"      */
+    AUTO_EXIT      = 'OFF'   /* Exit COL when no screen       */
+                             /* changes have been made and    */
+                             /* ENTER is pressed              */
+    TAB_SPACE      = 2       /* Column spacing for ATAB, the  */
+                             /* auto tab command              */
+    DIGITS         = 12      /* REXX numeric digits setting   */
+                             /* significant digits for ++ cmd */
+    SENTENCE_SPACE = 2       /* spacing after sentences for   */
+                             /*  text flow commands w, < and >*/
+    MATH_EMSG      = 'ON'    /* math error messages           */
+ 
+    DECIMAL      = 'PERIOD'/* decimal indicator for ++ cmd.   */
+/*   The three options for decimal are:                       */
+/*      PERIOD     for 1,234,567.89 (The Default)             */
+/*      COMMA      for 1.234.567,89                           */
+/*      FRENCH     for 1 234 567,89 or 1 234 567.89           */
+ 
+/*  Colors */
+    INFOCOLOR      = 'RED'   /* "Help" text                   */
+    PFCOLOR        = 'WHITE' /* PF key text                   */
+ 
+/*  SET COLOR MSGLINE RED */ /* Note that COL uses XEDIT MSG  */
+                             /* for messages and the current  */
+                             /* line for the COL command line */
+                             /* Set  XEDIT's                  */
+                             /* COLOR MSGLINE                 */
+                             /* COLOR CURLINE                 */
+                             /* to control these colors       */
+ 
+/* Optional specification to relocate the position of the     */
+/*  mini help information area from the default location.     */
+/*  Set INFOLOC to OFF to remove all COL messages             */
+/*  You may also specify OFF whenever you desire to           */
+/*  set up your own reserved lines.                           */
+ 
+/*  Examples:                                                 */
+ 
+/*   INFOLOC        = 1          */
+/*   INFOLOC        = -3         */
+/*   INFOLOC        = 'OFF'      */
+ 
+ 
+/* The following are XEDIT options which you may want to use  */
+/*  while in COL.  Remove the comment delimiters and add      */
+/*  XEDIT options which you may desire.                       */
+ 
+/*  SET SCALE OFF     */    /* option to turn off the scale   */
+/*  SET NULLS ON      */    /* option for nulls on            */
+/*  SET FULLREAD ON   */    /* option for fullread on         */

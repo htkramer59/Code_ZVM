@@ -1,0 +1,89 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    R text    Replaces the characters following the column where the
+              "R" is positioned with the specified text.  Text is
+              everything that appears after the character "R" up
+              to the last nonblank character.  Do not specify other
+              commands to the right of the "R" command.  They will be
+              treated as text.  The text may contain blanks.
+ 
+    O text    Overlays the characters following the column where
+              the "O" is positioned with the specified text.  Text is
+              everything that appears after the character "O" up to
+              the last nonblank character.  Do not specify other commands
+              to the right of the "O" command.  They will be treated as
+              text.  When the text contains blanks the corresponding
+              character position will NOT be overlayed. To overlay a
+              column with blanks use the underscore (_) character.
+              Use "_" regardless of the current setting of the COL
+              blank character.  See XEDIT COVERLAY for more information
+              on Overlay vs. Replace.
+ 
+    ' text    Pads the blanks after the column where the apostrophe (')
+              is positioned with the specified text.  Text is everything
+              that appears after the character "'" up to the last
+              nonblank character.  Do not specify other commands right of
+              the "'" command.  They will be treated as text.
+ 
+              EXAMPLE:  ??????'00????xyz??????????????????????????????????
+                        1            a
+                        2       9     b
+                        3      10      c
+                        4      11
+ 
+              yields:
+                        1      00    ayz
+                        2      09    xbz
+                        3      10    xyc
+                        4      11    xyz
+    - text    Removes and replaces characters with blanks, column by
+              column.  Do not specify other commands to the right of
+              the "-" command.  They will be treated as text.
+ 
+ 
+              EXAMPLE:  ??????-$$$$$$$$???????????????????????????????????
+                        1        $7,342
+                        2          $123
+                        3       $32,123
+ 
+              yields:
+                        1         7,342
+                        2           123
+                        3        32,123
+ 
+              When the text string starts with a blank in the first
+              position, then the blanking of characters is from left
+              to right and stops when a non-match is found.
+ 
+              EXAMPLE:  ?????????- 000????????????????????????????????????
+                        1          0001
+                        2          0010
+                        3          0100
+ 
+              yields:
+                        1             1
+                        2            10
+                        3           100
+ 
+.cs 7 on
+                     COLumn Edit Base Commands
+ 
+Place the cursor under any character of the task you are interested in
+and press PF1 or the ENTER key.
+ 
+COL BASECMD3 (ALL       A       Add or insert blanks into a column
+COL BASECMD5 (ALL       "       Duplicate a Column
+COL BASECMD2 (ALL       D       Delete a column
+COL BASECMDS (ALL       I       Insert text into a column
+COL BASECMD6 (ALL       /cmd    Do "here" rather than behind the command
+COL BASECMD6 (ALL       /       Shift the screen to this column
+COL BASECMD4 (ALL       O,R,',- Overlay, Replace, Pad or remove data
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

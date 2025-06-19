@@ -1,0 +1,143 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This is a generic status exec that can be used as a template
+    to create other tests.  It is also called to send an exable or
+    disable message to Hobbit when the client is started or stopped.
+ 
+    Thomas Kern  11/2006     Original V1.3
+    Rich Smrcina 02/10/2009  Changed to refer to the new project
+                             name Xymon.
+                                                                      */
+trace off
+parse arg verb test msg '(' files ')'
+parse value verb with verb '+' ttl .
+parse source . call_type myname .
+cr='15'x                                         /*  Carriage return  */
+emsgstart=date('U') time() myname':'   /* Start of error message line */
+'globalv stack BBDISPLAY BBPORT FQDN'
+pull bbdisplay
+pull bbport
+pull fqdn
+call init_open_socket      /*  Initialize and Open the socket  */
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call get_timestamp         /*  Get a linux-like timestamp      */
+call do_the_test           /*  Execute the test                */
+call send status           /*  Send the result in status to bb */
+call close_term_socket     /*  Close and terminate the socket  */
+exit
+ 
+do_the_test:
+if translate(test)= 'ALL' then test = '*'
+if ttl = '' then ttl = 30
+ 
+if verb = 'disable' then do
+   parse value msg with hours msg
+   msg = hours*60 msg
+   end
+if verb = 'enable' then do
+   msg = ''
+   end
+if verb = 'status' then do
+   parse value msg with color msg
+   verb = verb||'+'||ttl
+   msg = color dow month day time() tz year msg
+   end
+status = verb machine||'.'||test msg
+say status
+if words(files) ^= 0 then status = status cr
+do i = 1 to words(files) by 3
+   status = status '<hr>'
+   fn = translate(word(files,i))
+   ft = translate(word(files,i+1))
+   fm = translate(word(files,i+2))
+   'PIPE <' fn ft fm '| strip trailing | stem status2.'
+   do j = 1 to status2.0
+      status = status cr status2.j
+      end
+   status = status cr
+   end
+return
+ 
+init_open_socket:
+ret=Socket('Initialize','hobbitvm')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+ret=socket('Gethostname')
+parse var ret rc hostname .
+if rc<>0 then
+  say 'Gethostname:' ret
+ret=socket('Getdomainname')
+parse var ret rc domainame .
+if rc<>0 then
+  say 'Getdomainname:' ret
+fullname=hostname||'.'||domainame
+/*  Change periods to commas  */
+fullname=translate(fullname,',','.')
+'globalv put hostname'
+'globalv put domainame'
+'globalv put fullname'
+bbdate=date('U')
+'globalv put bbdate'
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_timestamp:
+'PIPE CP QUERY TIMEZONE' ,
+  '| locate /Active/' ,
+  '| specs w1 1' ,
+  '| var TZ'
+dow = substr(date('W'),1,3)
+parse value date('N') with day month year .
+timestamp = dow month day time() tz year
+return

@@ -1,0 +1,129 @@
+/*---------------------------------------------------------------+
+| Function : Check if we are in memory over commit and do        |
+|            we have space left                                  |
+|                                                                |
+| File     : MEMINV   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : MEMINV   .                                          |
+|                                                                |
+| Comments : This is always a snapshot...                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200424 09:33:52                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn .
+Numeric Digits 64
+'PIPE (NAME MANY.XEDIT:423 END ?)',
+    'cp IND QUEUES EXP',                        /* Ask who is in Q  */
+    '| sort w1.1',                              /* Sort on name     */
+    '| specs 24.8',                             /* Keep this        */
+    '| specs',                                  /* Totalise it      */
+         'printonly eof',                       /* .                */
+         ' a: word 1     .',                    /* .                */
+         '    set #0+=a',                       /* .                */
+         ' eof',                                /* .                */
+         '    print #0   1',                    /* .                */
+    '| var realpages',                          /* Store as         */
+    '?',                                        /* 2nd pipe         */
+    'cp QUERY NAMES',                           /* Who is in        */
+    '| split at ,',                             /* Split here       */
+    '| strip',                                  /* Remove spaces    */
+    '| specs fs - f1 1.9',                      /* Keep this        */
+    '| f: fanout',                              /* Dupl. recs.      */
+    '| j: juxtapose',                           /* Join some stuff  */
+    '| specs fs = ~.~  1 f2 nw ~.~ nw',         /* Prep 4 siconv    */
+    '| siconv w2.1 G2M  20',                     /* Rework 2 mb      */
+    '| specs w2.1',                             /* Keep this        */
+    '| change ~M~~',                            /* Remove this      */
+    '| specs',                                  /* Totalise         */
+         'printonly eof',                       /* .                */
+         ' b: word 1     .',                    /* .                */
+         '    set #1+=b',                       /* .                */
+         ' eof',                                /* .                */
+         '    print #1   1',                    /* .                */
+    '| strip',                                  /* Remove spaces    */
+    '| var definedmemory',                      /* Store as         */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| specs ~IND USER~ 1 w1.1 nw',             /* Compose cmds     */
+    '| cp',                                     /* Hand 2 cp        */
+    '| split',                                  /* Split            */
+    '| strip',                                  /* Remove spaces    */
+    '| all ~STOR=~',                            /* Select these     */
+    '| j:',                                     /* Conn 2 juxtapose */
+    '?',                                        /* 3rd pipe         */
+    'cp QUERY STORAGE',                         /* Ask cp           */
+    '| split',                                  /* Remove spaces    */
+    '| join 2',                                 /* Join 3....       */
+    '| specs fs = f1 1 f2 nw',                  /* Adjust 4 siconv  */
+    '| siconv w2.1 G2M',                        /* Rework 2 mb      */
+    '| change -1;-1 ~M~~',                      /* Remove m         */
+    '| specs fs . f1',                          /* Keep this        */
+    '| specs ~/LPAR_~ 1 w1.1 n ~/~ n w2.1 n',   /* Prep 4 varload   */
+    '| varload',                                /* Hand 2 rexx      */
+    '?',                                        /* 4th piple        */
+    'cp QUERY ALLOC PAGE',                      /* Ask cp           */
+    '| take last 1',                            /* Keep this        */
+    '| specs ~/DASDPAGES/~ 1',                  /* Prep 4 varload   */
+            'w3.1 n ',                          /* .                */
+            '~/DASDPERC/~ nw',                  /* .                */
+            'w4.1 n',                           /* .                */
+    '| change ~%~.00~',                         /* Replace this     */
+    '| change ~K~~',                            /* ...and this      */
+    '| split',                                  /* Split into recs  */
+    '| varload',                                /* Hand 2 rexx      */
+    '?',                                        /* 5th pipe         */
+    'cp QUERY USERID',                          /* Ask CP           */
+    '| specs w3.1',                             /* Rework           */
+    '| var node',                               /* Store as         */
+    '?',                                        /* 6th pipe         */
+    'cp IND ACTIVE',                            /* Ask cp           */
+    '| var indact'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Do some calculations                                           |
++---------------------------------------------------------------*/
+realpages=Format(realpages*4096/1024/1024,,0)
+dasdpages=dasdpages*1024*4/1024
+storageperc=Format(realpages/lpar_storage*100,3,2)
+dasdperc=Format(dasdperc,3,2)
+meminlpar=lpar_storage+lpar_standby
+meminuse=realpages+dasdpages
+/*---------------------------------------------------------------+
+| Compose the output...                                          |
++---------------------------------------------------------------*/
+out=Date('S') Time() myfn 'AT' node';',
+    'Hardware figures:;',
+    'Memory for defined in the LPAR     : 'Right(lpar_storage,10) 'MB;',
+    'Standby memory in the LPAR         : 'Right(lpar_standby,10) 'MB;',
+    'Reserved memory in the LPAR        : 'Right(lpar_reserved,10) 'MB;',
+    '                                   : 'Right(meminlpar,10)';',
+    ';',
+    indact';',
+    'Total pages allocated 4 running ids: 'Right(realpages,10) 'MB;',
+    'Total pages allocated on DASD      : 'Right(dasdpages,10) 'MB;',
+    '                                   : 'Right(meminuse,10)';',
+    ';',
+    'Total memory defined 4 running ids : 'Right(definedmemory,10) 'MB;',
+    ';' ,
+    'Percentage used memory  : 'storageperc';',
+    'Percentage pages on DASD: 'dasdperc
+If meminuse<lpar_storage Then out=out'; ;Memory in use 'meminuse' < memory in lpar 'meminlpar
+If meminuse>lpar_storage Then out=out'; ;Memory in use 'meminuse' > memory in lpar 'meminlpar' overcommit',
+                                 ';Total memory avalaible 'meminlpar', Memory: 'lpar_storage' Standby 'lpar_standby
+/*---------------------------------------------------------------+
+| Write it...and show it                                         |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'var out',                                  /* Take this        */
+    '| split at ;',                             /* Split in2 lines  */
+    '| cons',                                   /* Show             */
+    '| > 'myfn node' A'                         /* ...and write     */
+/*---------------------------------------------------------------+
+| Send it so we have it in 1 place                               |
++---------------------------------------------------------------*/
+If node<>'R1LB1' Then 'PUT 'myfn node' A B1'

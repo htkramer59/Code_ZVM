@@ -1,0 +1,159 @@
+/*---------------------------------------------------------------+
+| Function : Recycle a Linux server, initiated from the server   |
+|            ifself                                              |
+|                                                                |
+| File     : RECSRV   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RECSRV   TIMES      File 4 WAKEUP                   |
+|            WAKEUP   MODULE                                     |
+|                                                                |
+| Called   : RECSRV   .                                          |
+|                                                                |
+| Comments : RECSRV   DIRCTSAM   Sample directory 4 server       |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200529 07:16:09                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg .
+Parse Source . . myfn myft .
+allowedcmds='RECYCLE'
+/*---------------------------------------------------------------+
+| Start the main loop                                            |
++---------------------------------------------------------------*/
+Do main=1
+  Address CMS 'WAKEUP +00:05:00 (FILE('myfn' TIMES *) CC CONS RDR IUCVMSG VMCF SMSG'
+/*---------------------------------------------------------------+
+| Evaluate the rc we got from wakeup                             |
++---------------------------------------------------------------*/
+  Select
+  When rc=0  Then Nop                 /* Timer options done */
+  When rc=1  Then Call VMCF_SMSG_MSG
+  When rc=2  Then Nop                 /* Time on cmd line elapsed */
+  When rc=3  Then Call Do_Cmd         /* Timer from file */
+  When rc=4  Then Call Reader_Files
+  When rc=5  Then Call VMCF_SMSG_MSG
+  When rc=6  Then Leave main          /* Console interrupt */
+  When rc=7  Then Nop                 /* I/O intrupt     */
+  When rc=8  Then Leave main          /* External interrupt */
+  When rc=28 Then Do
+                  Say 'WAKEUP TIMES file not found exiting'
+                  Exit rc
+                  End
+  Otherwise Do
+            Say 'Unhandled returncode : 'rc
+            End
+  End
+End main
+/*---------------------------------------------------------------+
+| Exit here                                                      |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+Reader_Files:
+/*---------------------------------------------------------------+
+| Act on reader files                                            |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'stack',
+   '| hole'
+  Address Command 'CP TRANSFER * RDR ALL * PRT'
+Return
+ 
+ 
+Do_Cmd:
+/*---------------------------------------------------------------+
+| Do the command as requested by the file                        |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'stack',
+   '| take last 1',
+   '| specs w2.1 1 w-2;-1 nw',
+   '| cons',
+   '| var cmd'
+/*---------------------------------------------------------------+
+| Clean up the times file                                        |
++---------------------------------------------------------------*/
+Parse Value cmd With lineno cmd
+'PIPE (End ?)',
+     '< 'myfn' TIMES A',
+     '| nlocate anycase w-2;-1 ~'cmd'~',
+     '| > 'myfn' TIMES A'
+Return
+ 
+ 
+VMCF_SMSG_MSG:
+/*---------------------------------------------------------------+
+| Processing VMCF, SMSG and MSGs                                 |
++---------------------------------------------------------------*/
+what=''
+'PIPE (end ?)',
+    'stack',
+    '| pick w1.1 == ~*SMSG~',
+    '| cons',
+    '| pick w2.1 == w4.1',
+    '| specs w3;*',
+    '| f1: fanout',
+    '| specs w1.2',
+    '| var cmd',
+    '? f1:',
+    '| specs w3;*',
+    '| f2: fanout',
+    '| if1: if pick anycase w1.1 == ~BY~',
+    '|    specs ~/WHAT/BY~ 1',
+    '| if1:',
+    '| if2: if pick anycase w1.1 == ~WITHIN~',
+    '|    specs ~/WHAT/WITHIN~ 1',
+    '| if2:',
+    '| varload',
+    '? f2:',
+    '| specs w2.1',
+    '| var timeval'
+Trace "I"
+Say cmd
+If Wordpos('BY',what)=0 &,
+   Wordpos('WITHIN',what)=0 Then Address CMS cmd
+                            Else Call Add_2_Times what timeval
+Return
+ 
+ 
+Add_2_Times:
+/*---------------------------------------------------------------+
+| Add a line to the TIMES file...                                |
++---------------------------------------------------------------*/
+Parse Arg type destime
+Select
+When type='BY'     Then Do
+                   destime=destime':00'
+                   workdes=Substr(destime,1,2)||,
+                           Substr(destime,4,2)||,
+                           Substr(destime,7,2)
+                   worktim=Substr(time(),1,2)||,
+                           Substr(time(),4,2)||,
+                           Substr(time(),7,2)
+                   If workdes<worktim Then filedate=Date('U',Date('B',Date('U'),'U')+1,'B')
+                                      Else filedate=Date('U')
+                   End
+When type='WITHIN' Then Do
+                   hh=Right(destime%3600,2,'0')
+                   mm=Right(destime%60,2,'0')
+                   ss=destime//60
+                   destime='+'hh':'mm':'ss
+                   filedate=Date('U')
+                   End
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Add the line to the file                                       |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'literal 'filedate destime' 09/16/19 'cmd,
+    '| specs w1.1 1.8 w2.1 10.8 w3.1 nw.8 w4;* nw',
+    '| pad 80',
+    '| >> 'myfn' TIMES A'
+Drop cmd type destime
+Return

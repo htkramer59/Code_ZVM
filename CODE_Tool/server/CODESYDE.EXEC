@@ -1,0 +1,108 @@
+/*---------------------------------------------------------------+
+| Function : Synchronise and Deploy code                         |
+|                                                                |
+| File     : CODESYDE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : REPLACE  EXEC                                       |
+|            <vmarc files>     VMARC files for SYNChing          |
+|            *        DEPL*    Deploy manifests                  |
+|                                                                |
+| Called   : CODESYDE .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220422 15:21:31                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK IN (ONLY(CODE) NOTYPE WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else Exit rc
+Call Examine_Input
+If sync.0<>0 Then Call Sync_Code
+If depl.0<>0 Then Call Depl_Code
+Address CMS 'VMLINK IN <DET (ONLY(CODE) NOTYPE WRITE'
+Exit
+ 
+ 
+Examine_Input:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+sync.0=0
+depl.0=0
+'PIPE (NAME CODESYDE.EXEC:37 END ?)',
+   'cms LISTFILE * * 'wfm' (NOH',                /* See what is there*/
+   '| p: pick substr 1.4 of w2.1 \== ~DEPL~',    /* Select DEPLoys   */
+   '| stem sync.',                               /* Store as         */
+   '? p:',                                       /* Conn 2 pick      */
+   '| stem depl.'                                /* Hand 2 rexx      */
+Return
+ 
+ 
+Sync_Code:
+/*---------------------------------------------------------------+
+| Synchronise some of the code...                                |
++---------------------------------------------------------------*/
+Do s=1 To sync.0
+   Parse Value sync.s With fn proj .
+   Address CMS 'VMLINK 'proj' (ONLY(CODE) NOTYPE WRITE .fm'
+   If rc=0 Then Parse Upper Pull . . ofm .
+           Else Do
+           Say TimeStamp() 'Can not access project: 'proj
+           Iterate
+           End
+   Address CMS 'VMARC UNP 'ft proj wfm' = = 'ofm' (REPL OLDD'
+   If rc=0 Then Address CMS 'ERASE 'ft proj wfm
+   Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) NOTYPE WRITE'
+End s
+Return
+ 
+ 
+Depl_Code:
+/*---------------------------------------------------------------+
+| Deploy some of the code                                        |
++---------------------------------------------------------------*/
+Do d=1 To depl.0
+   'PIPE (NAME CODESYDE.EXEC:70 END ?)',
+       '< 'depl.d,
+       '| var deplcode'
+   Parse Value deplcode With fn ft targ1 targ2 proj sender node nodes
+   Say TimeStamp() fn ft 'deployed by: 'sender node
+/*---------------------------------------------------------------+
+| Access the input part                                          |
++---------------------------------------------------------------*/
+   Address CMS 'VMLINK 'proj' (ONLY(CODE) NOTYPE .fm'
+   If rc=0 Then Parse Pull . . ifm .
+           Else Do
+                Say TimeStamp() 'Can not link 'code
+                Iterate
+                End
+/*---------------------------------------------------------------+
+| Access the output part                                         |
++---------------------------------------------------------------*/
+   Address CMS 'VMLINK 'targ1 targ2' (NONAMES NOTYPE WRITE .fm'
+   If rc=0 Then Parse Pull . . ofm .
+           Else Do
+                Say TimeStamp() 'Can not link 'targ1 targ2
+                Iterate
+                End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+   Say Address CMS 'REPLACE 'fn ft ifm ofm
+/*---------------------------------------------------------------+
+| Release  in- and output and clean up                           |
++---------------------------------------------------------------*/
+   Address CMS 'VMLINK 'targ1 targ2' <DET (NONAMES NOTYPE WRITE'
+   Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) NOTYPE'
+   Address CMS 'ERASE 'depl.d
+End d
+Return
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

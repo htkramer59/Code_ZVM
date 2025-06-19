@@ -1,0 +1,223 @@
+/* this exec helps directory maintenance
+    +-----------------------------------------------------------+
+    | format:  | DRM <directory-fileid | VMUSERS DIRECT * >     |
+    |                   < ( direct-command >                    |
+    +-----------------------------------------------------------+
+    prerequisites:  $DRM$ XEDIT , DIRMAP MODULE, GETFMADR MODULE
+                   Written by:  Kris Buelens  IBM Belgium
+(c) Copyright International Business Machines Corporation 1985, 1998.
+                  All Rights Reserved.
+UPDATE HISTORY:                         >> Don't change this line || <<
+V1.0    1 Oct 85
+V2.0    2 Apr 86 changed filename of XEDIT macro to $DRM$
+V2.0             added new prefix commands
+V2.1      Feb 87 Find MDISK of a user (PF12)
+V2.2   30 Sep 87 Corrected PF2 'finduser' bug (i.e. USER xxxUSER pswd)
+V2.3    7 Jan 88 updated to support 9332 and 9335 dasd
+V2.4    9 Aug 88 updated to for easy change if running in VM/XA
+V2.5    6 Feb 89 updated for automatic Directory command select XA<->SP
+V2.6   23 Mar 89 updated to allow find previous userid
+V2.7   29 Mar 89 added LK options to LINK/ACCESS/FILELIST a mdisk
+V2.8   16 Oct 89 updated: SET SERIAL OFF for directory
+V2.9   7  Feb 90 postpone REMAP until realy needed (i.e. GET)
+V2.10  21 Feb 90 Support RACF
+V2.11  28 Feb 90 add PF23 (like PF11 but alloc MDISK at top part of gap)
+V2.12  12 Mar 90 inform about new version being used
+V2.13  10 Apr 90 add QLink prefix command to perform a Q LINKS command
+V2.14  13 May 91 use PF5/PF17 to cooperate with XEDIT's ALL macro
+V2.15  15 May 91 PF2 + cursor on INCLUDE statement=find PROFILE xxxx
+V2.16  24 Sep 91 better RACF interface thanks to RAC EXEC in RACF 1.9
+V2.17  13 Nov 91 check if having CP-class for dir-update
+V2.18  25 Nov 91 correct find a mdisk when mdiskpw contains "USER"
+V2.19  25 Nov 91 Use PSAVE iso SAVE
+V2.20  13 Jan 92 Support new GAPFILE format (since D/T9345)
+V2.20  14 Jan 92 Give better length of Mdisk sta & size numbers
+V2.21  24 Jan 92 Correct some cases where PF10|12 did not leave DRM
+V2.22  26 Feb 92 Added GETM command
+V2.23   1 Jun 92 Select default DIRECT module depending on host system
+V2.24  31 Aug 92 Added FORMAT prefix command
+       14 Sep 92 Use MIXED option of DIRECT command also if min. HPO R4
+V2.25  30 Oct 92 RACF interface: remove leading 0 from 4 digit addresses
+       25 Now 92 Improve this algorithm again
+       20 Jan 93 RACF interface: PF5=C /???????/SYSUSERS/
+        3 Feb 93 RACF interface: support AUTOLOG permits
+       17 May 93 Control cursor pos for LINK commands
+       22 Jul 93 correct 4 Digit addresses when finding user's MDISK(PF2)
+       27 Sep 93 Avoid REXX error if ALL macro used in GAPFILE
+       29 Sep 93 New GETC/GETL/GETH commands
+       14 Mar 96 Recognize NEWMDISK as an MDISK card (for MVMDISKS XEDIT)
+        5 Jun 96 Recognize GAPFILE format created by VM/ESA V2
+V2.26  27 Nov 96 Add DIRME prefix command to call DIRME for that user
+       28 May 98 Accept an EXEC as "DIRECT" command
+V2.27  22 Jun 98 New prefix commands: AMD, CMD and DMD (for DIRMAINT)
+V3.00  31 Aug 98 Y2K support, many small changes, Refresh via DIRMAINT
+                 FREEMAP support (helps to defragment disks)
+                 Use DRM NAMES for all tailorable stuff.
+V4.00  27 Dec 01 Additions for DRMGUI
+V4.54  24 Feb 12 Also check dates of DIRMAP ctrl files to check for remap
+V5     27 Aug 12 Avoid taking USER BACKUP as default directory
+END UPDATE HISTORY:
+*/
+TRACE N
+version=5.00
+crt='(c) Copyright International Business Machines Corporation 1985, 2012.'
+address ''
+parse upper source . . myname mytype mymode .
+parse value diag(0) with vmname 9 25 vmtype 28
+vmesa= ( left(c2X(vmtype),1)^='F' ) /* VM/ESA or VM/XA */
+ 
+parse upper arg fn ft fm .  '(' options '' RefreshDir direct
+gui=0
+ 
+do while options^='' /* analyse requested options */
+   parse var options option options
+   select
+     when option='$$GUI$$' then gui=1
+     when option='REFRESHDIR' then do
+        parse var options option options
+        RefreshDir=X2c(option)
+     end
+     when direct='' then Direct=option options
+     Otherwise call errexit 5, 'Invalid option:' option
+   end
+end
+ 
+dirm=0
+'PIPE CP QUERY PRODUCT|StrFIND / VMDIR/|SPEC W2 |Xlate upper|Var DVHena'
+if DVHena='ENABLED' then do
+   'STATE ACCESS   DATADVH *'
+   Dirm=(rc=0)
+end
+If Dirm then dirfile='USER BACKUP'
+        else dirfile='USER DIRECT'
+parse value 'A',
+      with  OutFm directcm DirMapOpts DirectOpts
+ 
+/* Find user preferences */
+'STATE DRM NAMES'
+if rc=0 then do
+   'MAKEBUF'
+   'NAMEFIND :nick DRM',
+            ':DirFile :OutFm :DirmapOpts :DirectOpts :DirectCm',
+            '(FILE DRM STACK'
+   if rc=0 then do; pull t;if t<>'' then DirFile   =t
+                    pull t;if t<>'' then OutFm     =t
+                    pull t;if t<>'' then DirmapOpts=t
+                    pull t;if t<>'' then DirectOpts=t
+                    pull t;if t<>'' then DirectCm  =t ; end
+   'DROPBUF'
+end
+parse var DirFile DefFn DefFt DefFm
+ 
+fn=word(fn deffn         ,1)
+ft=word(ft DefFt 'DIRECT',1)
+fm=word(fm DefFm '*'     ,1)
+if direct^='' then directcm=direct
+ 
+if fn='?'  then do; 'HELP CMS DRM' ;exit 100; end
+if fn='??'  then do
+   say crt
+   'EXECSTAT GDYVERS EXEC'
+   if rc<8 then call gdyvers 0,version,'DRM',myname mytype '*'
+           else 'HELP CMS DRM'
+   exit 100
+end
+ 
+'GLOBALV SELECT DRM GET CVERSION'
+if cversion='' then do
+   say crt
+   'GLOBALV SELECT DRM SETP CVERSION' version
+end
+else if cversion^=version then do
+   say crt
+   'EXECSTAT GDYVERS EXEC'
+   if rc<8 then do
+      call gdyvers cversion,version,'DRM',myname mytype '*'
+      if result='' then 'GLOBALV SELECT DRM SETP CVERSION' version
+   end
+end
+ 
+If OutFm='=' then do
+   'STATEW * *' fm
+   OutFm=word('A' fm,(rc=0)+1)
+end; else do
+   'STATEW * * 'outfm
+   if rc^=0 then do
+      if rc=28 then t='Disk "'outfm'" is read-only.'
+      else t='Outmode "'outfm'" is invalid.'
+      Call ErrExit rc,t,'Change DRM NAMES.'
+      exit rc
+   end
+end
+parse value diag(0) with 9 env +2 25 bitmap 33
+/* 7FFFFFE000000000 for z/VM Version 6 Release 1.0 */
+/* 7FFFFFF000000000 for z/VM Version 6 Release 2.0 */
+/*zVM52= (bitand(substr(bitmap,3,1),'FF'x)='FF'x) */
+/*zVM61= (bitand(substr(bitmap,4,1),'E0'x)='E0'x) */
+zVM62= (bitand(substr(bitmap,4,1),'F0'x)='F0'x)
+parse value queued(),
+      with oq ddate gdate modes
+/* check dates of GAPFILE and DIRECTORY and the DIRMAP control files */
+  'PIPE (end ?) COMMAND LISTFILE GAPFILE VOLSERS * (NOH ISO|TAKE',
+     '|Append COMMAND LISTFILE INCLUDE VOLSERS *(NOH ISO||TAKE',
+     '|Append COMMAND LISTFILE EXCLUDE VOLSERS *(NOH ISO||TAKE',
+     '|Append COMMAND LISTFILE FULLPACK DEFINES *(NOH ISO||TAKE',
+     '|SORT 57-75 D',
+     '|SPEC 57-75|Append Literal 0000-00-00 00:00:00|VAR CDATE',
+  '? COMMAND LISTFILE' fn 'GAPFILE 'outfm '(NOH ISO',
+     '|SPEC 57-75|Append Literal 0000-00-00 00:00:00|VAR GDATE',
+  '? COMMAND LISTFILE' fn ft fm '(NOH ISO', /* Directory file */
+     '|Var fid|SPEC 57-75|Append Literal |VAR DDATE'
+if ddate='' then do
+   if dirm then do
+      t='DIRMAINT';tt='(eg. DIRMAINT 1DB)'
+   end; else do
+      if zVM62 then t='PMAINT'
+               else t='MAINT'
+      tt='(eg.' t '2CC)'
+   end
+   Call ErrExit rc, 'Directory 'fn ft fm 'not found',,
+               'You have to LINK and ACCESS some' t 'MDISK first' tt
+end
+if directcm='' then do
+   directcm='DIRECTXA'
+   'STATE DIRECTXA MODULE *'
+   if rc<>0 then do
+      'EXEC VMLINK PMAINT 551 (NONAMES'
+      'STATE DIRECTXA MODULE *'
+   end
+   if rc<>0 then Call ErrExit rc,'DIRECTXA MODULE not found.'
+end
+else do
+  if word(directCm,1)='EXEC' then do
+     DirCmdFnFt=SUBword(directCm,2) 'EXEC'
+     'EXECSTAT' DirCmdFnFt ; rc=rc*(rc<>4)
+  end
+  else do
+     DirCmdFnFt=directcm 'MODULE'
+     'STATE' DirCmdFnFt
+  end
+  if rc^=0 then
+     Call ErrExit rc,'Directory command "'DirCmdFnFt '*" not found'
+end
+ 
+fid=space(left(fid,19))
+remap=(ddate>gdate | cDate>Gdate)  /* force $DRM$ to remap directory */
+ 
+ /* save variables for $DRM$ XEDIT*/
+'GLOBALV SELECT $drm$ PUT DIRMAPOPTS OUTFM FID MODES DIRECTCM REMAP',
+                         'DIRECTOPTS REFRESHDIR'
+/* call $DRM$ XEDIT to do the job*/
+queue 'MACRO $DRM$' word('$$GUI$$',(Gui=0)+1) '$PROFI$'
+'XEDIT' fid '(NOPROF'
+ 
+if GapFltSELFS=1 then  /* Should unload SELFS EXEC? ($DRM$ can load it)*/
+   'EXECDROP SELFS EXEC'
+exit rc
+ 
+ERREXIT: /* general errorexit routine */
+ parse upper source . . myname mytype . syn .
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)

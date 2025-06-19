@@ -1,0 +1,282 @@
+/*---------------------------------------------------------------+
+| Function : Link, Access and Filelist an MDISK or SFS directory |
+|                                                                |
+| File     : L        EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|            VMLINK   NAMES                                      |
+|                                                                |
+| Called   : L        <userid> <mdisk>       <fn> <ft> (<options>|
+|                     <filepool:userid>      <fn> <ft> (<options>|
+|                     <.dir filepool:userid> <fn> <ft> (<options>|
+|                     <subconfig> <mdisk>    <fn> <ft> (<options>|
+|                                                                |
+|            <userid> any valid userid or .DIR                   |
+|            <mdisk>  any valid mdisk or a filespace/directory   |
+|                     in combination with .DIR                   |
+|            <filepool:userid>  any valid filespace or           |
+|                               a combination with directory     |
+|            <.dir filepool:userid>  any valid filespace or      |
+|                               a combination with directory     |
+|            <subconfig> name of a subconfig e.g. maint-1        |
+|            <fn>      any filename you are looking for          |
+|                      defaults to *                             |
+|            <ft>      any filetype you are looking for          |
+|                      defaults to *                             |
+|            <options> If set to WRITE the target will be        |
+|                      access R/W                                |
+|                      If set to DEBUG locations will be shown   |
+|                      where we call Exit                        |
+|                      Maybe combined in any order               |
+|                                                                |
+| Comments : If no <mdisk> is specified this will default to     |
+|            191 or a filespace on VMUSERS e.g. VMUSERS:SOMEID.  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180214 13:49:24                                   |
+| Changes  : .                                                   |
+|            20230227 H.T.Kramer : Add functionality to          |
+|                         show mdisks in subconfigs              |
+|            20190510 H.T.Kramer : added filepool support        |
+|            20220526 H.T.Kramer : Rewrite for more defaults     |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid mdisk fn ft '(' options
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Do we have the WRITE option asked...                           |
++---------------------------------------------------------------*/
+If Wordpos('WRITE',options)<>0 Then vmlopt='WRITE'
+                               Else vmlopt=''
+If Wordpos('DEBUG',options)<>0 Then debug=1
+                               Else debug=0
+/*---------------------------------------------------------------+
+| Here we check if the input is empty, help or SFS               |
++---------------------------------------------------------------*/
+sfs=0
+Select
+When uid=''     Then Call Exit '28 No input specified'
+When uid='?'    Then Do
+/*---------------------------------------------------------------+
+| Show help                                                      |
++---------------------------------------------------------------*/
+                'VMFCLEAR'
+                'PIPE (NAME L.EXEC:66 END ?)',
+                   '< 'myfn myft' *',            /* Read my self     */
+                   '| tolabel Parse',            /* Up to here       */
+                   '| cons'                      /* Show             */
+                Call Exit '0'
+                End
+When uid='*'    Then uid=Userid()
+When uid='.DIR' Then Do
+/*---------------------------------------------------------------+
+| Going for directory in SFS                                     |
++---------------------------------------------------------------*/
+                If Substr(Reverse(mdisk),1,1)<>'.' Then mdisk=mdisk||'.'
+                Parse Value mdisk With filespace '.' .
+                filespace=filespace'.'
+                Parse Value mdisk With . ':' chkuid '.' .
+                uid=''
+                sfs=1
+                End
+When Pos(':',uid)<>0 Then Do
+/*---------------------------------------------------------------+
+| Going for directory in SFS                                     |
++---------------------------------------------------------------*/
+                If Substr(Reverse(uid),1,1)<>'.' Then uid=uid||'.'
+                Parse Value uid With filespace '.' .
+                filespace=filespace'.'
+                Parse Value uid With . ':' chkuid '.' .
+                fn=mdisk
+                ft=fn
+                sfs=1
+                End
+When Pos('-',Reverse(Strip(uid)))=2 Then Do
+/*---------------------------------------------------------------+
+| Assume this is a SUBCONFIG                                     |
++---------------------------------------------------------------*/
+                If fn='' Then fn='*'
+                If ft='' Then ft='*'
+                Call ShowSubCfg
+                Call Exit
+                End
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Here we check if we can find the MDISK of non SFS              |
++---------------------------------------------------------------*/
+nomd=0
+If \sfs Then Do
+     If mdisk='' Then mdisk='191'
+     chkuid=uid
+     nomd=CheckViaMdisk(uid mdisk)
+     End
+If nomd Then Do
+          filespace='VMUSERS:'uid'.'
+          chkuid=uid
+          uid=filespace
+          mdisk=''
+          sfs=1
+          End
+/*---------------------------------------------------------------+
+| Here we process the files                                      |
++---------------------------------------------------------------*/
+If fn='' Then fn='*'
+If ft='' Then ft='*'
+/*---------------------------------------------------------------+
+| We check if the id exists                                      |
++---------------------------------------------------------------*/
+idok=CheckViaMdisk(chkuid '0000')
+If \idok Then Call Exit '53 Userid does not exist: 'chkuid
+/*---------------------------------------------------------------+
+|  Now we check if the filespace exists if we are going SFS      |
++---------------------------------------------------------------*/
+If sfs Then Do
+    'PIPE (NAME L.EXEC:137 END ?)',
+       'cms QUERY DIRATTR 'filespace,            /* Ask cms 4 info   */
+       '| pick w1.1 == ~FILECONTROL~ or',        /* Select these     */
+              'w1.1 == ~DIRCONTROL~',            /* .                */
+       '| count lines',                          /* How many         */
+       '| var fsok'                              /* Store as boolean */
+    If \fsok Then Call Exit '33 No valid filespace: 'filespace
+    End
+/*---------------------------------------------------------------+
+| Compose the input for the VMLINK                               |
++---------------------------------------------------------------*/
+If sfs Then vmlinput='.DIR 'uid mdisk
+       Else vmlinput=uid mdisk
+Address CMS 'VMLINK 'vmlinput' (MODE0 NOTYPE 'vmlopt' NONAMES FILELIST 'fn ft' .fm'
+If rc=0 Then Parse Pull .
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Show error messages if present and exit with rc                |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If debug Then Call GetLocation exrc
+If Datatype(exrc,'NUM') Then Do
+                             Say errmsg
+                             If debug Then Say location
+                             End
+                        Else exrc=0
+Exit exrc
+ 
+ 
+CheckViaMdisk:
+/*---------------------------------------------------------------+
+| Do some checking thru Query MDISK                              |
++---------------------------------------------------------------*/
+Parse Upper Arg quid qcuu .
+'PIPE (NAME L.EXEC:173 END ?)',
+   'cp QUERY MDISK USER 'quid qcuu' DIR LOC',    /* Ask cp 4 info    */
+   '| pick w1.1 == ~HCPQMD040E~',                /* Select this      */
+   '| count lines',                              /* How many         */
+   '| var qret'                                  /* Store as boolean */
+Return qret
+ 
+ 
+GetLocation:
+/*---------------------------------------------------------------+
+| Get the location where the exit is called from                 |
++---------------------------------------------------------------*/
+Parse Upper Arg src .
+'PIPE (NAME L.EXEC:186 END ?)',
+   '< 'myfn myft' *',                            /* Read my self     */
+   '| specs pad 0 recno 1.5 right 1;* nw',       /* Preface w lineno */
+   '| locate anycase 6;* ~Call Exit~',           /* Select these     */
+   '| locate ~'src'~',                           /* Select this      */
+   '| strip leading ~0~',                        /* Remove zeros     */
+   '| specs ~Called from: 'myfn myft' Line:~ 1', /* Compose output   */
+            'w1.1 nw',                           /* .                */
+   '| var location'                              /* Hand 2 rexx      */
+Return
+ 
+ 
+ShowSubCfg:
+/*---------------------------------------------------------------+
+| Show a MDISK in a SUBCONFIG                                    |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT (NOT .fm'
+If rc=0 Then Parse Upper Pull  . . wfm .
+        Else Call Exit rc' Problem linking DIRMAINT 1DF'
+/*---------------------------------------------------------------+
+| Find the location of the SUBCONFIG                             |
++---------------------------------------------------------------*/
+'PIPE (NAME L.EXEC:208 END ?)',
+  '< USER DIRECT 'wfm,                           /* Read index       */
+  '| pick anycase w3.1 == ~'uid'~',              /* Find subconfig   */
+  '| specs ~/PARTFN/~  1 w6.1 n',                /* Prep 4 varload   */
+          '~;/START/~  n w7.1 n',                /* .                */
+          '~;/LENGTH/~ n w8.1 n',                /* .                */
+  '| split at ;',                                /* Split here       */
+  '| varload'                                    /* Hand 2 rexx      */
+If partfn='' |,
+   partfn='PARTFN' Then Call Exit rc 'Problem finding 'uid
+/*---------------------------------------------------------------+
+| Read the file, select SUBCONFIG and find the Virt. device      |
++---------------------------------------------------------------*/
+'PIPE (NAME L.EXEC:221 END ?)',
+   '< 'partfn' CLUSTER 'wfm,                     /* Read cluster     */
+   '| specs 1.72 1',                             /* Remove some cols */
+   '| strip',                                    /* Remove spaces    */
+   '| drop first 'start-1,                       /* Read upto here   */
+   '| take 'length,                              /* Take this        */
+   '| locate ~'mdisk'~',                         /* Find vcuu        */
+   '| specs ~/STARTLOC/~ 1 w4.1 n',
+           '~;/SIZE/~ n    w5.1 n',
+           '~;/VOLID/~ n   w6.1 n',
+   '| split at ;',
+   '| varload'
+Address CMS 'VMLINK DIRMAINT <DET (NOT'
+/*---------------------------------------------------------------+
+| Check if the DASD is available                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME L.EXEC:237 END ?)',
+   'cp QUERY DASD 'volid,                        /* Ask cp           */
+   '| locate anycase ~NOT FOUND~',               /* Look for this    */
+   '| count lines',                              /* How many?        */
+   '| var nomdisk'                               /* Hand 2 rexx      */
+If nomdisk Then Call Exit 99' DASD containing MDISK is not available'
+/*---------------------------------------------------------------+
+| Get free virt address and access mode                          |
++---------------------------------------------------------------*/
+Address CMS 'GETFMADR 120'
+Parse Pull . wfm lcuu .
+If wfm='Z' Then Call Exit 98' No free Virtual Device or Access Mode'
+/*---------------------------------------------------------------+
+| Define the disk                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME L.EXEC:252 END ?)',
+   'CP DEFINE MDISK 'lcuu startloc size volid,   /* Issue cmd        */
+   '| hole'                                      /* Don't show       */
+If rc<>0 Then Call Exit rc' Error in DEFINE MDISK or not authorized'
+/*---------------------------------------------------------------+
+| Access the disk                                                |
++---------------------------------------------------------------*/
+If vmlopt='WRITE' Then acm=wfm
+                  Else acm=wfm'/'wfm
+'PIPE (NAME L.EXEC:261 END ?)',
+   'CMS ACC 'lcuu acm' (MODE0',                  /* Issue cmd        */
+   '| hole'                                      /* Don't show       */
+If rc<>0 Then Do
+              dmrc=rc
+              'PIPE (NAME L.EXEC:266 END ?)',
+                 'CP DET 'lcuu,                  /* Issue cmd        */
+                 '| hole'                        /* Not showing      */
+              Call Exit dmrc' Problem ACCESSING 'uid mdisk
+              End
+/*---------------------------------------------------------------+
+| Show content                                                   |
++---------------------------------------------------------------*/
+Address CMS 'FILELIST 'fn ft wfm
+/*---------------------------------------------------------------+
+| Remove disk                                                    |
++---------------------------------------------------------------*/
+Address CMS 'REL 'wfm
+'PIPE (NAME L.EXEC:279 END ?)',
+    'CP DET 'lcuu,                               /* Issue cmd        */
+    '| hole'                                     /* Never show       */
+Return

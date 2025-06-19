@@ -1,0 +1,238 @@
+*R ;M ;Repname      ;Options/input needed         ;Reason for de-activation
+*e ;e ;             ;                             ;
+*p ;n ;             ;                             ;
+*n ;u ;             ;                             ;
+*o ;  ;             ;                             ;
+*  ;  ;             ;                             ;
+100;  ;CPU          ;                             ;
+101;  ;REDISP       ;                             ;
+.  ;  ;REHIST       ;                             ;
+102; 5;SYSTEM       ;                             ;
+103; 2;STORAGE      ;                             ;
+104; 4;PRIVOP       ;                             ;
+105;  ;GRAPHDET     ;                             ;
+.  ;  ;PLOTDET      ;                             ;
+.  ;  ;GRAPHSUM     ;                             ;
+.  ;  ;PLOTSUM      ;                             ;
+.  ;  ;GRAPHVAR     ;                             ;
+.  ;  ;PLOTVAR      ;                             ;
+106; 6;CPSERV       ;                             ;
+107;11;CHANNEL      ;                             ;
+108;  ;DEVICE       ;                             ;
+.  ;  ;DEVICE       ;DASD                         ;
+109;  ;DEVICE       ;CPOWNED                      ;
+110;  ;DEVICE       ;<devno>                      ;
+111;  ;CACHDBSE     ;                             ;
+112;21;USER         ;                             ;
+113;  ;UPAG         ;                             ;
+114;23;USTAT        ;                             ;
+.  ;  ;USTATG       ;%CAT %PGW %IOW %PSW %RUN %EL ;
+115;  ;USER         ;<userid>                     ;
+116;  ;SFS          ;                             ;
+117;  ;SFS          ;<userid>                     ;
+119; 7;SPOOL        ;                             ;
+.  ;  ;SPOOL        ;NOSYSTEM                     ;
+120;  ;SPOOL        ;USER                         ;
+121;  ;SPOOL        ;<userid>                     ;
+122;  ;CP           ;<cmd>                        ;
+123;  ;CMS          ;<cmd>                        ;
+124;  ;MENU         ;                             ;
+126;  ;LPAR         ;                             ;
+127;24;URESP        ;                             ;
+*128;31;GRAPHICS ;                             ;Monitor setting/Feature not present
+129;25;UTRANS       ;                             ;
+130; C;SYSTRANS     ;                             ;
+131;19;DEVCONF      ;                             ;
+132;26;UCOMM        ;                             ;
+133; 9;NSS          ;                             ;
+134; A;DSPACESH     ;                             ;
+135;  ;USTLOG       ;                             ;
+136;3D;RESPALL      ;                             ;
+137;  ;RESPUP       ;                             ;
+138;39;MDCACHE      ;                             ;
+139;37;CPSALL       ;                             ;
+140;  ;CPSTOCP      ;                             ;
+141;  ;CPSTOVM      ;                             ;
+142;  ;CPSFAIL      ;                             ;
+143;  ;PAGELOG      ;                             ;
+144;  ;PROCLOG      ;                             ;
+145;3F;SCHEDLOG     ;                             ;
+146;36;AUXLOG       ;                             ;
+147; B;VDISKS       ;                             ;
+*148;  ;FCONTROL ;DEFSCRN                      ;Monitor setting/Feature not present
+149; E;MONSET       ;                             ;
+150;  ;SFSLOG       ;                             ;
+151;  ;SFSIOLOG     ;                             ;
+152;  ;SFSREQ       ;                             ;
+153; I;EXCEPT       ;                             ;
+154; F;SYSSET       ;                             ;
+155; D;MONDATA      ;                             ;
+*156;  ;SEEKLOC  ;                             ;Monitor setting/Feature not present
+*157;17;SEEKDIST ;                             ;Monitor setting/Feature not present
+158;  ;SEEKDET      ;<devno>                      ;
+160;32;HISTDATA     ;                             ;
+161;  ;LCHANNEL     ;                             ;
+*162;  ;USERLOG  ;<userid>                     ;Monitor setting/Feature not present
+*163;  ;UPAGELOG ;<userid>                     ;Monitor setting/Feature not present
+*164;  ;USTATLOG ;<userid>                     ;Monitor setting/Feature not present
+*165;  ;URESPLOG ;<userid>                     ;Monitor setting/Feature not present
+*166;  ;UTRANLOG ;<userid>                     ;Monitor setting/Feature not present
+*167;  ;UCOMMLOG ;<userid>                     ;Monitor setting/Feature not present
+*168;  ;DEVLOG   ;<devno>                      ;Monitor setting/Feature not present
+*169;  ;CACHDLOG ;<devno>                      ;Monitor setting/Feature not present
+*170;  ;CPOWNLOG ;<devno>                      ;Monitor setting/Feature not present
+*171;  ;SEEKLLOG ;<devno>                      ;Monitor setting/Feature not present
+*172;  ;SEEKDLOG ;<devno>                      ;Monitor setting/Feature not present
+*173;33;BENCHMRK ;                             ;Monitor setting/Feature not present
+174;  ;UTRANDET     ;<userid>                     ;
+*175;3G;SCHDATA  ;                             ;Monitor setting/Feature not present
+*176;12;CTLUNIT  ;                             ;Monitor setting/Feature not present
+*177;15;CACHEXT  ;                             ;Monitor setting/Feature not present
+178;  ;MDCSTOR      ;                             ;
+179;3I;SYSLOG       ;                             ;
+180; G;SYSCONF      ;                             ;
+*182;  ;UCOMMLOG ;<userid>                     ;Monitor setting/Feature not present
+183;38;DASDLOG      ;                             ;
+*184;  ;CACHELOG ;<devno>                      ;Monitor setting/Feature not present
+185;1A;IOCHANGE     ;                             ;
+186;  ;BASMODE      ;                             ;
+*187;  ;FC       ;DEFLOG                       ;Monitor setting/Feature not present
+188;27;MTUSERS      ;                             ;
+*189;  ;MTUSRLOG ;<userid>                     ;Monitor setting/Feature not present
+190;  ;BFSFILES     ;                             ;
+191;  ;BFSPIPES     ;                             ;
+192;  ;BFSLOCKS     ;                             ;
+*193;  ;SYSMENU  ;                             ;Monitor setting/Feature not present
+194;34;CORREL       ;                             ;
+195;  ;REDHIST      ;<fn ft fm>                   ;
+*198;  ;FCONRMT  ;                             ;Monitor setting/Feature not present
+*.  ;  ;SYSLOAD  ;                             ;Monitor setting/Feature not present
+*199;  ;.....    ;                             ;Monitor setting/Feature not present
+*201;  ;FCONXREP ;                             ;Monitor setting/Feature not present
+202;  ;LPARLOG      ;                             ;
+203;3K;TCPMENU      ;                             ;
+204;  ;TCPACTLG     ;<tcpid>                      ;
+205;  ;TCPDATLG     ;<tcpid>                      ;
+206;  ;TCPICMP      ;<tcpid>                      ;
+207;  ;TCPSESS      ;<tcpid>                      ;
+210;  ;TCPLINKS     ;<tcpid>                      ;
+211;  ;TCPBPLOG     ;<tcpid>                      ;
+212;  ;TCPCONF      ;<tcpid>                      ;
+213;  ;UDEFMENU     ;??                           ;
+214;  ;TCPUSERS     ;<tcpid>                      ;
+215;  ;FCHANNEL     ;                             ;
+*216;3E;RSKMENU  ;                             ;Monitor setting/Feature not present
+*217;  ;RSKDET   ;<userid>                     ;Monitor setting/Feature not present
+*218;  ;RSKLOG   ;<userid>                     ;Monitor setting/Feature not present
+*219;  ;RSKDISK  ;<userid>                     ;Monitor setting/Feature not present
+*220;  ;RSKSTOR  ;<userid>                     ;Monitor setting/Feature not present
+221;3H;SFSMENU      ;                             ;
+*222;  ;TCPIOLOG ;<tcpid>                      ;Monitor setting/Feature not present
+*223;  ;LINUX    ;                             ;Monitor setting/Feature not present
+*224;  ;LINUX    ;<userid>                     ;Monitor setting/Feature not present
+225;35;SYSSUMLG     ;                             ;
+226;28;UCONF        ;                             ;
+*227;  ;LXNETWRK ;<userid>                     ;Monitor setting/Feature not present
+*228;  ;LXFILSYS ;<userid>                     ;Monitor setting/Feature not present
+*229;  ;LXMEM    ;<userid>                     ;Monitor setting/Feature not present
+*230;  ;LXCPU    ;<userid>                     ;Monitor setting/Feature not present
+*231;  ;HIPSOCK  ;                             ;Monitor setting/Feature not present
+232;  ;IOPROCLG     ;                             ;
+*233;  ;TCPDOSLG ;<tcpid>                      ;Monitor setting/Feature not present
+234;  ;PROCCONF     ;                             ;
+235;  ;LPARCONF     ;                             ;
+236;3B;PROCMENU     ;                             ;
+237;18;IOPQUEUE     ;                             ;
+238;  ;IDLEUSER     ;                             ;
+239;  ;PROCSUM      ;                             ;
+240;  ;VSWITCH      ;                             ;
+*241; H;VMRM     ;                             ;Monitor setting/Feature not present
+*242;  ;LINUXMEM ;                             ;Monitor setting/Feature not present
+*243;  ;LXCPU    ;                             ;Monitor setting/Feature not present
+*244;  ;LXMEM    ;                             ;Monitor setting/Feature not present
+*245;  ;LXNETWRK ;                             ;Monitor setting/Feature not present
+*246;  ;LXCPULOG ;                             ;Monitor setting/Feature not present
+*247;  ;LXMEMLOG ;                             ;Monitor setting/Feature not present
+*248;  ;LXNETLOG ;                             ;Monitor setting/Feature not present
+249;  ;SCSI         ;                             ;
+*250;  ;SCSILOG  ;<devno>                      ;Monitor setting/Feature not present
+251;  ;QDIO         ;                             ;
+*252;  ;QDIOLOG  ;<devno>                      ;Monitor setting/Feature not present
+253;  ;STORLOG      ;                             ;
+*254;  ;AVAILLOG ;                             ;Monitor setting/Feature not present
+255;  ;QEBSM        ;                             ;
+*256;  ;QEBSMLOG ;                             ;Monitor setting/Feature not present
+257;  ;UQDIO        ;                             ;
+*258;  ;UQDIOLOG ;<userid>                     ;Monitor setting/Feature not present
+*259;  ;DEMNDLOG ;                             ;Monitor setting/Feature not present
+260;3A;STORMENU     ;                             ;
+261;  ;SXSAVAIL     ;                             ;
+262;  ;SXSPAGE      ;                             ;
+263;  ;SXSDEFER     ;                             ;
+264;  ;SXSUTIL      ;                             ;
+*265;  ;LOCKLOG  ;                             ;Monitor setting/Feature not present
+266;  ;GVSWITCH     ;                             ;
+267;  ;EVSWITCH     ;                             ;
+268;  ;GVNIC        ;                             ;
+269;  ;VNIC         ;                             ;
+270;  ;EVNIC        ;                             ;
+271; 3;SSIMENU      ;                             ;
+272;  ;ISFECONF     ;                             ;
+273;  ;ISFEACT      ;                             ;
+*274;  ;ISFLACT  ;                             ;Monitor setting/Feature not present
+*275;  ;ISFLCONF ;                             ;Monitor setting/Feature not present
+*276;  ;SSICONF  ;                             ;Monitor setting/Feature not present
+*277;  ;SSISCHLG ;                             ;Monitor setting/Feature not present
+*278;  ;SSIMILG  ;                             ;Monitor setting/Feature not present
+*279;  ;ISFELOG  ;<epoint>                     ;Monitor setting/Feature not present
+*280;  ;ISFLLOG  ;<partner>                    ;Monitor setting/Feature not present
+*281;  ;ISFLALOG ;                             ;Monitor setting/Feature not present
+*282;  ;DEVICE   ;HPF                          ;Monitor setting/Feature not present
+*283;  ;HPFLOG   ;<devno>                      ;Monitor setting/Feature not present
+284;13;DEVMENU      ;                             ;
+285;  ;LGRELOG      ;                             ;
+*286;  ;LGRDATA  ;                             ;Monitor setting/Feature not present
+287;  ;TOPOLOG      ;                             ;
+*288;  ;USRMPLOG ;<userid>                     ;Monitor setting/Feature not present
+289;22;UPGMENU      ;                             ;
+290;  ;UPGACT       ;                             ;
+*291;  ;UPGACTLG ;<userid>                     ;Monitor setting/Feature not present
+292;  ;UPGUTL       ;                             ;
+*293;  ;UPGUTLLG ;<userid>                     ;Monitor setting/Feature not present
+294;  ;AVLB2GLG     ;                             ;
+295;  ;AVLA2GLG     ;                             ;
+296;  ;STEALLOG     ;                             ;
+297;  ;AGELLOG      ;                             ;
+298;  ;PUORGLOG     ;                             ;
+299;  ;PUCFGLOG     ;                             ;
+*300;  ;DSVCLOG  ;                             ;Monitor setting/Feature not present
+301;  ;DSVBKACT     ;                             ;
+302;  ;PHYSLOG      ;                             ;
+303;  ;DSVSLOG      ;                             ;
+304;  ;PRCLOG       ;                             ;
+305; 8;LPARMENU     ;                             ;
+306;  ;LSHARACT     ;                             ;
+307;3C;LPARLOGM     ;                             ;
+*308;  ;CPLCONF  ;                             ;Monitor setting/Feature not present
+*308;  ;CPLACT   ;                             ;Monitor setting/Feature not present
+*310;14;PCIMENU  ;                             ;Monitor setting/Feature not present
+*311;  ;PCICONF  ;                             ;Monitor setting/Feature not present
+*312;  ;PCIACT   ;                             ;Monitor setting/Feature not present
+*313;  ;PCILOG   ;<pcifunc>                    ;Monitor setting/Feature not present
+314;  ;PINLOG       ;                             ;
+*315;  ;USTMPLOG ;<userid>                     ;Monitor setting/Feature not present
+316;  ;SUBPLOG      ;                             ;
+*317;  ;GLONACT  ;                             ;Monitor setting/Feature not present
+*318;  ;PCIACT   ;ROCE                         ;Monitor setting/Feature not present
+*319;  ;PCILOG   ;<pcifunc>                    ;Monitor setting/Feature not present
+*320;  ;PCIACT   ;ZEDC                         ;Monitor setting/Feature not present
+*321;  ;PCILOG   ;<pcifunc>                    ;Monitor setting/Feature not present
+*322;  ;PCIACT   ;ISMM                         ;Monitor setting/Feature not present
+*323;  ;PCILOG   ;<pcifunc>                    ;Monitor setting/Feature not present
+324;  ;CPLMENU      ;                             ;
+325; 1;CPUMENU      ;                             ;
+326;  ;LOCKACT      ;                             ;
+*327;  ;HPALIAS  ;                             ;Monitor setting/Feature not present
+*328;  ;HPSHARE  ;                             ;Monitor setting/Feature not present
+329;  ;VOLUME       ;                             ;
+*330;  ;VOLLOG   ;                             ;Monitor setting/Feature not present

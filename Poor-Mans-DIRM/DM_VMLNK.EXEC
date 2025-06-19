@@ -1,0 +1,54 @@
+/*---------------------------------------------------------------+
+| Function : Routine for LINK/DETACH of disk                     |
+|                                                                |
+| File     : DM_VMLNK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_VMLNK <nickname> <det> ( <write>                 |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240619 16:10:09                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+DM_VML:
+Parse Upper Arg nick accs '(' rw .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting 'nick accs rw
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Examine the input                                              |
++---------------------------------------------------------------*/
+If Abbrev('DETACH',Strip(accs),3) Then accs='<DETACH'
+                                  Else accs=''
+If rw='WRITE' & accs=''  Then rw='WRITE'
+If rw='WRITE' & accs<>'' Then rw='WRITE'
+If accs='' Then getmode='.fm'
+           Else getmode=''
+If test &,
+   nick='SOURCEDIR' Then nick=nick'.TEST'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wfm=''
+Address CMS 'VMLINK 'nick accs '(ONLY(DM) NOTYPE 'rw getmode
+If rc=0 & accs='' Then Parse Pull . . wfm .
+If rc<>0 Then rw='WRITE' Then Call Exit 428
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Return wfm

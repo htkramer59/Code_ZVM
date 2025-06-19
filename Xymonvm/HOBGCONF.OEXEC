@@ -1,0 +1,57 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*
+/-  Herald ten Dam 08/21/2019                                          -/
+/-    Get configs of guests     */
+trace off
+parse source . call_type myname .
+cr='15'x                                         /*  Carriage return   */
+emsgstart=date('U') time() myname':'   /* Start of error message line  */
+'globalv stack BBDISPLAY BBPORT FQDN '
+pull bbdisplay
+pull bbport
+pull fqdn
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call get_timestamp         /*  Get a linux-like timestamp      */
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+exit
+ 
+do_the_test:
+/* get configs of guest through vmc report 28 */
+'pipe vmc perfsvm 28   | drop 5 | specs w1 1 w8 nw w12 nw | sort w1 | preface literal [guests config] | > HOBVM340 CLIENT A'
+/* 'pipe var status | split at x15 | console' */
+return
+ 
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return
+ 
+get_timestamp:
+'PIPE CP QUERY TIMEZONE' ,
+  '| locate /Active/' ,
+  '| specs w1 1' ,
+  '| var TZ'
+dow = substr(date('W'),1,3)
+parse value date('N') with day month year .
+timestamp = dow month day time() tz year
+return

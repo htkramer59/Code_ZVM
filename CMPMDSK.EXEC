@@ -1,0 +1,87 @@
+/*---------------------------------------------------------------+
+| Function : Compare the content of 2 minidisks, might work      |
+|            for filepool directories as well.                   |
+|                                                                |
+| File     : CMPMDSK  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CMPMDSK OUT = report                                |
+|                                                                |
+| Called   : CMPMDSK  <uid1> <mdisk1> <uid2> <mdisk2>            |
+|                                                                |
+|            <uid2> can be specified as = meaning us <uid1>      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181005 14:16:39                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid1 mdisk1 uid2 mdisk2 .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Test and set some variables                                    |
++---------------------------------------------------------------*/
+If uid1=''   Then Exit 28
+If mdisk1='' Then mdisk1=191
+If uid2='='  Then uid2=uid1
+If mdisk2='' Then mdisk2=191
+/*---------------------------------------------------------------+
+| Assume it is a filepool directory                              |
++---------------------------------------------------------------*/
+If Pos(uid1,'.')<>0 Then uid1='.DIR 'mdisk1
+If Pos(mdisk1,'.')<>0 Then Do
+           uid2='.DIR 'mdisk1
+           mdisk1=''
+           mdisk2=''
+           End
+/*---------------------------------------------------------------+
+| Collect the info...                                            |
++---------------------------------------------------------------*/
+Call Get_Info uid1 mdisk1 stem1.
+Call Get_Info uid2 mdisk2 stem2.
+/*---------------------------------------------------------------+
+| Now compare the lot...                                         |
++---------------------------------------------------------------*/
+/*      '| sort w1.1',                             /* Put in corr ordr*/ */
+Address CMS 'PIPE (end ? name CMPDSK:11)',
+     'stem stem1.',                             /* Take this       */
+     '| l: lookup w4;* w4;*',                   /* Compare fr w4   */
+     '| specs w1.1 1.5 ~  ~ nw w2;* nw',        /* Adjust dups     */
+     '| fi: faninany',                          /* Take in others  */
+     '| sort 28.20',
+     '| > 'myfn' OUT A',                        /* Write report    */
+     '?',                                       /* 2nd pipe        */
+     'stem stem2.',                             /* Take these      */
+     '| l:',                                    /* Conn 2 lookup   */
+     '| specs w1.1 1.5 ~>>~ nw w2;* nw',        /* Adjust recs     */
+     '| fi:',                                   /* Conn 2 fanin    */
+     '? l:',                                    /* Conn 2 lookup   */
+     '| specs w1.1 1.5 ~<<~ nw w2;* nw',        /* Adjust recs     */
+     '| fi:'                                    /* Conn 2 fanin    */
+text='      Recno !! User-id Mdisk     FN       FT       FM Recfm  Lrecl    Records     Blocks Timestamp'
+Queue 'SET RESERVED 5 NON NOHIGH 'text
+Address CMS 'XEDIT 'myfn' OUT A (WIDTH 500'
+Return
+ 
+ 
+Get_Info:
+/*---------------------------------------------------------------+
+| Get the list of files...                                       |
++---------------------------------------------------------------*/
+Parse Arg uid mdisk out
+If out='' Then Do
+               out=mdisk
+               mdisk=''
+               End
+'PIPE (end ?)',
+   'CMS VMLINK 'uid mdisk' (QUIET NONAMES INVOKE LISTFILE * * .fm (NOHEADER ISODATE',
+   '| specs 1.17 1.17 ~_~ 19  20.1 20.1 w4;* nw', /* Clear fm letter */
+   '| specs ~'uid mdisk'~ 1 1;* nw',            /* Add id & disk   */
+   '| specs w1.1 1.8 w2.1 nw.8 w3.1 nw.8 w4;* nw ',
+   '| specs recno 1.5 1;* nw',                  /* Add rec no      */
+   '| specs pad 0 w1.1 1.5 right w2;* nw',      /* Adjust rec no   */
+   '| stem 'out                                 /* Store here      */
+Return

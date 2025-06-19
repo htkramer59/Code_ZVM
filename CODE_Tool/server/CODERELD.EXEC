@@ -1,0 +1,4 @@
+/**/
+Say 'Reloading code and control files'
+Address COMMAND 'CP IPL CMS PARM AUTOCR'
+Exit 1

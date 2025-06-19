@@ -1,0 +1,6 @@
+/**/
+Parse Upper Arg fn ft .
+If fn='' Then fn='*'
+If ft='' Then ft='*'
+'VMLINK .DIR .STATUS. (NON QUIET FILEL 'fn ft' .fm'
+'PIPE stack | hole'

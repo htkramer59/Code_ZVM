@@ -1,0 +1,22 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change the password                                 |
+|                                                                |
+| File     : DM_SETPW EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_ONLIN EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|                                                                |
+| Called   : DM_SETPW <uid> <pw>                                 |
+|          : SETPW    <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 12:54:12                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

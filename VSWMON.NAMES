@@ -1,0 +1,19 @@
+*
+:nick.vswmon   :product..dir vmpsb2:herman.vswmon.     :node.R1LB2
+:nick.vswmon   :product..dir vmpsb1:herman.vswmon.     :node.R1LB1
+:nick.vswmon   :product..dir vmpso1:herman.vswmon.     :node.R1LO1
+:nick.vswmon   :product..dir vmpsa1:herman.vswmon.     :node.R1LA1
+:nick.vswmon   :product..dir vmpsa2:herman.vswmon.     :node.R1LA2
+:nick.vswmon   :product..dir vmpsp1:herman.vswmon.     :node.R1LP1
+:nick.vswmon   :product..dir vmpsp2:herman.vswmon.     :node.R1LP2
+ 
+* Wait nick    * time to wait in mm:ss
+:nick.wait     :time.00:10
+ 
+* Switches nick  * Which switches to check       * on wich node
+:nick.switches :names.VSR1ZVM                    :node.R1LB1
+:nick.switches :names.VSR1ZVM VSR1BHH VSR1ODAT   :node.R1LO1
+:nick.switches :names.VSR1ZVM VSR1BHH VSR1ADAT   :node.R1LA1
+:nick.switches :names.VSR1ZVM VSR1BHH VSR1ADAT   :node.R1LA2
+:nick.switches :names.VSR1ZVM VSR1BHH VSR1PDAT   :node.R1LP1
+:nick.switches :names.VSR1ZVM VSR1BHH VSR1PDAT   :node.R1LP2

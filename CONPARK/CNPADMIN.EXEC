@@ -1,0 +1,716 @@
+/*---------------------------------------------------------------+
+| Function : .                                                   |
+|                                                                |
+| File     : CNPADMIN EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : CNPADMIN .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210507 13:37:29                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+Select
+When myft='EXEC' Then Call Run_EXEC
+When myft='XEDIT' Then Call Run_XEDIT
+Otherwise Exit 88
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc emsg
+If Datatype(exrc,'NUM')=0 Then exrc=0
+If exrc<>0 Then Say TimeStamp() emsg
+Exit exrc
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn
+ 
+ 
+Run_XEDIT:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+changes=0
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:47 END ?)',
+    'cms QUERY DISPLAY',
+    '| specs ~/MAXLINES/~ 1 w2.1 n ~/MAXLEN/~ nw w3.1 n',
+    '| split',
+    '| varload',
+    '?',
+    'rexxvars 1 toload',
+    '| varload',
+    '?',
+    'cp QUERY USERID',
+    '| var ident'
+Call Read_Config
+Call XeditSettings
+/*---------------------------------------------------------------+
+| Fastpath...                                                    |
++---------------------------------------------------------------*/
+Select
+when what = 'USERS'  Then Call ShowUsers
+when what = 'CLIENT' Then Call ShowClient
+when what = 'SERVER' Then Call ShowServer
+when what = 'DEFLT'  Then Call ShowDefaults
+Otherwise Do
+Call InitDisp
+End
+End
+/*---------------------------------------------------------------+
+| Loop...                                                        |
++---------------------------------------------------------------*/
+Do x=1
+    Call Display
+    'READ ALL NUMBER TAG'
+    Address CMS 'PIPE (NAME CNPADMIN.EXEC:78 END ?)',
+        'stack',                                /* Read from stack  */
+        '| xlate upper',                        /* Uppercase        */
+        '| p: pick w1.1 == ~PFK~',
+        '| specs w3.1',
+        '| var cmd',                            /* Store as         */
+        '? p:',
+        '| pick w1.1 ==  ~RES~',
+        '| stem newdata.'
+/*---------------------------------------------------------------+
+| What to do....                                                 |
++---------------------------------------------------------------*/
+    Select
+    When cmd='' |,
+         cmd='CMD'      Then Call Get_Info
+    When cmd='HELP'     Then Address CMS 'HELP CMS CNPADMIN'
+    When cmd='ADD'      Then Call AddNewUser
+    When cmd='DELETE'   Then Call DeleteUser
+    When cmd='CHANGE'   Then Call Change
+    When cmd='RETURN'   Then Do
+                        Call InitDisp
+                        End
+    When cmd='QUIT'     Then Do
+                        Queue 'QQUIT'
+                        Exit
+                        End
+    When cmd='EMSG'     Then Queue cmd
+    Otherwise Say '>>>>' cmd '<<<<<'
+    End
+End x
+ 
+ 
+Change:
+/*---------------------------------------------------------------+
+| Execute the changes                                            |
++---------------------------------------------------------------*/
+Select
+When from=showusers    Then Call ChangeUser
+When from=showclient   Then Call ChangeClient
+When from=showserver   Then Call ChangeServer
+When from=showdefaults Then Call ChangeDefs
+Otherwise 'EMSG Invalid selection'
+End
+Return
+ 
+ 
+AddNewUser:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR'
+line=cursor.1-6
+inst=cursor.2
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:130 END ?)',
+    'stem newdata.',
+    '| specs w3;*',
+    '| change ~_~~',
+    '| change 1.2 ~3 ~/NEWID/~',
+    '| change 1.3 ~13 ~/UKEEP/~',
+    '| change 1.3 ~20 ~/UCOMPRESS/~',
+    '| change 1.3 ~26 ~/UFREQUENCY/~',
+    '| change 1.3 ~31 ~/UMETHOD/~',
+    '| varload'
+'PIPE (NAME CNPADMIN.EXEC:140 END ?)',
+    'cp QUERY MDISK USER 'newid' 0 DIR',
+    '| locate ~HCPQMD040E~',
+    '| count lines',
+    '| var idok'
+If \idok Then 'EMSG Id 'newid' does not exist'
+Call CheckContent 'KEEP' ukeep
+Call CheckContent 'COMPRESS' ucomp
+Call CheckContent 'FREQUENCY' ufreq
+Call CheckContent 'METHOD' umeth
+/**
+If \Datatype(ukeep,'NUM') Then 'EMSG Non numeric data in keep field: 'ukeep
+If \Datatype(ucompress,'NUM') Then 'EMSG Non numeric data in compress field: 'ucompress
+If Pos(ufrequency,'DHAI')=0 Then 'EMSG Invalid frequency: 'ufrequency
+If Wordpos(umethod,'STORE FORWARD STORE&FORWARD')=0 Then 'EMSG Invalid method: 'umethod
+**/
+new=':nick.'Left(newid,8)' :keep.'Left(ukeep,3)' :compress.'Left(ucompress,2)' :frequency.'ufrequency' :method.'umethod
+'EXTRACT /LASTMSG'
+If lastmsg.1='' Then Call UpdateFile
+Return
+ 
+ 
+CheckContent:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg label labvalue
+Select
+When label='KEEP'      Then If \Datatype(labvalue,'NUM') Then 'EMSG Non numeric data in KEEP field: 'labvalue
+When label='COMPRESS'  Then If \Datatype(labvalue,'NUM') Then 'EMSG Non numeric data in COMPRESS field: 'labvalue
+When label='FREQUENCY' Then If Pos(labvalue,'DHAI')=0 Then 'EMSG Invalid FREQUENCY: 'labvalue
+When label='METHOD'    Then If Wordpos(labvalue,'STORE FORWARD STORE&FORWARD')=0 Then 'EMSG Invalid METHOD: 'labvalue
+Otherwise 'EMSG Do not understand 'label labvalue
+End
+Return
+ 
+ 
+DeleteUser:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Say under construction
+ 
+ 
+ 
+ 
+Return
+ 
+ 
+UpdateFile:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:173 END ?)',
+     '< CONPARK NAMES *',
+     '| append disk CONPARK 'node' *',
+     '| strip',
+     '| join * xFF',
+     '| split anycase before string ~:CLIENT.~',
+     '| split anycase before string ~:MAINDIR.~',
+     '| split anycase before string ~:USERS.~',
+     '| split anycase before string ~:SYSTEM.~',
+     '| split anycase before string ~:DEFAULTS.~',
+     '| change anycase ~:CLIENT~1 :CLIENT~',
+     '| change anycase ~:MAINDIR~2 :MAINDIR~',
+     '| change anycase ~:USERS~3 :USERS~',
+     '| change anycase ~:SYSTEM~4 :SYSTEM~',
+     '| change anycase ~:DEFAULTS~5 :DEFAULTS~',
+     '| l: locate anycase ~:USERS.~',
+     '| specs w2;*',
+     '| split at string xFF',
+     '| p: pick 3.1 \== ~*~',
+     '| join * xFF',
+     '| specs ~3~ 1 1;* nw xFF n ~'new' * Added: 'Date('S') Time() ident'~ n',
+     '| fi: faninany',
+     '| join * xFF',
+     '| var new',
+     '? l:',
+     '| stem rest.',
+     '? p:',
+     '| fi:'
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:201 END ?)',
+     'stem rest.',
+     '| append var new',
+     '| sort 1.1',
+     '| specs w2;*',
+     '| split at string xFF',
+     '| > NAMES CONPARK A'
+Return
+ 
+ 
+ChangeUser:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR'
+line=cursor.1-6
+inst=cursor.2
+work=data.line
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:218 END ?)',
+    'var work',
+    '| change anycase ~%B~ ~',
+    '| change anycase ~%G~ ~',
+    '| change anycase ~%Y~ ~',
+    '| var work'
+Select
+When inst>1   & inst<34  Then Do
+                              part=Substr(work,1,34)
+                              displacement=0
+                              End
+When inst>34  & inst<68  Then Do
+                              part=Substr(work,34,34)
+                              displacement=34
+                              End
+When inst>68  & inst<102 Then Do
+                              part=Substr(work,68,34)
+                              displacement=68
+                              End
+When inst>102 & inst<136 Then Do
+                              part=Substr(work,102,34)
+                              displacement=102
+                              End
+Otherwise Nop
+End
+part=Strip(Strip(part,'B','|'))
+id=Strip(Substr(part,1,8))
+Parse Value part With . curdays curcomp curfreq curmeth .
+curdays=Word(part,2)
+curcomp=Word(part,3)
+curfreq=Word(part,4)
+curmeth=Word(part,5)
+Do n=1 To newdata.0
+   Parse Value newdata.n With . . offset newval .
+   newoffset=offset-displacement
+   Select
+   When newoffset = 12 Then newdays=newval
+   When newoffset = 18 Then newcomp=newval
+   When newoffset = 23 Then newfreq=newval
+   When newoffset = 27 Then newmeth=newval
+   Otherwise Nop
+   End
+End
+If newdays='' | newdays='NEWDAYS' Then newdays=curdays
+If newcomp='' | newcomp='NEWCOMP' Then newcomp=curcomp
+If newfreq='' | newfreq='NEWFREQ' Then newfreq=curfreq
+If newmeth='' | newmeth='NEWMETH' Then newmeth=curmeth
+Say id curdays curcomp curfreq curmeth
+Say id newdays newcomp newfreq newmeth
+Call CheckContent 'KEEP' newdays
+Call CheckContent 'COMPRESS' newcomp
+Call CheckContent 'FREQUENCY' newfreq
+Call CheckContent 'METHOD' newmeth
+cur=':nick.'Left(id,8)' :keep.'Left(curdays,3)' :compress.'Left(curcomp,2)' :frequency.'Left(curfreq,2)' :method.'curmeth
+new=':nick.'Left(id,8)' :keep.'Left(newdays,3)' :compress.'Left(newcomp,2)' :frequency.'Left(newfreq,2)' :method.'newmeth,
+    '* Changed: 'Date('S') Time() ident
+/* Updated: 20210507 16:28:57 H.T.Kramer */
+'EXTRACT /LASTMSG'
+/* If lastmsg.1='' Then Call UpdateFile */
+Say cur
+Say new
+Drop curdays curcomp curfreq curmeth
+Drop curdays curcomp curfreq curmeth
+Drop displacement offset newoffset
+Return
+ 
+ 
+ChangeServer:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:247 END ?)',
+   'stack',
+   '| specs recno 1.1 1;* nw',
+   '| cons'
+Return
+ 
+ 
+ChangeDefs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:258 END ?)',
+   'stem newdata.',
+   '| specs recno 1.1 1;* nw',
+   '| cons'
+Return
+ 
+ 
+ 
+ 
+ChangeClient:
+/*---------------------------------------------------------------+
+| Change the client config i.e. the locations...                 |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR'
+line=cursor.1-6
+Parse Value data.line With . '%g' curinfo
+curinfo=Strip(curinfo)
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:275 END ?)',
+      'stack',
+      '| xlate upper',
+      '| var newinfo'
+Select
+When newinfo=curinfo Then 'EMSG no changes'
+When Word(newinfo,1)='.DIR' Then Call CheckSFS
+When Word(newinfo,1)<>'.DIR' Then Call CheckMd
+Otherwise 'EMSG can not comply'
+End
+If error='' Then Do
+      Address CMS 'PIPE (NAME CNPADMIN.EXEC:286 END ?)',
+         '< CONPARK NAMES *',
+         '| change ~'curinfo'~'newinfo'~',
+         '| > CONPARK NAMES A'
+      changes=1
+      End
+If rc=0 Then Call InitDisp
+Return
+ 
+ 
+CheckSFS:
+/*---------------------------------------------------------------+
+| Check if the filespace/directory exists                        |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:300 END ?)',
+    'cms LISTDIR 'Word(newinfo,2),
+    '| find DMS',
+    '| append literal ',
+    '| join *',
+    '| strip',
+    '| var error'
+If error<>'' Then 'EMSG 'error
+Return
+ 
+ 
+CheckMd:
+/*---------------------------------------------------------------+
+| Check if the Minidisk exists..                                 |
++---------------------------------------------------------------*/
+error=''
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:316 END ?)',
+     'cp QUERY MDISK USER 'newinfo' DIR',
+     '| find HCP',
+     '| append literal ',
+     '| join *',
+     '| strip',
+     '| var error'
+If error<>'' Then 'EMSG 'error
+Return
+ 
+ 
+Read_Config:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:331 END ?)',
+    '< CONPARK NAMES *',
+    '| pick 1.1 \== ~*~',
+    '| pick 1.1 \== ~~',
+    '| join * x40',
+    '| split anycase before string ~:MAINDIR.~',
+    '| split anycase before string ~:USERS.~',
+    '| split anycase before string ~:SYSTEM.~',
+    '| split anycase before string ~:DEFAULTS~',
+    '| change ~:~/~ 1',
+    '| change ~.~/~ 1',
+    '| xlate fs / f2.1',
+    '| varload',
+    '?',
+    'cp QUERY USERID',
+    '| specs W3.1 1',
+    '| var node'
+Return
+ 
+ 
+Run_EXEC:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'EXECLOAD 'myfn' EXEC * = XEDIT'
+Address CMS 'XEDIT 'myfn' WORK A (WIDTH 500 PROFILE 'myfn
+Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+XeditSettings:
+/*---------------------------------------------------------------+
+| Initial XEDIT settings                                         |
++---------------------------------------------------------------*/
+'RECFM V'
+'LRECL 160'
+'TRUNC *'
+'VERIFY 1 'maxlen
+'CURLINE ON 4'
+'PREFIX OFF'
+'TOFEOF OFF'
+'SCALE  OFF'
+'EXTRACT /SCREEN'
+'SET ENTER IGNORE'
+maxlines=Word(screen.1,2)-8
+/*---------------------------------------------------------------+
+| Define the control char and colors we are going to use...      |
++---------------------------------------------------------------*/
+'SET CTLCHAR % ESCAPE'
+'SET CTLCHAR Y PROTECT   YELLOW HIGH'
+'SET CTLCHAR y NOPROTECT YELLOW HIGH'
+'SET CTLCHAR W PROTECT   WHITE  HIGH'
+'SET CTLCHAR w NOPROTECT WHITE  HIGH'
+'SET CTLCHAR B PROTECT   BLUE   HIGH'
+'SET CTLCHAR b NOPROTECT BLUE   HIGH'
+'SET CTLCHAR G PROTECT   GREEN  HIGH'
+'SET CTLCHAR g NOPROTECT GREEN  HIGH'
+'SET CTLCHAR R PROTECT   RED    HIGH'
+'SET CTLCHAR r NOPROTECT RED    HIGH'
+'SET CTLCHAR $ OFF'
+Return
+ 
+ 
+InitDisp:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If changes Then subm='Submit'
+           Else subm=''
+title='Main Menu'
+header='     Available_selections'
+Call MakeSeparator
+pfkeys='1 Help;2;3 Quit;4;5 'subm';6;7;8;9;10;11;12 Quit'
+lines=' %g_%Y Users allowed to send files to CONPARK, ,',
+      '%g_%Y Nicknames for CLIENT code, ,',
+      '%g_%Y Server Setting, ,',
+      '%g_%Y Defaults for User settings'
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:408 END ?) var lines | split at , | stem data.'
+Call SetPFKeys
+cursor='7 3'
+Return
+ 
+ 
+Get_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR'
+If title='Main Menu' Then Do
+         Select
+         when cursor.1='7' Then Call ShowUsers
+         when cursor.1='9' Then Call ShowClient
+         when cursor.1='11' Then Call ShowServer
+         when cursor.1='13' Then Call ShowDefaults
+         Otherwise Do
+           'EMSG Invalid cursor position/argument'
+           Call Initdisp
+           End
+         End
+         End
+Return
+ 
+ 
+ShowUsers:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+from=showusers
+title='User Settings'
+header=' User      Keep  Comp Frq Action '
+header=Copies(header,4)
+Call MakeSeparator
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:443 END ?)',
+    'var defaults',
+    '| split before string ~:~',
+    '| strip',
+    '| sort',
+    '| pick anycase fs . f1.1 == ~:keep~ or',
+    '                    f1.1 == ~:compress~ or',
+    '                    f1.1 == ~:frequency~ or',
+    '                    f1.1 == ~:method~',
+    '| change anycase ~:keep~:ukeep~',
+    '| change anycase ~:comp~:ucomp~',
+    '| change anycase ~:freq~:ufreq~',
+    '| change anycase ~:meth~:umeth~',
+    '| xlate upper',
+    '| change ~:~/~',
+    '| change ~.~/~',
+    '| varload'
+addstrt=' %YAdd new entry, overwrite the defaults if needed:;',
+  '%WUser    %W%WKeep %W%WComp%W%WFrq%W%WAction%W;',
+  '%W--------%W%W-----%W%W----%W%W---%W%W------%W;',
+  '%g________%G%g'Left(ukeep,5)'%G%g'Left(ucompress,4)'%G%g'Left(ufrequency,3)'%G%g'Left(umethod,6)'%G'
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:464 END ?)',
+      'var users',
+      '| split anycase before string ~:NICK.~',
+      '| strip',
+      '| sort w1.1',
+      '| change anycase ~:nick.~%B~',
+      '| change anycase ~:keep.~%g~',
+      '| change anycase ~:compress.~ %g~',
+      '| change anycase ~:frequency.~ %g~',
+      '| change anycase ~:method.~ %g~',
+      '| strip',
+      '| pick 1.1 \== ~~',
+      '| specs 1;* 1 ~%Y~ nw x4F n',
+      '| snake 4',
+      '| strip x4F',
+      '| append literal ',
+      '| append var addstrt',
+      '| split at ;',
+      '| stem data.'
+pfkeys='1 Help;2;3 Return;4;5 Add;6 Delete;7;8;9;10 Change;11;12 Quit'
+Call SetPFKeys
+cursor='7 12'
+Call Display
+ 
+Return
+ 
+ 
+ShowClient:
+/*---------------------------------------------------------------+
+| Show the conpark client settings...                            |
++---------------------------------------------------------------*/
+from=showclient
+title='Server Settings'
+header=' Change desired defaults and press F10 to change'
+Call MakeSeparator
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:499 END ?)',
+   'var maindir',
+   '| split anycase before string ~:NICK.~',
+   '| pick 1.1 == ~:~',
+   '| drop first 1',
+   '| specs 1;* 2',
+   '| change ~ :~%Y~',
+   '| l: locate anycase ~'node'~',
+   '| split before string ~%Y~',
+   '| change ~.~%g~ 1',
+   '| change anycase ~node%g~node%B~',
+   '| change anycase ~nick%g~nick%B~',
+   '| preface literal  Active settings for this node:',
+   '| fi: faninany',
+   '| stem data.',
+   '? l:',
+   '| change ~ :~%Y~',
+   '| split before string ~%Y~',
+   '| change ~.~%B~ 1',
+   '| preface literal  Settings for other nodes',
+   '| preface literal %B',
+   '| if1: if locate anycase ~node~',
+   '|     specs 1;* 1 ~%B~ nw write',
+   '| if1:',
+   '| if2: if locate anycase ~product~',
+   '|     change /%B/%g/',
+   '| if2:',
+   '| append literal ',
+   '| append literal %RIf changes made to other nodes you need to send the output to the other nodes!',
+   '| buffer',
+   '| fi:'
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10 Change;11;12 Quit'
+Call SetPFKeys
+cursor='9 10'
+Call Display
+Return
+ 
+ 
+ShowServer:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+from=showserver
+title='Server Settings'
+header=' Change desired defaults and press F10 to change'
+Call MakeSeparator
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:545 END ?)',
+   'var system',
+   '| split before string ~:~',
+   '| pick 1.1 == ~:~',
+   '| drop first 1',
+   '| change ~:~%Y~',
+   '| change ~.~%g~',
+   '| stem data.'
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10 Change;11;12 Quit'
+Call SetPFKeys
+cursor='7 18'
+Call Display
+Return
+ 
+ 
+ShowDefaults:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+from=showdefaults
+title='Default Settings'
+header=' Change desired defaults and press F10 to change'
+Call MakeSeparator
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:568 END ?)',
+   'var defaults',
+   '| split before string ~:~',
+   '| strip',
+   '| pick 1.1 == ~:~',
+   '| drop first 1',
+   '| change ~:~%Y~',
+   '| change ~.~%g~',
+   '| stem data.'
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10 Change;11;12 Quit'
+cursor='7 18'
+Call SetPFKeys
+Call Display
+Return
+ 
+ 
+SetPFKeys:
+/*---------------------------------------------------------------+
+| Set the pf keys                                                |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:588 END ?)',
+   'var pfkeys',                                /* Take this        */
+   '| split at ~;~',                            /* Split here       */
+   '| f: fanout',                               /* Duplicate recs   */
+   '| xlate upper',                             /* Uppercase        */
+   '| specs ~SET PF~ 1 1;* n',                  /* Compose cmd      */
+   '| stem set.',                               /* Store as         */
+   '? f:',                                      /* Conn 2 fanout    */
+   '| specs w1.1 1 ~=~ n w2.1 nw',              /* Adjust layout    */
+   '| if: if pick w2.1 \== ~~',                 /* It is not empty  */
+   '|     specs w1.1 1 ~%B~ n w2.1 n ~%W~ n',   /* Adjust layout    */
+   '| if:',                                     /* Conn 2 if        */
+   '|     specs w1.1 1 ~ ~ n.5',                /* Adjust layout    */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Make 1 record    */
+   '| specs ~Pf~ 1 1;* n',                      /* Add this         */
+   '| var pfkeyline'                            /* Store as         */
+/*---------------------------------------------------------------+
+| Get the keys set in XEDIT                                      |
++---------------------------------------------------------------*/
+Do s=1 To set.0
+  Address XEDIT set.s
+End s
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Set the reserved lines...                                      |
++---------------------------------------------------------------*/
+time=Date('S') Time() myfn
+l=Length(time)
+if cursor='' Then cursor='7 2'
+'SET RESERVE 3 WHITE NO 'Center(title,120-l)'%G'time
+'SET RESERVE 4 WHITE NO 'header
+'SET RESERVE 5 WHITE NO 'separator
+If data.0<=maxlines Then Do
+          rep=maxlines-data.0-1
+          Address CMS 'PIPE (NAME CNPADMIN.EXEC:626 END ?)',
+              'literal ',                       /* Make empty rec   */
+              '| dup 'rep,                      /* Copy x times     */
+              '| stem data. append'             /* Add to this      */
+          End
+Do d=1 To data.0
+ lineno=d+6
+ 'RESERVE 'lineno 'HIGH' data.d
+End d
+'CURSOR SCREEN 'cursor
+'SET RESERVE -1 WHITE NO 'pfkeyline
+Return
+ 
+ 
+MakeSeparator:
+/*---------------------------------------------------------------+
+| Create a separator to measure...                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CNPADMIN.EXEC:644 END ?)',
+   'var header ',                               /* Take this        */
+   '| deblock 1',                               /* Split into recs  */
+   '| if: if pick 1.1 \== ~ ~',                 /* If not empty     */
+   '|   specs ~-~ 1',                           /* Do this          */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Re-instate record*/
+   '| var separator'                            /* Store as         */
+Return

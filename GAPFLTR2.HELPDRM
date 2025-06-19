@@ -1,0 +1,61 @@
+With the "GAP/MDISKMAP file filter" panel you can filter the volumes you want
+to see in a GAP file or in the MDISKMAP file.
+ 
+1. Using the filter selection panel
+*------------------------------------
+You place the cursor on a line with group of disks, then you press
+  ENTER, PF4, PF9, or PF10 to confirm your selection
+ 
+  In all  cases, DRM will use XEDIT's ALL function to list selected
+  volumes in GAPFILE/MDISKMAP that is presented to you.
+  The key you press defines how and how long we interprete your choice.
+ 
+ Enter = View only the volumes in selected group
+         This means DRM will use XEDIT's ALL function so you see only
+         volumes included in the selected group.  We do it just once.
+ PF4   = View only the volumes NOT in selected group
+         This a like above, but we list the volumes NOT in the group.
+ 
+ PF9   = View&remember: only volumes in selected group
+         Like case one, but we remember your selection until you
+         explicitely turn it off (PF11) or leave DRM.
+ PF10  = View&remember: volumes NOT in selected group
+         Like as case two, but we remember your selection.
+ 
+With PF11 you tell us to see all volumes that DIRMAP included in its GAPFILE,
+so, returning to default mode.
+ 
+ 
+Behind the scenes we use the same mechanism as XEDIT's ALL macro to hide
+"unwanted" lines.  These lines are still in the file, but excluded from
+display.  Consequently, if you filtered the MDISKMAP and you use the FILE
+or SAVE command, the hidden lines will be written to disk too.
+If you want to SAVE only the displayed lines, use the PUT command;
+for example    -* PUT * MYxyz MDISKMAP
+   (the -* makes XEDIT first goes to "top of file" before executing PUT)
+ 
+2. Filtering setup
+*----------------------
+To set up the dynamic filtering groups, refer to the RELATED section (PF11)
+  Filtering - Dynamic GAP & MDISKMAP filtering details
+ 
+.cs 7 on
+ 
+For other DRM and related information:
+   place the cursor under the topic of your choice and press ENTER or PF1
+ 
+ 
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM DYNFLTR (ALL
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips, README
+ 
+XEDIT ALL (ALL          ALL          ›%XEDIT's ALL macro; "Selective Line Editing"
+SET SELECT  (ALL         SET SELECT  ›%- Assign nbrs for "Selective Line Editing"
+SET DISPLAY (ALL         SET DISPLAY ›%- Which lines will be displayed
+SET SCOPE  (ALL          SET SCOPE   ›%- To which lines apply commands
+.cs 7 off

@@ -1,0 +1,19 @@
+/* Added col1 & col2 */
+Parse Upper Arg col1 col2 .
+ 
+'PIPE (end ?)',
+   'cp Q N',
+   '| split at ,',
+   '| strip',
+   '| sort',
+   '| specs 1;* 1.20',
+   '| snake 'col1 col2,
+   '| > snake file a'
+'PIPE (end ?)',
+   'cp Q N',
+   '| split at ,',
+   '| strip',
+   '| sort',
+   '| specs 1;* 1.20',
+   '| snk 'col1 col2,
+   '| > snk file a'

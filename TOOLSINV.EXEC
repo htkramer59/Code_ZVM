@@ -1,0 +1,159 @@
+/*---------------------------------------------------------------+
+| Function : Create inventory of the tools directory...          |
+|                                                                |
+| File     : TOOLSINV EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RSCS     EXEC      to find the working nodes        |
+|            RMCMD    EXEC      issue command thru rscs          |
+|            <myfn>   FILE      work file                        |
+|            <myfn>   INVENTOR  files found on all nodes         |
+|            <myfn>   REPORT    files that deviate               |
+|            <myfn>   MISSING   files are missing on nodes       |
+|                                                                |
+| Called   : TOOLSINV .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210416 14:36:24                                   |
+| Changes  : .                                                   |
+|            20210610 H.T.Kramer : Re-write                      |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Init some stuff..                                              |
++---------------------------------------------------------------*/
+toolsfm='Q'
+inv.0=0
+dev.0=0
+nodesina.0=0
+hdr='FILENAME FILETYPE    FORMAT LRECL       RECS     BLOCKS DATE       TIME     Nodes&count:'
+/*---------------------------------------------------------------+
+| Main code line                                                 |
++---------------------------------------------------------------*/
+Call CleanUp
+Call Get_NodeName
+Call Get_Act_Nodes
+Address CMS 'RMCMD CMS LISTFILE * * 'toolsfm' (NOHEADER ISODATE , , , FILE ,'myfn' FILE A'
+If rc<>0 Then Exit 128
+Call Prepare_Results
+If inv.0<>0 Then Call Create_Inventory
+If dev.0<>0 Then Call Create_Deviations
+If nodesina.0<>0 Then Call Create_Missing
+Exit
+ 
+ 
+Prepare_Results:
+/*---------------------------------------------------------------+
+| Prepare some stems for later processing                        |
++---------------------------------------------------------------*/
+'PIPE (NAME TOOLSINV.EXEC:52 END ?)',
+   '< 'myfn' FILE A',                            /* Read work file   */
+   '| pick 1.1 \== ~ ~ and',                     /* Make             */
+          '1.1 \== ~*~ and',                     /* ....a            */
+          'w4.1 \== ~'toolsfm'0~ and',           /* .....selection   */
+          'w4.1 \== ~RMCMD~',                    /* .                */
+   '| specs w2;* 1 w1.1 nw x40 n',
+   '| f: fanout',
+   '| fi: faninany',
+   '| sort 1.75',
+   '| join keylen 75',
+   '| p: pick w-1;-1 == ~'nodesact.0'~',
+   '| stem dev.',
+   '? f:',
+   '| sort 1.75',
+   '| unique count 1.75',
+   '| specs 11;* 1 1.10 strip nw',
+   '| specs 1.75 1 w-1;-1 nw',
+   '| fi:',
+   '? p:',
+   '| stem inv.'
+Address CMS 'ERASE 'myfn' FILE A'                /* Clean up         */
+Return
+ 
+ 
+Create_Inventory:
+/*---------------------------------------------------------------+
+| Create some reports                                            |
++---------------------------------------------------------------*/
+Say 'Create_Inventory'
+'PIPE (NAME TOOLSINV.EXEC:82 END ?)',
+   'stem inv.',                                  /* Get these        */
+   '| preface var hdr',
+   '| > 'myfn' INVENTRY A'
+Return
+ 
+ 
+Create_Deviations:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Say 'Create_Deviations'
+'PIPE (NAME TOOLSINV.EXEC:94 END ?)',
+    'stem dev.',
+    '| preface var hdr',
+    '| > 'myfn' DEVIATIONS A'
+Return
+ 
+ 
+Create_Missing:
+/*---------------------------------------------------------------+
+| Create report on the files missing on the nodes...             |
++---------------------------------------------------------------*/
+Say 'Create_Missing'
+'PIPE (NAME TOOLSINV.EXEC:106 END ?)',
+  'stem nodesina.',                              /* Take these       */
+  '| join * x40',                                /* Make 1 record    */
+  '| specs ~Can not check on nodes:~ 1 1;* nw',      /* Add this         */
+  '| > 'myfn' MISSING A'                         /* Write 2 file     */
+Return
+ 
+ 
+Get_Act_Nodes:
+/*---------------------------------------------------------------+
+| Get all the active rscs nodes                                  |
++---------------------------------------------------------------*/
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+'PIPE (NAME TOOLSINV.EXEC:119 END ?)',
+   'rscs QUERY SYSTEM',                          /* Ask rscs         */
+   '| p: pick anycase w4.1 == ~CONNECT~',        /* Select these     */
+   '| specs substr -2;-1 of w3.1',               /* Keep shortnode   */
+   '| append var shortnode',                     /* Add myself       */
+   '| sort',                                     /* Sort them        */
+   '| stem nodesact.',                           /* Store as         */
+   '? p:',                                       /* Conn 2 pick      */
+   '| pick anycase w4.1 == ~ACTIVE~',            /* Select these     */
+   '| specs substr -2;-1 of w3.1',               /* Keep shortnode   */
+   '| sort',                                     /* Sort them        */
+   '| stem nodesina.'                            /* Store as         */
+Address CMS 'EXECDROP RSCS REXX'
+Return
+ 
+ 
+Get_NodeName:
+/*---------------------------------------------------------------+
+| Get nodename and short nodename                                |
++---------------------------------------------------------------*/
+'PIPE (NAME TOOLSINV.EXEC:139 END ?)',
+    'cp QUERY USERID',                           /* Ask cp           */
+    '| specs w3.1',                              /* Keep this        */
+    '| var node',                                /* Store as         */
+    '| specs -2;-1',                             /* Reduce to this   */
+    '| var shortnode'                            /* Store as         */
+Return
+ 
+ 
+CleanUp:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'literal INVENTRY DEVIATIONS MISSING',
+    '| split',
+    '| specs ~ERASE 'myfn'~ 1 w1.1 nw ~A~ nw',
+    '| cms'
+Return

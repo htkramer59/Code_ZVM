@@ -1,0 +1,105 @@
+/*---------------------------------------------------------------+
+| Function : Check TCP IP config files                           |
+|                                                                |
+| File     : QSMEMORY EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSMEMORY REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSMEMORY <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSMEMORY REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* .                */
+vdisk.0=0                                        /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'myfn'. 1'
+When how='?'    Then Do
+                     'PIPE (NAME QSTCPIP.EXEC:40 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose header and get commands                                |
++---------------------------------------------------------------*/
+stemname='report.'
+'PIPE (NAME QSTCPIP.EXEC:52 END ?)',
+    'literal 'TimeStamp(),                       /* Compose header   */
+    '| append var tcp_header 1',                 /* .                */
+    '| join * x40',                              /* .                */
+    '| var tcp_header',                          /* .                */
+    '?',                                         /* .                */
+    'var tcp_cmds 1',                            /* Get cmds         */
+    '| var cmds'                                 /* .                */
+/*---------------------------------------------------------------+
+| Do the queries...                                              |
++---------------------------------------------------------------*/
+tcp.0=0
+'PIPE (NAME QSTCPIP.EXEC:64 END ?)',
+    'var cmds',                                  /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| stem tcpcmd.'                             /* Store as...      */
+Do t=1 To tcpcmd.0
+   hdr=TimeStamp() tcpcmd.t
+  'PIPE (NAME QSTCPIP.EXEC:70 END ?)',
+    '| literal 'tcpcmd.t,                        /* Get cmd          */
+    '| cms',                                     /* Issue it         */
+    '| preface var hdr',                         /* Add header       */
+    '| stem tcp. append'                         /* Add 2 stem       */
+End t
+Call Add2Output 'tcp.'
+/*---------------------------------------------------------------+
+| Hand back the output                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME QSTCPIP.EXEC:80 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var tcp_header',                  /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Hand 2 caller    */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Add to the output stem                                         |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSTCPIP.EXEC:100 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* .                */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

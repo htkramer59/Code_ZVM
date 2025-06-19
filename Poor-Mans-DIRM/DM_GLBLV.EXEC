@@ -1,0 +1,113 @@
+/*---------------------------------------------------------------+
+| Function : Set or display the show switch                      |
+|                                                                |
+| File     : DM_GLBV  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_GLBV  <on/off/show>                              |
+|                              TEST   switch on/of test          |
+|                              TRACE   "  "        trace         |
+|                              SHOW    "  "        show          |
+|                              SET    specify setting 4 trace    |
+|                     <empty>  Returns all values                |
+|                                                                |
+|             SET can be SET TRACECTL with any of the value      |
+|             REXX trace control values                          |
+|             SET can be SET TRACETARGET to identify an EXEC     |
+|             where the trace is to be started                   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240621 17:01:07                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . switch varname setting
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+setable='TEST TRACE SET'
+If switch<>'' & switch<>'SHOW' &,
+   Wordpos(varname,setable)=0 Then Call Exit 228
+Select
+When switch='OFF' Then Do
+                       swtc=0
+                       Address CMS 'GLOBALV SELECT DM SETLP 'varname swtc
+                       tracetarget=Value('TRACETARGET',,'LASTING DM')
+                       If varname='TRACE' |,
+                          varname='TRACETARGET' Then Say varname 'set to 'switch' for 'tracetarget
+                                                Else Say varname 'set to 'switch
+                       End
+When switch='ON'  Then Do
+                       swtc=1
+                       Address CMS 'GLOBALV SELECT DM SETLP 'varname swtc
+                       tracetarget=Value('TRACETARGET',,'LASTING DM')
+                       If varname='TRACE' |,
+                          varname='TRACETARGET' Then Say varname 'set to 'switch' for 'tracetarget
+                                                Else Say varname 'set to 'switch
+                       End
+When switch='SET' Then Do
+/*---------------------------------------------------------------+
+| Do some checks                                                 |
++---------------------------------------------------------------*/
+                       If Wordpos(varname,'TRACECTL TRACETARGET')=0 Then Call Exit 228
+                       traceinpt='ACEFLIROS'
+/*---------------------------------------------------------------+
+| Act on the input                                               |
++---------------------------------------------------------------*/
+                       Select
+                       When varname='TRACECTL'   Then Do
+                            If Pos(setting,traceinpt)=0 Then Call Exit 328
+                            Address CMS 'GLOBALV SELECT DM SETLP TRACECTL 'setting
+                            End
+                       When varname='TRACETARGET' Then Do
+                            'PIPE (NAME DM_GLBLV.EXEC:69 END ?)',
+                               'cms LISTFILE 'setting' EXEC * (NOH', /* Find the file    */
+                               '| pick w1.1 \== ~DMSLST002E~',       /* Ignore this      */
+                               '| count lines',                      /* Count lines      */
+                               '| var filefnd'                       /* Store as boolean */
+                            If \filefnd Then Call Exit 428
+                            Address CMS 'GLOBALV SELECT DM SETLP TRACETARGET 'setting
+                            End
+                       Otherwise Nop
+                       End
+                       Say varname' is set to 'setting
+                       End
+When switch='SHOW' Then Do
+                       Address CMS 'GLOBALV SELECT DM LIST'
+                       End
+When switch=''    Then Do
+                       show=Value('SHOW',,'LASTING DM')
+                       test=Value('TEST',,'LASTING DM')
+                       trace=Strip(Value('TRACE',,'LASTING DM'))
+                       tracectl=Value('TRACECTL',,'LASTING DM')
+                       tracetarget=Value('TRACETARGET',,'LASTING DM')
+                       If switch='' Then switch=''
+                       If show='' Then show=0
+                       If test='' Then test=0
+                       If trace='' Then trace=0
+                       If tracectl='' Then tracectl='I'
+                       If tracetarget='' Then tracetarget=''
+                       'PIPE (NAME DM_GLBLV.EXEC:96 END ?)',
+                          'rexxvars toload',     /* Take variable    */
+                          '| nlocate anycase ~myfn~',
+                          '| nlocate anycase ~myft~',
+                          '| varload 1'          /* Hand 2 caller    */
+                       End
+Otherwise Call Exit 28
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc
+If \Datatype(exrc,'NUM') Then exrc=0
+/* Say Date('S') Time() myfn myft' Exiting' */
+Exit

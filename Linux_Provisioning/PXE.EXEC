@@ -1,0 +1,264 @@
+/*---------------------------------------------------------------+
+| Function : Mimick PXEboot...                                   |
+|                                                                |
+| File     : PXE      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files in : KERNEL      IMG                                     |
+|            <newserver> PARM                                    |
+|            INITRD      IMG                                     |
+|                                                                |
+|                                                                |
+| Called   : PXE      .                                          |
+|                                                                |
+| Comments : Uses VMLINK, SWAPGEN                                |
+|            Tested for SLES11 and 12                            |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181108 11:29:49                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg parms
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Preliminaries...                                               |
++---------------------------------------------------------------*/
+myid=Userid()
+myctl=Substr(myid,1,6)
+distro=Substr(myid,1,2)
+'PIPE (NAME PXE.EXEC:31 END ?)',
+   'cp QUERY USERID ',                          /* Who am I        */
+   '| specs substr -2;-1 of w-1;-1 ',           /* Take last part  */
+   '| var node',                                /* Store here      */
+   '?',                                         /* 2nd pip         */
+   'cp QUERY TIMEZONE',                         /* Ask CP          */
+   '| xlate upper',                             /* Uppercase all   */
+   '| pick w-1;-1 == ~ACTIVE~',                 /* Want only this  */
+   '| specs w1.1',                              /* Keep this       */
+   '| var timezone'                             /* Store here      */
+Say TimeStamp()' Timezone: 'timezone
+Say TimeStamp()' OTAP classification: 'node
+/*---------------------------------------------------------------+
+| Here we start....                                              |
++---------------------------------------------------------------*/
+Call Check_Distro
+Call Read_and_Check_Config
+Call Find_Distro_Versions
+Call Find_Input
+If version='' |,
+   version='VERSION' Then Do
+                     Call IPL_Boot_Disk
+                     End
+                Else Do
+                     Call Check_DASD
+                     Call Prepare
+                     Call Punch_Files
+                     Call Disable_Input
+                     Call IPL_RDR
+                     End
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Uniform way of exiting the code                                |
++---------------------------------------------------------------*/
+Parse Arg exrc exmsg
+If exrc='' | exrc='EXRC' Then exrc=0
+If exmsg<>'' & exmsg<>'EXMSG' Then Say TimeStamp() exmsg
+Exit exrc
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Make a timestamp                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME PXE.EXEC:76 END ?)',
+   'literal ',                                  /* Empty line       */
+   '| timestamp isodate ',                      /* Take time        */
+   '| var timestamp'                            /* Store here       */
+Return timestamp myid myfn
+ 
+ 
+Prepare:
+/*---------------------------------------------------------------+
+| Start spool .... clean rdr .... just in case                   |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SPOOL PUN *'
+Address COMMAND 'CP PURGE * RDR ALL'
+Return
+ 
+ 
+Punch_Files:
+/*---------------------------------------------------------------+
+| Link & access version...and punch the files...                 |
++---------------------------------------------------------------*/
+Say TimeStamp()'Preparing install'
+Address CMS 'VMLINK 'version' (ONLY('myfn') .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc 'Problem linking 'version
+Address CMS 'PUNCH KERNEL IMG 'wfm' (NOH'
+punrc=rc
+Address CMS 'PUNCH 'myctl 'PARM 'wfm' (NOH'
+punrc=punrc+rc
+Address CMS 'PUNCH INITRD IMG 'wfm' (NOH'
+punrc=punrc+rc
+If punrc<>0 Then Call Exit punrc 'Problem punching files for install'
+Address CMS 'VMLINK 'version' <DET (ONLY('myfn')'
+Drop wfm
+Return
+ 
+ 
+Disable_Input:
+/*---------------------------------------------------------------+
+| Disable the input file....                                     |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'version' (ONLY('myfn') WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc 'Problem linking 'version' in WRITE mode'
+Address CMS 'RENAME 'myctl' PARM 'wfm' PARM 'myctl wfm
+Address CMS 'VMLINK 'version' <DET (ONLY('myfn') write'
+Return
+ 
+ 
+Check_Distro:
+/*---------------------------------------------------------------+
+| Check the distros we support                                   |
++---------------------------------------------------------------*/
+Select
+  When distro='SL' Then distro='SLES'
+  When distro='RH' Then distro='RHEL'
+  Otherwise Call Exit 128 'Unknown distro: 'distro
+  End
+Return
+ 
+ 
+Find_Input:
+/*---------------------------------------------------------------+
+| Determine which distro we are going to build...                |
+|   assuming only  1 file will be found                          |
++---------------------------------------------------------------*/
+version=''
+Do v=1 To version.0
+  'PIPE (NAME PXE.EXEC:143 END ?)',
+     'cms VMLINK 'version.v' (NOTYPE ONLY('myfn') INVOKE LISTFILE 'myctl' PARM .fm ',
+     '| hole'
+  If rc=0 Then version=version.v
+End v
+Say TimeStamp()'Running/installing: 'version
+Return
+ 
+ 
+Find_Distro_Versions:
+/*---------------------------------------------------------------+
+| Get all the distro versions                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME PXE.EXEC:156 END ?)',
+     '< 'myfn' NAMES *',                        /* Read this        */
+     '| xlate upper',                           /* Uppercase all    */
+     '| all /:NICK.'distro'/&/:LIST./',         /* Find this        */
+     '| specs fs . f3',                         /* Remove some stuff*/
+     '| specs fs : f1',                         /* and more         */
+     '| split',                                 /* Make records     */
+     '| strip',                                 /* Remove spaces    */
+     '| sort w1.1 d',                           /* Invert sort order*/
+     '| stem version.'                          /* Store here       */
+Return
+ 
+ 
+ 
+Read_and_Check_Config:
+/*---------------------------------------------------------------+
+| Read config and check virtual devices                          |
++---------------------------------------------------------------*/
+'PIPE (NAME PXE.EXEC:174 END ?)',
+    '< 'myfn' CONFIG *',                        /* Read this        */
+    '| f: fanout',                              /* Duplicate recs   */
+    '| pick 1.1 \== ~*~',                       /* Remove comments  */
+    '| specs pad 0 w1.1 1.4 right w2;* nw',     /* Adjust length    */
+    '| l: lookup w1.1 w2.1 detail',             /* Compare...       */
+    '| stem exist.',                            /* Results here     */
+    '? ',                                       /* 2nd pipe         */
+    'cp QUERY VIRTUAL DASD',                    /* Ask CP           */
+    '| l:',                                     /* Conn 2 lookup    */
+    '| stem missing.',                          /* Missing here     */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| xlate upper',                            /* Uppercase        */
+    '| pick w-1;-1 == ~BOOT~',                  /* Find this        */
+    '| specs w1.1',                             /* Keep this        */
+    '| var boot_disk'                           /* Store here       */
+If missing.0<>0 Then Do
+            Say TimeStamp()'The following devices are missing:'
+            'PIPE (NAME PXE.EXEC:192 END ?)',
+               'stem missing. ',                /* Take these       */
+               '| specs ~'TimeStamp() myfn'~ 1 w1;* nw',  /* Add som*/
+               '| cons'                         /* Show...          */
+            Call Exit 99
+            End
+Return
+ 
+ 
+Check_DASD:
+/*---------------------------------------------------------------+
+| Check if CMS filesystem is on root disk                        |
+| Requires DIRM for id AMD with LABEL option!!                   |
++---------------------------------------------------------------*/
+Do e=1 To exist.0
+   Parse Value exist.e With cuu descr .
+   Say TimeStamp()'Checking FS for: 'exist.e
+   descr=Translate(descr)
+   Select
+     When descr='CONTROL' Then Nop
+     When descr='BOOT'    Then Call Check_Fs
+     When descr='ROOT'    Then Call Check_Fs
+     When descr='SWAP1'   Then Nop
+     When descr='SWAP2'   Then Nop
+     When descr='SWAP3'   Then Call Format_Swap
+     When descr='SWAP4'   Then Call Format_Swap
+     When descr='ORACLE'  Then Call Check_Fs
+     Otherwise Call Exit 99 'No valid description 'descr' for 'cuu
+     End
+End e
+Return
+ 
+ 
+Check_Fs:
+/*---------------------------------------------------------------+
+| Check if the disk is CMS formatted...                          |
++---------------------------------------------------------------*/
+'PIPE (NAME PXE.EXEC:229 END ?)      cms ACCESS 'cuu' Z | hole'
+If rc<>0 Then Call Exit rc 'NON-CMS filesystem found on 'cuu', CAUTION!!'
+Return
+ 
+ 
+Format_Swap:
+/*---------------------------------------------------------------+
+| Make a fixed disk SWAP                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME PXE.EXEC:238 END ?)',
+     'cp QUERY MDISK USER * 'cuu' DIR LOC',     /* Ask cp           */
+     '| drop first 1',                          /* Remove header    */
+     '| specs w-1;-1',                          /* Take last word   */
+     '| var blocks'                             /* Store here       */
+/* Address CMS 'VMLINK TOOLS 200 (NOTYPE NONAMES INVOKE SWAPGEN 'cuu blocks' (FBA' */
+Address CMS 'SWAPGEN 'cuu blocks' (FBA'
+Drop blocks
+Return
+ 
+ 
+IPL_Boot_Disk:
+/*---------------------------------------------------------------+
+| Here we IPL the boot disk found in the CONFIG....              |
++---------------------------------------------------------------*/
+Say TimeStamp()'Booting disk: 'boot_disk
+Address COMMAND 'CP IPL 'boot_disk
+Return
+ 
+ 
+IPL_RDR:
+/*---------------------------------------------------------------+
+| IPLing the reader to start install                             |
++---------------------------------------------------------------*/
+Say TimeStamp()'Booting RDR for install'
+Address COMMAND 'CP IPL C CLEAR'
+Return

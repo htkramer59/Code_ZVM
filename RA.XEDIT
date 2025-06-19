@@ -1,0 +1,24 @@
+/* This exec is a bootstrap to call $DRM$ RACF interface from VMSECURE
+    +-----------------------------------------------------------+
+    | format:  | RA                                             |
+    +-----------------------------------------------------------+
+ RA can be typed in cmdline and/or PREFix area
+  Written by: Kris Buelens IBM Belgium;  BUELENS at DIEVMD 15 Jun 1990*/
+parse upper source . . myname mytype . syn .
+c ='COMMAND'; cs=c 'SET'; ce=c 'EXTRACT'
+ 
+parse upper arg args 0 arg1 arg2  arg3 arg4 0 . . pline op1 .
+lnk  ='LINK LNK LK'            /*prefix cmd to LINK a USER MDISK */
+Qlink='QLINK QLIN QLI QL'      /*prefix cmd to issue Q LINKS */
+format='FRMT FORMT FORMA'      /*PREFIX: to format the indicated MDISK*/
+racf ='RACF RAC RA'            /*prefix cmd to preparse RACF command */
+do i=1 to words(lnk qlink racf format)
+  c 'SET PREFIX SYN' word(lnk qlink racf format,i) '$DRM$'
+end i
+ 
+if arg1='PREFIX' then do /* a call via PREFIX command */
+   c ':'pline c 'SET PENDING ON RA' op1
+   queue c 'LPREFIX'
+end
+else
+   c ':1' c 'LPREFIX RA*'

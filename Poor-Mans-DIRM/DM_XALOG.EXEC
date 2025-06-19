@@ -1,0 +1,147 @@
+/*---------------------------------------------------------------+
+| Function : Show, Add or delete XAUTOLOG statements             |
+|                                                                |
+| File     : DM_XALOG EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_XALOG <uid> <action> <auid>                      |
+|          : XAU      <uid> <action> <auid>                      |
+|                           QRY                                  |
+|                           ADD                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid action auid .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Get some settings                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get the userid and other directory stmts                       |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Find the correct stmts                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_XALOG.EXEC:44 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~XAUTOLOG~',          /* Select these     */
+   '| stem curxauto.'                            /* Create stem      */
+/*---------------------------------------------------------------+
+| Act on the input                                               |
++---------------------------------------------------------------*/
+Select
+When action='QRY' Then Call ShowXauto
+When action='ADD' Then Call AddXauto
+When action='DEL' Then Call DELXauto
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Apply changes to the directory                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_XALOG.EXEC:60 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Apply changes    */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online the USER DIRECT                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowXauto:
+/*---------------------------------------------------------------+
+| Display what we found                                          |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft' XAUTOLOG for 'uid' contains: '
+'PIPE (NAME DM_XALOG.EXEC:88 END ?)',
+   'stem curxauto.',                             /* Take these       */
+   '| specs w3;*',                               /* Keep ids         */
+   '| split',                                    /* Split            */
+   '| specs w1.1 25',                            /* Adjust 4 display */
+   '| cons'                                      /* Hand 2 rexx      */
+Call Exit
+Return
+ 
+ 
+AddXauto:
+/*---------------------------------------------------------------+
+| Add the XAUTOLOG stmt                                          |
++---------------------------------------------------------------*/
+If \DM_CKUID(auid) Then Call Exit 48
+'PIPE (NAME DM_XALOG.EXEC:103 END ?)',
+  'stem uid.',                                   /* Take this        */
+  '| pick anycase w2.1 == ~XAUTOLOG~ or',        /* Find any of..    */
+                 'w2.1 == ~INCLUDE~ or',         /* Find any of..    */
+                 'w2.1 == ~MACHINE~ or',         /* Find any of..    */
+                 'w2.1 == ~OPTION~ or',          /* Find any of..    */
+                 'w2.1 == ~IPL~',                /* Find any of..    */
+  '| sort w1.1',                                 /* Sort them        */
+  '| take last 1',                               /* Take right 1     */
+  '| var curpos'                                 /* Hand 2 rexx      */
+newpos=curpos';'Copies(' ',7)' XAUTOLOG 'auid
+chgstmt='| change ~'curpos'~ ~'newpos'~ | split at ;'
+Return
+ 
+ 
+DelXauto:
+/*---------------------------------------------------------------+
+| Delete the XAUTOLOG stmt                                       |
++---------------------------------------------------------------*/
+If auid='ALL' Then Do c=1 To curxauto.0
+/*---------------------------------------------------------------+
+| We delete ALL XAUTOLOGs                                        |
++---------------------------------------------------------------*/
+                      chgstmt=''
+                      'PIPE (NAME DM_XALOG.EXEC:127 END ?)',
+                         'stem direct.',         /* Take these       */
+                         '| buffer',             /* Prevent loop     */
+                         '| nlocate anycase ~'curxauto.c'~',  /* Remove this      */
+                         '| stem direct.'        /* Rewrite array    */
+                   End c
+              Else Do
+/*---------------------------------------------------------------+
+| We delete a single XAUTOLOG                                    |
++---------------------------------------------------------------*/
+                      'PIPE (NAME DM_XALOG.EXEC:137 END ?)',
+                         'stem curxauto.',            /* Take these       */
+                         '| locate anycase ~'auid'~', /* Find this one    */
+                         '| var curxauto'             /* Hand 2 rexx      */
+                      If curxauto='' Then Call Exit 253
+                      s=Wordpos(auid,curxauto)
+                      newxauto=Subword(curxauto,1,s-1) Subword(curxauto,s+1)
+                      If Words(newxauto)=2 Then chgstmt='| nlocate anycase ~'curxauto'~'
+                                           Else chgstmt='| change anycase ~'curxauto'~ ~'newxauto'~'
+                   End
+Return

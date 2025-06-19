@@ -1,0 +1,126 @@
+/*---------------------------------------------------------------+
+| Function : Show IND of all LPARs                               |
+|                                                                |
+| File     : ALLIND   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RSCS     EXEC                                       |
+|                                                                |
+| Called   : ALLIND   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200928 12:55:24                                   |
+| Changes  : .                                                   |
+|            20220914 H.T.Kramer : Adapted for update to         |
+|                       RSCS EXEC                                |
+|            20220506 H.T.Kramer : Implemented QUIET mode        |
+|            20220301 H.T.Kramer : Added VMLINK to process data  |
+|                       away from the A disk                     |
+|            20211018 H.T.Kramer : Moved output to file and      |
+|                       then XEDIT that file                     |
+|                                                                |
+|            20210203 H.T.Kramer : Complete overhaul due to      |
+|                       change in RSCS EXEC                      |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what . '(' dryrun .
+Parse Source . . myfn myft .
+'VMFCLEAR'
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+If what='?' Then Do
+      'VMFCLEAR'
+      'PIPE (NAME ALLIND.EXEC:36 END ?)',
+          '< 'myfn myft' *',                     /* Read myself      */
+          '| tolabel Parse',                     /* Upto here        */
+          '| cons'                               /* Show             */
+      Exit
+      End
+'PIPE (NAME ALLIND.EXEC:42 END ?)',
+    'cms EXECMAP RSCS REXX',                     /* Ask cms          */
+    '| drop first 1',                            /* Ignore header    */
+    '| count lines',                             /* Count            */
+    '| var exldd'                                /* Hand 2 rexx      */
+If exldd Then Address CMS 'EXECDROP RSCS REXX'
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+'PIPE (NAME ALLIND.EXEC:53 END ?)',
+    'rscs QUERY SYSTEM',
+    '| drop first 2',
+    '| drop last 1',
+    '| specs w2.1 1 w3.1 nw',
+    '| l: locate anycase ~CONNECT~',
+    '| fi: faninany',
+    '| specs w1.1',
+    '| sort',
+    '| stem node.',
+    '? l:',
+    '| specs w1.1',
+    '| join * x40',
+    '| specs ~LINK(s) not operating:~ 1 1;* nw',
+    '| cons',
+    '?',
+    'cp QUERY USERID',
+    '| specs substr -2;-1 of w3.1',
+    '| fi:'
+inddata.0=0
+inderr.0=0
+Do n=1 To node.0
+'PIPE (NAME ALLIND.EXEC:75 END ?)',
+   'rscs 'node.n' CP INDICATE',                       /* Hand 2 stage     */
+   '| stem inddata. append'
+End n
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+'PIPE (NAME ALLIND.EXEC:86 END ?)',
+   'stem inddata.',
+   '| pick substr 1.3 of w2.1 == ~AVG~ or',      /* Select these     */
+          'w2.1 == ~MDC~ or',                    /* .                */
+          'substr 1.2 of w2.1 == ~Q0~ or',       /* .                */
+          'substr 1.2 of w2.1 == ~Q1~',          /* .                */
+   '| specs w1.1 1.8 w2;* nw',                   /* Remove some stuff*/
+   '| join keylen 8',                            /* Make 1 rec/lpar  */
+   '| change ~AVGPROC-~~',                       /* Remove           */
+   '| change ~DORMANT-~~',                       /* ...some          */
+   '| change ~READS-~~',                         /* .....stuff       */
+   '| change ~WRITES-~~',                        /* .                */
+   '| change ~/SEC~~',                           /* .                */
+   '| change ~MDC~~',                            /* .                */
+   '| change ~HIT RATIO-~~',                     /* .                */
+   '| change ~Q0-~~',                            /* .                */
+   '| change ~Q1-~~',                            /* .                */
+   '| change w1.1 ~:~~',                         /* Remove this      */
+   '| specs w1.1 1.8',                           /* Rework on        */
+           'w2.1 nw.7 right',                    /* ...record        */
+           'w3.1 nw.5 centre',                   /* .....layout      */
+           'w4.1 nw',                            /* .                */
+           '~/~ n',                              /* .                */
+           'w5.1 n',                             /* .                */
+           'w6.1 nw',                            /* .                */
+           'w7.1 nw',                            /* .                */
+           'w8.1 nw',                            /* .                */
+           'w9.1 nw',                            /* .                */
+   '| sort w2.1 d',                              /* Sort on cpu      */
+   '| append stem inderr.',                      /* Take in others   */
+   '| preface literal ........ AVGPROC IFLs   READS/WRITES Hits Users        Dorm  Users',
+   '| preface literal                        Minidisk Caching   Q0                 Q1',
+   '| preface literal 'TimeStamp(),
+   '| > 'myfn' OVERVIEW 'wfm                     /* Show results     */
+Address CMS 'EXECDROP RSCS REXX'
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Exit
+ 
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

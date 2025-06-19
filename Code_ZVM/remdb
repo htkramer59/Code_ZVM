@@ -1,0 +1,28 @@
+#! /bin/bash
+clear	
+if [ $1 = '?' ] ; then
+	echo
+	echo 'Remove a user id from the guest database of CloudConnector/Fei Long'
+	echo
+	echo 'syntax: remdb <id> <task>'
+	exit
+fi
+id=`echo $1 | tr [:lower:] [:upper:]`
+task=$2
+db="/var/lib/zvmsdk/databases/sdk_guest.sqlite"
+#
+# Checking if the id exists in the db/table
+#
+show="select * from guests where userid='$id';"
+echo ">>> $show"
+sudo sqlite3 -line $db "$show"
+if [ -z $task ] ; then
+	echo ">>> No action taken"
+	else
+	remo="delete from guests where userid='$id'"
+	echo ">>> $remo"
+	sudo sqlite3 -line $db "$remo"
+	echo ">>> $show"
+	sudo sqlite3 -line $db "$show"
+fi
+

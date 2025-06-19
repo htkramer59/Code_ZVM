@@ -1,0 +1,303 @@
+/*---------------------------------------------------------------+
+| Function : Issue a remote command....on all nodes              |
+|                                                                |
+| File     : RMCMD    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RSCS     EXEC                                       |
+|            WAKEUP   MODULE    to wakeup on rdr files           |
+|            RMCMD    INFO      default output file              |
+|                                                                |
+| Called   : RMCMD    <cmdline> , <node> , id , task ,           |
+|                            <outfn> <outft> <outfm>             |
+|                                                                |
+|                     <cmdline> Is any command to be issued      |
+|                            Note: prefix with CP or CMS         |
+|                                  when none specified CMS       |
+|                                  is assumed                    |
+|                            Note: when this is ? display some   |
+|                                  HELP                          |
+|                                                                |
+|                     <node> is the short name of the node, B2   |
+|                            ALL gives all available via RSCS    |
+|                            Can also be a list: B1 B2 O1        |
+|                                                                |
+|                     <id>   If this is not your own id...       |
+|                            enter . or = to use current id      |
+|                                                                |
+|                     <task> Can be: SHOW FILE SEND              |
+|                            SHOW will show the results for you  |
+|                            FILE will leave a file              |
+|                            SEND is for the executing side      |
+|                            QUIET is no files, no typing        |
+|                                                                |
+|                     <outfn> <outft> <outfm> if you do not      |
+|                             want your output in the default    |
+|                             file                               |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210330 11:38:39                                   |
+| Changes  : .                                                   |
+|            20230321 H.T.Kramer : Removed some coding,          |
+|                     made receiving part more reliable          |
+|            20220912 H.T.Kramer : Fixed after update of         |
+|                     RSCS EXEC.                                 |
+|            20220624 H.T.Kramer : Added a check to see if       |
+|                     a server with RSCS in its name is running  |
+|            20220506 H.T.Kramer : Made the code quiet when      |
+|                     called from an other exec                  |
+|            20211119 H.T.Kramer : Rework the receiving end      |
+|                     sometimes we missed 1 or more files        |
+|            20211004 H.T.Kramer : Made it so we do not see      |
+|                     the files coming in.                       |
+|            20210719 H.T.Kramer : Changed the wait/read         |
+|                     procedure to speed this up.                |
+|            20210527 H.T.Kramer : Allow cmdline length up to    |
+|                     250 chars                                  |
+|            20210416 H.T.Kramer : Made it possible to issue     |
+|                     more cmds in 1 go, note XAUTOLOG           |
+|                     restrictions on cmdline length apply       |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline ',' targetnode ',' id ',' task ',' outfn outft outfm .
+Parse Source . . myfn myft .
+x=Time('R')
+/*---------------------------------------------------------------+
+| Some basic checks on the input                                 |
++---------------------------------------------------------------*/
+If cmdline=''  Then Call Exit '228 No cmdline entered'
+If Length(cmdline)>125 Then Call Exit '300 commandline exceeds length'
+If cmdline='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME RMCMD.EXEC:75 END ?)',
+                 '< 'myfn myft' *',            /* Read myself */
+                 '| tolabel Parse',            /* Up to here  */
+                 '| cons'                      /* Show        */
+             Call Exit
+             End
+/*---------------------------------------------------------------+
+| Setting some defaults                                          |
++---------------------------------------------------------------*/
+Parse Value cmdline With envir .
+If envir\='CMS' &,
+   envir\='CP'   Then cmdline='CMS 'cmdline
+If targetnode='' Then node='ALL'
+If task=''       Then task='SHOW'
+If Wordpos(task,'SHOW FILE SEND QUIET ?')=0 Then Do
+                                            quiet=0
+                                            Call Exit '99 Can not handle task: 'task
+                                            End
+/*---------------------------------------------------------------+
+| Get node info and screen size                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME RMCMD.EXEC:96 END ?)',
+   'CP QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var curnode',                              /* Store as         */
+   '| specs -2;-1',                              /* Reduce to this   */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cms QUERY DISPLAY',                          /* Ask cms          */
+   '| specs w3.1',                               /* Keep this        */
+   '| if: if pick anycase w1.1 == ~IS~',         /* If this          */
+   '|    literal 160',                           /* .we use this     */
+   '| if:',                                      /* Conn 2 if        */
+   '| var maxlen'                                /* Hand 2 rexx      */
+maxlen=maxlen-6  /* Take prefix area into account */
+quiet=1          /* Initial setting */
+/*---------------------------------------------------------------+
+| Select what to do with the output                              |
++---------------------------------------------------------------*/
+Select
+When task='SHOW' |,
+     task='FILE' |,
+     task='QUIET' Then Do
+     If task='QUIET'     Then quiet=1
+                         Else quiet=0
+     If id='' |,
+        id='.' |,
+        id='='           Then id=Userid()
+     If targetnode='' |,
+        targetnode='.'   Then targetnode='ALL'
+     If outfn=''         Then outfn=myfn
+     If outft=''         Then outft='INFO'
+     If outfm=''         Then outfm='A'
+     Call AskInfo
+     If task='SHOW'      Then Address CMS 'XEDIT 'outfn outft outfm
+     If task='QUIET'     Then Address CMS 'ERASE 'outfn outft outfm
+     End
+When task='SEND' Then Do
+     If id=''      Then Call Exit '28 No return id specified'
+     If targetnode='' |,
+        targetnode='ALL' Then Call Exit '128 Invalid usage'
+     Call SendInfo
+     End
+Otherwise Call Exit '199 Can not handle task: 'task
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+CheckLoad:
+/*---------------------------------------------------------------+
+| Check if RSCS EXEC is EXECLOADed and act on it                 |
++---------------------------------------------------------------*/
+Address CMS 'EXECSTAT RSCS REXX (RESIDENT'
+If rc=0 Then Address CMS 'EXECDROP RSCS REXX'
+        Else Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+Return
+ 
+ 
+AskInfo:
+/*---------------------------------------------------------------+
+| If the node is ALL we need to do a query on the current node   |
++---------------------------------------------------------------*/
+If targetnode='ALL' Then Call Issue_Cmds
+/*---------------------------------------------------------------+
+| Split the node variable into the separate nodes                |
++---------------------------------------------------------------*/
+'PIPE (NAME RMCMD.EXEC:170 END ?)',
+    'var targetnode',                            /* Take this        */
+    '| split',                                   /* Split into recs  */
+    '| strip',                                   /* Remove spaces    */
+    '| stem targetnode.'                         /* Hand 2 rexx      */
+Call CheckLoad
+/*---------------------------------------------------------------+
+| Talk to each node specified                                    |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET IMSG OFF'
+Address COMMAND 'CP SET MSG  OFF'
+remotecmd='CP XAUTOLOG 'id' CMD 'myfn cmdline','curnode','id',SEND'
+Do t=1 To targetnode.0
+  'PIPE (NAME RMCMD.EXEC:183 END ?)',
+     'rscs 'targetnode.t remotecmd,              /* Talk 2 rscs      */
+     '| if: if pick 1.3 == ~DMT~',               /* If rscs errors   */
+     '|     cons',                               /* .show them       */
+     '| if:',                                    /* Conn 2 if        */
+     '| hole'                                    /* Suppress rubish  */
+  Call Receive_File
+End t
+Address COMMAND 'CP SET MSG  ON'
+Address COMMAND 'CP SET IMSG ON'
+Call CheckLoad
+Return
+ 
+ 
+Receive_File:
+/*---------------------------------------------------------------+
+| Receive the files sent back                                    |
++---------------------------------------------------------------*/
+waittime='+1'                                    /* For delay stage  */
+maxtry=5                                         /* No of tries      */
+cntr=0                                           /* Used 2 exit Do   */
+/*---------------------------------------------------------------+
+| If this check the number of files we need                      |
++---------------------------------------------------------------*/
+If targetnode.t='ALL' Then maxfiles=7
+                      Else maxfiles=targetnode.0
+/*---------------------------------------------------------------+
+| Try a max number of times to receive files                     |
++---------------------------------------------------------------*/
+Do m=1 To maxtry
+   'PIPE (NAME RMCMD.EXEC:213 END ?)',
+       'literal 'waittime,                       /* Take this        */
+       '| delay',                                /* Wait some secs   */
+       '| specs ~CP QUERY RDR * ALL~ 1',         /* Compose cmd      */
+       '| cp',                                   /* Hand 2 cp        */
+       '| drop first 1',                         /* Ignore hdr/error */
+       '| pick w-2;-2 == ~'myfn'~',              /* Select these     */
+       '| f: fanout',                            /* Duplic. records  */
+       '| specs ~RECEIVE~ 1',                    /* Compose          */
+                'w2.1 nw',                        /* ...cmds          */
+                '~= = 'outfm' (NOLOG REPL OLDD~ nw', /* .                */
+       '| cms',                                  /* Hand 2 cms       */
+       '? f:',                                   /* Conn 2 fanout    */
+       '| count lines',                          /* How many         */
+       '| var cnt'                               /* Hand 2 rexx      */
+    cntr=cntr+cnt                                /* Update cntr      */
+    If cntr>=maxfiles Then Leave m               /* If we reach this */
+End m
+/*---------------------------------------------------------------+
+| Nowe gather all the output from all the nodes...               |
++---------------------------------------------------------------*/
+'PIPE (NAME RMCMD.EXEC:234 END ?)',
+   'cms LISTFILE 'myfn' * 'outfm' (NOH',         /* Ask cms          */
+   '| pick w2.1 \== ~EXEC~     and',             /* Ignore           */
+          'w2.1 \== ~'outft'~',                  /* ..these          */
+   '| sort w1.2',                                /* Sort them        */
+   '| f: fanout',                                /* Dupl. records    */
+   '| getfiles',                                 /* Read all files   */
+   '| preface literal Execution took 'Time('E')' seconds',   /* Add hdr          */
+   '| specs 1;* 1.'maxlen,                       /* Adjust rec. len  */
+   '| > 'outfn outft outfm,                      /* Write 2 file     */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~ERASE~ 1 w1.3 nw',                  /* Compose cmds     */
+   '| cms'                                       /* Hand 2 cms       */
+Return
+ 
+ 
+SendInfo:
+/*---------------------------------------------------------------+
+| Send the info to the originating id and node                   |
++---------------------------------------------------------------*/
+z=Time('R')
+Call Issue_Cmds
+Address CMS 'SENDFILE 'myfn curnode' A TO 'id' AT 'targetnode
+Address CMS 'ERASE 'myfn curnode' A'
+Address COMMAND 'CP LOGOFF'
+Return
+ 
+ 
+Issue_Cmds:
+/*---------------------------------------------------------------+
+| Issue all the commands that have been presented                |
++---------------------------------------------------------------*/
+wfm='A'
+Address CMS 'SET CMSTYPE HT'
+'PIPE (NAME RMCMD.EXEC:268 END ?)',
+    'var wfm 1',
+    '| var wfm'
+Address CMS 'SET CMSTYPE RT'
+If wfm='' | wfm='WFM' then wfm='A'
+'PIPE (NAME RMCMD.EXEC:273 END ?)',
+     'var cmdline',                              /* Take this        */
+     '| split at ;',                             /* Split here       */
+     '| strip',                                  /* Remove spaces    */
+     '| if: if pick w1.1 \== ~CP~ and',
+                   'w1.1 \== ~CMS~',             /* If this not prsnt*/
+     '|   specs ~CMS~ 1 1;* nw',                 /* Use this         */
+     '| if:',                                    /* Conn 2 if        */
+     '| stem cmd.'                               /* Store as         */
+Do c=1 To cmd.0
+If \quiet Then Say TimeStamp() node id cmd.c
+ title=TimeStamp() cmd.c
+ If c=1 Then out='>'
+        Else out='>>'
+ 'PIPE (NAME RMCMD.EXEC:287 END ?)',
+     cmd.c,                                      /* Take this        */
+     '| preface var title',                      /* Add title        */
+     '| change ~;~ ~',                           /* Remove these     */
+     '| specs pad space ~'shortnode'~ 1.2',
+                       '1;* nw.'maxlen-3,        /* Add node id      */
+     '| pad 'maxlen' space',
+     '| 'out myfn curnode wfm' F 'maxlen          /* Store as         */
+End c
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Uniform timestamp                                              |
++---------------------------------------------------------------*/
+Return Date('S') Time() myfn

@@ -1,0 +1,4 @@
+/**/
+Address COMMAND 'CP CLOSE CONS'
+Address COMMAND 'CP SLEEP 2 SEC'
+Address CMS 'CONPARK *'

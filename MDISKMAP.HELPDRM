@@ -1,0 +1,68 @@
+         Using the MDISKMAP
+     ----------------------------
+ 
+ We have seen that with PF16, DRM will import the "fname MDISKMAP" in the XEDIT
+ ring.  DRM prepares a few PF-keys and one prefix command:
+  FI    the FI prefix command can be used to find the given mdisk in the
+        CP directory.  Usefull when for example that minidisk is badly located
+        and overlaps another mdisk.
+  PF4   "Cleanup", with this function, DRM will make the MDISKMAP file better
+        for usage in XEDIT (the default map is better for printing)
+        (samples are shown below)
+  PF9   "Freemap", when you hit this key the first time, DRM builds the FREEMAP
+        file, it is supposed to give an better overview of the disk
+        fragmentation (and example is included below)
+        When you place the cursor on a minidisk in the MDISKMAP file and hit
+        PF9, DRM will XEDIT the FREEMAP and position the cursor on the
+        representation of that minidisk.
+  PF10  Jump to the next volser in the MDISKMAP file
+  PF11  Jump to the previous volser in the MDISKMAP file
+ 
+ The standard MDISKMAP file looks +/- like
+  1USER     DIRECT      Map of Minidisks    11:51:19   05Aug98
+  +____     ______      ___ __ _________    ________   _______   ____
+  0Volser Devtype  Ownerid  Vaddr Mode    Start       End       Len
+  +______ _______  _______  _____ ____    _____       ___       ___
+ 
+   ---------------------------------------------------------------------
+   VMPK01 3390     FULLPACK  50A4  RR       000      3338      3339
+                   $ALLOC$   50A4  R        000       000       001
+                   RACFVM    0591  MR       001       009       009
+                   RACFVM    0505  RR       010       077       068
+   ..................
+                   OPERATOR  0191  MR       231       234       004
+                                            235       239       005     Gap
+ 
+ In "cleaned" form the MDISKMAP file looks like:
+   ----------------------------------------------------------------------------
+   VMPK01 3390     FULLPACK  50A4  RR       000      3338      3339
+   VMPK01 3390     $ALLOC$   50A4  R        000       000       001
+   VMPK01 3390     RACFVM    0591  MR       001       009       009
+   VMPK01 3390     RACFVM    0505  RR       010       077       068
+   ..................
+   VMSRES 3390     OPERATOR  0191  MR       231       234       004
+   VMSRES 3390                              235       239       005     Gap
+When you always want to see the "cleaned" mdiskmap, modify PROFDRM XEDIT
+(a sample is prepared).
+ 
+ 
+ 
+ 
+**** For more details, refer to the "RELATED" section (press PF11) ***
+.cs 7 on
+(c) Copyright International Business Machines Corporation 1985, 2012.
+    All Rights Reserved.
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER
+ 
+ 
+CMS DRM     (ALL        Overview ›&- An overview of DRM
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips
+.cs 7 off

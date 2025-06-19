@@ -1,0 +1,33 @@
+* Nick names for disks/directories used by the code
+:nick.directxa        :product.MAINT 551        :title.Disk with DIRECTXA
+:nick.sourcedir       :product.MAINT 2CC        :title.Disk w USER DIRECT
+:nick.sourcedir.test  :product.DMSERVER 291     :title.Disk w USER DIRECT-test
+:nick.cpdir           :product.MAINT 123        :title.Disk w CP DIRECT
+/* :nick.workspace    :product.<user> <200>     :title.Temp/Work space on disk */
+:nick.workspace       :product..dir .work.      :title.Temp/Work space on sfs
+ 
+* Name of the source directory
+:sourcefile.USER DIRECT                         :title.Source Directory filename
+ 
+* Interval for wakeup
+:interval.+30:00
+ 
+* Wakeup options
+:options.QUIET CC RDR EXT SMSG IUCVMSG VMCF FILE (DMSERVER TIMES *
+ 
+* Files which will be accepted if sent by an ADMIN
+:validfiles.DMSERVER TIMES;DM ADMINS;DM COMMANDS;* DIRECT;* BATCH
+ 
+ 
+* Do we need to format new minidisks on/off/1/0
+:format_new_disk.on
+* Are we testing on/off/1/0
+:test.on
+* Do we switch on tracing on/off/1/0
+:trace.off
+* Which type of trace do we start see: help rexx trace
+:tracectl.i
+* Which part of the code are we going to trace
+:tracetarget.dm_glblv
+* Show more details on/off/1/0
+:show.1

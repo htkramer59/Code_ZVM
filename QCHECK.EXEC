@@ -1,0 +1,106 @@
+/*---------------------------------------------------------------+
+| Function : Do a quick check for some disk/space items          |
+|                                                                |
+| File     : QCHECK   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QCHECK   CONTROL input, control file                |
+|            POOLUSG  EXEC    routine, external                  |
+|                                                                |
+| Called   : QCHECK   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200508 10:35:42                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg .
+Parse Source . . myfn myft .
+hi='1DE8'x
+lo='1D60'x
+/*---------------------------------------------------------------+
+| Get some info on where we are running                          |
++---------------------------------------------------------------*/
+'PIPE (NAME QCHECK.EXEC:6 END ?)',
+     'cp QUERY USERID',                         /* Ask cp           */
+     '| specs w3.1',                            /* Keep this        */
+     '| var node',                              /* Store as         */
+     '| specs -2;-1 1',                         /* Reduce to this   */
+     '| var shortnode'                          /* Store as         */
+'PIPE (NAME QCHECK.EXEC:12 END ?)',
+     '< 'myfn' CONTROL *',                      /* Read this        */
+     '| pick 1.1 \== ~*~ and 1.1 \== ~~',       /* Skip these       */
+     '| xlate upper',                           /* ...U know        */
+     '| change anycase ~<shortnode>~'shortnode'~',  /* Replace this     */
+     '| change ~=~/~',                          /* and this         */
+     '| specs ~/~ 1 1;* n',                     /* Add this         */
+     '| varload'                                /* Hand 2 rexx      */
+'PIPE (NAME QCHECK.EXEC:20 END ?)',
+     'var filepools',                           /* Take this        */
+     '| split',                                 /* Make records     */
+     '| f1: fanout',                            /* Duplicate recs   */
+     '| specs w1.1 1.10',                       /* Add spaces       */
+     '| j1: juxtapose',                         /* Join them        */
+     '| fi: faninany',                          /* Take in others   */
+     '| cons',                                  /* Show...          */
+     '? f1:',                                   /* Conn 2 fanout    */
+     '| specs ~QUERY FILEPOOL MINIDISK~ 1 w1.1 nw',  /* Compose cmds     */
+     '| cms',                                   /* Issue them       */
+     '| inside ~STORAGE GROUP MINIDISK TOTALS~', /* Select this      */
+              '~LOG INFORMATION~',              /* .                */
+     '| pick w1.1 \== ~~ and',                  /* More selection   */
+            'w1.1 \== ~Storage~ and',           /* .                */
+            'w1.1 \== ~Group~',                 /* .                */
+     '| if1: if pick substr 1.2 of w4.1 >> ~'filep_limit'~',  /* If this happens  */
+     '|     specs 1;* 1.79',                    /* Add text         */
+                 '~<<< Over the limit of 'filep_limit'%~ nw',  /* .                */
+     '| if1:',                                  /* Conn 2 if        */
+     '| j1:',                                   /* Conn 2 juxtapose */
+     '?',                                       /* 2nd pipe         */
+     'cp QUERY ALLOC MAP',                      /* Ask CP           */
+     '| drop first 1',                          /* Drop header      */
+     '| if: if pick w-2;-2 == ~DRCT~',          /* Adjust % 4 DRCT  */
+     '|    specs w1;-4 1 pad 0 w-3;-3 nw.3 right w-2;-1 nw',  /* .                */
+     '| if:',                                   /* Conn 2 if        */
+     '|    specs w1;-3 1 pad 0 w-2;-2 nw.3 right w-1;-1 nw',  /* .                */
+     '| if:',                                   /* Conn 2 if        */
+     '| if2: if pick w-2;-2 == ~DRCT~',         /* .                */
+     '|   if3: if pick substr 1.2 of w-3;-3 >> ~'dirct_limit'~',  /* .                */
+     '|        specs 1;* 1.89',                 /* .                */
+                    '~<<< Over the limit of 'dirct_limit'~ nw',  /* .                */
+     '|   if3:',                                /* .                */
+     '| if2:',                                  /* .                */
+     '| if4: if pick w-1;-1 == ~SPOOL~',        /* .                */
+     '|   if5: if pick substr 1.2 of w-2;-2 >> ~'spool_limit'~',  /* .                */
+     '|        specs 1;* 1.89',                 /* .                */
+                    '~<<< Over the limit of 'spool_limit'~ nw',  /* .                */
+     '|   if5:',                                /* .                */
+     '| if4:',                                  /* .                */
+     '| if6: if pick w-1;-1 == ~PAGE~',         /* .                */
+     '|   if7: if pick substr 1.2 of w-2;-2 >> ~'page_limit'~',  /* .                */
+     '|        specs 1;* 1.89',                 /* .                */
+                    '~<<< Over the limit of 'page_limit'~ nw',  /* .                */
+     '|   if7:',                                /* .                */
+     '| if6:',                                  /* .                */
+     '| fi:',                                   /* .                */
+     '?',                                       /* .                */
+     'var dirm_pools',                          /* Take this        */
+     '| split',                                 /* U know what      */
+     '| f2: fanout',                            /* Dupl. recs       */
+     '| specs w1.1 1.10',                       /* Adjust           */
+     '| j2: juxtapose',                         /* Join             */
+     '| fi:',                                   /* Conn 2 faninany  */
+     '? f2:',                                   /* Conn 2 fanout    */
+     '| specs ~POOLUSG~ 1 w1.1 nw',             /* Compose cmds     */
+     '| cms',                                   /* Issue them       */
+     '| if8: if pick w1.1 == ~Perc.Used~',      /* To adapt         */
+     '|   if9: if pick w-1;-1 >> ~'dirm_limit'~',  /* .                */
+     '|        specs 1;* 1.79',                 /* .                */
+                    '~<<< Over the limit of 'dirm_limit'~ nw',  /* .                */
+     '|   if9:',                                /* .                */
+     '| if8:',                                  /* .                */
+     '| j2:'                                    /* .                */
+Exit

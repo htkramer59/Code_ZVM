@@ -1,0 +1,62 @@
+/*---------------------------------------------------------------+
+| Function : Get the details for a user id                       |
+|                                                                |
+| File     : DM_GETID EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|                                                                |
+| Called   : DM_GETID .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 10:35:45                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Find details in INDEX                                          |
++---------------------------------------------------------------*/
+details=DM_INDEX('GET 'uid)
+Parse Value details With lim1 lim2 .
+/*---------------------------------------------------------------+
+| Select the user id and hand both to caller                     |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+ 
+'PIPE (NAME DM_GETID.EXEC:44 END ?)',
+   '< 'dirfnft wfm,                              /* Read this file   */
+   '| specs pad 0 recno 1.5 right 1.72 nw',      /* Add recnos       */
+   '| stem direct. 1',                           /* Hand 2 caller    */
+   '| between ~'lim1'~ ~'lim2'~',                /* Select user id   */
+   '| stem uid. 1'                               /* Hand 2 caller    */
+piprc=rc
+ 
+wfm=DM_VMLNK('SOURCEDIR DET')
+If piprc<>0 Then Call Exit 128
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

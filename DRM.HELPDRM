@@ -1,0 +1,156 @@
+ 
+         Commands While Viewing the Directory
+   -----------------------------------------------
+ 
+Subcommands: DRM displays the directory and gives you new commands:
+Directory Prefix commands:
+   > GET <    Enter in the prefix of a MDISK line , to find a GAP of the size
+              found in the 'size'-field of the MDISK card (5th word).  You
+              will get on split-screen all the gaps available four your
+              MDISK, sorted by size.  Place cursor on wanted line and:
+                   PF2   to get the whole gap
+                   PF11  to get the size you asked
+   > GETD <   Enter in the prefix of a MDISK line , to find a GAP of the size
+              found in the 'size'-field of the MDISK card (5th word).  The
+              asked MDISK will be allocated in the smallest fitting gap (no
+              prompting occurs).
+   > GETV <   Enter in the prefix of a MDISK line to find a GAP of the size as
+              coded in the 'size'-field of the MDISK card (5th word).  DRM
+              will only look on the volid contained in the MDISK card (6th
+              word).  The asked MDISK will be allocated in the smallest
+              fitting gap (no prompting occurs).
+   > GETV?<   Enter in the prefix of a MDISK line to get prompted for place
+              selection.  But, the GAPFILE will only list free space on on the
+              the volid contained in the MDISK card (6th word).
+   > GETM <   Enter in the prefix of a MDISK line , to select directly the
+               max gap still available on any disk of the specified devtype
+               (or any disk at all if you place an * is the devtype field of
+               the MDISK card).  (no prompting occurs).
+   > GETMV <  Combination of GETM and GETV
+   > DELET <  Enter in the prefix of a USER line to delete this user from
+              the CP directory.  (deleted lines will be saved in "fn
+              DELETED" to provide -manual- recovery).
+   > LK xyz<  Enter in the prefix of a MDISK line or LINK card
+              to LINK, <ACCESS, <FILELIST, <DETACH>>> a minidisk.
+              Options "xyz" indicates what should done:
+               - use 'R', 'W' or 'M' to indicate LINK-mode
+                 (R becomes RR; W becomes WR and M becomes MR)
+               - use 'A' to request for an ACCESS after LINKing
+               - use 'F' to request for FILELIST after ACCESSing
+               - use 'D' to request for DETACH after FILELIST
+               these letters can be written in any order, some "normal" options
+               will be added by default (see samples below)
+              Example:  LK M   -> just LINK in MR-mode
+              Example:  LK MA  -> LINK in MR-mode & ACCESS the disk
+              Example:  LK MF  -> LINK in MR-mode, ACCESS & FILELIST
+                                  (Access option has been added by default)
+              Example:  LK D   -> LINK, ACCESS, FILELIST & RELEASE (DETACH
+                                  (linkmode,Access and Filelist options are
+                                   added by default)
+   > LNK m <  Synonym for the LK command
+   > MD xyz<  Similar to LK .... BUT,›&BEWARE ....
+             ›&MD uses DEFINE MDISK to get to the mdisk, what makes that CP
+             ›&does›|*not*›&check for R/W links, so it is kind of an MW link.
+             ›&And, as you should now, MW links are dangerous
+   > MDSK  <  Synonym for the MD command
+   > QLink <  To see who is currently LINKed to that minidisk
+   > QDsk  <  Give much info about the minidisk (such as last R/W access)
+   > CMP   <  Enter two CMD prefix commands in MDISK records: DRM
+              LINKs both mdisks and compares them using COMPMDSK XEDIT
+   > FI    <  - if in USER DIRECT:
+                -- on MDISK card   find that MDISK in the MDISKMAP
+                -- on LINK card   find that MDISK in the USER DIRECT
+              - if in MDISKMAP: find that MDISK in USER DIRECT
+              - if in LINKMAP: find that LINK statement in USER DIRECT
+                (to find the target MDISK of a LINK in the map, enter FI on the
+                 line with the -------------- preceeding the LINK map)
+   > FRMT<n>< Formats the indicated minidisk for CMS use
+              "n" can be 5, 1, 2, or 4 to indicate wanted CMS blocksize
+   > RACF n<  Ask DRM to prepare a RACF commands file to define
+              or alter the RACF definitions.
+               - One can abbreviate RACF to RA or RAC.
+               - Command must be given on USER- or MDISK-cards
+               - Operand1 can be a number or * to request that 'n'
+                 source cards get scanned for MDISK cards to generate
+                 corresponding RDEFINE cards.
+               Three skeleton files can be tailored:
+                 RACFDRM SKELUSER (for RACF command on USER card)
+                 RACFDRM SKELMDSK (for RACF command on MDISK card)
+                 RACFDRM SKELLINK (for RACF command on LINK card)
+               Refer also to "RACF" in Related help (PF11)
+   > LU <     Executes RAC LISTUSER of the user you're looking at
+   > RL <     Executes RAC RLIST of the mdisk you're looking at
+   > AMD <    Prepares a DIRMAINT AMDISK command
+   > CMD <    Prepares a DIRMAINT CMDISK command
+   > DMD <    Prepares a DIRMAINT DMDISK command
+   > TMD <    Prepares a DIRMAINT TMDISK command
+   > CHV <    Prepares a DIRMAINT CHVADDR command
+   > PURGE <  Prepares a DIRMAINT PURGE command
+ 
+ PF-keys while viewing the Directory:
+ ------------------------------------
+ --> Note: 'PFn+tttt' means type 'tttt' in CMDline & press PF 'n'
+ 
+ *** PF-keys to find users or minidisks ***
+ PF2 Find USER or PROFILE
+   -> PF2             find next userid
+   -> PF2+userid      find 'USER userid ' from the top of the file.
+   -> PF2+/userid     find a USER begining with 'userid' from top of file
+   -> PF2+&/userid    find a USER begining with 'userid' from where you are
+   -> PF2+cursor on INCLUDE statement      find PROFILE xxxx statement
+ 
+   -> example: PF2+CMSUS  will find first 'USER CMSUS '
+               PF2+&/CMSUS  allows walking trough users 'CMSUS1', 'CMSUS2' ...
+ PF2 Find MDISK 'mmm' of user 'userid'
+      same as for finding a userid, but enter 'userid mmm' in cmdline
+      before pressing PF2
+   -> example: PF2+MAINT 190  to find MDISK 190 of MAINT
+ PF14 find previous user
+ 
+ *** PF-keys to select a set of users
+ PF5 and PF17 to see users which definition contains a given string
+   -> example: to see all users that include profile GCSUSER,
+                 type /INCLUDE GCSUSER/ and press PF17
+                 You'll see the INCLUDE GCS cards and the USER cards
+                 of those users having this include
+   For more information look at FINDUSER in the "Related" section (PF11)
+ 
+ *** PF-keys to refresh and/or save the files
+ PF4  "REFRESH" SAVE directory and rerun DIRMAP
+                 ==> new gapfile is created , use this to add deleted
+                 MDISKS to the gapfile . (GET<D> will update the GAPFILE
+                 to substract any 'GET'ed MDISK).
+ PF4+DIRM   sends a USER BACKUP command to DIRMAINT and when this is ended
+            refreshes the directory you're seeing
+ PF16  XEDIT's the MDISKMAP file (this MDISKMAP file is created by DIRMAP)
+ 
+ PF10  FILE only
+ PF11  FILE + DIRMAP
+ PF12  FILE + DIRMAP + DIRECT  (DIRECT is only done when DIRMAP rc=0)
+ 
+ PF22  SAVE only
+ PF23  SAVE + DIRMAP
+ PF24  SAVE + DIRMAP + DIRECT  (DIRECT is only done when DIRMAP rc=0)
+        PF24 is useful to bring the new directory online, but stay in
+        in the XEDIT session of the directory.
+ 
+ 
+**** For more details, refer to the "RELATED" section (press PF11) ***
+.cs 7 on
+(c) Copyright International Business Machines Corporation 1985, 2012.
+    All Rights Reserved.
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER
+ 
+ 
+CMS DRM     (ALL        Overview ›&- An overview of DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips
+DRM RACF    (ALL        RACF     ›&- Details about interface with RACF
+.cs 7 off

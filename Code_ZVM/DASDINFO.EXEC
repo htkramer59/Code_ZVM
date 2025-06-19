@@ -1,0 +1,151 @@
+/*---------------------------------------------------------------+
+| Function : Display as much info on the DASD as we can get      |
+|                                                                |
+| File     : DASDINFO EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files out: DASDINFO <node>                                     |
+|                                                                |
+| Called   : DASDINFO <selct> ( <how>                            |
+|                                                                |
+|            <selct>  Can be LUN or FCP, which will display      |
+|                     only LUN or FCP info found                 |
+|            <how>    Sets how to do output. If left empty       |
+|                     it will default to CONS, which is          |
+|                     display only, FILE will store the          |
+|                     outcome into a file.                       |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190418 08:45:10                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg selct '(' how .
+Parse Source . . myfn myft .
+'PIPE (NAME DASDINFO.EXEC:21 END ?)',
+    'cp QUERY USERID',
+    '| specs w3.1',
+    '| var node',
+    '| specs -2;-1',
+    '| var shortnode'
+Trace "O"
+Select
+When selct='LUN' Then Do
+                selct='| all /DASD/&/ATTACH/!/LUN/'
+                End
+When selct='FCP' Then Do
+                selct='| all /DASD/&/ATTACH/!/FCP/!/EDEV/'
+                End
+When selct='?'   Then Do
+                'VMCLEAR'
+                'PIPE (NAME DASDINFO.EXEC:37 END ?)',
+                     '< 'myfn myft' *',
+                     '| tolabel Parse',
+                     '| cons'
+                Exit
+                End
+Otherwise Do
+                selct=''
+                End
+End
+Select
+When how='FILE' Then output='| > 'myfn node' A'
+When how='CONS' | how='' Then output='| cons'
+Otherwise Do
+     Say 'Do not understand 'how
+     Exit
+     End
+End
+/*---------------------------------------------------------------+
+| Do a simple QUERY DASD and hand the findings to the next pipe  |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:58 END ?)',
+   'cp QUERY DASD',                             /* Ask cp          */
+   '| specs w2.1 1 w1;* nw',                    /* Prefix address  */
+   '| stem out.',                               /* Store here      */
+   '| specs w1.1',                              /* Keep address    */
+   '| stem dasd.'                               /* Store here      */
+/*---------------------------------------------------------------+
+| Query ALLOC MAP                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:67 END ?)',
+   'cp QUERY ALLOC MAP',                        /* Ask cp          */
+   '| drop first 3',                            /* Remove header   */
+   '| specs w2.1 1 w1;* nw',                    /* Prefix address  */
+   '| stem out. append'                         /* Add to stem     */
+/*---------------------------------------------------------------+
+| Check DASD against EDEVices and collect the info               |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:75 END ?)',
+   'stem dasd.',                                /* Take these      */
+   '| f1: fanout',                              /* Duplicate recs  */
+   '| specs w1.1 1.5',                          /* Keep this       */
+   '| j: juxtapose',                            /* Put side by side*/
+   '| stem out. append',                        /* Append 2 stem   */
+   '? f1:',                                     /* Conn 2 fanout   */
+   '| specs ~QUERY EDEV~ 1 w1.1 nw ~DETAILS~ nw', /* Compose cmds  */
+   '| cp',                                      /* Ask cp          */
+   '| f2: fanout',                              /* Duplicate recs  */
+   '| change 1.7 ~ ~_~',                        /* Replace spaces  */
+   '| j:',                                      /* Conn 2 juxtapose*/
+   '? f2:',                                     /* Conn 2 fanout   */
+   '| strip leading ~_~',                       /* Remove these    */
+   '| join * x40',                              /* Make 1 rec      */
+   '| split before string ~EDEV~',              /* Split here      */
+   '| split before string ~FCP_DEV:~',          /* .....and here   */
+   '| specs w1.2',                              /* Keep these      */
+   '| join * x40',                              /* Make 1 rec      */
+   '| split before string ~EDEV~',              /* Split here      */
+   '| specs w2.1 1 w4.1 nw w6.1 nw',            /* Remove stuff    */
+   '| stem fcp.'                                /* Store here      */
+/*---------------------------------------------------------------+
+| Get info on the Fcp devices found                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:100 END ?)',
+   'stem fcp.',                                 /* Take these      */
+   '| f: fanout',                               /* Duplicate recs  */
+   '| specs w1.2 1.5',                          /* Keep this       */
+   '| j: juxtapose',                            /* Put side by side*/
+   '| stem out. append',                        /* Add to this     */
+   '? f:',                                      /* Conn 2 fanout   */
+   '| specs ~QUERY~ 1 w2.2 nw',                 /* Compose cmds    */
+   '| cp',                                      /* Ask cp          */
+   '| j:'                                       /* Conn 2 juxtapose*/
+/*---------------------------------------------------------------+
+| Process the found dasd                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:113 END ?)',
+   'stem dasd.',                                /* Take stem       */
+   '| f: fanout',                               /* Duplicate recs  */
+   '| specs w1.1 1.5',                          /* Keep this       */
+   '| j: juxtapose',                            /* Lay side by side*/
+   '| stem out. append',                        /* Append to stem  */
+   '? f:',                                      /* Conn 2 fanout   */
+   '| specs ~QUERY SYS ~ 1 w1.1 nw',            /* Compose cmd     */
+   '| cp',                                      /* Ask cp          */
+   '| pick 1.1 \== ~ ~',                        /* Remove empties  */
+   '| j:'                                       /* Conn 2 juxtapose*/
+/*---------------------------------------------------------------+
+| Format the output and write the file                           |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:127 END ?)',
+   'stem out.',                                 /* Take these      */
+   '| specs pad 0 w1.1 x2d 1.5 right w1;* nw',  /* Make cuu decimal*/
+   '| sort w1.1',                               /* Sort            */
+   '| specs a: w2.1 .',                         /* Compose report  */
+            'if break(a) then',                 /* Break on cuu    */
+            '~;_;~ 1',                          /* Add lines break */
+            'id a n',                           /* Write cuu       */
+            'write',                            /* Really add rec  */
+            'endif',                            /* End of iff      */
+            'w3;* 7',                           /* Add rest        */
+   '| change ~_~ ~',                            /* Replace these   */
+   '| split at ;',                              /* Make extra lines*/
+   selct,
+   '| preface literal 'Date('S') Time() myfn,   /* Add timestamp   */
+            'on LPAR 'node,
+   output                                       /* Write to file   */
+Exit

@@ -1,0 +1,50 @@
+*
+* My personal settings
+*
+*
+* A specific piece of code want to run at the beginning of the profile
+* :pre_exit.
+*
+*
+* Extra access input
+:access_items.ACCESS . A :ifrc0.RELEASE D
+*
+*
+* Define where we find the tooling and identify an alternate
+:tooling.VMLINK .DIR vmusers:tools. <* Q (NONAMES :alt_tooling.VMLINK TOOLS 400 <* Q (NONAMES
+*
+*
+* cp commands we want to execute
+:cpcmds.SPOOL CONS CONPARK START EOF NAME Userid() CONSLOG;
+        SET EMSG ON;
+        SET DATEFORM ISODATE USER;
+        SET PF1  SUBSTITU IMMED PIPE (END \) &*;
+        SET PF13  SUBSTITU IMMED PIPE (END \) &*;
+        SET PF11 RETRIEVE FORWARD;
+        SET PF23 RETRIEVE FORWARD;
+        SET PF12 RETRIEVE BACKWARD;
+        SET PF24 RETRIEVE BACKWARD;
+        SCREEN OUT YELLOW STAT  GREEN;
+        TERM LINESIZE 160;
+        TERM MORE 10 10
+*
+*
+* CMS commands we want to be run
+:cmscmds.ACCESS 193 U;
+         ACCESSM0 ON;
+         SYNONYM USERID() SYNONYM;
+         CLNNETLG (GO;
+         OPCHK;
+         CHECK
+*
+*
+* Execute or other commands we want to be run at the end
+:run.DAILY
+*
+*
+* A specific piece of code want to run at the end of the profile
+* :post_exit.
+*
+*
+* If this is a server enter the start up code for the server here
+*:servercode.rscs  :serverenv.gcs

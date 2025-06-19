@@ -1,0 +1,214 @@
+/* This exec shows DIRMAINT's WORKUNITs.
+ - We allow you to execute all native DIRMAINT commands related to
+   workunits (RETRY, CANCEL, DELETE, ...)
+ - In addition we have an X(EDIT) command so you can see the (raw)
+   contents of the workunits.
+ - A Q(uery) command so that you can see which LINKs to minidisks
+   prohibit a workunit from completing.
+   Native:
+     DVHDMC3850W Unable to obtain link to 010F for step 1 in work unit
+     DVHDMC3850W 28144520; CP LINK return code was 104.
+   Response to our QUERY command
+     DATAMOVE: Next LINKs prohibit DIRM FOR RACFVM DMDISK F200:
+     DATAMOVE: RACFVM   F200 R/O
+   ====> needs QDTMOVEL EXEC on an mdisk DATAMOVE accesses <=====
+ 
+  +-----------------------------------------------------------+
+  | format:  | DIRMW                                          |
+  +-----------------------------------------------------------+
+ 
+20 Jun 2002: DIRMAINT writes more DVH msgs to WUCFFAIL files
+             so we flagged all files in RED.
+             Now we scan for  DVHxxx3414W ie Rollback failed
+28 Jan 2005: Add the Query workunit command (finds prohibiting LINKs)
+             ===> QDTMOVEL EXEC rqd on an mdisk DATAMOVE accesses
+ 7 Feb 2005: Remove dependency of LNK EXEC (better to go to WWW)
+17 Aug 2005: Support CLONEDISK requests on Q command
+             Be sure to detach linked DIRMAINT 1DF when error happens
+Written by: Kris Buelens IBM Belgium;  KRIS at VMKBBR01  7 Oct 1997*/
+ 
+parse upper source . . myname mytype . syn .
+address command
+ 
+'DROPBUF';'MAKEBUF';makebuf=rc
+'GETFMADR'; parse pull . fm cuu .
+parse value diagrc(8,'LINK DIRMAINT 1DF' cuu 'RR'),
+      with rc . 17 emsg '15'x
+if rc=0 then 'PIPE COMMAND ACCESS' cuu fm'|VAR EMSG'
+if rc<>0 then call errexit rc,emsg
+ 
+do forever
+   Call GetList /* Get the WUCFFAIL files */
+   if queued()=0 then call errexit 0,'There are no WUCFFAIL nor',
+                                     'WORKUNIT files on DIRMAINT 1DF'
+   call Display
+   'PIPE COMMAND ACCESS' cuu fm
+end
+ 
+/*-----------------------------------------------------------------*/
+Display: /* Call SELFS EXEC to display the findings                */
+/*-----------------------------------------------------------------*/
+ 'EXECSTAT SELFS EXEC'
+ if rc=4 then do; 'EXECLOAD SELFS EXEC'
+                   if rc=0 then SELFS_loaded=1;end
+ queue 'SELEXP (RED REV)' left('Date     Workunit          From     For      Command',67,'41'x)
+ queue 'TOP' center(' Select Workunit(s) to work with ',70,'-')
+ queue 'TOPEXP (GREEN REVV) For WORKUNIT: X= Xedit ; R= Retry ; C= Cancel ; W= Wakeup'
+ queue 'TOPEXP (GREEN REVV)               Q= Query DATAMOVE about LINK problems probibiting the request'
+ if NbRed=0 then
+    queue 'TOPEXP (GREEN REVV) For WUCFFAIL: X= Xedit ; D= Delete'
+ else
+    queue 'TOPEXP (GREEN REVV,'left('',39,'G')left('',26,'P')')',
+     'For WUCFFAIL:  X= Xedit ; D= Delete',
+                   '   (pink color = BIG problem)'
+ 
+ queue 'BOT (RED REV) PF1= DIRM HELP           PF2= Refresh           PF3= Stop '
+ call selfs 'INITC' myname /* init the panel */
+ if result^='' then do;'DROPBUF'     /* SELFS EXEC gave error */
+    call errexit result,'Error' result 'from SELFS EXEC';end
+ 
+ SelfsStarted=1; Updates=''; emsg=''
+ do forever
+    If Updates<>'' then updates='UPDSELFLD' updates
+    parse value selfs("DISPLAY" myname,updates,emsg,,
+                      'PFNOSEL 1 2 3','MINSEL 1'),
+          with pfk sel '' updates emsg
+    select
+     when pfk>100 then do;'DROPBUF'     /* SELFS EXEC gave error */
+         call errexit pfk,'Error' result 'from SELFS EXEC';end
+     when pfk=1 then 'HELP ADVHCMD'
+     when pfk=2 then  return   /* Cause a refresh */
+     when pfk=3 then call errexit 0
+     otherwise                        /* ETK  */
+      emsg=ProcessCommand() /* Process user selection as commands */
+    end /* select */
+ end
+return
+ 
+/*-----------------------------------------------------------------*/
+ProcessCommand: /* Process user selection as commands              */
+/*-----------------------------------------------------------------*/
+ upper sel
+ SomeDataMove=0
+ do while sel^='' & emsg=''      /* Process user's selections */
+    parse var sel i c sel
+    parse var sel.i '_' . fn ft . '' DirmCmd
+    Select
+     when c='X' then do
+       'PIPE COMMAND ACCESS' cuu fm /* Refresh disk FATs */
+       'XEDIT' fn ft fm ; updates=updates';'i 1 '_' ;end
+     When c='W' & ft='WORKUNIT' then DirmCmd='WORKUNIT' fn 'WAKEUP'
+     When c='R' & ft='WORKUNIT' then DirmCmd='WORKUNIT' fn 'RETRY'
+     When c='C' & ft='WORKUNIT' then DirmCmd='WORKUNIT' fn 'CANCEL'
+     When c='Q' & ft='WORKUNIT' then emsg=QueryDataMove()
+     When c='D' & ft='WUCFFAIL' then DirmCmd='WORKUNIT' fn 'DELETE'
+     When c='?' | c='*' | c='_' then nop
+     Otherwise                       updates=updates';'i 1 '?'
+    end
+    If DirmCmd<>'' then do
+       Say 'DIRM' DirmCmd
+       'EXEC DIRMAINT' DirmCmd
+       updates=updates';'i 1 '*'
+    end
+ end
+ if SomeDataMove & Emsg='' then
+    return 'EMSG Wait & press ENTER or CLEAR to see DATAMOVE''s answers'
+return emsg
+/*-----------------------------------------------------------------*/
+QueryDataMove: /*                                                  */
+/*-----------------------------------------------------------------*/
+ 'PIPE COMMAND ACCESS' cuu fm /* Refresh disk FATs */
+ fid=fn ft fm
+ 'PIPE (end ?) <' fid,
+   '|DMM: FIND DMM:|SPEC W2.1|VAR DataMove',
+   '?DMM:',
+   '|CMD: FIND ORIGCMD|SPEC W2.2|VAR CMD',
+   '?CMD:',
+   '|TRG: FIND TARGETID|SPEC W2|VAR TRG',
+   '?TRG:',
+   '|StrFrLabel /BEGINCMDS/',
+   '|StrToLabel /NTRIED/',
+   '|AMD: PICK W2 == /AMDISK/',
+   '|AMD$: LOCATE / $$$$$$/',
+   '|SPEC W5 1|JOIN * / / |APPEND LITERAL|VAR $Amdisks',
+   '?AMD$:',
+   '|SPEC W5 1|JOIN * / / |APPEND LITERAL|VAR Amdisks',
+   '?AMD:',
+   '|TMD: PICK W2 == /TMDISK/',
+   '|SPEC W7 1|JOIN * / / |APPEND LITERAL|VAR Tmdisks',
+   '?TMD:|PICK W2 == /MMDISK/',
+   '|SPEC W7 1|JOIN * / / |APPEND LITERAL|VAR mmdisks'
+ 
+ parse var cmd cmd vdev .
+ if wordpos(cmd,'DMDISK CMDISK AMDISK CLONEDISK')=0 then
+    return 'EMSG Unknown DIRMAINT command in' fid':' cmd vdev
+ if cmd='AMDISK' then vdevs=Amdisks tMdisks
+                 else if cmd='CLONEDISK' then vdevs=mmdisks
+                                      else vdevs=Amdisks $Amdisks tMdisks
+ w= words(vdevs)
+ if w=0 then return 'EMSG No AMDISKs nor TMDISKs found in' fid
+ if w>2 then return 'EMSG Too many AMDISKs/TMDISKs found in' fid
+ 
+ t='DIRM DATAMOVE CMS EXEC QDTMOVEL',
+      userid() 'DIRM FOR' trg cmd vdev':' vdevs
+/* say t */
+ address CMS t
+ SomeDataMove=1
+ 
+ updates=updates';'i 1 '*'
+return ''
+ 
+ERREXIT: EXIT: /* general (error)exit routine */
+ if symbol('fm')='VAR' then call diag 8,'DET' cuu
+ if symbol('makebuf')='VAR' then 'DROPBUF' makebuf
+ if symbol('SelfsStarted')='VAR' then
+    call selfs "TERM" myname      /* delete the panel */
+ if SELFS_loaded=1 then 'EXECDROP SELFS EXEC'
+ parse upper source . . myname mytype . syn .
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)
+ 
+ 
+GetList:
+'PIPE (end ?)',
+ ' COMMAND LISTFILE * WUCFFAIL' fm '(DATE NOH',
+ '|APPEND COMMAND LISTFILE * WORKUNIT' fm '(DATE NOH',
+ '|O: FANOUT',                        /* Copy records to .. */
+ '|SPEC 1-17 10 W8 1.8 right',
+ '|J: JUXTAPOSE',                     /* .. preface recs by fileid */
+,/* Records look like: */
+,/* 97-09-26 07167394 WUCFFAIL<n> xxxxxx   where "n"= sequence nbr */
+ '|SORT 1.29',
+ '|JOIN KEYLENGTH 26',        /* Join all records same WU in 1 record */
+ '|ACT: LOCATE W3 /WORKUNIT/',     /* Active workunits */
+ '|SPEC /SEL (Yel  ) _/ 1 1-* NW', /* show active in YELLOW */
+ '|CTA: FANOUT|BUFFER',            /* Count how many Active */
+ '|OUT: FANIN 0 2 1',            /* Collect output */
+ '|CHANGE /<0>//|CHANGE /<1>//|CHANGE /<2>//|CHANGE /<3>//',
+ '|CHOP 82',                             /* Shorten the lines */
+ '|STACK',                               /* To stack for SELFS EXEC */
+ '|STEM SEL.',                           /* To a stem for us */
+ '?ACT:',                                /* Failed workunits come here */
+ '|ERR: LOCATE 28 /0/',                    /* Those with errors: */
+ '|SPEC /SEL (Pink ) _/ 1 1-* NW|buffer',  /* Show with color Pink */
+ '|CtPink: Count lines',                    /* Count red ones */
+ '|OUT2: FANIN',                           /* Get those without err */
+ '|CTF: FANOUT|BUFFER',                   /* Count how many */
+ '|OUT:',                                  /* pass to main stream */
+ '?CtPink:|Var NbRed',                     /* Count pink ones */
+ '?ERR:',                                /* Those without errors */
+ '|SPEC /SEL (Green) _/ 1 1-* NW|buffer',  /* Show in GREEN */
+ '|OUT2:',
+ '?CTA:|TAKE 1|COUNT LINES|CTJ: FANINANY|JOIN|FIND 11'||,
+      '|SPEC /SEL (white)   --- failed workunits: -------------/ 1|OUT:',
+ '?CTF:|TAKE 1|COUNT LINES|CTJ:',
+ '?O:|GETFILES',                      /* read the Workunit files */
+ '|F1: FIND ORIGUSER| SPEC /<1>/ 1 W2 Nw.8',
+ '|F:  FANINANY|J:?F1:',
+ '|F2: FIND ORIGCMD|  SPEC /<3>/ 1 W2-* Nw |F:?F2:',
+ '|F3: FIND TARGETID| SPEC /<2>/ 1 W2 Nw.8|F:?F3:',
+ '|F4: FIND DVH   3414W|SPEC /<0>/ |F:?F4:'  /* if ROLLBACK Fails */
+return
+ 

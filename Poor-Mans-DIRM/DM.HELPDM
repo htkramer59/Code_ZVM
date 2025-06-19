@@ -1,0 +1,36 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Poor man's dirmaint for a monolithic directory      |
+|                                                                |
+| File     : DM       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_CKUID EXEC      Checking EXEC                    |
+|            DM       COMMANDS  List of commands & status        |
+|            DM       NAMES     Controls where is written        |
+|            DM       ERRORS    List of errors                   |
+|            DM*      EXEC      All DM execs                     |
+|                                                                |
+| Called   : DM       <uid> <cmd> <input>                        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Requires : option LNKNOPAS                                     |
+|            CP CLASS A, B or C                                  |
+|            Write access to MAINT 123                           |
+|            NO SSI SUPPORTED!!!                                 |
+|                                                                |
+|            Support is only available when time permits or      |
+|            if the author likes to work on it.                  |
+|            Support requires also a well described case.        |
+|                                                                |
+|  To test: GLOBALV SELECT DM SETLP TEST 1                       |
+|  Stop testing: GLOBALV SELECT DM SETLP TEST 0                  |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240618 19:24:44                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

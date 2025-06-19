@@ -1,0 +1,168 @@
+*** sorry for this "quick document" it is this or nothing ***                   
+*************************************************************                   
+                                                                                
+                                                                                
+The MVMDISKS XEDIT macro is a tool to assist users without DIRMAINT             
+or alike in moving lots of minidisks.  For example to make a pack empty.        
+                                                                                
+When moving to unlike disk formats (such as 3380 -> 3390) MVMDISKS can          
+only move CMS formatted minidisks and not RECOMPed ones (eg MAINT 190).         
+VSE data, or the CP spool must be moved by other means.                         
+                                                                                
+                                                                                
+                                                                                
+An overview:                                                                    
+--------------                                                                  
+The steps to move minidisks are:                                                
+ 1. For each minidisk to move, define one on the new pack(s)                    
+ 2. Copy the data                                                               
+ 3. Delete the old minidisk                                                     
+                                                                                
+MVMDISKS and other worker execs help you to perform all steps.                  
+                                                                                
+Step 0, Preparation of new disks                                                
+--------------------------------                                                
+ - Label the new disks.                                                         
+ - Define the new disks in your directory as a FULLPACK mdisk of some           
+   user (we define all disks under user FULLPACK, with as vaddr the             
+   the real address of the pack).                                               
+   The MDISK card should not be "MDISK xxxx devt 0 END" as this does not        
+   allow DIRMAP to find the size of the pack.  You must specify the size        
+   of the pack.  For example MDISK 1234 3390 0 3339 NEWVOL for a 3390-3         
+ - If these disks will be CP-owned, format and allocate the areas used          
+   by CP, and define a dummy mdisk to "reserve" the area.  Example              
+     USER $SPOOL$ NOLOG                                                         
+      MDISK 50A3 3390 137 400 NEWVOL R SPOOL SPOOL                              
+ - Create a file named GAPFILE VOLSERS in which you list the volume             
+   labels of the new disks where you want to move mdisks to.                    
+                                                                                
+                                                                                
+Step 1, creation of new mdisks                                                  
+------------------------------                                                  
+ - You start DRM (DRM is a tool that allows to manage the CP directory,         
+   for example to add new mdisks)                                               
+ - In DRM, you start the MVMDISKS macro.  You tell it which disks must be       
+   made empty, and new disks that can be used as target space.                  
+   MVMDISKS will update the CP Directory in co-operation with DRM.              
+    For example: you want to make VSHR04 empty, so you issue                    
+                    MVMDISKS VSHR04 (AUTO                                       
+    The result for one of the mdisks might be the next 3 records:               
+        MDISK 1500 3390 80 120 VSHR04 RR $DIRBKP$ ACES1500 M$M$D$I$             
+       *$$$$ MDISK ACCESS 1500 duplicated as 2500 for move.                     
+        MDISK 2500 3390 537 120 NEWVOL RR $DIRBKP$ ACES1500 M$M$D$I$            
+       -> a Mult pasword was added to the original MDISK card                   
+       -> a separator card was inserted                                         
+       -> a new Mdisk card added on the new disk, with a temp mdsk addr         
+          (as temp addr we try to use +1000 if impossible)                      
+    At the same time, a control file was created listing which mdisks           
+    have to be copied:                                                          
+       *-------- 9 Jan 2003 10:01:43 ---------                                  
+       EXEC COPYDDR  ACCESS   1500 $DIRBKP$     ACCESS   2500 M$M$D$I$          
+       EXEC COPYDDR  $CSE$    50AB R$M$D$I$     $CSE$    60AB M$M$D$I$          
+       EXEC COPYDDR  VMTAPE   1195 $DIRBKP$     VMTAPE   2195 CTRLFILE          
+                                                                                
+ You now can place this directory online.  The new and old mdisks are           
+ both LINKable at this time.  We are ready for the next step:                   
+                                                                                
+Step 2, copying the data onto the new mdisks                                    
+--------------------------------------------                                    
+ Here we use exploit the list of mdisks created in step 1: COPMDSK2 LIST        
+  Depending on the data on the mdisks, you can use a copier exec that we        
+  provide, or you can create your own copier exec, taking ours as model.        
+  - CLSTDDR EXEC  uses DDR to copy.  Only possible if source and target         
+                  disktype is identical.  But, can copy non-CMS data too.       
+  - CLSTSMS EXEC  uses DFSMS COPY to copy.  Can only copy CMS formatted         
+                  data, but can be even faster than DDR.                        
+                  The DFSMS MODULE is part of DFSMS, what is a free of          
+                  charge feature of VM/ESA and z/VM. It must be installed       
+                  separately, no product tailoring is required. Normal          
+                  installation place is DFSMS 1B5.                              
+  - CLSTCMS EXEC  uses CMS FORMAT and COPYFILE.  The slowest method, but        
+                  it can copy mdisks to target disks smaller than the           
+                  source.                                                       
+ These 3 execs are all similar: to read a COPMDSK2 LIST (or alike),             
+ and work mdisk my mdisk.  Their output is an updated list: all mdisks          
+ successfully copied become a comment line.  So, this output can be used        
+ again as input to retry failed copies at a later time (e.g. the copy           
+ failed as a user was logged on).                                               
+                                                                                
+ This step is supposed to run off-shift, when most users are logged off.        
+                                                                                
+                                                                                
+Step 3 delete old mdisks                                                        
+-------------------------                                                       
+ Basically we must remove the old mdisk card, change the temp addr we           
+ placed on the new mdisk back to the original address, remove the temp          
+ link password(s) and remove the comment card.                                  
+ Using our example:                                                             
+        MDISK 1500 3390 80 120 VSHR04 RR $DIRBKP$ ACES1500 M$M$D$I$             
+       *$$$$ MDISK ACCESS 1500 duplicated as 2500 for move.                     
+        MDISK 2500 3390 537 120 NEWVOL RR $DIRBKP$ ACES1500 M$M$D$I$            
+ must become:                                                                   
+        MDISK 1500 3390 537 120 NEWVOL RR $DIRBKP$ ACES1500                     
+                                                                                
+ MVMDISKS CLEANUP performs that.                                                
+                                                                                
+ Real life though is a bit more complex: we never trust anything.  So           
+ MVMDISKS CLEANUP has some extra "check" options.                               
+    When using a check option, MVMDISKS will verify that the mdisk was          
+    indeed copied to the new place.  So, it LINKs the new and old mdisk         
+    and performs some checks before removing the old mdisk.                     
+    - When the check is OK, we keep the mdisks linked so that no-one can        
+      make changes.                                                             
+    - When the check is not OK, the mdisks are not switched and a log           
+      file is updated.                                                          
+    After a check you have a choice:                                            
+     - place the directory online.  That is, all mdisks checked fine will       
+       exist only on the new DASD.  Mdisks for which the check failed           
+       will still exist in 2 copies.                                            
+     - issue QQUIT and all mdisks will stil exist in two copies.                
+       exist only on the new DASD.  Mdisks for which the check failed           
+ More details: have a look at the intro in the MVMDISKS XEDIT macro.            
+                                                                                
+                                                                                
+Practical points                                                                
+----------------                                                                
+- Don't forget to read the introduction comments in all execs. They             
+  contain more details: MVMDISKS XEDIT and CLSTSxxx EXEC                        
+                                                                                
+- MVMDISKS does not only support freeing entire disks, you can create           
+  EXCLUDE/UNCLUDE control files were you can be more precise.  Both files       
+  have records formatted as follows:                                            
+      MDISK userid cuu      to ex/include an Mdisk of a user                    
+      USER userid           to ex/include a complete user                       
+      DISK volser           to ex/include mdisks on a volser                    
+                                                                                
+- Don't try to move too much at once.  With our process you can move by         
+  pieces and take your time.  E.g. every days some mdisks and at a              
+  weekend the things that are hard to move (mdisks of servers).                 
+  After a move, you can look at the MDISKMAP and see what is left on the        
+  disks you want to make empty.                                                 
+                                                                                
+  Working piece by piece is based on the list files used by the CLSTxxx         
+  EXECs: what has been copied becomes a comment.  Re-use the list to            
+  retry copies.                                                                 
+  When at step 3: a list of "mdisks not yet copied"/"changed since copy"        
+  is created.  You can feed this list to the CLSTxxx EXECs as well.             
+                                                                                
+- During step 2: you can manually split the "mdisks to copy" lists in           
+  multiple sections and run these sections in different virtual machine         
+  to work in parallel.                                                          
+                                                                                
+- During step 1: When moving many mdisks, be sure your GAP file contains        
+  enough space to accommodate all mdisks to be moved.  If there is no           
+  more free space, you'll have to issue QQUIT and restart from your last        
+  SAVE point.                                                                   
+                                                                                
+- For step 2 and 3: When you have an ESM such as RACF, you may be forced        
+  to create definitions that allow you to use the new mdisks with their         
+  temp addr.  As these temp addresses will be removed ultimately these          
+  RACF definitions don't need to be permanent.                                  
+  The CLSTxxx EXECs have code to create RACF definitions and remove them        
+  after the copy.  The use is triggered by DEFRACF/DELRACF options.             
+  If you have another ESM, you'l have to change the subroutines a bit.          
+                                                                                
+                                                                                
+Happy copying.   Kris                                                           
+                                                                                
+                                                                                

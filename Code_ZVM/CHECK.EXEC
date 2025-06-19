@@ -1,0 +1,13 @@
+/**/
+list='* DIRECT;EXTENT CONTROL;NETRC DATA'
+'PIPE (end ?)',
+     'var list',
+     '| split at ~;~ ',
+     '| specs ~LISTFILE~ 1 w1;* nw ~A (NOHEADER ISODATE~ nw',
+     '| cms',
+     '| nfind DMSLST',
+     '| stem line.'
+If line.0<>0 Then Do
+Say 'Unwanted/dangerous files found on A-disk'
+'PIPE stem line. | cons'
+End

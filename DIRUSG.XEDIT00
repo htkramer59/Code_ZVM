@@ -1,0 +1,95 @@
+/*---------------------------------------------------------------+
+| Function : Add block usage to DIRLIST                          |
+|                                                                |
+| File     : DIRUSG   XEDIT                                      |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DIRUSG   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190719 12:37:05                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Get all the lines from the dirlist                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DIRUSG.XEDIT:22 END ?)',
+   'xedit ',                                    /* Read all lines   */
+   '| specs substr w1.1 of 10;*',               /* Keep only dirname*/
+   '| strip',                                   /* Remove spaces    */
+   '| stem dir.'                                /* Hand to rexx     */
+/*---------------------------------------------------------------+
+| Get all the length for use in layout and header                |
++---------------------------------------------------------------*/
+dll=0                                           /* Set to zero      */
+Do d=1 To dir.0
+   dll=dll Length(dir.d)                        /* Add length       */
+End d
+/*---------------------------------------------------------------+
+| Determine highest number...                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DIRUSG.XEDIT:37 END ?)',
+   'var dll',                                   /* Get the numbers  */
+   '| split',                                   /* Split them       */
+   '| specs pad 0  w1.1 1.10 right ',           /* Adjust 4 sorting */
+   '| sort ',                                   /* Now sort         */
+   '| take last 1',                             /* Take highest     */
+   '| var ll'                                   /* Store as         */
+/*---------------------------------------------------------------+
+| Rework header                                                  |
++---------------------------------------------------------------*/
+'EXTRACT /RESERVED */'                          /* Get all headers  */
+'PIPE (NAME DIRUSG.XEDIT:48 END ?)',
+   'stem reserved. ',                           /* Take these       */
+   '| take first 1',                            /* Keep this        */
+   '| var reserved'                             /* Store 4 rework   */
+reserved=reserved||Copies(' ',ll-15) Right('Data-Blks',12) Right('System-Blks',13) Right('Total-Blks',13),
+                   Right('Total Kb',13)
+':1'                                            /* Go to top        */
+'CLOCATE 'll+10                                 /* .                */
+/*---------------------------------------------------------------+
+| Get all the block counts....                                   |
++---------------------------------------------------------------*/
+Do d=1 To dir.0
+   'PIPE (NAME DIRUSG.XEDIT:60 END ? LISTCMD NAME FPUSAGE.EXEC:105 END ?)',
+      'literal QUERY BLOCKS * * 'dir.d,         /* Compose cmd      */
+      '| cms',                                  /* Issue cmd        */
+      '| pick w4.1 == ~BASE~',                  /* Only real files  */
+      '| f: fanout',                            /* Duplicate recs   */
+      '| specs w-2;-2',                         /* Keep data blocks */
+      '| stem datablock.',                      /* Store as         */
+      '? f:',                                   /* Conn 2 fanout    */
+      '| specs w-1;-1',                         /* Keep syst blocks */
+      '| stem systblock.'                       /* Store as         */
+   call Add_Up
+End d
+/*---------------------------------------------------------------+
+| Set the new header and go to top                               |
++---------------------------------------------------------------*/
+'SET RESERVED 'reserved
+':1'                                            /* Go to top        */
+Return
+ 
+ 
+Add_Up:
+/*---------------------------------------------------------------+
+| Do calculations for this directory                             |
++---------------------------------------------------------------*/
+systtot=0                                       /* Initialise       */
+datatot=0                                       /* these 2          */
+Do s=1 To systblock.0
+   systtot=systtot+systblock.s                  /* Add up           */
+   datatot=datatot+datablock.s                  /* ...also          */
+End s
+/*---------------------------------------------------------------+
+| Add this to the display                                        |
++---------------------------------------------------------------*/
+'COVERLAY 'Right(datatot,11) Right(systtot,13) Right(datatot+systtot,13) Right((datatot+systtot)*4,13)
+'+1'                                            /* Up 1 record      */
+Return

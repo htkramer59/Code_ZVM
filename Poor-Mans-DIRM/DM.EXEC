@@ -1,0 +1,120 @@
+/*---------------------------------------------------------------+
+| Function : Poor man's dirmaint for a monolithic directory      |
+|                                                                |
+| File     : DM       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_CKUID EXEC      Checking EXEC                    |
+|            DM       COMMANDS  List of commands & status        |
+|            DM       NAMES     Controls where is written        |
+|            DM       ERRORS    List of errors                   |
+|            DM*      EXEC      All DM execs                     |
+|                                                                |
+| Called   : DM       <uid> <cmd> <input>                        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Requires : option LNKNOPAS                                     |
+|            CP CLASS A, B or C                                  |
+|            Write access to MAINT 123                           |
+|            NO SSI SUPPORTED!!!                                 |
+|                                                                |
+|            Support is only available when time permits or      |
+|            if the author likes to work on it.                  |
+|            Support requires also a well described case.        |
+|                                                                |
+|  To test: GLOBALV SELECT DM SETLP TEST 1                       |
+|  Stop testing: GLOBALV SELECT DM SETLP TEST 0                  |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240618 19:24:44                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmd uid input
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If cmd='?' Then Call Help
+If uid='*' Then uid=Userid()
+/*---------------------------------------------------------------+
+| Read the NAMES file and find the command                       |
++---------------------------------------------------------------*/
+'PIPE (NAME DM.EXEC:55 END ?)',
+    '< 'myfn' NAMES *',
+    '| locate anycase ~:sourcefile.~',
+    '| specs fs . substr w1.2 of f2 1',
+    '| var dirfnft',
+    '?',
+    '< 'myfn' COMMANDS *',
+    '| pick w1.1 == ~'cmd'~ and w2.1 == ~1~',
+    '| f: fanout',
+    '| specs w4.2 1',
+    '| change ~.~~',
+    '| var xecutable',
+    '| count lines',
+    '| var cmdok',
+    '? f:',
+    '| specs w3.1',
+    '| var docheck'
+If cmdok Then Do
+              If docheck Then Do
+                 uidok=DM_CKUID(uid)
+                 If \uidok Then Call Exit '48'
+              End
+              'PIPE (NAME DM.EXEC:77 END ?)',
+                  'var ws 1',
+                  '| var ws'
+              If cmd='MAX' Then input='MAX 'input
+              Address CMS xecutable uid input
+              If rc<>0 Then Call Exit rc
+              End
+         Else Call Exit '28'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If \Datatype(exrc,'NUM') Then exrc=0
+                         Else Call ErrorMsg
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ErrorMsg:
+/*---------------------------------------------------------------+
+| Find the message and display it                                |
++---------------------------------------------------------------*/
+exrc=Right(exrc,3,0)
+'PIPE (NAME DM.EXEC:102 END ?)',
+    '< 'myfn' ERRORS *',                         /* Read the file    */
+    '| find 'exrc,                               /* Locate error     */
+    '| specs ~'myfn'-'exrc'~ 1 w2;* nw ~'errmsg'~ nw',   /* Compose msg      */
+    '| cons'                                     /* Show             */
+Return
+ 
+ 
+Help:
+/*---------------------------------------------------------------+
+| Display help                                                   |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+'PIPE (NAME DM.EXEC:115 END ?)',
+   '< 'myfn myft' *',
+   '| tolabel Parse',
+   '| cons'
+Call Exit
+Return

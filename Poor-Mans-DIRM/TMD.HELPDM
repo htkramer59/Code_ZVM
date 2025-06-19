@@ -1,0 +1,25 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Move a minidisk from 1 user to an other             |
+|                                                                |
+| File     : DM_TMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_CKMDK EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_TMD   <uid1> <cuu1> <uid2> <cuu2> MOVElinks      |
+|          : TMD      <uid1> <cuu1> <uid2> <cuu2> MOVElinks      |
+|                                                 KEEPlinks      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 08:21:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

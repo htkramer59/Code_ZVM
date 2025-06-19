@@ -1,0 +1,207 @@
+From <a href="mailto:kris.buelens@gmail.com">Kris Buelens</a>, IBM Belgium
+<p>The DRM package provides a simple interface to manage the CP directory
+<ul>
+<li>Helps with finding free space for new minidisks (automatic or manual)
+<li>Checks for overlaps before placing the directory online
+<li>Can be used to see only users with certain options
+<li>Helps to defragment CKD disks
+(DIRMAINT and/or DFSMS is required then)
+<li>The additional MVMDISKS tool can be used as a help to move/copy lots
+    of minidisks to other volumes.  Moving to another dasdtype is
+    only supported for CMS formatted minidisks as we use DDR, DFSMS COPY
+    or FORMAT and COPYFILE.
+<li>The DIRBAC EXEC can be used to create DDR statements to backup
+    only used cylinders (gaps and excluded users are skipped).
+</ul>
+<p>In general: a poor man's DIRMAINT alternative,
+<br>If you have DIRMAINT: enhances DIRMAINT a little bit:
+<ul>
+<li>DIRME is an EXEC to directly XEDIT the directory entry of a user
+    or to send selected users into a Pipeline.&nbsp; It also allows
+    to XEDIT some selected DIRMAINT control files.&nbsp;
+    Examples:<tt>DIRME MAINT</tt> and you see MAINT's entry in XEDIT.
+    &nbsp;<tt>DIRME MAINT LOCK</tt> and you can change MAINT's entry.
+    &nbsp;<tt>DIRME EXTENT CONTROL</tt> and you can change that control
+    file.
+ 
+<li>DIRMW is an EXEC to look at DIRMAINT's WORKUNIT files.&nbsp;
+    It allows to view them, issue RETRY and CANCEL commands as well as
+    removing olf failed WUCCFAIL files.&nbsp;  All this without
+    having to remember the workunit ids.
+</ul>
+ 
+<p>Prerequesite:
+<br>
+ DIRMAP MODULE, part of CMS Utilities feature, standard part of CMS
+ in z/VM, is used to map the
+ directory as well as to find free space.
+ 
+ 
+<h4>Changes Version 3.00.1 :</h4>
+  8 Sep 1998 - Accept the LK prefix command also on LINK cards
+<p>
+ 15 Sep 1998 - Ignore blank lines in RACF commands file
+<p>
+ 29 Sep 1998 - Bug: do not rebuild the GAPfile for each GET command
+ 
+<h4>Changes Version 3.01 :</h4>
+  4 Jul 2000 - Improve Freemap (disk defragmanentation)
+<ul>
+<li>PF11 is now FILELIST of the mdisk pointed too.
+<li>When moving an Mdisk with DIRM CMDISK, DRM will now allow moving
+into a gap smaller than the original Mdisk.  And, DRM will use the new
+mdisk size when updating the freemap.
+<li>DRM recognizes when you change a prepared DIRM CMDISK into a
+DIRM DMDISK, and it will update the freemap accordingly.
+</Ul>
+<h4>Changes Version 3.02:</h4>
+  7 Jul 2000 - Improve Freemap (disk defragmanentation)
+<ul>
+<li>When you write 'userid cuu' in FREEMAP's commandline, and press PF9
+    (or PF11) it will find the indicated mdisk in the freemap.
+<li>Bug correction:  when moving minidisks, the remaining gap space
+    in a FREEMAP line can become 0.  When later another gap is found
+    on a line with a 0, the cursor got placed at a wrong gap, or at
+    not gap at all.  Problem fixed.
+</Ul>
+<h4>Changes Version 4</h4>
+ 30 Jan 2002 - Support for the DRMGUI PACKAGE
+<br>
+  1 Feb 2002 - Better errormessage passing to DRMGUI in case of errors
+<h4>Changes Version 4.1</h4>
+ 10 Jan 2003 - Include the MVMDISKS and DIRBKP tools.
+<br>
+<h4>Changes Version 4.2</h4>
+ 7 Feb 2004 - Include the DIRMW tool to make handling of DIRMAINT
+ WORKUNIT files a lot easier.&nbsp;
+ Add some new prefix commands: for example LU (becomes RAC LISTUSER),
+ RL (becames RAC RLIST VMMDISK ...),
+ TMD (for DIRM TMDISK), and PURGE (for DIRM PURGE).
+<br>
+<h4>Changes Version 4.3</h4>
+ 8 Feb 2004 - Add CMP prefix command to easily compare the contents of
+ two minidisks (uses COMPMDSK, part of the
+<a href="descript.cgi?COMPARE">Compare</a> package).
+<br>
+<h4>Changes Version 4.4 <tt>May/June 2005</tt></h4>
+<ul>
+<li>Fix the FI prefix command entered in MDISKMAP
+<li>Start DIRM BATCH if many DIRMAINT commands entered in XEDIT Prefix
+<li>Allow "CMDisk" prefix commands on LINK cards, it prepares a DIRM LINK
+<li>Support a "nbr" on most DIRM cmds (e.g. "DMD 5" prepares a
+DIRM DMDISK for the up to 5 MDISK cards.
+<li>Addition of the MDSK EXEC.  This makes a DEFINE MDISK easy if your
+current VM system has access to other VM systems (e.g. a Guest test VM,
+or VMs sharing DASD with your VM).  You need to have a copy of the CP
+directory of this other system.  The MDSK EXEC extracts the wanted MDISK
+card from it, ATTACHes the target volser to the SYSTEM if required,
+issues the DEFINE MDISK, ACCESSes it R/O (by default) and can start
+FILELIST.  At the end, MDSK can DETACH the things again.
+</ul>
+ 
+<h4>Changes Version 4.5 <tt>July 2005</tt></h4>
+The DIRME EXEC has been included in the package.
+ 
+<h4>Changes Version 4.5.2 <tt>August 2006</tt></h4>
+We support the new layout provided by DIRMAP in z/VM 5.2.&nbsp;
+The FRMT prefix command now supports a parameter to indicate
+the wanted CMS blocksize.
+ 
+<h4>Changes Version 4.5.3 <tt>February 2009</tt></h4>
+<br>
+PF 10, 11, & 12 performed SAVE and not FILE as they are described.
+<br>
+When an unauthorised user issued DIRME uid LOCK, DIRME kept waiting
+after that DIRMAINT replies "not authorised", causing a long
+response time.
+<h4>Changes Version 4.5.3a <tt>October 2009</tt></h4>
+<br>
+PF 10 (file), resulted in a NOVALUE rexx error.
+<h4>Changes Version 4.5.4 <tt>Februari 2011</tt></h4>
+<ul>
+<li>Fix searching an MDISK with prefix FInd cmd in MDISKMAP
+<li>The FI prefix command now also works in LINKMAP
+<li>For both FI commands, the cursor will be placed on the MDISK
+    or LINK found.
+<li>A fix for the <b>MDSK EXEC</b>:
+<br>Give user a chance to do something if target MDISK cannot be
+    ACCESSed or FILELISTed.
+<li>Two fixes for the <b>QDSK EXEC</b>:
+<br>Try to use ACCESS(MODE0.  If impossible (meaning fm 0 files
+    remain invisible), we add an * in col 45 of Q DISK to signal
+    that the number of files doesn't include fmode 0 files.
+<br>Add LINKS option to display who has links to the selected MDK
+</ul>
+<h4>Changes Version 5.1 <tt>March 2013</tt></h4>
+Two main changes and many small changes.
+<ol>
+<li>Support dynamic filtering op GAPFILE and MDISKMAP.
+<p> You have a few classes of disk volumes and may want to find space
+    for a new MDISK on a disk belonging (or not belonging) to a given
+    class.
+<br>For example: a class may be the disks
+    that are PPRC copied to a remote site.
+    When you allocate a new MDISK you want an easy way to select whether
+    or not that MDISK must go to a PPRC or non-PPRC volume.
+<br>DRM's <i>Dynamic Filtering</i> allows that: you define you disk
+    classes in DRM NAMES. The same disk classes can be used to filter
+    the MDISKMAP.  Issue HELP DRM DYNFLTR to learn the details.
+<li>With z/VM 6.2, the CP directory was changed quite a bit, with
+    SUBCONFIG and IDENTITY statements as additional means to define
+    virtual machines.
+    DRM V5 supports those new statements in a certain way.
+<p> As DRM's main task is to find space for new MDISKs (based on DIRMAP's
+    GAPFILE), not too much had to be changed.  The main change is to
+    DRM's PF2 fuinction: "find user" or "find user mdisk".
+<br>An example: you can type "MAINT 191" in XEDIT's command line an
+    press PF2.  DRM will locate the MDISK 191 of user MAINT in the CP
+    DIRECTORY.
+<ul>
+<li>If you do not have a z/VM running in SSI mode: you have for example
+    IDENTITY MAINT and exactly one BUILD ON statement pointing to
+    SUBCONFIG MAINT-1.
+    In the sample CP Directory, the 191 MDISK of MAINT
+    is located in the directory section of MAINT-1.
+<br>In this case when you search for example for MAINT 191 (using DRM's
+    PF2), DRM will locate the MDISK statement in IDENTITY MAINT or in
+    SUBCONFIG MAINT-1.
+    So, on such systems, the find "user mdisk"
+    function works as if there is no SUBCONFIG statement.
+<li>If your z/VM system is running in SSI mode: then you have example
+    IDENTITY MAINT and one to four BUILD ON statements pointing to
+    SUBCONFIG MAINT-1, MAINT-2 etc.
+<br>In this case when you search for example for MAINT 191 (using DRM's
+    PF2), DRM doesn't know in which SUBCONFIG to look and will tell
+    "not found".  So, in stead of typing "MAINT 191" & press PF2,
+    you then must type "MAINT-n 191" & press PF2
+</ul>
+Other changes for z/VM 6.2
+<ul>
+<li>When the cursor is on a BUILD ON statement and you hit PF2, DRM
+    will search the corresponding SUBCONFIG (just like that with the
+    cursor on INCLUDE, PF2 searches for that PROFILE statement).
+<li>When hitting PF2 without having entered a userid (and the cursor is
+    not on INCLUDE nor on BUILD ON), DRM advances to the next USER,
+    PROFILE, IDENTIFY or SUBCONFIG statement.
+</ul>
+<li>Extra documentation: a README first and a PDF.
+</ol>
+<h4>Changes Version 5.1.A <tt>Nov 2014</tt></h4>
+Fix build of the FREEMAP: all gapsizes were not shown.
+<br>Allow RACF prefix commands on AMDISK records (just like on MDISKs).
+<h4>Changes Version 5.1.B <tt>Feb 2015</tt></h4>
+Fix build of the FREEMAP: gap sizes at end-of-disk weer not printed
+ 
+<h4>Changes Version 5.2 <tt>Mar 2021</tt></h4>
+<ul>
+<li>Gap size was not reported for gaps at end-of-disk
+<li>Avoid Rexx syntax err for some RACF and Dirmaint prefix cmds
+<li>For GET(x) commands: give better msg when GAPFILE has only
+    gaps of different disk type than requested on the MDISK-card
+<li>Xlate volser to upper when GET commands are executed
+    (avoid "no gap found" if volser is e.g. "VM7res")
+<li>Prefix command FI in LINKMAP did no longer work
+<li>Some error msg was sometimes not displayed, but this was shown
+<xmp>          3559 *-*     c 'SET MSGM ON'
+                +++ RC(-3) +++   </xmp>
+</ul>

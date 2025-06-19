@@ -1,0 +1,59 @@
+/*---------------------------------------------------------------+
+| Function : Start up of XYMON VM server code                    |
+|                                                                |
+| File     : PROFILE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PROFILE  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211222 09:29:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SPOOL CONS CONPARK START NAME 'Userid()' CONLOG'
+Address COMMAND 'CP SET PF11 RETRIEVE FORWARD'
+Address COMMAND 'CP SET PF23 RETRIEVE FORWARD'
+Address COMMAND 'CP SET PF12 RETRIEVE BACKWARD'
+Address COMMAND 'CP SET PF24 RETRIEVE BACKWARD'
+Address CMS 'SYNONYM 'Userid()' SYNONYM'
+Address CMS 'ACCESS 0592 N'
+Address CMS 'ACCESS 1111 I'
+Address CMS 'VMLINK .DIR VMUSERS:TOOLS. <* Q> (NONAMES '
+Address CMS 'VMLINK .DIR VMSYS:PERFSVM. <* X-A> (NONAMES '
+Address COMMAND 'CP SET RUN ON'
+exl_list='FCX EXEC;RSCS EXEC;TOPTEN EXEC'
+Say
+Say
+/*---------------------------------------------------------------+
+| Ask some questions and do some settings..                      |
++---------------------------------------------------------------*/
+'PIPE (NAME PROFILE.EXEC:36 END ?)',
+    'cp QUERY 'Userid()',                        /* Ask cp           */
+    '| specs w3.1',                              /* Keep this        */
+    '| locate ~DSC~',                            /* Do we have this  */
+    '| count lines',                             /* How many lines   */
+    '| var disc',                                /* Store as boolean */
+    '?',                                         /* 2nd pipe         */
+    'var exl_list',                              /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~EXECLOAD~ 1 w1.2 nw ~* = REXX~ nw',   /* Compose cmds     */
+    '| cms'                                      /* Hand 2 cms       */
+/*---------------------------------------------------------------+
+| If we are DISC running...we can start otherwise ask            |
++---------------------------------------------------------------*/
+If \disc Then Do
+  Say 'Do you want to start the Xymon VM Client? (Y/N)'
+  Parse Upper Pull ans .
+  If ans <> 'Y' Then
+  Exit
+  End
+/*---------------------------------------------------------------+
+| Start the server code                                          |
++---------------------------------------------------------------*/
+Address CMS 'EXEC HOBVMDRV'

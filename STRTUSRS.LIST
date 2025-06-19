@@ -1,0 +1,22 @@
+:Defaults.                                                                      
+  :wait.1                                                                       
+  :depends.                                                                     
+  :pre.                                                                         
+  :post.                                                                        
+  :title.Start of userids on VM4HTK                                             
+                                                                                
+:warnids.operator,maint730,herman                                               
+                                                                                
+:sourcedir.maint730 2cc                                                         
+                                                                                
+:id.TCPIP                                                                       
+:id.VMUSERS                                                                     
+:id.VMSERVS                                                                     
+:id.VMSERVU                                                                     
+:id.VMSERVR                                                                     
+:id.VMSERVP                                                                     
+:id.DTCVSW1                                                                     
+:id.DTCVSW2                                                                     
+:id.DTCVSW3                                                                     
+:id.DTCVSW4                                                                     
+:id.CONPARK                                                                     

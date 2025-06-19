@@ -1,0 +1,260 @@
+/*---------------------------------------------------------------+
+| Function : Check DASD                                          |
+|                                                                |
+| File     : QSDASD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSDASD   REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSDASD   <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSDASD   REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init 2 stems     */
+work.0=0                                         /* .                */
+temp.0=0                                         /* .                */
+eckd.0=0
+edev.0=0
+/*---------------------------------------------------------------+
+ 
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSDASD.EXEC:44 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose the header                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME QSDASD.EXEC:55 END ?)',
+    'literal 'TImeStamp(),                       /* Compose header   */
+    '| var dasd_header 1',                       /* .                */
+    '| join * x40',                              /* .                */
+    '| var dasd_header'                          /* .                */
+/*---------------------------------------------------------------+
+| Find out how many DASD we have and MDC setting                 |
++---------------------------------------------------------------*/
+'PIPE (NAME QSDASD.EXEC:63 END ?)',
+    'cp QUERY DASD ALL',                         /* Ask cp           */
+    '| split at ,',                              /* Split here       */
+    '| strip',                                   /* Remove space     */
+    '| n: nlocate anycase ~OFFLINE~',            /* Select...        */
+    '| stem qdasd.',                             /* Store as         */
+    '| specs w2.1',                              /* Keep this        */
+    '| f1: fanout',                              /* Dupl. records    */
+    '| specs w1.1 1.4 x40 n',                    /* Add space        */
+    '| j: juxtapose',                            /* Join them        */
+    '| join keylen 4',                           /* Join on cuu      */
+    '| p: pick anycase substr 1.4 of w8.1 == ~9336~',   /* Select these     */
+    '| specs w1.1',                              /* Keep this        */
+    '| stem edev.',                              /* Store as         */
+    '? p:',                                      /* Conn 2 pick      */
+    '| specs w1.1 1',                            /* Keep this        */
+    '| stem eckd.',                              /* Hand 2 rexx      */
+    '? f1:',                                     /* Conn 2 fanout    */
+    '| specs ~QUERY DASD DETAILS~ 1 w1.1 nw',    /* Compose cmds     */
+    '| cp',                                      /* Issue cmds       */
+    '| strip',                                   /* Remove spaces    */
+    '| j:',                                      /* Conn 2 juxtapose */
+    '? n:',                                      /* Conn 2 nlocate   */
+    '| stem offline.',                           /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY MDCACHE',                          /* Issue cmd        */
+    '| f2: fanout',                              /* Dupl. records    */
+    '| stem mdc.',                               /* Store as         */
+    '? f2:',                                     /* Conn 2 fanout    */
+    '| take first 1',                            /* Take only this   */
+    '| locate anycase ~ON~',                     /* Select           */
+    '| count lines',                             /* How many         */
+    '| var mdcon'                                /* Store as         */
+Call Add2Output 'qdasd.,; ;DASD found on the system'
+Call Add2Output 'offline.,; ;Offline  DASD found on the system'
+If edev.0<>0 Then Call Edev_Details
+If eckd.0<>0 Then Call Eckd_Details
+Call DASD_Map
+/*---------------------------------------------------------------+
+| Get all the data and send it to....                            |
++---------------------------------------------------------------*/
+'PIPE (NAME QSDASD.EXEC:104 END ?)',
+   'stem work.',                                 /* Add header       */
+   '| preface var dasd_header',                  /* ...and           */
+   '| preface literal ',                         /* ....return to    */
+   '| preface literal ',                         /* .....caller      */
+   '| split at ;',                               /* .                */
+   output                                        /* .                */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+DASD_Map:
+/*---------------------------------------------------------------+
+| Create a map per dasd                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME QSDASD.EXEC:122 END ?)',
+   'stem qdasd.',                                /* Take these       */
+   '| specs w2.1',                               /* Keep this        */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs w1.1 1.4 x40 n',                     /* Add a space      */
+   '| j: juxtapose',                             /* Join outcome     */
+   '| join keylen 4',                            /* Join on cuu      */
+   '| space 1',                                  /* Remove spaces    */
+   '| n1: nlocate anycase ~HCPQSY~',             /* Ignore these     */
+   '| n2: nlocate anycase ~NOT FOUND~',          /* ..and these      */
+   '| stem det.',                                /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY SYSTEM~ 1 w1.1 nw',           /* Compose cmds     */
+   '| cp',                                       /* Issue them       */
+   '| j:',                                       /* Conn 2 juxtapose */
+   '? n1:',                                      /* Conn 2 nlocate   */
+   '| stem notatt.',                             /* Hand 2 rexx      */
+   '? n2:',                                      /* Conn 2 nlocate   */
+   '| stem nomdisk.'                             /* Hand 2 rexx      */
+temp.0=0
+Do d=1 To det.0
+   work=det.d
+   'PIPE (NAME QSDASD.EXEC:144 END ?)',
+      'var work',                                /* Take these       */
+      '| f: fanout',                             /* Dupl records     */
+      '| specs w1.7 1',                          /* Keep these       */
+      '| specs w1.1 1',                          /* Rework           */
+              'w-1;-1 nw',                       /* ....layout       */
+              'w-2;-2 nw',                       /* .                */
+              'w-3;-3 nw.6',                     /* .                */
+              'x40 n',                           /* .                */
+      '| j: juxtapose',                          /* Join them        */
+      '| stem temp. append',                     /* Add 2 stem       */
+      '? f:',                                    /* Conn 2 fanout    */
+      '| specs w8;*',                            /* Keep this        */
+      '| split at ,',                            /* Split here       */
+      '| strip',                                 /* Remove spaces    */
+      '| specs w2.2 1 w1.1 nw',                  /* Rework           */
+      '| sort',                                  /* Sort             */
+      '| join keylen 8',                         /* Join on id       */
+      '| j:'                                     /* Conn 2 juxtapose */
+End d
+'PIPE (NAME QSDASD.EXEC:164 END ?)',
+    'stem temp.',                                /* Take these       */
+    '| sort',                                    /* Sort them        */
+    '| f: fanout',                               /* Duplicate recs   */
+    '| specs w1.6 1 x40 nw',                     /* Add a space      */
+    '| j: juxtapose',                            /* Join them        */
+    '| specs a: w1.6 .',                         /* Add a break      */
+            'w7;* 35',                           /* .                */
+            'break a',                           /* .                */
+            'id a 1',                            /* .                */
+    '| specs b: 1.23 .',                         /* and another one  */
+            '24;* 25',                           /* .                */
+            'break b',                           /* .                */
+            'id b 1',                            /* .                */
+    '| stem temp.',                              /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs w7;*',                              /* Keep this part   */
+    '| split minimum 100 after blank',           /* Split...         */
+    '| j:'                                       /* Conn 2 fanout    */
+Call Add2Output 'temp.,; ;Users per DASD;CUU  Volid  #Usr Indctr  Mdsk RorW Userids'
+Return
+ 
+ 
+Edev_Details:
+/*---------------------------------------------------------------+
+| Get the details for the edevices                               |
++---------------------------------------------------------------*/
+singlepath.0=0
+multipath.0=0
+'PIPE (NAME QSDASD.EXEC:193 END ?)',
+   'stem edev.',                                 /* Take these       */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs w1.1 1.4 x40 n',                     /* Add a space      */
+   '| j: juxtapose',                             /* Join the items   */
+   '| join keylen 4',                            /* Sort on device   */
+   '| p: pick w5.1 == ~~',                       /* Select these     */
+   '| stem singlepath.',                         /* Store as         */
+   '? p:',                                       /* Conn 2 pick      */
+   '| stem multipath.',                          /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY EDEV~ 1 w1.1 nw ~DETAILS~ nw',  /* Compose cmds     */
+   '| cp',                                       /* Issue them       */
+   '| strip',                                    /* Remove space     */
+   '| pick w1.1 == ~FCP_DEV:~',                  /* Select these     */
+   '| specs w2.1 1 w4.1 nw w6.1 nw',             /* Rework           */
+   '| j:'                                        /* Conn 2 juxtapose */
+If singlepath.0<>0 Then Call Add2Output 'singlepath.,Check if you can add more FCPs'
+If multipath.0<>0 Then Call Add2Output 'multipath.,; ;Checked DASD;CUU  FCP  'Substr('WWPN',1,16) Substr('LUN',1,16),
+                                                                    'FCP  'Substr('WWPN',1,16) Substr('LUN',1,16)
+ 
+Return
+ 
+ 
+Eckd_Details:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pavno.0=0
+pav.0=0
+dasdfw.0=0
+hyp.0=0
+'PIPE (NAME QSDASD.EXEC:225 END ?)',
+    'cp QUERY PAV',                              /* Ask cp           */
+    '| l: locate anycase ~NO~',                  /* Select these     */
+    '| stem pavno.',                             /* Store as         */
+    '? l:',                                      /* Conn 2 locate    */
+    '| stem pav.'                                /* Hand 2 rexx      */
+If pavno.0<>0 Then Call Add2Output 'pavno.,No PAV devices'
+If pav.0<>0 Then Call Add2Output 'pav.,Devices for which PAV is set'
+'PIPE (NAME QSDASD.EXEC:233 END ?)',
+    'stem eckd.'                                 /* Take these       */
+    '| specs ~QUERY DASDFW~ 1 w1.1 nw',          /* compose cmds     */
+    '| cp',                                      /* Issue them       */
+    '| stem dasdfw.'                             /* Store output     */
+If dasdfw.0<>0 Then Call Add2Output 'dasdfw.,DASDFW settings'
+'PIPE (NAME QSDASD.EXEC:239 END ?)',
+    'stem eckd.'                                 /* Take these       */
+    '| specs ~QUERY HYPERSWAP~ 1 w1.1 nw',       /* Compose cmds     */
+    '| cp',                                      /* Issue them       */
+    '| stem hyp.'                                /* Store output     */
+If hyp.0<>0 Then Call Add2Output 'hyp.,HYPERSWAP settings'
+Return
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSDASD.EXEC:255 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* .                */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

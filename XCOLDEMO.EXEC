@@ -1,0 +1,8 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*    In case user types in XCOLDEMO instead of COLDEMO         */
+/*--------------------------------------------------------------*/
+'EXEC COLDEMO'

@@ -1,0 +1,30 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Delete a MDISK from a User                          |
+|                                                                |
+| File     : DM_DMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_VMLNK EXEC     To link items in DM NAMES         |
+|            VMLINK   EXEC     To link other disks               |
+|            DM_ONLIN EXEC     Write CP directory                |
+|            DM_CKMDK EXEC     Check for MDISK                   |
+|            DM_INDEX EXEC     Locate user id                    |
+|            DM_FORMT EXEC     Format MDISK before deletion      |
+|            <directory file>                                    |
+|                                                                |
+| Called   : DM_DMD   <uid> <cuu> <NOCLEAN>                      |
+|          : DMD      <uid> <cuu> <NOCLEAN>                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 12:07:16                                   |
+| Changes  : .                                                   |
+|            20250527 H.T.Kramer : Replaced subroutine with      |
+|                                  external routine for FORMATING|
+|            20240708 H.T.Kramer : Add NOCLEAN option            |
+|                                                                |
++---------------------------------------------------------------*/

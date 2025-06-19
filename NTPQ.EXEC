@@ -1,0 +1,39 @@
+/*---------------------------------------------------------------+
+| Function : Ask the time from the nearest NTP server/HMC        |
+|                                                                |
+| File     : NTPQ     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : NTPQ     REXX                                       |
+|                                                                |
+| Called   : NTPQ     .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20221209 13:43:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME NTPQ.EXEC:19 END ?)',
+     'cp QUERY CPUID',
+     '| specs w3.1',
+     '| deblock 2',
+     '| pick w1.1 == ~98~ or w1.1 == ~A8~',
+     '| var cpuid'
+/*---------------------------------------------------------------+
+| Determine NTPD to use                                          |
++---------------------------------------------------------------*/
+Select
+When cpuid='98' Then ntpd='10.35.1.45'
+When cpuid='A8' Then ntpd='10.35.1.46'
+Otherwise Do
+  Say 'Can not determine NTPD to use'
+  Exit
+  End
+End
+'PIPE (NAME NTPQ.EXEC:36 END ?)',
+    'literal 'ntpd,
+    '| ntpq',
+    '| cons'

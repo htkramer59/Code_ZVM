@@ -1,0 +1,26 @@
+/*---------------------------------------------------------------+
+| Function : Bootstrap exec for modules/execs on other disks     |
+|            that normally are not accessed                      |
+|                                                                |
+| File     : BOOTSTRP EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   NAMES                                      |
+|            VMLINK   EXEC                                       |
+|                                                                |
+| Called   : BOOTSTRP .                                          |
+|                                                                |
+| Comments : Make sure there is a corresponding entry in         |
+|            VMLINK NAMES.                                       |
+|            Copy this exec as the name in VMLINK NAMES          |
+|            e.g. COPY BOOTSTRP EXEC Q NETSTAT EXEC Q (OLDDATE   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220202 16:10:12                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arguments
+Parse Source . . myfn myft .
+Address CMS 'VMLINK 'myfn' (QUIET PARMS 'arguments

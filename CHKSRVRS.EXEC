@@ -1,0 +1,403 @@
+/*---------------------------------------------------------------+
+| Function : Check and correct user ids for GDH                  |
+|                                                                |
+| File     : CHKSRVRS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CHKSRVRS CONTROL     control file                   |
+|          : CHKSRVRS OVERVIEW    results from checks/fixes      |
+|          : CHKSRVRS BATCH       dirmaint batch input           |
+|                                                                |
+| Called   : CHKSRVRS ( RUN                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190314 13:23:17                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . '(' run .
+Parse Source . how myfn myft .
+If run='RUN' Then run=1
+             Else run=0
+Call Read_Control
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Do
+             Exit rc
+             End
+Call Get_Dir_Info
+Call Get_Fcp_Pairs
+/*---------------------------------------------------------------+
+| Loop thru the findings...                                      |
++---------------------------------------------------------------*/
+Do i=1 To id.0
+   Say id.i
+   Call Read_Dir
+   Call Test_IPL
+   Call Test_CMD
+   Call Test_MDISK
+   Call Test_FCP
+   Drop diripl stor. dir_mdisk.
+   Call Check_Running
+   Call Check_Vdisk
+   line=Copies('-',60)
+   Say line
+End i
+Address CMS 'VMLINK DIRMAINT 1DF <DET (NONAMES QUIET'
+/*---------------------------------------------------------------+
+| Write BATCH file and run it                                    |
++---------------------------------------------------------------*/
+If out.0<>0 Then Do
+     'PIPE (NAME CHKSRVRS.EXEC:57 END ?)',
+        'stem out. ',                           /* Take these      */
+        '| > 'myfn' BATCH    A'                 /* Write file      */
+    If run Then Address CMS 'DIRM BATCH 'myfn' BATCH'
+    End
+/*---------------------------------------------------------------+
+| Write the status report                                        |
++---------------------------------------------------------------*/
+If stat.0<>0 Then Do
+     'PIPE (NAME CHKSRVRS.EXEC:66 END ?)',
+        'stem stat. ',
+        '| specs w1.1 ',
+        '| sort unique ',
+        '| count lines ',
+        '| var reported',
+        '?',
+        'stem id.',
+        '| specs w1.1 1.9',
+        '| snake 8',
+        '| stem lst.',
+        '?',
+        'stem fcppairs.',
+        '| specs 1;* 1.20 ~- ~ nw',
+        '| snake 4',
+        '| stem fcplist.'
+     'PIPE (NAME CHKSRVRS.EXEC:72 END ?)',
+        'stem stat. ',                          /* Take these      */
+        '| specs ~;_;~ 1 w1.1 n.8 w2;* nw',     /* Adjust recs     */
+        '| specs   a: w1.1   .',                /* Smarten layout  */
+        '      w2-*   13',
+        '   break a',
+        '      id a  1',
+        '| split at ;',
+        '| change 1.1 ~_~ ~',
+        '| append literal ',
+        '| append literal List of servers, 'id.0':',
+        '| append stem lst.',
+        '| append literal ',
+        '| append literal Available FCP pairs ,'fcppairs.0':',
+        '| append stem fcplist.',
+        '| preface var line',                   /* Add line        */
+        '| preface literal Servers checked : 'id.0' , deviating servers: 'reported,
+        '| preface literal 'myfn myft' ; 'node' ; Last run: 'Date('S') Time(), /* Add timestamp */
+        '| > 'myfn node' A'                     /* Write file      */
+     If sendto<>'' Then Call Send_Overview
+     End
+Exit
+ 
+ 
+Send_Overview:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Say 'Under construction'
+Say 'sendto='sendto
+Say 'filetrans='filetrans
+Return
+ 
+ 
+Test_IPL:
+/*---------------------------------------------------------------+
+| Check if we are on CMS?                                        |
++---------------------------------------------------------------*/
+If diripl<>'' & diripl<>'DIRIPL' then Do
+                 If Wordpos(req_ipl,diripl)=0 Then Do
+                    out='FOR 'id.i' IPL CMS PARM AUTOCR'
+                    'PIPE (NAME CHKSRVRS.EXEC:107 END ?)',
+                       'var out ',              /* Take this       */
+                       '| stem out. append ',   /* Add to stem     */
+                       '| specs ~'id.i' Fixed:~ 1 1;* nw',  /* Prefix record   */
+                       '| stem stat. append'    /* Add to stats    */
+                 End
+                 End
+            Else Do
+                    'PIPE (NAME CHKSRVRS.EXEC:115 END ?)',
+                       'literal 'id.i' IPL statement missing ',
+                       '| stem stat. append'    /* Add to stats    */
+                 End
+Return
+ 
+ 
+Test_CMD:
+/*---------------------------------------------------------------+
+| Check for reserved memory                                      |
++---------------------------------------------------------------*/
+If dir_cmd.0<>0 Then Do d=1 To dir_cmd.0
+           Parse Value dir_cmd.d With 'COMMAND' dircmd
+           dircmd=Subword(dircmd,1,3)
+           If dircmd<>req_cmd Then Do
+              'PIPE (NAME CHKSRVRS.EXEC:130 END ?)',
+                 'literal 'id.i 'No reserved memory ',
+                 '| stem stat. append'          /* Add 2 stats     */
+               End
+           End
+           Else do
+              'PIPE (NAME CHKSRVRS.EXEC:136 END ?)',
+                 'literal 'id.i' No COMMAND statement present in definitions',
+                 '| stem stat. append'          /* Add to stats    */
+           End
+Return
+ 
+ 
+Test_FCP:
+/*---------------------------------------------------------------+
+| Check if at least 2 FCP definitions are present                |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:144 END ?)',
+   'stem dir_fcp. ',
+   '| l: lookup w1.1 w1.1',
+   '?',
+   'stem req_fcp.',
+   '| l:',
+   '| specs ~'id.i' Deviating FCP connection:~ 1 1;* nw',
+   '| stem stat. append',
+   '? l:',
+   '| specs ~'id.i' Missing FCP connection for:~ 1 1;* nw',
+   '| stem stat. append'
+Return
+ 
+ 
+ 
+Test_MDISK:
+/*---------------------------------------------------------------+
+| Test if the needed mdisks are there                            |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:154 END ?)',
+     'stem dir_mdisk.',                         /* Take these      */
+     '| buffer',                                /* Prevent stall   */
+     '| l: lookup 1.2 1.2',                     /* Lookup...compare*/
+     '?',                                       /* 2nd pipe        */
+     'stem wildc.',                             /* Take these      */
+     '| l:',                                    /* Conn 2 lookup   */
+     '? l:',                                    /* 2 lbl           */
+     '| specs ~'id.i' Missing mdisks in range:~ 1 1;* nw ~**~ n',
+     '| stem stat. append'                      /* Add 2 stats     */
+'PIPE (NAME CHKSRVRS.EXEC:164 END ?)',
+     'stem req_mdisk.',                         /* Take these      */
+     '| l: lookup w1.1 w1.1',                   /* Compare         */
+     '?',                                       /* 2nd pipe        */
+     'stem dir_mdisk.',                         /* And take these  */
+     '| l:',                                    /* Conn 2 lookup   */
+     '| stem missing.',
+     '? l:',                                    /* Conn 2 lookup   */
+     '| stem rest.'                             /* Store as        */
+/*---------------------------------------------------------------+
+| Process...the missing ones and produce records                 |
++---------------------------------------------------------------*/
+Do m=1 To missing.0
+   Select
+   When missing.m='0100' Then Do
+            'PIPE (NAME CHKSRVRS.EXEC:179 END ?)',
+               'literal 'id.i' Missing mdisk: 'missing.m,
+               '| stem stat. append'
+            End
+   When missing.m='0200' Then Nop
+   When missing.m='1300' Then Do
+            'PIPE (NAME CHKSRVRS.EXEC:185 END ?)',
+               'literal FOR 'id.i req_swap,     /* Compose cmd     */
+               '| stem out. append ',           /* Add here        */
+               '| spec ~'id.i' Fixed:~ 1 1;* nw ',    /* Adjust recs     */
+               '| stem stat. append'            /* and add here    */
+            End
+   Otherwise Nop
+   End
+End m
+Return
+ 
+ 
+Check_Running:
+/*---------------------------------------------------------------+
+| Check if the id is currently running                           |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:201 END ?)',
+   'cp query 'id.i' ',                          /* Ask cp          */
+   '| nfind HCP ',                              /* look for..      */
+   '| count lines ',                            /* How many?       */
+   '| var running'                              /* Store as        */
+Return
+ 
+ 
+Check_Vdisk:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \running Then Do
+       'PIPE (NAME CHKSRVRS.EXEC:214 END ?)',
+          'literal 'id.i' Not running can not check V-disk (swap)',
+          '| stem stat. append'                 /* Add 2 stats     */
+       End
+       Else Do
+       'PIPE (NAME CHKSRVRS.EXEC:219 END ?)',
+             'stem cur_vdisk.',                 /* Take these      */
+             '| locate ~'id.i'~ ',              /* Find mine       */
+             '| l: lookup w2.1 w1.1',           /* Compare         */
+             '?',                               /* 2nd pipe        */
+             'stem req_vdisk.',                 /* Take these      */
+             '| l:',                            /* Conn 2 lookup   */
+             '? l:',                            /* Conn 2 lookup   */
+             '| specs ~'id.i' Missing VDISK at:~ 1 w1.1 nw ~To fix reboot at zVM level~ nw',
+             '| stem stat. append'              /* Add 2 stats     */
+       End
+Return
+ 
+ 
+Read_Dir:
+/*---------------------------------------------------------------+
+| If no cluster id...take this otherwise select some records     |
++---------------------------------------------------------------*/
+If clst.i= '*******' Then Do
+           fn=id.i' DIRMPART 'wfm
+           rem=''
+           tak=''
+           End
+           Else Do
+           fn=clst.i 'CLUSTER 'wfm
+           rem='| drop first 'strt.i-1 /* Remove 1st part */
+           tak='| take first 'recs.i   /* Take this ammount */
+           End
+/*---------------------------------------------------------------+
+| Read the directory...                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:250 END ?)',
+   '< 'fn,                                      /* Read this       */
+   rem,                                         /* Remove these    */
+   tak,                                         /* Keep these      */
+   '| strip',                                   /* Remove spaces   */
+   '| xlate upper',                             /* Upper case      */
+   '| f1: find COMMAND',                        /* Select these    */
+   '| stem dir_cmd.',                           /* Store as        */
+   '? f1:',                                     /* Conn 2 find     */
+   '| f2: find IPL',                            /* Select these    */
+   '| specs w2;*',                              /* Keep this       */
+   '| var diripl',                              /* Store as        */
+   '? f2:',                                     /* Conn 2 find     */
+   '| f3: find MDISK',                          /* Select these    */
+   '| specs w2.1',                              /* Keep these      */
+   '| stem dir_mdisk.',                         /* Store as        */
+   '? f3:',                                     /* Conn 2 find     */
+   '| f4: find DEDICATE',
+   '| specs w2.2',
+   '| join keylen 5',
+   '| stem dir_fcp.'
+Return
+ 
+ 
+Read_Control:
+/*---------------------------------------------------------------+
+| Read the control file                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:278 END ?)',
+    '< 'myfn' CONTROL *',                       /* Read the file   */
+    '| pick 1.1 \== ~*~',                       /* Skip these      */
+    '| pick 1.1 \== ~ ~',                       /* ...and these    */
+    '| pick 1.1 \== ~~',                        /* ....and these   */
+    '| xlate fs = f1 upper',                    /* Uppercase this  */
+    '| specs fs = ~/~ 1 f1.1 n ~/~ n f2;* n',   /* Prep 4 varload  */
+    '| varload'                                 /* Hand to rexx    */
+/*---------------------------------------------------------------+
+| Prepare some stuff...                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:289 END ?)',
+    'var req_mdisks',                           /* Take this       */
+    '| split',                                  /* Split into recs */
+    '| strip',                                  /* Remove spaces   */
+    '| l: locate ~*~',                          /* Take these      */
+    '| strip ~*~',                              /* Remove this     */
+    '| stem wildc.',                            /* Store here      */
+    '? l:',                                     /* Conn 2 locate   */
+    '| stem req_mdisk.',                        /* Store rest      */
+    '?',                                        /* 2nd pipe        */
+    'var req_vdisks',                           /* Take this       */
+    '| split',                                  /* Split into recs */
+    '| stem req_vdisk.',                        /* Store as        */
+    '?',                                        /* 3rd pipe        */
+    'var req_fcp',                              /* Take this       */
+    '| split',                                  /* Split into recs */
+    '| stem req_fcp.',                          /* Store as        */
+    '?',                                        /* 3rd pipe        */
+    'var donot_check',
+    '| split',
+    '| specs ~NLOCATE /~ 1 w1.1 n ~/~ n',
+    '| join * ~!~',
+    '| var donot_check',
+    '?',
+    'cp QUERY VDISK',                           /* Ask CP          */
+    '| pick w1.1 == ~VDISK~',                   /* Remove empties  */
+    '| specs w2.2 1',                           /* Keep this       */
+    '| stem cur_vdisk.',                        /* Store as        */
+    '?',
+    'cms IDENTIFY',
+    '| specs w3.1',
+    '| var node'
+If donot_check<>'' &,
+   donot_check<>'DONOT_CHECK' Then donot_check='|'Translate(donot_check,'|','!')
+                              Else donot_check=''
+Drop req_mdisks req_vdisks req_vdisks
+Return
+ 
+ 
+Get_Dir_Info:
+/*---------------------------------------------------------------+
+| Obtain some info from the directory..                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:328 END ?)',
+    '< USER DIRECT 'wfm,                        /* Read this       */
+    '| locate ~U 'id'~',                        /* Select these    */
+    '| specs w3.1 1 w6;* nw',                   /* Keep this       */
+    donot_check,
+    '| sort w1.1 d',                            /* Sort, last 1st  */
+    '| f: fanout',                              /* Duplicate recs  */
+    '| specs w1.1',                             /* Keep this       */
+    '| stem id.',                               /* Store as        */
+    '? f:',                                     /* Conn 2 fanout   */
+    '| specs w2.1',                             /* Keep this       */
+    '| stem clst.',                             /* Store as        */
+    '? f:',                                     /* Conn 2 fanout   */
+    '| specs w3.1',                             /* Keep this       */
+    '| stem strt.',                             /* Store as        */
+    '? f:',                                     /* Conn 2 fanout   */
+    '| specs w4.1',                             /* Keep this       */
+    '| stem recs.'                              /* Store as        */
+Return
+ 
+ 
+Get_Fcp_Pairs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVRS.EXEC:353 END ?)',
+  'CP Q FCP ALL',
+  '| xlate upper',
+  '| split at ,',
+  '| strip',
+  '| nlocate ~ATTACHED~',
+  '| nlocate ~OFFLINE~',
+  '| nlocate ~AGENT~',
+  '| specs w2.1 1',
+  '| sort -3;-1',
+  '| join * x40',
+  '| spill 9',
+  '| specs pad 0 2.3 1.4 right w1;* nw',
+  '| specs w1.1 x2d 1 w2;* nw',
+  '| specs pad 0 w1.1 1.4 right w2;* nw',
+  '| sort w1.1',
+  '| specs ~5C50~ 1  w2.1 nw ~5C51~ nw w3.1 nw',
+  '| stem fcppairs.'
+Return

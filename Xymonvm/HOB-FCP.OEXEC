@@ -1,0 +1,190 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*
+/-  Herald ten Dam 05/06/2019                                        -/
+/-      FCP throughput                                               */
+ /*---------------------------------------------------------------+
+ | H.T.Kramer 20200608 Removed GLOBALV PUT because it is filling  |
+ |                     the A-disk unneeded                        |
+ +---------------------------------------------------------------*/
+trace off
+parse source . call_type myname .
+cr='15'x                                         /*  Carriage return   */
+emsgstart=date('U') time() myname':'   /* Start of error message line  */
+'globalv stack BBDISPLAY BBPORT FQDN VMPTK PTKSVM'
+pull bbdisplay
+pull bbport
+pull fqdn
+pull vmptk
+pull ptksvm
+if vmptk <> 1 then exit 4
+rc = diagrc('8','QUERY USER' ptksvm)
+if word(rc,1) <> 0 then notloggedon=1
+call init_open_socket      /*  Initialize and Open the socket  */
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call get_timestamp         /*  Get a linux-like timestamp      */
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+call send status           /*  Send the result in status to bb write */
+call close_term_socket
+call init_open_socket
+call send status2          /*  Send the result in status to bb read */
+call close_term_socket     /*  Close and terminate the socket  */
+exit
+ 
+do_the_test:
+/*  Check logged on flag, if true send yellow icon with message.  */
+if notloggedon=1 then do
+  msg = ptksvm 'Not logged on'
+  msg = 'yellow' dow month day time() tz year msg
+  status = 'status' machine||'.fcp_write' msg cr
+  status2 = 'status' machine||'.fcp_read' msgcr
+  return
+end
+qdiobuffer=64*1024
+'PIPE vmc 'ptksvm' print QDIO | hole'
+'CP SLEEP 1 SEC'
+'PIPE (end ?)',
+   'cp Q RDR * ALL',
+   '| PICK W-3;-3 == FCONMON',
+   '| specs w2.1',
+   '| take last 1',
+   '| var spid'
+'PIPE (END ?)',
+   '?reader file 'spid' ',
+   '| specs 2;* 1 ',
+   '| zone w4.1 all FCP',
+   '| nlocate Device',
+   '| sort w2.1 d',
+   '| specs w1.3 1 w1.4 nw.4 right pad 0 w-7;-7 nw.8 right w-5;-5 nw.8 right',
+   '| specs w1 nw w2 nw w3 nw w4 nw ',
+      'a: w5.1 .',
+      'b: w6.1 .',
+      'set (#0:=a*'qdiobuffer';#1:=b*'qdiobuffer')',
+      'print #0 pict 99999999999 nw',
+      'print #1 pict 99999999999 nw',
+   '| f: fanout',
+   '| specs w2 1 /@/ n w3 n /:/ n w5 nw ',
+   '| siconv B w2.1',
+   '| SPECS W1 NW PAD 0 W2 NW.20 RIGHT',
+   '| SORT W2 D',
+   '| siconv B w2.1',
+   '| change /@/_/',
+   '| join * x15',
+   '| var fcpwrite',
+   ' ?f:',
+   '| specs w2 1 /@/ n w3 n /:/ n w6 nw ',
+   '| siconv B w2.1',
+   '| SPECS W1 NW PAD 0 W2 NW.20 RIGHT',
+   '| sort w2 d',
+   '| siconv B w2.1',
+   '| change /@/_/',
+   '| join * x15',
+   '| var fcpread'
+/*    '| specs w2.1 1 w1.1 nw w3;* nw x40 n', */
+/*    '| join keylen 8', */
+ 
+msg = green dow month day time() tz year
+IF FCPWRITE="FCPWRITE" THEN
+DO
+ STATUS = 'status' MACHINE'.fcp_write' MSG CR 'NO DEVICES'
+ STATUS2= 'status' MACHINE'.fcp_read' MSG CR 'NO DEVICES'
+END
+ELSE
+ DO
+msg = msg 'FCP write bytes/s'cr||fcpwrite cr
+status = 'status' machine||'.fcp_write' msg
+msg = green dow month day time() tz year
+msg = msg 'FCP read bytes/s'cr||fcpread cr
+status2 = 'status' machine||'.fcp_read' msg
+END
+/* 'pipe var status | split at x15 | console' */
+return
+ 
+init_open_socket:
+ret=Socket('Initialize','SOCFCP')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+ret=socket('Gethostname')
+parse var ret rc hostname .
+if rc<>0 then
+  say 'Gethostname:' ret
+ret=socket('Getdomainname')
+parse var ret rc domainame .
+if rc<>0 then
+  say 'Getdomainname:' ret
+/* fullname=hostname||'.'||domainame */
+/*  Change periods to commas  */
+/* fullname=translate(fullname,',','.') */
+/* 'globalv put hostname' */
+/* 'globalv put domainame' */
+/* 'globalv put fullname' */
+bbdate=date('U')
+'globalv put bbdate'
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return
+ 
+get_timestamp:
+'PIPE CP QUERY TIMEZONE' ,
+  '| locate /Active/' ,
+  '| specs w1 1' ,
+  '| var TZ'
+dow = substr(date('W'),1,3)
+parse value date('N') with day month year .
+timestamp = dow month day time() tz year
+return

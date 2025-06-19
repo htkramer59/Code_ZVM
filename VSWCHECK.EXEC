@@ -1,0 +1,201 @@
+/*---------------------------------------------------------------+
+| Function : Check if the vswitches are running correct..        |
+|                                                                |
+| File     : VSWCHECK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VSWCHECK REPORT    , output file                    |
+|                                                                |
+| Called   : VSWCHECK vswitches , waittime ( warning-ids         |
+|                                                                |
+|            vswitches  , blank separated list, defaults below   |
+|                         ALL will get info from Q VSWITCH ALL   |
+|                         ? will show some help                  |
+|            waittime   , in minutes, default 30 minutes         |
+|            warning-ids, blank separated list, default OPERATOR |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200122 17:55:15                                   |
+| Changes  : .                                                   |
+|            20200123 H.T.Kramer : Added ALL as possible input   |
+|                                  Added HELP function...        |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg switchname ','  wait '(' warnids
+Parse Source . . myfn myft .
+ignore='DTCSMAPI XCATVSW1 XCATVSW2'
+/*---------------------------------------------------------------+
+| Process the arguments                                          |
++---------------------------------------------------------------*/
+If switchname=','   Then switchname=''
+If switchname=''    Then switchname='VSR1ZVM' /* Default switch  */
+If switchname='ALL' Then Call Get_Switches
+If switchname='?'   Then Call Show_Help
+If wait=''          Then wait='30'            /* Minutes */
+                    Else wait=Right(Strip(wait),2,'0')
+If warnids=''       Then warnids='OPERATOR'   /* Default ids */
+'PIPE (NAME VSWCHECK.EXEC:33 END ?)',
+    'CP QUERY USERID',                          /* Ask cp           */
+    '| specs w3.1',                             /* Take this        */
+    '| var node'                                /* Store as         */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+Say TimeStamp() 'Checking VSWITCHES : 'switchname
+Say TimeStamp() 'Checking every     : 'wait' minutes'
+Say TimeStamp() 'Messages sent to   : 'warnids
+Say TimeStamp() Center(' Start Checking ',80,'-')
+/*---------------------------------------------------------------+
+| Main loop                                                      |
++---------------------------------------------------------------*/
+Do i=1
+  'PIPE (NAME VSWCHECK.EXEC:49 END ?)',
+      'var switchname',                         /* Take this        */
+      '| split',                                /* Split            */
+      '| stem switch.'                          /* Store as         */
+/*---------------------------------------------------------------+
+| Loop thru the switches                                         |
++---------------------------------------------------------------*/
+  Do s=1 To switch.0
+    Say TimeStamp() 'Checking 'switch.s
+    'PIPE (NAME VSWCHECK.EXEC:58 END ?)',
+        'CP QUERY VSWITCH 'switch.s' DETAILS',  /* Ask details      */
+        '| xlate upper',                        /* Upper case       */
+        '| specs ~'TimeStamp()'~ 1 1;* nw',     /* Add timestamp    */
+        '| stem res.',                          /* Store as         */
+        '| n1: nlocate ~RDEV~',                 /* Find these       */
+        '? n1:',                                /* Conn 2 nlocate   */
+        '| n2: nlocate ~ACTIVE~',               /* Take these out   */
+        '| n3: nlocate ~BACKUP~',               /* and these        */
+        '| stem oth.',                          /* Store rest       */
+        '? n2:',                                /* Conn 2 nlocate   */
+        '| count lines',                        /* How many lines   */
+        '| specs ~'TimeStamp()' ACTIVE ports:~ 1 w1.1 nw',    /* Prep display     */
+        '| cons',                               /* Display          */
+        '| specs w-1;-1',                       /* Keep this        */
+        '| var ports_active',                   /* Store as         */
+        '? n3:',                                /* Conn 2 nlocate   */
+        '| count lines',                        /* How many         */
+        '| specs ~'TimeStamp()' BACKUP ports:~ 1 w1.1 nw',    /* Prep display     */
+        '| cons',                               /* Display          */
+        '| specs w-1;-1',                       /* Keep this        */
+        '| var ports_backup'                    /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If one of these is not 1...tell us something                   |
++---------------------------------------------------------------*/
+    Select
+    When ports_active=2 &,
+         ports_backup=0 Then Do
+           Say TimeStamp() 'Running ACTIVE/ACTIVE 'switch.s
+           End
+    When ports_active=1 &,
+         ports_backup=0 Then Do
+           Say TimeStamp() 'Running ACTIVE/NO BACKUP 'switch.s
+           Call Write_Report
+           Call Send_Warnings
+           End
+    When ports_active=1 &,
+         ports_backup=1 Then Do
+           Say TimeStamp() 'Running ACTIVE/BACKUP 'switch.s
+           End
+    When ports_active=0 |,
+         ports_backup=0 Then Do
+           Say TimeStamp() 'VSWITCH NOT ACTIVE/NO BACKUP 'switch.s
+           Call Write_Report
+           Call Send_Warnings
+           End
+    Otherwise Do
+           Say TimeStamp() 'Undefined status for 'switch.s
+           Call Write_Report
+           Call Send_Warnings
+           End
+    End
+    Say TimeStamp() Center(' End of Check ',80,'-')
+    End s
+/*---------------------------------------------------------------+
+| Wait for the time given...                                     |
++---------------------------------------------------------------*/
+  'WAKEUP +00:'wait':00 (CC TIME EXT'
+  Select
+  When rc=2 Then Nop
+  When rc=6 | rc=8 Then Do
+    Say TimeStamp() Center(' Checking Stopped : 'rc' ',80,'-')
+    Leave i
+    End
+  Otherwise Nop
+  End
+End i
+Exit
+ 
+ 
+Write_Report:
+/*---------------------------------------------------------------+
+| Write a report and append to the file                          |
++---------------------------------------------------------------*/
+       'PIPE (NAME VSWCHECK.EXEC:130 END ?)',
+           'stem res.',                         /* Take these       */
+           '| append literal 'Copies('-',80),   /* Add line         */
+           '| append stem oth.',                /* Add these        */
+           '| append literal 'Center(' End Of Report ',80,'-'),   /* Add a line       */
+           '| >> 'myfn' report a'               /* Append 2 file    */
+Return
+ 
+ 
+Send_Warnings:
+/*---------------------------------------------------------------+
+| Warn the users specified in warnids                            |
++---------------------------------------------------------------*/
+       'PIPE (NAME VSWCHECK.EXEC:143 END ?)',
+           'var warnids',                       /* Take these       */
+           '| split',                           /* Split            */
+           '| specs ~WARNING~ 1 w1.1 nw ~'TimeStamp() switch.s' in problem status~ nw',
+           '| cons',                            /* Show outcome     */
+           '| cp'                               /* Hand 2 cp        */
+Return
+ 
+ 
+Get_Switches:
+/*---------------------------------------------------------------+
+| Get all VSWITCH NAMES                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME MANY.XEDIT:423 END ?)',
+    'cp QUERY VSWITCH ALL',                     /* Ask cp           */
+    '| pick w1.1 == ~VSWITCH~',                 /* Keep these       */
+    '| change ~SYSTEM~~',                       /* Remove this      */
+    '| specs w2.1',                             /* Now keep this    */
+    '| if: if locate ~.~',                      /* If there is this */
+    '|   specs fs . f2',                        /* Chop of field 1  */
+    '| if:',                                    /* Conn 2 if        */
+    '| l: lookup',                              /* Compare          */
+    '?',                                        /* 2nd stage        */
+    'var ignore',                               /* Take this        */
+    '| split',                                  /* Split here       */
+    '| l:',                                     /* Conn 2 lookup    */
+    '| join * x40',                             /* Make 1 record    */
+    '| var switchname'                          /* Overrule variable*/
+Return
+ 
+ 
+Show_Help:
+/*---------------------------------------------------------------+
+| Show some help                                                 |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+'PIPE (end ?)',
+    '< 'myfn myft' *',                          /* Read myself      */
+    '| tolabel Parse',                          /* Read to here     */
+    '| cons'                                    /* Show it          */
+Exit
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a uniform timestamp for messages                        |
++---------------------------------------------------------------*/
+Return Date('S') Time() myfn node

@@ -1,0 +1,45 @@
+ADDUSER &USERID  PASSWORD(&PASSWORD)  DFLTGRP(????????) OWNER(????????)  UACC(NONE)   NAME('&NAME')
+.* Is VMDEV and/or VMBATCH class active?
+.*  List those you have on a .*ClassAct
+.*  Sample: .*ClassAct  VMBATCH VMDEV
+.*ClassAct
+.*
+.*GroupStart   --> Defines the RACF groups you have
+*** existing Groups: $VMBUO   for BCRS clients  -SYSAREA   for $PAGE$,..
+***                  $BUOFF   for xxxxxxx       -SYSSERV   service mach.
+***                  $BUOTEAM for xxxxxxx       -SYSBATCH  for Batch M.
+***                  $MAINTVM for xxxxxxx
+.*GroupEnd     --> End defined RACF groups
+.*Class VMBATCH
+***  VMBATCH resource
+RDEFINE VMBATCH &USERID OWNER(&USERID) UACC(NONE)
+PERMIT &USERID CLASS(VMBATCH) ID(&MYSELF) DELETE
+PERMIT &USERID CLASS(VMBATCH) ACCESS(CONTROL) ID(SYSBATCH)
+.*endClass
+*** His Minidisk(s)
+.*loop VMMDISK
+RDEFINE VMMDISK &USERID.191 OWNER(&USERID) UACC(NONE)
+.*endLoop
+.*loop VMMDISK
+PERMIT  &USERID.191  CLASS(VMMDISK) ID(&MYSELF) DELETE
+.*endLoop
+* Delete all existing permissions:
+*PERMIT  &USERID.191  CLASS(VMMDISK)   RESET
+***
+*** Other related RACF commands
+***
+*DELUSER &USERID
+*ALTUSER &USERID PASSWORD(&PASSWORD)  RESUME
+*CONNECT &USERID GROUP(groupid)      *** Goupids: IBS, .... SYSALL
+*REMOVE  &USERID GROUP(groupid)
+*PERMIT  &USERID.191  CLASS(VMMDISK)   ID(grantee)   ACCESS(READ)
+*PERMIT  &USERID.191  CLASS(VMMDISK)   ID(SYSALL)    ACCESS(ALTER)
+*PERMIT  &USERID.191  CLASS(VMMDISK)   ID(SYSREAD)   ACCESS(READ)
+*PERMIT  &USERID.191  CLASS(VMMDISK)   ID(SYSWRITE)  ACCESS(CONTROL)
+*** ACCESS AUTHORITY  ===>  DELETE  - TO REMOVE ACCESS AUTHORITY
+***                         NONE    - TO PREVENT A USER FROM ACCESSING
+***                         READ    - TO ALLOW READ/ONLY ACCESS
+***                         UPDATE  - TO ALLOW WRITE ACCESS
+***                         CONTROL - TO ALLOW MULTI-READ ACCESS
+***                         ALTER   - TO ALLOW MULTI-WRITE ACCESS  (also
+***                                     allows user to assign authority)

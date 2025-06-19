@@ -1,0 +1,155 @@
+/*---------------------------------------------------------------+
+| Function : Find gaps for the new guest to fit in               |
+|                                                                |
+| File     : HOBGFITS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : EXTENT   CONTROL                                    |
+|            *        VCONTROL                                   |
+|                                                                |
+| Called   : HOBGFITS <poolnames> <guest size> ( <map y or n>    |
+|                                                                |
+| Comments : Returns the number of fitting gaps                  |
+|            Assumes DIRMAINT 1DF linked as 1DF                  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220112 10:25:44                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg poolnames guestsize '(' map .
+Parse Source . calltype  myfn myft .
+gaps=0
+If poolnames=''  Then poolnames='LINUXOS'
+If poolnames='?' Then Do
+                     'PIPE (NAME HOBGFITS.EXEC:26 END ?)',
+                         '< 'myfn myft' *',
+                         '| tolabel Parse',
+                         '| cons'
+                     Exit
+                     End
+If guestsize=''  Then guestsize=25165824
+If map<>''       Then map='| preface literal $$$$$$$ | cons'
+                 Else map=''
+/*---------------------------------------------------------------+
+| Access disk with EXTENT CONTROL                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK * 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Do
+        Say 'VMLINK ERROR 'rc
+        Exit 0
+        End
+/*---------------------------------------------------------------+
+| Start processing                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBGFITS.EXEC:47 END ?)',
+    'var poolnames',
+    '| split at anyof ~;,.~',
+    '| stem pool.'
+If pool.0=1 Then exitrc=1
+            Else exitrc=0
+Do p=1 To pool.0
+   Call Read_Extent_Control
+   totgaps=0
+   Do v=1 To volser.0
+      Call Find_Gaps
+   End v
+   If exitrc Then exrc=totgaps
+             Else Do
+                  exrc=0
+                  Say Left(pool.p,10)' : 'Right(totgaps,4)' x 'guestsize
+                  End
+End p
+/*---------------------------------------------------------------+
+| Release the disk                                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK * 1DF <RELEASE (NONAMES QUIET'
+Exit exrc
+ 
+ 
+Find_Gaps:
+/*---------------------------------------------------------------+
+| Find the gaps in the volsers                                   |
++---------------------------------------------------------------*/
+If map='' Then showmap=''
+          Else showmap=Subword(map,1,3) volser.v Subword(map,5)
+'PIPE (NAME HOBGFITS.EXEC:78 END ?)',
+   '< 'volser.v' VCONTROL 'wfm,                  /* Read this file   */
+   '| pick anycase w1.1 == ~MAXBLK=~ or',        /* Select these     */
+                  'w1.1 == ~ENTRY=~',            /* ...records       */
+   '| l: locate anycase ~MAXBLK=~',              /* Keep this        */
+   '| specs pad 0 w2.1 1.10 right',              /* Adjust           */
+   '| var maxblk',                               /* Store as         */
+   '? l:',                                       /* Conn 2 locate    */
+   '| stem entry.'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Work on the content of the entries                             |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBGFITS.EXEC:90 END ?)',
+   'stem entry.',                                /* Take these       */
+   '| specs pad 0 w2.1 1.10 right',              /* Adjust numbers   */
+                 'w3.1 nw.10 right',             /* .                */
+   '| sort unique w1.1',                         /* Remove duplicates*/
+   '| specs w1.2 1',                             /* Add 1 to the     */
+           'a: w2.1 .',                          /* .endnumber       */
+           'set #0:=a+1',                        /* .so we know      */
+           'print #0 pict 9999999999 nw',        /* .the next extent */
+           '~;~ nw',                             /* .                */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs pad 0 recno 1.4 right 1;* nw',       /* Add record no    */
+   '| fi: faninany',                             /* Take in others   */
+   '| sort 1.4',                                 /* Sort on recno    */
+   '| join keylen 4',                            /* Join on recno    */
+   '| specs w2;*',                               /* Remove recno     */
+   '| if1: if pick w5.1 == ~~',                  /* If this is empty */
+   '|      specs w1;* 1',                        /* Adjust           */
+                '~'maxblk' .......... .......... ;~ nw',   /* Add endblock     */
+   '| if1:',                                     /* Conn 2 if        */
+   '| if2: if pick w3.1 \== w5.1',               /* If a gap         */
+   '|         specs 1;* 1 ~GAP~ nw',             /* Add a marker     */
+   '| if2:',                                     /* Conn 2 if        */
+   '| if3: if pick w-1;-1 == ~GAP~',             /* If lastword is.. */
+   '|         specs w1;* 1',                     /* Calculate the    */
+                   'b: w3.1 .',                  /* .size            */
+                   'c: w5.1 .',                  /* ..of the         */
+                   'set #1:=c-b',                /* ....gap          */
+                   'print #1 pict 9999999999 nw',   /* .                */
+   '|         specs w1;* 1',                     /* Check how many   */
+                   'd: w-1;-1 .',                /* .guests          */
+                   'set #2:=d%'guestsize,        /* ..fit in the     */
+                   'print #2 nw',                /* ...gaps          */
+   '| if3:',                                     /* Conn 2 if        */
+   showmap,                                      /* Show it ?        */
+   '| locate anycase ~GAP~',                     /* Select the gaps  */
+   '| specs printonly eof',                      /* Add up the gaps  */
+           'e: w-1;-1 .',                        /* .                */
+           'set #3+=e',                          /* .                */
+           'eof',                                /* .                */
+           'print #3 nw',                        /* .                */
+   '| var gaps',                                 /* Store ass        */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| drop first 1',                             /* Loose this one   */
+   '| specs pad 0 recno 1.4 right 1;* nw',       /* Add record no    */
+   '| fi:'                                       /* Conn 2 faninany  */
+   totgaps=totgaps+gaps                          /* Summing...       */
+Return
+ 
+ 
+Read_Extent_Control:
+/*---------------------------------------------------------------+
+| Get the volume labels from EXTENT CONTROL                      |
++---------------------------------------------------------------*/
+joinkey=Length(pool.p)
+'PIPE (NAME HOBGFITS.EXEC:145 END ?)',
+   '< EXTENT CONTROL 'wfm,                       /* Read this file   */
+   '| inside ~:GROUPS.~ ~:END.~',                /* Select this part */
+   '| locate anycase ~'pool.p'~',                /* Find these       */
+   '| nlocate anycase ~(ALLOCATE~',              /* Remove this      */
+   '| strip',                                    /* Remove spaces    */
+   '| join keylen 'joinkey,                      /* Join on poolname */
+   '| specs w2;*',                               /* Remove poolname  */
+   '| split',                                    /* Split            */
+   '| stem volser.'                              /* Store as         */
+Return

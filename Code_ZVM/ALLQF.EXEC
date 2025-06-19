@@ -1,0 +1,118 @@
+/*---------------------------------------------------------------+
+| Function : Count the spool files and count them per user       |
+|            Only display the ones having more than 1 file       |
+|                                                                |
+| File     : ALLQF    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC                                       |
+|            ALLQF    ALLNODES                                   |
+|            ALLQF    OVERVIEW                                   |
+|                                                                |
+| Called   : ALLQF    .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220531 10:21:31                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Check if RMCMD EXEC and its   |
+|                     output                                     |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . '(' where .
+Parse Source . . myfn myft .
+'PIPE (NAME ALLQF.EXEC:26 END ?)',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Call Exit '28 Can not run: RMCMD EXEC missing'
+If where='REMOTE' Then Call Remote
+                  Else Call Local
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Local:
+/*---------------------------------------------------------------+
+| The local part of this code                                    |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull  . . wfm .
+        Else Call Exit rc 'Problem VMLINK of STATUS'
+Address CMS 'RMCMD CMS 'myfn' (REMOTE,,,FILE,'myfn'  ALLNODES 'wfm
+If rc<>0 Then Call Exit '128 Can not execute RMCMD'
+fs='FF'x
+'PIPE (NAME ALLQF.EXEC:54 END ?)',
+   '< 'myfn' ALLNODES 'wfm,                      /* Read this file   */
+   '| pick anycase 1.1 \== ~*~ and',             /* Ignore these     */
+                  '1.1 \== ~ ~ and',             /* .                */
+                  'w2.1 \== ~USERID~ and',       /* .                */
+                  'w4.1 \== ~RMCMD~',            /* .                */
+   '| space',                                    /* Compress spaces  */
+   '| change ~files:~~',                         /* Remove this      */
+   '| specs w2.1 1 xFE n w1.1 nw w3;* nw',       /* Add a separator  */
+   '| sort w1.1 d',                              /* Sort on Queue    */
+   '| join keylen 3',                            /* Join per Queue   */
+   '| pick fs 'fs' substr w-1;-1 of f1 \== ~0~ and', /* Ignore if        */
+                  'substr w2.1 of f3 \== ~0~ and',   /* .these           */
+                  'substr w2.1 of f4 \== ~0~ and',   /* ..are            */
+                  'substr w2.1 of f5 \== ~0~ and',   /* ...zero          */
+                  'substr w2.1 of f6 \== ~0~ and',   /* .                */
+                  'substr w2.1 of f7 \== ~0~ and',   /* .                */
+                  'substr w2.1 of f8 \== ~0~',   /* .                */
+   '| split at xFE',                             /* Split here       */
+   '| change xFF ~ ~',                           /* Replace these    */
+   '| if: if pick 1.1 == ~ ~',                   /* If this          */
+   '|   specs w1.1 5 w2.1 nw.5 right',           /* .rework the      */
+   '          w4.1 nw.8 w3.1 nw.5 right',        /* ...records       */
+   '          w6.1 nw.8 w5.1 nw.5 right',        /* .                */
+   '          w8.1 nw.8 w7.1 nw.5 right',        /* .                */
+   '          w10.1 nw.8 w9.1 nw.5 right',       /* .                */
+   '          w12.1 nw.8 w11.1 nw.5 right',      /* .                */
+   '          w14.1 nw.8 w13.1 nw.5 right',      /* .                */
+   '          w16.1 nw.8 w15.1 nw.5 right',      /* .                */
+   '| if:',                                      /* Conn 2 if        */
+   '|    specs w1.1 1 ~;  Node Total Id       Files Id       Files Id       Files~ n',
+   '| if:',                                      /* Conn 2 if        */
+   '| split at ;',                               /* Split here       */
+   '| > 'myfn' OVERVIEW 'wfm                     /* Write to file    */
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+Remote:
+/*---------------------------------------------------------------+
+| The remote part for this code                                  |
++---------------------------------------------------------------*/
+ques='RDR PRT PUN'
+Do q=1 To Words(ques)
+   que=Word(ques,q)
+   'PIPE (NAME ALLQF.EXEC:100 END ?)',
+      'cp QUERY 'que' ALL',                      /* .                */
+      '| drop first 1',                          /* .                */
+      '| f: fanout',                             /* .                */
+      '| sort w1.1',                             /* .                */
+      '| unique count w1.1',                     /* .                */
+      '| specs pad 0 1.10 strip 1.4 right',      /* .                */
+                    '11.8 strip nw',             /* .                */
+      '| sort w1.1 d',                           /* .                */
+      '| pick w1.1 > ~1~',                       /* .                */
+      '| fi: faninany',                          /* .                */
+      '| join * xFF',                            /* .                */
+      '| cons',                                  /* .                */
+      '? f:',                                    /* .                */
+      '| count lines',                           /* .                */
+      '| specs ~'que' files:~ 1 1;* nw',         /* .                */
+      '| fi:'
+End q
+Return

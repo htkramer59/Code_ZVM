@@ -1,0 +1,188 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This exec will perform the CPU test on a z/VM system and
+    report the results back to the Xymon network monitor.
+ 
+    Rich Smrcina 01/28/2k+1  Original V1.0
+    Rich Smrcina 12/30/03    Revised  V1.1
+    Rich Smrcina 06/10/05    Revised  V1.2
+        Added disk test to check SFS filepool usage
+    Rich Smrcina 05/08/06
+        Added IPL Time and uptime calculation
+    Rich Smrcina 02/10/07    Revised  V1.3
+        Modified to handle local and remote configuration mode.
+    Rich Smrcina 02/10/09
+        Changed project name to Xymon.
+    Martha McConaghy 8/26/09
+        Change to PIPELINE to prevent error data on program stack.
+                                                                      */
+cr='15'x         /*  Carriage return  */
+emsgstart=date('U') time() ' HOBVMCPU:' /* Start of error message line */
+bbdisplay=Value('BBDISPLAY',,'GLOBAL UNNAMED')
+bbport=Value('BBPORT',,'GLOBAL UNNAMED')
+fqdn=Value('FQDN',,'GLOBAL UNNAMED')
+mode=Value('CFGMODE',,'GLOBAL UNNAMED')
+if fqdn='Y' then machine=Value('FULLNAME',,'GLOBAL UNNAMED')
+            else machine=Value('HOSTNAME',,'GLOBAL UNNAMED')
+if mode='CLIENT' then do
+  cpu=Value('CPU',,'GLOBAL UNNAMED')
+  parse var cpu yellow red .
+  end
+else do
+ /* for topten */
+ yellow=80
+end
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+if mode='CLIENT' then do
+  call init_open_socket    /*  Initialize and Open the socket  */
+  call send status         /*  Send the result in status to bb */
+  call close_term_socket   /*  Close and terminate the socket  */
+  end
+exit
+ 
+do_the_test:
+'execio * CP (stem' CPRESP. 'string IND'
+/* Calculate uptime */
+parse var cplevel.3 . . ipldate ipltime .
+parse var ipltime hh ':' mm ':' ss
+numdays=date('B',ipldate,'U')
+numsecs=(hh*3600)+(mm*60)+ss
+daysup=date('B')-numdays
+cdsecs=time('S')
+if cdsecs >= numsecs then do
+  secsup=cdsecs-numsecs
+  end
+if cdsecs < numsecs then do
+  secsup=(86400-numsecs)+cdsecs
+  daysup=daysup-1
+  end
+hrsup=format(secsup%3600,2,0)
+minup=format((secsup-(hrsup*3600))/60,2,0)
+uptime='Uptime: 'daysup' Days, 'hrsup' Hours, 'minup' Minutes'
+parse var cpresp.1 . 'AVGPROC-' avg_cpu'%' numproc .
+avg_cpu=strip(avg_cpu,'L','0')
+'pipe vmc perfsvm cp q proc | drop 3 |locate ~PROCESSOR~ |stem procs.'
+ 
+ 
+ 
+ 
+ 
+ 
+if mode='SERVER' then do
+  if avg_cpu > yellow then call TopTen
+   else topten.0=0
+  queue '[uptime]'
+  queue uptime
+  queue ''
+ 
+  'erase HOBVM180 CLIENT A'
+  'execio * diskw HOBVM180 CLIENT A (finis'
+/*  Marist Change - remove code and replace with PIPE
+  queue '[cpu]'
+  do j=1 to cpresp.0
+    queue cpresp.j
+    end
+  queue ''
+  'erase HOBVM200 CLIENT A'
+  'execio * diskw HOBVM200 CLIENT A (finis'
+*/
+If topten.0>0 Then apptop='| append stem topten.'
+ else apptop=''
+  'erase HOBVM200 CLIENT A'
+  'PIPE stem cpresp.|' ,
+       'literal [cpu]' ,
+       apptop,
+       '|append literal 'cr cr,
+       '|append stem procs.',
+       '|> HOBVM200 CLIENT A'
+  end  /* End of Marist change */
+else do
+  select
+    when avg_cpu > red then color='red'
+    when avg_cpu > yellow then color='yellow'
+    otherwise color='green'
+    end
+  status='status 'machine'.cpu' color date() time() ,
+         ' CPU Utilization ' avg_cpu'%' cr cplevel.1 cr cplevel.3 cr ,
+         uptime cr cpresp.1
+  end
+return
+ 
+init_open_socket:
+ret=Socket('Initialize','SOCCPU')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return
+ 
+TopTen:
+/** Extract the top ten CPU users from PERFSVM **/
+'PIPE (End ?)',
+    'vmc perfsvm user (3000',
+    '| drop first 4',
+    '| t: take first 2',
+    '| buffer',
+    '| fi: faninany',
+    '| stem topten.',
+    '? t:',
+    '| specs fs .',
+    '        w1.1 1.8',
+    '        pad 0',
+    '        substr w2.1 of f1 nw.3 right',
+    '        . n',
+    '        substr w1.1 of f2 n.2 left',
+    '        pad space',
+    '        w3;* nw.61 right',
+    '| sort w2.1 d',
+    '| take first 10',
+    '| fi:'
+Return

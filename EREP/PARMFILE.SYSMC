@@ -1,0 +1,6 @@
+PRINT=PS                                                                        
+TYPE=MC                                                                         
+HIST                                                                            
+ACC=N                                                                           
+ZERO=N                                                                          
+ENDPARM                                                                         

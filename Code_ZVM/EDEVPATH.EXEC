@@ -1,0 +1,992 @@
+/*  */
+ 
+/********************************************************************/
+/*                                                                  */
+/* (C) Copyright International Business Machines Corporation,       */
+/*     2014.  All Rights Reserved.                                  */
+/*                                                                  */
+/*                                                                  */
+/* EDEVPATH EXEC                                                    */
+/*                                                                  */
+/* This exec provides means for the system administrator to         */
+/* manage the FCP paths leading to the system's EDEVs.              */
+/*                                                                  */
+/* Ability is provided to do the following tasks with respect       */
+/* to the system's EDEVs:                                           */
+/*                                                                  */
+/* - Remove the paths that use specific FCP chpids or WWPNs         */
+/*                                                                  */
+/* - Restore the paths removed during a previously performed        */
+/*   "remove" function, said invocation of the "remove" function    */
+/*   having written a log file containing a list of the paths       */
+/*   it removed                                                     */
+/*                                                                  */
+/* - Record an inventory or snapshot of the system's EDEVs          */
+/*   and their pathing arrangements                                 */
+/*                                                                  */
+/* The envisioned use for this is to let the system administrator   */
+/* remove a set of EDEV paths, the paths of the set sharing         */
+/* a component such as an FCP chpid.  The purpose of the removal    */
+/* would be so the system administrator could then apply service    */
+/* to the removed component.  After the service activity on the     */
+/* component is complete, the system administrator can again run    */
+/* this tool, this time, to restore the paths removed during the    */
+/* previously perfomed "remove" function.                           */
+/*                                                                  */
+/* The removed component can be:                                    */
+/* - an FCP chpid, identified by chpid number                       */
+/* - a WWPN, identified by WWPN number                              */
+/* - a list of WWPNs, the list identified by a nickname and         */
+/*   defined in a CMS NAMES file                                    */
+/*                                                                  */
+/* The purpose of the first two is self-evident.  The purpose for   */
+/* the list-of-WWPNs function is as follows.  Storage controllers   */
+/* such as the V7000 are often divided into two redundant halves    */
+/* called "nodes".  Associated with each node is a list of WWPNs.   */
+/* To service the node, we want to deactivate all of the EDEV       */
+/* paths that route through any of the node's WWPNs.  Thus this     */
+/* program offers the ability to assign symbolic names to lists     */
+/* of WWPNs and can remove all paths that mention any of the        */
+/* WWPNs appearing in the symbolically named list.                  */
+/*                                                                  */
+/*                                                                  */
+/* PREREQUISITES                                                    */
+/*                                                                  */
+/* The exec must be run in a CMS guest having CP class B            */
+/* privilege.  This requirement is checked.                         */
+/*                                                                  */
+/*                                                                  */
+/* FUNCTIONS                                                        */
+/*                                                                  */
+/* The exec provides the following functions:                       */
+/*                                                                  */
+/*                                                                  */
+/* ================================================================ */
+/*                                                                  */
+/* REMOVE some paths from the system's EDEVs according to           */
+/* options specified on the command                                 */
+/*                                                                  */
+/* Syntax:                                                          */
+/* EDEVPATH REMOVE ( options                                        */
+/*                                                                  */
+/* Options:                                                         */
+/* FCP_CHPID chp    remove all paths using this FCP chpid           */
+/* WWPN wwpn        remove all paths mentioning this WWPN           */
+/* NODE nodenick    remove all paths mentioning any WWPN            */
+/*                   associated with <nodenick> in our              */
+/*                   NAMES file                                     */
+/* LOGFILE lfn      write the logfile to "lfn EDEVPATH A"           */
+/* REPLACE          if the specified logfile already exists,        */
+/*                   it is OK to replace (overwrite) it             */
+/* NAMES nfn        use this NAMES file instead of the one          */
+/*                   named "<execname> NAMES"                       */
+/* TEST             go through the motions but do not               */
+/*                   actually remove any paths                      */
+/*                                                                  */
+/* Notes:                                                           */
+/*                                                                  */
+/* 1.  An EDEV's path must match ALL of the specified filters       */
+/*     for the path to be removed.                                  */
+/*                                                                  */
+/* 2.  The WWPN and NODE options are mutually exclusive.            */
+/*                                                                  */
+/* 3.  If LOGFILE option was not specified, '$DEFAULT' is used.     */
+/*                                                                  */
+/* 4.  The "nodenick" nicknames are defined in a CMS names file     */
+/*     called <execname> NAMES.  (Whatever you named this exec,     */
+/*     the NAMES file has a matching name.)  Each entry in the      */
+/*     NAMES file looks like this example:                          */
+/*                                                                  */
+/*     :nick.FRED                                                   */
+/*      :list.xxxxxxxxxxxxxxxx [yyyyyyyyyyyyyyy ...]                */
+/*                                                                  */
+/*     This entry identifies a list of WWPNs that can be            */
+/*     referred to collectively by the option "NODE FRED".          */
+/*                                                                  */
+/*     The envisioned mode of use for this is to let the            */
+/*     system administrator construct groups of WWPNs               */
+/*     associated with specific nodes of his SAN's storage          */
+/*     controllers.  For example, if the SAN has two storage        */
+/*     controllers A and B, with each controller having two         */
+/*     nodes, and each node having 2 WWPN ports, the system         */
+/*     administrator might code up his NAMES file like this:        */
+/*                                                                  */
+/*     :nick.A1                                                     */
+/*      :list.aaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbb                     */
+/*                                                                  */
+/*     :nick.A2                                                     */
+/*      :list.cccccccccccccccc dddddddddddddddd                     */
+/*                                                                  */
+/*     :nick.B1                                                     */
+/*      :list.eeeeeeeeeeeeeeee ffffffffffffffff                     */
+/*                                                                  */
+/*     :nick.B2                                                     */
+/*      :list.gggggggggggggggg hhhhhhhhhhhhhhhh                     */
+/*                                                                  */
+/*     If the administrator knew he were going to take node 1       */
+/*     of controller A out of service, he could use this exec       */
+/*     with the "NODE A1" option.  Doing so would remove every      */
+/*     EDEV path that leads to one of node A1's WWPNs.              */
+/*                                                                  */
+/*                                                                  */
+/* ================================================================ */
+/*                                                                  */
+/* RESTORE removed paths according to REMOVE log records            */
+/* contained in a log file                                          */
+/*                                                                  */
+/* Syntax:                                                          */
+/* EDEVPATH RESTORE ( options                                       */
+/*                                                                  */
+/* Options:                                                         */
+/* LOGFILE lfn      restore every path mentioned in our             */
+/*                   logfile "lfn EDEVPATH *"                       */
+/*                                                                  */
+/* Notes:                                                           */
+/*                                                                  */
+/* 1.  The restore function attempts to restore only those          */
+/*     logged removals having RC=0 in the log file.                 */
+/*                                                                  */
+/*                                                                  */
+/* ================================================================ */
+/*                                                                  */
+/* SNAPSHOT of the current state of the system's EDEVs              */
+/*                                                                  */
+/* Syntax:                                                          */
+/* EDEVPATH SNAPSHOT ( options                                      */
+/*                                                                  */
+/* Options:                                                         */
+/* SNAPFILE fn      the snapshot file to write                      */
+/*                    "fn EDEVSNAP A"                               */
+/*                                                                  */
+/* Notes:                                                           */
+/*                                                                  */
+/* 1.  If SNAPFILE option was not specified, '$DEFAULT' is used.    */
+/*                                                                  */
+/*                                                                  */
+/* ================================================================ */
+/*                                                                  */
+/* HELP for this program                                            */
+/*                                                                  */
+/* Syntax:                                                          */
+/* EDEVPATH HELP      (or EDEVPATH ?)                               */
+/*                                                                  */
+/* Notes:                                                           */
+/*                                                                  */
+/* 1.  Asking for help just results in printing the prologue        */
+/*     to the console.                                              */
+/*                                                                  */
+/* 2.  It is not necessary to have elevated CP privilege to         */
+/*     use the HELP function.                                       */
+/*                                                                  */
+/*                                                                  */
+/* ================================================================ */
+/*                                                                  */
+/*                                                                  */
+/* Brian Wade   May 2014                                            */
+/*                                                                  */
+/********************************************************************/
+/* PEND */
+ 
+address 'COMMAND'
+ 
+parse source . . my_fn my_ft my_fm .
+ 
+/*********************************************************************/
+/* initialize options                                                */
+/*********************************************************************/
+ 
+binopts = 'DEBUG REPLACE TEST'
+valopts = 'FCP_CHPID WWPN NODE LOGFILE NAMES SNAPFILE'
+ 
+opts. = ''
+ 
+t = binopts valopts
+do while (t<>'')
+ parse var t o t
+ x = '$' || o
+ select
+  when (wordpos(o,binopts)>0) then
+   opts.x = 0
+  when (wordpos(o,valopts)>0) then
+   opts.x = ''
+  otherwise
+   nop
+ end
+end
+ 
+/*********************************************************************/
+/* initialize other variables                                        */
+/*********************************************************************/
+ 
+o. = 0
+ 
+dflt.$NFN = my_fn               /* NAMES file */
+ 
+dflt.$LFN = '$DEFAULT'          /* log file filename   */
+dflt.$LFT = 'EDEVLOG'           /* log file filetype   */
+dflt.$LFM = 'A'                 /* log file filemode   */
+ 
+dflt.$SFN = '$DEFAULT'          /* snap file filename  */
+dflt.$SFT = 'EDEVSNAP'          /* snap file filetype  */
+dflt.$SFM = 'A'                 /* snap file filemode  */
+ 
+erc.1  = 100
+erc.2  = 101
+erc.3  = 102
+erc.4  = 103
+erc.5  = 104
+erc.6  = 105
+erc.7  = 106
+erc.8  = 107
+erc.9  = 108
+erc.10 = 109
+erc.11 = 110
+erc.12 = 111
+erc.13 = 112
+erc.14 = 113
+erc.15 = 114
+ 
+/*********************************************************************/
+/* parse command line                                                */
+/*********************************************************************/
+ 
+arg verb . '(' opts
+ 
+do while (opts<>'')
+ parse var opts o opts
+ x = '$' || o
+ select
+  when (wordpos(o,binopts)>0) then
+   opts.x = 1
+  when (wordpos(o,valopts)>0) then
+  do
+   parse var opts v opts
+   opts.x = translate(v,' ',',')
+  end
+  otherwise
+   say 'Unrecognized option' o '-- continuing'
+ end
+end
+ 
+/*********************************************************************/
+/* let him get help without elevated privileges                      */
+/*********************************************************************/
+ 
+if (verb='HELP') | ,
+   (verb='?')  then
+do
+ parse value say_help(my_fn my_ft my_fm) with rc .
+ return 0
+end
+ 
+/*********************************************************************/
+/* test for needed privileges                                        */
+/*********************************************************************/
+ 
+needed_privs = 'B'
+parse value test_CP_privs(needed_privs) with rc .
+if (rc=0) then
+do
+ say 'This exec needs these CP privilege classes:' needed_privs
+ say 'But it doesn''t have them.'
+ say 'Check your CP privilege classes and try again.'
+ return erc.1
+end
+ 
+/*********************************************************************/
+/* dispatch on verb                                                  */
+/*********************************************************************/
+ 
+select
+ 
+ when (verb='REMOVE') then
+  parse value remove_paths() with rc .
+ 
+ when (verb='RESTORE') then
+  parse value restore_paths() with rc .
+ 
+ when (verb='SNAPSHOT') then
+  parse value collect_snapshot() with rc .
+ 
+ otherwise
+ do
+  say 'Unrecognized verb' verb
+  rc = erc.2
+ end
+ 
+end  /* select */
+ 
+/*********************************************************************/
+/* return to invoker                                                 */
+/*********************************************************************/
+ 
+return rc
+ 
+ 
+/********************************************************************/
+/* SUBROUTINES                                                      */
+/********************************************************************/
+ 
+ 
+/********************************************************************/
+/* REMOVE paths                                                     */
+/********************************************************************/
+ 
+remove_paths: procedure expose,
+ erc.,
+ dflt.,
+ opts.,
+ o.
+ 
+ wwpn_list = ''
+ 
+ /*******************************************************************/
+ /* validate options                                                */
+ /*******************************************************************/
+ 
+ /*******************************************************************/
+ /* nothing to remove?                                              */
+ /*******************************************************************/
+ 
+ select
+ 
+  /* you must specify SOMETHING to remove */
+  when (opts.$FCP_CHPID='') & ,
+       (opts.$WWPN='') & ,
+       (opts.$NODE='')             then
+  do
+   say 'You must specify something to remove.'
+   return erc.3
+  end
+ 
+  /* do not specify both WWPN and NODE */
+  when (opts.$WWPN<>'') & ,
+       (opts.$NODE<>'')     then
+  do
+   say 'WWPN and NODE are mutually exclusive.'
+   return erc.4
+  end
+ 
+  /* if we get here, we're fine */
+  otherwise
+   nop
+ 
+ end  /* select */
+ 
+ /*******************************************************************/
+ /* validate FCP_CHPID                                              */
+ /*******************************************************************/
+ 
+ if (opts.$FCP_CHPID<>'') then
+ do
+  v = 1
+  select
+   when (datatype(opts.$FCP_CHPID,'X')=0) then   v = 0
+   when (x2d(opts.$FCP_CHPID)<0) | ,
+        (x2d(opts.$FCP_CHPID)>255)        then   v = 0
+   otherwise nop
+  end
+  if (v=0) then
+  do
+   say 'FCP_CHPID' opts.$FCP_CHPID 'is not valid'
+   return erc.5
+  end
+ end
+ 
+ /*******************************************************************/
+ /* validate WWPN                                                   */
+ /*******************************************************************/
+ 
+ if (opts.$WWPN<>'') then
+ do
+  if (is_wwpn_list(opts.$WWPN)=0) then
+  do
+   say 'WWPN' opts.$WWPN 'is not valid'
+   return erc.6
+  end
+  wwpn_list = opts.$WWPN
+ end
+ 
+ /*******************************************************************/
+ /* validate NODE                                                   */
+ /*******************************************************************/
+ 
+ if (opts.$NODE<>'') then
+ do
+  parse value get_wwpn_list(opts.$NODE) with rc wwpn_list
+  if (rc<>0) then
+  do
+   say 'RC='rc 'translating nickname' opts.$NODE
+   return erc.7
+  end
+  if (is_wwpn_list(wwpn_list)=0) then
+  do
+   say 'Nickname' opts.$NODE 'WWPN list' wwpn_list 'is not a valid WWPN list'
+   return erc.8
+  end
+ end
+ 
+ /*******************************************************************/
+ /* prepare log file                                                */
+ /*******************************************************************/
+ 
+ ofm = dflt.$LFM
+ oft = dflt.$LFT
+ ofn = opts.$LOGFILE
+ if (ofn='') then ofn = dflt.$LFN
+ 
+ if (isrw(ofm)=0) then
+ do
+  say 'Specified output filemode' ofm 'is not writeable... trying filemode A'
+  ofm = 'A'
+ end
+ 
+ if (isrw(ofm)=0) then
+ do
+  say 'Specified output filemode' ofm 'is not writeable... exiting...'
+  return erc.9
+ end
+ 
+ outfile = findfile(ofn oft ofm, dflt.$LFT)
+ if (outfile='?') then
+  outfile = ofn oft ofm
+ else
+ do
+  if (opts.$REPLACE=0) then
+  do
+   say 'Log file' outfile 'already exists and REPLACE not specified'
+   return erc.10
+  end
+ end
+ 
+ /*******************************************************************/
+ /* say and log what we are removing                                */
+ /*******************************************************************/
+ 
+ say 'Log of removals will be written to file' outfile
+ 
+ none_string = '(none specified)'
+ 
+ x = out(' ')
+ x = out('Log of EDEVPATH REMOVE run' isonow())
+ 
+ x = out(' ')
+ l = 'Removal filters (a path must match ALL filters to be removed):'
+ x = say_and_out(l)
+ 
+ t = 'FCP_CHPID WWPN NODE'
+ do while (t<>'')
+  parse var t o t
+  x = '$' || o
+  v = opts.x
+  if (v='') then v = none_string
+  l = ' ' || left(o,12) ':' v
+  if (o='NODE') & (v<>none_string) then l = l '(' wwpn_list ')'
+  x = say_and_out(l)
+ end
+ 
+ x = say_and_out(' ')
+ 
+ /*******************************************************************/
+ /* obtain list of EDEVs to process                                 */
+ /*******************************************************************/
+ 
+ cmd = 'QUERY EDEV ALL'
+ 'PIPE (end \)',
+  '     cp' cmd,
+  '|    stem qa.'
+ if (rc<>0) then
+ do
+  say 'RC='rc 'from' cmd
+  return rc
+ end
+ 
+ /*******************************************************************/
+ /* evaluate each EDEV with respect to specified criteria           */
+ /*******************************************************************/
+ 
+ rp_count = 0
+ re_count = 0
+ 
+ do i = 1 to qa.0
+ 
+  /* collect the EDEV's details */
+  parse var qa.i . edev .
+  cmd = 'QUERY EDEV' edev 'DETAILS'
+  'PIPE (end \)',
+   '     cp' cmd,
+   '|    stem qb.'
+  if (rc<>0) then
+  do
+   say 'RC='rc 'from' cmd
+   say 'Continuing, but EDEV' edev 'will not be recorded'
+   iterate
+  end
+ 
+  rpc = 0
+ 
+  /* evaluate and handle each path */
+  do j = 1 to qb.0
+ 
+   select
+ 
+    /* find type and attrib */
+    when (wordpos('TYPE',qb.j)>0) & ,
+         (wordpos('ATTRIBUTES',qb.j)>0) then
+     parse var qb.j . 'TYPE' p_type . 'ATTRIBUTES' p_attrib .
+ 
+    /* it is a path - handle it */
+    when (pos('FCP_DEV:',qb.j)>0) then
+    do
+ 
+     /* extract FCP rdev, WWPN, and LUN */
+     parse var qb.j 'FCP_DEV:' p_rdev . 'WWPN:' p_wwpn . 'LUN:' p_lun .
+ 
+     /* find chpid of RDEV */
+     parse value chpid_of(p_rdev) with rc p_chp .
+     if (rc<>0) then
+     do
+      say 'RC='rc 'looking for chpid for FCP_DEV' p_rdev
+      iterate
+     end
+ 
+     /* decide whether to keep it.  to qualify to be  */
+     /* removed, ALL removal criteria must be met.    */
+ 
+     r = 1
+     if (opts.$FCP_CHPID<>'') then
+      if (x2d(opts.$FCP_CHPID)<>x2d(p_chp)) then
+       r = 0
+     if (wwpn_list<>'') then
+      if (wordpos(p_wwpn,wwpn_list)=0) then
+       r = 0
+ 
+     /* at this point if r>0 the path met all criteria */
+     if (r>0) then
+     do
+      cmd = ,
+       'SET EDEV' edev ,
+       'TYPE' p_type ,
+       'ATTR' p_attrib ,
+       'DELETE PATH' ,
+       'FCP_DEV' p_rdev ,
+       'WWPN' p_wwpn ,
+       'LUN' p_lun
+      l = '!REMOVED' edev p_type p_attrib p_rdev p_wwpn p_lun 'RC='
+      if (opts.$TEST>0) then
+       rrc = 'TEST!'
+      else
+       parse value diagrc(8,cmd) with rrc cc .
+      say 'RC='rrc 'from' cmd
+      l = l rrc
+      x = out(l)
+      if (rrc=0) then
+       rpc = rpc + 1
+     end
+ 
+    end  /* is a path */
+ 
+    /* ignore other lines */
+    otherwise
+     nop
+ 
+   end  /* select */
+ 
+  end  /* the QUERY EDEV DETAILS output */
+ 
+  /* update counts of paths removed and of EDEVs affected */
+  rp_count = rp_count + rpc
+  if (rpc>0) then
+   re_count = re_count + 1
+ 
+ end  /* all EDEVs */
+ 
+ x = say_and_out(' ')
+ l = 'Removed' rp_count 'paths from' re_count 'EDEVs.'
+ x = say_and_out(l)
+ 
+ x = say_and_out(' ')
+ 
+ if (o.0>0) then
+ do
+  'PIPE stem o. | >' outfile
+  say 'RC='rc 'writing log file' outfile
+ end
+ 
+ return rc
+ 
+ 
+/********************************************************************/
+/* RESTORE from log file                                            */
+/********************************************************************/
+ 
+restore_paths: procedure expose,
+ erc.,
+ dflt.,
+ opts.,
+ o.
+ 
+ ifm = '*'
+ ift = dflt.$LFT
+ ifn = opts.$LOGFILE
+ if (ifn='') then ifn = dflt.$LFN
+ 
+ /* try to find log file */
+ infile = findfile(ifn ift ifm, dflt.$LFT)
+ if (infile='?') then
+ do
+  say 'Cannot find log file' infile
+  return 28
+ end
+ 
+ /* read the log file */
+ 'PIPE (end \)',
+  '     <' infile,
+  '|    stem f.'
+ if (rc<>0) then
+ do
+  say 'RC='rc 'reading' infile
+  return rc
+ end
+ 
+ say 'Restoring EDEV paths from log file' infile
+ 
+ /* handle all log file records */
+ 
+ e_list = ''
+ ap_count = 0
+ 
+ do i = 1 to f.0
+ 
+  parse var f.i verb rest
+ 
+  select
+ 
+   /* a !REMOVED record - if RC was 0, put it back */
+   when (verb='!REMOVED') then
+   do
+    parse var rest r_edev r_type r_attrib r_rdev r_wwpn r_lun . 'RC=' r_rc .
+    if (r_rc<>0) then
+     say 'Skipped:' f.i
+    else
+    do
+     cmd = ,
+      'SET EDEV' r_edev ,
+      'TYPE' r_type ,
+      'ATTR' r_attrib ,
+      'ADD PATH' ,
+      'FCP_DEV' r_rdev ,
+      'WWPN' r_wwpn ,
+      'LUN' r_lun
+     if (opts.$TEST>0) then
+      rrc = 'TEST!'
+     else
+      parse value diagrc(8,cmd) with rrc cc .
+     say 'RC='rrc 'from' cmd
+     if (rrc=0) then
+     do
+      if (wordpos(r_edev,e_list)=0) then
+       e_list = e_list r_edev
+      ap_count = ap_count + 1
+     end
+    end
+   end  /* !REMOVED */
+ 
+   /* something else */
+   otherwise
+    nop
+ 
+  end  /* select */
+ 
+ end  /* all records */
+ 
+ say 'Restored' ap_count 'paths to' words(e_list) 'EDEVs.'
+ 
+ return 0
+ 
+ 
+/********************************************************************/
+/* SNAPSHOT of current state of things                              */
+/********************************************************************/
+ 
+collect_snapshot: procedure expose,
+ erc.,
+ dflt.,
+ opts.,
+ o.
+ 
+ /*******************************************************************/
+ /* prepare to write to snap file                                   */
+ /*******************************************************************/
+ 
+ ofm = dflt.$SFM
+ oft = dflt.$SFT
+ ofn = opts.$SNAPFILE
+ if (ofn='') then ofn = dflt.$SFN
+ 
+ if (isrw(ofm)=0) then
+ do
+  say 'Specified output filemode' ofm 'is not writeable... trying filemode A'
+  ofm = 'A'
+ end
+ 
+ if (isrw(ofm)=0) then
+ do
+  say 'Specified output filemode' ofm 'is not writeable... exiting...'
+  return erc.11
+ end
+ 
+ outfile = findfile(ofn oft ofm, dflt.$SFT)
+ if (outfile='?') then
+  outfile = ofn oft ofm
+ else
+ do
+  if (opts.$REPLACE=0) then
+  do
+   say 'Log file' outfile 'already exists and REPLACE not specified'
+   return erc.12
+  end
+ end
+ 
+ say 'Snapshot will be written to file' outfile
+ 
+ /*******************************************************************/
+ /* obtain list of EDEVs to process                                 */
+ /*******************************************************************/
+ 
+ cmd = 'QUERY EDEV ALL'
+ 'PIPE (end \)',
+  '     cp' cmd,
+  '|    stem qa.'
+ if (rc<>0) then
+ do
+  say 'RC='rc 'from' cmd
+  return rc
+ end
+ 
+ /*******************************************************************/
+ /* obtain DETAILS about each EDEV                                  */
+ /*******************************************************************/
+ 
+ do i = 1 to qa.0
+ 
+  /* get the details */
+  parse var qa.i . edev .
+  cmd = 'QUERY EDEV' edev 'DETAILS'
+  'PIPE (end \)',
+   '     cp' cmd,
+   '|    stem qb.'
+  if (rc<>0) then
+  do
+   say 'RC='rc 'from' cmd
+   say 'Continuing, but EDEV' edev 'will not be recorded'
+   iterate
+  end
+ 
+  /* log them */
+  x = out(' ')
+  x = out('*SNAP' edev isonow())
+  'PIPE stem qb. | stem o. append'
+ 
+ end  /* all EDEVs */
+ 
+ if (o.0=0) then
+  say 'No EDEVs found.'
+ else
+ do
+  'PIPE stem o. | >' outfile
+  say 'RC='rc 'writing snapshot file' outfile
+ end
+ 
+ return rc
+ 
+ 
+/*********************************************************/
+/* queued output routine                                 */
+/*********************************************************/
+ 
+out: procedure expose,
+ o.
+ parse arg what
+ n = o.0 + 1
+ o.n = what
+ o.0 = n
+ return 0
+ 
+say_and_out: procedure expose,
+ o.
+ parse arg what
+ say what
+ x = out(what)
+ return 0
+ 
+ 
+/*************************************************************/
+/* finds first instance of file matching supplied filename   */
+/*************************************************************/
+ 
+findfile: procedure
+ ifs = arg(1)
+ tft = arg(2)
+ parse var ifs ifn ift ifm .
+ if (ifm='') then ifm = '*'
+ if (ift='') then ift = tft
+ if (ifn='') then return '?'
+ fspec = ifn ift ifm
+ if (words(fspec)<>3) then return '?'
+ 'PIPE (end \)',
+  '     cms LISTFILE' fspec,
+  '|    take 1',
+  '|    append literal ?',
+  '|    var rv'
+ if (rc<>0) then return '?'
+ parse var rv ifn ift ifm .
+ ifm = left(ifm,1)
+ rv = ifn ift ifm
+ return rv
+ 
+ 
+/********************************************************************/
+/* test CP privilege classes                                        */
+/********************************************************************/
+ 
+test_CP_privs: procedure
+ arg w .
+ e = x2c('15')
+ parse value diagrc(8,'QUERY PRIVCLASS') with rc cc . 'Currently:' c . (e) .
+ rv = 1
+ do while (rv>0) & (length(w)>0)
+  parse var w 1 t 2 w
+  if (pos(t,c)=0) then
+   rv = 0
+ end
+ return rv
+ 
+ 
+/*********************************************************/
+/* is filemode R/W                                       */
+/*********************************************************/
+ 
+isrw: procedure
+ arg fm
+ fm = left(fm,1)
+ rv = 0
+ 'PIPE (end \)',
+ '     CMS QUERY ACCESSED' fm,
+ '|    drop 1',
+ '|    specs w 2 1',
+ '|    var t'
+ if (rc=0) then
+  if (t='R/W') then
+   rv = 1
+ return rv
+ 
+ 
+/************************************************************/
+/* returns time now, in ISO format                          */
+/************************************************************/
+ 
+isonow: procedure
+ n = date('S') time()
+ parse var n d t
+ parse var d 1 yyyy 5 mm 7 dd 9 .
+ return yyyy'-'mm'-'dd t
+ 
+ 
+/************************************************************/
+/* validates whether a passed string is a list of WWPNs     */
+/************************************************************/
+ 
+is_wwpn_list: procedure
+ arg xl
+ xc = '0123456789ABCDEF'
+ do while (xl<>'')
+  parse var xl x xl
+  if (length(x)<>16) then return 0
+  do while (length(x)>0)
+   parse var x 1 c 2 x
+   if (pos(c,xc)=0) then return 0
+  end
+ end
+ return 1
+ 
+ 
+/************************************************************/
+/* translates a node nickname to a WWPN list                */
+/************************************************************/
+ 
+get_wwpn_list: procedure expose,
+ dflt.,
+ opts.
+ arg nick
+ nfn = opts.$NAMES
+ if (nfn='') then nfn = dflt.$NFN
+ cmd = 'NAMEFIND :nick' nick ':list ( FILE' nfn 'STEM NF.'
+ address 'COMMAND' cmd
+ if (rc<>0) then
+ do
+  say 'RC='rc 'from' cmd
+  return rc
+ end
+ rv = ''
+ do i = 1 to nf.0
+  rv = rv translate(nf.i)
+ end
+ return 0 strip(rv)
+ 
+ 
+/************************************************************/
+/* returns first CHPID of an rdev                           */
+/************************************************************/
+ 
+chpid_of: procedure
+ arg rdev .
+ 'PIPE (end \)',
+  '     cp QUERY PATH' rdev,
+  '|    locate /CHPIDs to/',
+  '|    append literal ?',
+  '|    var l'
+ if (rc<>0) then
+ do
+  say 'RC='rc 'looking up chpid for RDEV' rdev
+  return rc
+ end
+ if (l='?') then
+ do
+  say 'Could not determine chpid for RDEV' rdev
+  return -1
+ end
+ parse var l . ':' c .
+ return 0 c
+ 
+ 
+/************************************************************/
+/* types out prologue                                       */
+/************************************************************/
+ 
+say_help: procedure
+ arg infile
+ 'PIPE (end \)',
+  '     <' infile,
+  '|    stem f.'
+ if (rc<>0) then
+ do
+  say 'RC='rc 'reading' infile
+  return rc
+ end
+ 
+ end_tag = '/* PEND */'
+ 
+ i = 1
+ f = 0
+ do while (f=0) & (i<=f.0)
+  if (f.i=end_tag) then
+   f = 1
+  else
+   say f.i
+  i = i + 1
+ end
+ 
+ return 0
+ 
+ 

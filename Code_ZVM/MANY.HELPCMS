@@ -1,0 +1,135 @@
+.cm                                                                             
+MANY XEDIT macro                                                                
+                                                                                
+Purpose:                                                                        
+Create some user and prefix commands to make your editing easier.               
+                                                                                
+How to implement MANY:                                                          
+                                                                                
+To use the MANY XEDIT macro you need to set prefix synonyms in                  
+your XEDIT PROFILE.                                                             
+Using the SET PREFIX command SET PREFIX SYNONYM <synonym> MANY.                 
+Also you need some commandline synonyms. Use SET SYNONYM <synonym> MANY.        
+                                                                                
+If you are getting to many commands you can use CMS PIPE and a list             
+to do you settings.                                                             
+                                                                                
+ prefix=                                                                        
+       'BOX COM DCM HD MC TAG PN PIPE IF DO DEL SAV FIL NUL TR Z'               
+       'PBOX T TS TSRX B N CEN LEF RIG UPP LOW PTF ANC UL OL TBL PCM'           
+       'SEL SUB CONS FMTP PIPNM NODE START HLP'                                 
+                                                                                
+ commandline"                                                                   
+       'HD MC PIPNM NODE START HLP'                                             
+                                                                                
+ Description of the COMMANDLINE synonyms:                                       
+        HD        Adds a header in a simple format, see MANY XEDIT.             
+                                                                                
+        MC        Make Comment, adds a comment/update statement to              
+                  the header as shown in MANY XEDIT.                            
+                                                                                
+        PIPNM     This labels all the PIPE/CALLPIPE statements in your code     
+                  with the name of the exec and the linenumber where the PIPE   
+                  is found. For example: PIPE (NAME MANY.XEDIT:50 END ?).       
+                                                                                
+        NODE      Inserts a PIPE which gives you node and shortnode values.     
+                  Needs to be adapted to your needs.                            
+                                                                                
+        START     Insert a basic start for a Rexx EXEC. Contains the            
+                  Start comment, Parse Upper Arg and Parse Source.              
+                                                                                
+        HLP       Inserts a PIPE which shows the header that was created before.
+                  Also adds a few REXX statements.                              
+                                                                                
+                                                                                
+ Description of the PREFIX synonyms:                                            
+        BOX        Creates a Rexx comment box, if you enter a number after BOX  
+                   it makes a box with that number of empty lines for you.      
+                                                                                
+        COM        Makes comment of Rexx statements enter a number after COM    
+                   and that ammount of lines will be commented.                 
+                                                                                
+        DCM        Removes the comment strings from that line or number of      
+                   lines.                                                       
+                                                                                
+        HD         See commandline section.                                     
+                                                                                
+        MC         See commandline section.                                     
+                                                                                
+        TAG        Creates a small comment line with timestamp for you          
+                                                                                
+        PN         Create a PIPE label on the statement you are at.             
+                   See commandline section on PIPNM.                            
+                                                                                
+        PIPE       Inserts a PIPE skeleton for you.                             
+                                                                                
+        IF         Inserts an IF/THEN/ELSE skeleton for you.                    
+                                                                                
+        DO         A DO/END prototype is inserted.                              
+                                                                                
+        SEL        Inserts a Rexx select prototype.                             
+                                                                                
+        SAV        Enables you to save the file from the prefix.                
+                                                                                
+        FIL        Enables you to FILE the file from the prefix.                
+                                                                                
+        NUL        Flips the SET NULLS settings for you.                        
+                                                                                
+        TR         If no trace statement on the line it will insert             
+                   Trace(I) for you, if present it will flip the                
+                   trace on or of.                                              
+                                                                                
+        Z          Move the cursor to the end of the line.                      
+                                                                                
+        PBOX       Inserts a Rexx comment box in a PIPE                         
+                                                                                
+        T          Go to the top of the file.                                   
+                                                                                
+        B          Go to the bottom of the file                                 
+                                                                                
+        TS         Insert a timestamp.                                          
+                                                                                
+        TSRX       Insert a timestamp subroutine.                               
+                                                                                
+        N          Insert Rexx Date Sorted.                                     
+                                                                                
+        CEN        Center the content of the line.                              
+                                                                                
+        LEF        Move the content of the line to the left.                    
+                                                                                
+        RIG        Move the content of the line to the right.                   
+                                                                                
+        UPP        Uppercase the content of the line.                           
+                                                                                
+        LOW        Lowercase the content of the line.                           
+                                                                                
+        ANC        Insert a html anchor framework.                              
+                                                                                
+        UL         Insert a html unordered list framework.                      
+                                                                                
+        OL         Insert a html ordered list framework.                        
+                                                                                
+        TBL        Insert a html table framework                                
+                                                                                
+        PCM        Add rexx comment at the end of the line, mostly pipe.        
+                   Add a number and on that number of lines a comment           
+                   will be added. If you enter PCM* comments will be            
+                   generated until the last part of the PIPE.                   
+                                                                                
+        SUB        Inserts a Ress subroutine framework.                         
+                                                                                
+        CONS       Insert a PIPE cons statement for you.                        
+                                                                                
+        FMTP       Formats a PIPE on 1 line to a PIPE over several lines.       
+                                                                                
+        PIPNM      See the commandline section.                                 
+                                                                                
+        NODE       See the commandline section.                                 
+                                                                                
+        START      See the commandline section.                                 
+                                                                                
+        HLP        See the commandline section.                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                

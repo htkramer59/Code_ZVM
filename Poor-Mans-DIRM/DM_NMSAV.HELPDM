@@ -1,0 +1,26 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add, Delete or Query NAMESAVE stmts                 |
+|                                                                |
+| File     : DM_NMSAV EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_NMSAV <uid> <action> <segnames>                  |
+|          : NAME     <uid> <action> <segnames>                  |
+|                           QRY                                  |
+|                           ADD                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240708 10:08:20                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

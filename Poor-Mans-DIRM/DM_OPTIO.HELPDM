@@ -1,0 +1,25 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add, Change, Deleter or Query OPTION stmt           |
+|                                                                |
+| File     : DM_OPTIO EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_OPTIO <uid> <action> <reqopts>                   |
+|          : OPTION   <uid> <action> <reqopts>                   |
+|                           QRY                                  |
+|                           ADD                                  |
+|                           DEL                                  |
+|                           CHNG                                 |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:00:31                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

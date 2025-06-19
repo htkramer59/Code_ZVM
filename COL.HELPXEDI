@@ -1,0 +1,483 @@
+.cs 0 on
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+COL is a COLumn edit macro for XEDIT.
+ 
+COL allows you to edit columns in the same way that you edit lines when
+using XEDIT's prefix commands.  COL will present a command line across
+the screen containing ?'s.  Enter COL commands into this area, just as
+you enter XEDIT prefix commands in the prefix area.
+ 
+ EXAMPLE: to delete columns, enter d's above the column.
+ 
+ ===== ????????????ddddddddddd??????????????????????????????????????????
+ 
+ o   Basic Column Operations
+     -   Delete
+     -   Add blanks
+     -   Move
+     -   Copy
+ o   Column Operations unique to COL
+     -   Insert text
+     -   Overlay text
+     -   Convert to Upper or Lower case
+     -   Copy text forward or backward within a column
+     -   Blank redundant text within a column in a forward or
+         backward direction.
+     -   Insert blank separator lines when data in a column
+         changes
+     -   Place sequence numbers in a column
+         --  Any sequence number
+             o   Any starting number
+             o   Any increment value
+             o   Any repeat factor
+         --  Alpha
+         --  Hex
+         --  Binary
+     -   Sum a column of numbers
+         --  Total
+         --  Subtotals
+         --  Line totals
+         --  Cumulative line totals
+ o   Sorting
+     -   Column Sorts
+     -   Advanced Function Sorts
+         --  Integer
+         --  Floating point
+         --  Hex
+         --  NLS character
+ o   Text Alignment
+     -   Line up text
+     -   Word flow within a column
+     -   Left, Center, Right and Both Justification
+     -   Automatically place text in columns for editing such
+         as found in  Script  tabular  data  when  using  the
+         ".ti".  or BookMasters :lines tag.
+     -   Compress column data into Script tabular data
+     -   Remove trailing blanks
+ o   Convenience commands
+     -   Undo the last COL operation
+     -   Identify the location of columns
+     -   Set Tabs
+     -   Set Verify setting
+     -   Set Truncation column
+     -   Set Zones
+ o   Advanced Functions
+     -   Exclude  specific columns from XEDIT prefix commands
+         and subcommands
+     -   Apply XEDIT prefix commands to lines  with  specific
+         text within a column
+     -   Apply  XEDIT subcommands to lines with specific text
+         within a column
+     -   Offsetting the XEDIT prefix command  for  the  above
+         operation
+     -   A  repeat  factor  for placing sequence numbers in a
+         column
+     -   Applying XEDIT prefix commands to  lines  with  spe-
+         cific text within the XEDIT Zone setting
+     -   Blocking or grouping so that only blocks of text are
+         displayed.
+     -   Transpose columns and lines
+ 
+ COL  is  fully  compatible  with XEDIT commands and supports
+ XEDIT's exclude functions as provided with XEDIT "X"  prefix
+ command and the ALL command.  Any width file may be edited.
+.cs 0 off
+.cs 1 on
+ COL  (MACRO)     Does Column operations for XEDIT
+ 
+ The format of the COL  macro is:
+ 
+ ------------------------------------------------------------------------
+ |            |                                                         |
+ |  COL       |    TARGET | 1    < S < B >> <NOPROF>  < (column_command |
+ |            |             _               <UNDO  >                    |
+ |            |                             <NOUNDO>                    |
+ |            |                             <TRUNC >                    |
+ |            |                             <NOTR  >                    |
+ |            |                             <NOEXIT>                    |
+ |            |                             <PREFIX x>                  |
+ |            |                             <ATABx>                     |
+ |            |                             <TABx>                      |
+ |            |                             <COMPx>                     |
+ |            |                             <TXn>                       |
+ |            |                             <PERIOD>                    |
+ |            |                             <COMMA>                     |
+ |            |                             <FRENCH>                    |
+ |            |                                                         |
+ ------------------------------------------------------------------------
+ 
+ Examples:   COL *            invokes column to end of file
+ 
+             COL :5 * $       invokes down to but not including line 5
+                              with the command line symbol set to "*"
+                              and the blank symbol set to "$"
+ 
+             COL * (???ddd    executes COL with the command:
+                              ???ddd????...
+ 
+    target    : is a normal XEDIT line target (e.g: *,:12,/uptohere/...)
+                and marks the range within your file that COL commands
+                should execute upon.  COL always starts at the current
+                line and ends (not including) on the target line.
+ 
+    S         : is the command used in the COL prefix area to change the
+                the character used for the COL command line (default is
+                a '?').  The character used as the symbol may not be
+                placed in the text by any of the commands.
+ 
+    B         : is the command used in the COL command line to indicate
+                that a blank character is to be inserted.  The supplied
+                profile for COL (PROFCOL XEDIT) sets the blank character
+                to an actual blank.  COL internal default is the
+                character "_".
+ 
+    column_command
+              : is the command that COL will execute.  This is for
+                macro writers who desire to build the command line
+                and have COL execute that command line rather than
+                have a user input the command line.
+ 
+    The following keywords may be entered anywhere in the COL
+    argument string:
+ 
+    NOPROF      Do not execute the COL profile PROFCOL XEDIT.
+ 
+    UNDO        Activate the undo option which allows undoing
+                the results of the last COL command.  Undo is a
+                COL command line prefix command.  Default setting
+                for the undo option is NOUNDO.
+ 
+                See the usage notes included in this document for
+                more information.
+ 
+    NOUNDO      Turn off the undo option regardless of the setting
+                in PROFCOL XEDIT.
+ 
+    TRUNC       Allow column truncation when inserting text.
+ 
+    NOTR        Disallow column truncation.
+ 
+    NOEXIT      When using a macro call to COL, do not exit COL after
+                completing the argument string.
+ 
+    PREFIX x    Apply the XEDIT prefix command as indicated by "x" to all
+                lines that match the text in the column_command.
+                For example:
+                COL * PREFIX D (
+                will delete all blank lines as defined by the current
+                XEDIT zone setting.
+ 
+    ATABx       Where "x" is the Script tab control character.
+                Script text may have tabs defined as follows:
+ 
+                  .ti ^ 05
+                  .tp 10 20 30 04
+                  ^811^^Most^111.00^9583
+ 
+                The ATAB function will automatically tab or align the
+                text based on the length of the longest text in each
+                field.  Fields are defined by the Script tab control
+                character which is a "^" in the above example.  "ATAB^"
+                will use the character "^" to automatically tab the text.
+                The XEDIT tab settings are adjusted to match the text.
+ 
+    TABx        Where "x" is the Script tab control character.  This is
+                the same as ATABx except that the text will be tabbed to
+                the XEDIT tab settings rather than automatically tabbed
+                based on text length of each field.
+ 
+    COMPx       Where "x" is the Script tab control character.  The
+                Compress operation is the reverse of ATAB or TAB.  The
+                data will be recompressed into it's Script format.  The
+                character "x" will be reinserted as the field divider
+                and control character.
+ 
+    TSn         The space control for ATAB is set by this parameter.
+                The internal default for COL is to place 2 spaces
+                between each field when auto tabbing.  "n" is the number
+                of spaces desired for this call and will override the
+                default 2.  TS may also be defined in PROFCOL XEDIT as
+                "tab_space = n".
+ 
+    PERIOD      Use a period to indicate decimals in numbers
+                (1,234,567.89) when using the SUM command ++
+                regardless of the setting in PROFCOL XEDIT.
+ 
+    COMMA       Use a comma to indicate decimals in numbers
+                (1.234.567,89) when using the SUM command ++
+                regardless of the setting in PROFCOL XEDIT.
+ 
+    FRENCH      Use a period or comma to indicate decimals
+                and blanks for thousand separators in numbers
+                (1 234 567.89 or 1 234 567,89) when using the
+                SUM command ++ regardless of the setting in
+                PROFCOL XEDIT.
+ 
+ 
+    COL creates a command line that you can use like the prefix area for
+    vertical operations.
+ 
+    The command area is a blank line denoted by a string of '?'
+    question marks.  You can enter the commands described below by
+    overtyping the ?'s in the command line.  There can be any mixture
+    of commands in the command line at one time.
+ 
+    While in COL you can enter normal XEDIT commands (e.g:  scrolling!)
+    or do updates in the file.  Normal prefix commands can be executed.
+    If you want to leave the COL environment just press PF3/15.  If you
+    set AUTO_EXIT = 'ON' on PROFCOL XEDIT then you may press ENTER to
+    exit if no entries or screen changes have been made.
+ 
+    PF1  is a help function.
+    PF2  will give a command summary.
+    PF3  will exit COL.
+    PF15 will exit COL.
+ 
+.cs 1 off
+.cs 2 on
+                         ***** COLumn Quick Reference *****'
+ /    Shift screen to this column          | K     convert column to UPPER case
+ /cmd Do "here" rather than behind the cmd | L     CONVERT COLUMN TO lower CASE
+ 'txt Pad (overlay) blanks with text       | M     Move columns
+ -txt Replace text with blanks             | N     Number (insert sequence nbrs)
+ ;    Set tabs                             | Otxt  Overlay text
+ "    Duplicate                            | P     Preceding target
+ +    Sum numbers in the column            | Qtxt  line up text (Queue-up text)
+ \    Reverse the column, swap end for end | QQtxt line up text behind character
+ A    Add (insert) a number of blanks      | Rtxt  Replace text
+ B    remove trailing Blanks to this column| S     Sort
+ C    Copy columns                         | T     Truncation setting
+ D    Delete columns                       | U     Upon target
+ E    Emulate (copy forward) data          | V     Verify setting
+ _    De-emulate (blank duplicates)        | W     Flow words justifying L and R
+ !    Insert separator line                | <     Flow words justifying left
+ F    Following target                     | >     Flow words justifying right
+ G    descendinG sort                      | X     Xfer columns
+ H    Verify in HEX                        | Y     Column include(inverse of ^)
+ Itxt Insert text                          | ^     Column exclude
+ J    Justify (use with JL, JC, JR, or JB) | Z     Zone setting
+      Add nbr (i.e. JL1) to specify spacing|
+ ******************  Prefix Commands adjacent to COL command line **************
+ 
+ ?      Re-display last command
+ @      Execute delayed block commands
+ =      Re-execute last command
+ ALL    Block all command based on the COL command line entry
+ ATABx  Automatically tab Script data based on the character :hp2.:q.x:eq.:ehp2.
+ Bx     Set Blank character to x
+ COMMA  Set the decimal indicator to comma                      (1.234.567,89)
+ COMPx  Compress Script data leaving "x" as the Script tab character
+ DIGnn  Set the REXX Numeric Digits setting for the Sum command to nn
+ FRENC  Set the decimal indicator to French     (1 234 567.89 or 1 234 567,89)
+ NOTRu  Disallow column truncation
+ PERIO  Set the decimal indicator for the SUM command to period (1,234,567.89)
+ PICtu  Picture or display which columns contain blanks
+ PREFIx Apply prefix to lines matching the text in the COL command line
+ @      with prefix offsets the application of the prefix command
+        and delays the execution of block commands
+ Reset  COL command line
+ \      Reverse the order of the lines within the COL range
+ Sx     Set command line Symbol to x
+ T      Reset Truncation Setting
+ TABx   Tab Script data to the XEDIT tab columns using :hp2.:q.x:eq.:ehp2.
+ TBoth  Left and Right justify text between all XEDIT tabs
+ TCent  Center text between all tabs
+ TLeft  Left  justify text between all XEDIT tabs
+ TRANs  Transpose columns and lines
+ TRigh  Right justify text between all XEDIT tabs
+ TRUNC  Allow column truncation
+ TSn    Set the auto tab spacing to n
+ Undo   last COL command
+ V      Reset Verify setting'
+ Z      Reset Zone setting
+ 
+ Any other command or text is passed to XEDIT
+ **********  PF11 Column split/join within the current zone setting ************
+ 
+ ********** Mathematical and Logical Operations ********************************
+Y     Above the columns to be operated upon,
+=     above the column to receive the results and
++-*/  Mathematical symbols or constants between columns in the COL command
+      line or in the columns themselves.  Also use: ()^&|<>=%1234567890.
+ 
+.cs 2 off
+.cs 5 on
+ Usage Notes:
+ ------------
+ 
+  1.    The XEDIT eXclude prefix command may be used very nicely in
+        conjunction with COL.  If lines are excluded within the COL
+        depth, these excluded lines are not operated upon.  Excluded
+        lines may be defined before or during the COL session.  Excluded
+        lines may also be defined using the XEDIT ALL command.
+ 
+  2.    You can operate only within the ZONE and VERIFY settings.
+ 
+  3.    The commands are processed from left to right except the copy,
+        and move commands which are processed last.  If a copy AND a
+        move appears, only the copy is executed.  If a copy or move
+        appears more than once, only the right most is executed.  CC, MM
+        and XX are block commands and will put COL into a command
+        pending status until either:
+ 
+        a) A second command pair has been entered OR
+        b) A target (F, P or U) has been specified.
+ 
+        If a stand alone CC has been entered and a target entered, then
+        CC is treated as C2.  The same applies to MM and XX.
+ 
+  4.    In many cases a string of characters may be used, i.e a strings
+        of DDDDDDDDDDDDDDDDD's is the same as entering
+           DD?????????????DD
+ 
+  5.    You may scroll up or down while in COL.  However scrolling is
+        limited to the depth of COL as defined by the target when COL is
+        invoked.  The depth is marked in the prefix area with the symbol
+        "<<->>" above and below the first and last line.  As you scroll
+        you may place the COL command line next to a "worse case" text
+        condition to enter your commands.  COL will still execute your
+        command over the entire depth as originally defined.  Lines
+        outside of the range are displayed for your convenience.
+ 
+  6.   Macro writers.  When using:
+ 
+       the column_command entered will start at the current zone setting.
+       You may use the zone command to effectively "tab" the
+       column_command so that leading "?"s need not be entered.
+       For example:
+ 
+            SET ZONE 40 *
+            COL 5 (D
+            SET ZONE 1 *
+ 
+       will delete column 40 for a depth of 5.
+ 
+  7.   When using:
+ 
+            COL target (column_command
+ 
+       If no column_command is entered or if the command given to COL
+       results in a Column Pending Condition, COL will stay active.  The
+       user may then complete the command at the terminal and exit COL
+       when they desire.
+ 
+  8.   When using:
+ 
+            COL target (column_command
+ 
+       Use:  SET CMSTYPE HT to prevent COL from displaying messages.
+ 
+  9.   When using:
+ 
+            COL target (column_command
+ 
+       The Return code is set to the return code of "LOCATE target".
+       See XEDIT LOCATE for the values.
+ 
+ 10.   COLSPLJN may be used without invoking COL.  COLSPLJN is a macro
+       included with the COL package, but the user may set a PF key to
+       call COLSPLJN directly and the zone settings will be honored
+       using the same rules for split and join as outlined.
+ 
+ 11.   Use the single character form of the command whenever you desire
+       to set a column pending condition.  This is necessary if you
+       desire to scroll right or left to complete a command.
+ 
+ 
+       i.e. use      ????????z??????????????????z???????
+       rather than   ????????zzzzzzzzzzzzzzzzzzzz???????
+ 
+ 12.   COL sort commands (S and G) honor excluded lines.  This is
+       different than the normal XEDIT SORT which uses SCOPE = ALL.
+       COL sorts the non-excluded lines (using column data between
+       the zone settings) separately and then merges the sorted data
+       back into the original column.  Of course zones may be 1 *.
+ 
+ 13.   HEX characters that are not on the keyboard can be put in a file
+       via COL.  It is difficult to insert hex character 3F by other
+       means.
+ 
+       The way to insert, add, emulate, replicate etc a hex character is
+       to:
+ 
+       A. Set the VERIFY HEX setting above the position you want to alter
+ 
+       B. Type in your command IN HEX.
+          i.e., to replicate the HEX characters 3F in column 43 type:
+          hh on columns 42 and 43 of the command line -
+             you will then get the Verify Hex settings.
+             Then on the command line which should now just show 6F6F meaning ??
+             type: 993F     (where 99 = r for replace)
+ 
+       C. To show the file in normal character mode type either:
+            a)  VERIFY 1 *  on the XEDIT command line, or
+            b)  V           in the COL command line prefix area
+ 
+       D. Proceed with COL as normal.
+ 
+       To INSERT 3 SPACES in VERIFY HEX setting TYPE 89404040
+       where:    89 = I
+                 40 = blank
+ 
+ 14.   UNDO uses the XEDIT GET and PUT functions.
+ 
+ 15.   Macro writers:  When using the sum operation, the results of the
+       addition operation ++ when calling COL as a macro are available in
+       lastmsg.1 from XEDIT EXTRACT /LASTMSG/.  The form of the values in
+       the returned message is:
+ 
+           count total minimum maximum average results
+ 
+       matching the message displayed on the screen in interactive mode.
+       Only the numeric results are in lastmsg.1.  The extraneous text
+       has been removed.  In addition a "result" parameter has been added
+       which contains a "Y" or "N" depending on if the answer has been
+       placed in the file.
+ 
+.cs 5 off
+.cs 7 on
+                         COL COMMANDS
+ 
+For detailed information on a command or task, place the cursor under the
+topic of your choice and press ENTER or the PF1 key.
+ 
+ 
+COL BASECMD3 (ALL       A       Add or insert blanks into a column
+COL COPYCMDS (ALL       C       Copy a column
+COL COPYCMD2 (ALL       M       Move a column
+COL COPYCMD3 (ALL       X       Transfer (Xfer) a column
+COL COPYCMD4 (ALL       F,P,U   Targets for Copy, Move and Xfer
+COL BASECMD5 (ALL       "       Duplicate a Column
+COL BASECMD2 (ALL       D       Delete a column
+COL BASECMDS (ALL       I       Insert text into a column
+COL BASECMD6 (ALL       /cmd    Do "here" rather than behind the command
+COL BASECMD6 (ALL       /       Shift the screen to this column
+COL COLMCMD5 (ALL       Y,^     Exclude columns from XEDIT PREFIX commands
+COL BASECMD4 (ALL       O,R,',- Overlay, Replace, Pad or remove data
+COL TEXTCMD3 (ALL       J       Justify Text
+COL TEXTCMDS (ALL       Q       Line up or Queue text
+COL TEXTCMD2 (ALL       B       Remove trailing blanks up to a column
+COL TEXTCMD4 (ALL       W,<,>   Wordflow text within a column as in Script
+COL COLMCMDS (ALL       +       Add or sum numbers in a column
+COL COLMCMD2 (ALL       N       Place sequence numbers in a column
+COL COLMCMD3 (ALL       E       Emulate (copy forward) data down a column
+COL COLMCMD3 (ALL       _       Blank duplicate or redundant data ("de-emulate")
+COL COLMCMD3 (ALL       !       Insert blank separator lines when data changes
+COL COLMCMD4 (ALL       S,G     Sort data within a column
+COL COLMCMD6 (ALL       \       Reverse the command or swap column end for end
+COL TEXTCMD5 (ALL       K,L     Change text in a column to upper or lower case
+COL MISCCMDS (ALL       V,H     Set Verify including Hex capability
+COL MISCCMD4 (ALL       Z       Set Zone for XEDIT
+COL MISCCMD2 (ALL       T       Set Truncation Column
+COL MISCCMD3 (ALL       ;       Set Tabs
+COL MATHCMDS (BRIEF     math    Mathematical operations
+ 
+COL PREFIX   (REL       PREFIX Commands
+ 
+.cs 7 off

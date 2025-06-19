@@ -1,0 +1,551 @@
+/*---------------------------------------------------------------+
+| Function : Housekeeping utility                                |
+|                                                                |
+| File     : VMUTIL   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMUTIL CONFIG                                       |
+|            VMUTIL TIMES                                        |
+|            WAKEUP MODULE                                       |
+|                                                                |
+| Called   : VMUTIL   .                                          |
+|                                                                |
+| Comments : Userid needs to be enrolled in FP                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190205 08:32:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+/****
+ 0       Nothing to wait for--all timer file options are done
+ 1       VMCF/SMSG received and stacked
+ 2       The specified time period has elapsed
+ 3       A time from the timer file has been reached
+ 4       A reader file of the proper class has arrived
+ 5       A message has arrived
+ 6       Interrupt from the virtual console
+ 7       I/O interrupt
+ 8       External interrupt
+ 28      WAKEUP TIMES file not found
+ 100     Explanation complete (when '?' specified)
+ 101     Empty file in card reader, RDR option (RC from FSREAD)
+ 103     Unknown error from card reader, RDR option (RC from FSREAD)
+ 200     Invalid command option
+ 201     Reader not operational
+ 202     Error from CP SPOOL RDR HOLD
+ 203     Invalid hours field of time parameter
+ 204     Invalid minutes field of time parameter
+ 205     Invalid seconds field of time parameter
+ 206     Invalid time parameter
+ 207     Error reading times file
+ 208     VMCF AUTHORIZE error
+ 209     VMCF SENDX error
+ 210     VMCF data transfer error
+ 211     Error writing times file
+ 212     Invalid time parameter in times file
+ 213     Times file not on R/W disk
+ 214     PSW error
+ 
+****/
+Trace "O"
+Parse Source . how myfn myft .
+'VMFCLEAR'
+ll=50 /* Display linelenght */
+Call Error 0 Center(' S T A R T I N G ',ll,'-')
+Call Read_Config
+Call Set_Defaults
+/*---------------------------------------------------------------+
+| Main loop....                                                  |
++---------------------------------------------------------------*/
+Do z=1
+  Address CMS 'REACC'    /* Re-access all disks for new code/control files*/
+  Address CMS 'WAKEUP 'interval' (FILE('myfn' TIMES) TIME 'wakeup_options
+  Call Error 0 'rc from WAKEUP: 'rc
+  Select
+  When rc=0   Then Call Error '0 all done'
+  When rc=1   Then Call VMCF_SMSG_MSG
+  When rc=2   Then Call Timer
+  When rc=3   Then Call Run_Command
+  When rc=4   Then Call ReaderFile
+  When rc=5   Then Call VMCF_SMSG_MSG
+  When rc=6   Then Call ConsoleInt
+  When rc=7   Then Call IOInt
+  When rc=8   Then Call ExtInt
+  When rc=28  Then Do
+                   rc=200+rc
+                   Call Error rc 'VMUTIL TIMES NOT available, Exiting'
+                   End
+  When rc=200 Then Call Error rc 'Invalid option for WAKEUP'
+  When rc=207 Then Call Error rc 'Error reading 'myfn' times file'
+  When rc=211 Then Call Error rc 'Error writing 'myfn' times file'
+  Otherwise Call Error rc 'Unhandled returncode'
+  End
+/*---------------------------------------------------------------+
+| Check if we have to reload the configs                         |
++---------------------------------------------------------------*/
+  If z//reload=0 Then Call Reload_Config
+End z
+Exit
+ 
+ 
+Reload_Config:
+/*---------------------------------------------------------------+
+| Reload the config file                                         |
++---------------------------------------------------------------*/
+Call Error 0 Center(' Reloading CONFIG ',ll,'-')
+Call Read_Config
+Call Set_Defaults
+Return
+ 
+ 
+Timer:
+/*---------------------------------------------------------------+
+| Wait timer expired, destroy stack                              |
++---------------------------------------------------------------*/
+Call Error 0 'Timer expired'
+Call Destroy_Stack
+Return
+ 
+ 
+Destroy_Stack:
+/*---------------------------------------------------------------+
+| Empty the stack...                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME VMUTIL.EXEC:116 END ?)  stack | hole'
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Make a uniform timestamp for messages                          |
++---------------------------------------------------------------*/
+label=Date('S') Time() myfn
+Return label
+ 
+ 
+Read_Config:
+/*---------------------------------------------------------------+
+| Read my config file and load the variables                     |
++---------------------------------------------------------------*/
+Call Error 0 'Reading config file'
+'PIPE (NAME VMUTIL.EXEC:133 END ?)',
+    '< 'myfn' CONFIG *',                        /* Read my config   */
+    '| pick 1.1 \== ~~',                        /* Remove empties   */
+    '| pick 1.1 \== ~*~',                       /* Remove comments  */
+    '| specs fs = ~/~ 1 f1 n ~/~ n f2;* n',     /* Prepare for rexx */
+    '| xlate upper',                            /* Uppercase all    */
+    '| strip',                                  /* Remove spaces    */
+    '| varload',                                /* Hand 2 rexx      */
+    '?',
+    'cms ID ',
+    '| specs w3.1 ',
+    '| var curnode'
+Return
+ 
+ 
+Set_Defaults:
+/*---------------------------------------------------------------+
+| Setting some defaults                                          |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| List of variables expected...                                  |
++---------------------------------------------------------------*/
+check='ADMIN INTERVAL RELOAD VALID_COMMANDS VALID_FILES WAKEUP_OPTIONS',
+      'TEST_MODUS DEBUG BACKUP_NO'
+/*---------------------------------------------------------------+
+| Checking if the expected variables are there                   |
++---------------------------------------------------------------*/
+'PIPE (NAME VMUTIL.EXEC:160 END ?)',
+   'rexxvars toload ',                          /* Take all vars    */
+   '| l: lookup fs / f2 f1',                    /* Compare          */
+   '?',                                         /* 2nd pipe         */
+   'var check',                                 /* Take this        */
+   '| split',                                   /* Split            */
+   '| l:',                                      /* Conn 2 lookup    */
+   '? l:',                                      /* Conn 2 lookup    */
+   '| specs ~/~ 1 w1;* n ~/~ n',                /* Prep 4 rexx      */
+   '| varload'                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Fill the empty variables with defaults                         |
++---------------------------------------------------------------*/
+If debug='' Then Do
+   debug='0'
+   Call Error 0 'Setting DEBUG to default: 'debug
+   End
+   Else Call Error 0 'DEBUG is set to: 'debug
+If debug Then Trace "I"
+If interval='' Then Do
+   interval='+00:05:00'
+   Call Error 0 'Setting INTERVAL to default: 'interval
+   End
+   Else Call Error 0 'INTERVAL is set to: 'interval
+If test_modus='' Then Do
+   test_modus='1'
+   Call Error 0 'Setting TEST_MODUS to default: 'test_modus
+   End
+   Else Call Error 0 'TEST_MODUS is set to: 'test_modus
+If reload='' Then Do
+   reload=60
+   Call Error 0 'Setting RELOAD   to default: 'reload
+   End
+   Else Call Error 0 'RELOAD is set to: 'reload
+If valid_commands='' Then Do
+   Call Error 0 'VALID_COMMANDS not set/empty'
+   End
+   Else Call Error 0 'VALID_COMMANDS are: 'valid_commands
+If valid_files='' Then Do
+   Call Error 0 'VALID_FILES not set/empty'
+   End
+   Else Call Error 0 'VALID_FILES are: 'valid_files
+If remove_files='' Then Do
+   Call Error 0 'REMOVE_FILES not set/empty'
+   End
+   Else Call Error 0 'REMOVE_FILES are: 'remove_files
+If wakeup_options='' Then Do
+   wakeup_options='CONS'
+   Call Error 0 'Setting WAKEUP_OPTIONS to default: 'wakeup_options
+   End
+   Else Call Error 0 'WAKEUP_OPTIONS is set to: 'wakeup_options
+If backup_no='' Then Do
+   backup_no='2'
+   Call Error 0 'Setting BACKUP_NO to default: 'backup_no
+   End
+   Else Call Error 0 'BACKUP_NO is set to: 'backup_no
+Call Error 0 'Administrators: 'admin
+Call Error 0 'Nodes: 'nodes
+Call Error 0 Copies('-',ll)
+If test_modus Then Do
+                   pipecpout='| CONS'
+                   pipecmsout='| CONS'
+                   End
+                   Else Do
+                   pipecpout='| CONS | CP| CONS'
+                   pipecmsout='| CONS | CMS | CONS'
+                   End
+accept.0=0
+return.0=0
+Return
+ 
+ 
+Error:
+/*---------------------------------------------------------------+
+| Uniform way to display error messages                          |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If exrc<>0 Then errmsg=errmsg exrc
+Say TimeStamp() myfn myft errmsg
+If exrc>200 Then Exit exrc
+Return
+ 
+ 
+ConsoleInt:
+/*---------------------------------------------------------------+
+| Received a console interrupt, quitting                         |
++---------------------------------------------------------------*/
+Call Error 0 Center('To restart enter: VMUTIL',ll)
+Call Error 0 Center(' S T O P P E D ',ll,'-')
+Exit
+Return
+ 
+ 
+Run_Command:
+/*---------------------------------------------------------------+
+| Run the command that we receive from the TIMES file            |
++---------------------------------------------------------------*/
+'PIPE (NAME VMUTIL.EXEC:257 END ?)',
+   'stack ',                                    /* Take from stack  */
+   '| join * x40',                              /* Make 1 line      */
+   '| specs ~!* Current time: 'Substr(Date('W'),1,8)'~ 1 w3.1 nw w2.1 nw',
+           '~!* Desired time:~ nw w6.3 nw',
+           '~!* Command:~ nw w9;* nw',          /* Prep output      */
+   '| split at string ~!~',                     /* Split here       */
+   '| cons',                                    /* Show             */
+   '| take last 1',                             /* Take this        */
+   '| specs fs : f2;*',                         /* Split            */
+   '| strip',                                   /* Remove spaces    */
+   '| cms',                                     /* Hand 2 cms       */
+   '| cons'                                     /* Show results     */
+If rc<>0 Then Call Error '0 Return code from last command: 'rc
+rc=0 /* To prevent the rc from cmd to interrupt wakeup */
+Return
+ 
+ 
+ReaderFile:
+/*---------------------------------------------------------------+
+| Process the reader files we found...                           |
++---------------------------------------------------------------*/
+Call Destroy_Stack
+'PIPE (NAME VMUTIL.EXEC:280 END ?)',
+   'cp QUERY RDR * ALL ISODATE',                /* See what we got  */
+   '| drop first 1',                            /* Remove header    */
+   '| p: pick w1.1 \== ~'Userid()'~',           /* Ignore my own    */
+   '| specs w1.2 1 w-2;-1 nw x40 n',            /* Keep this        */
+   '| f: fanout',
+   '| j: juxtapose',
+   '| if: if pick w1.1 == ~RSCS~',
+   '|     specs w-1;-1 1 w2;-2 nw',
+   '| if:',
+   '|     specs w1;* 1 ~'curnode'~ nw',
+   '| if:',
+   '| l: lookup w3.2 w1.2 details',             /* Compare....      */
+   '| stem work1.',                           /* Keep these       */
+   '?',                                         /* 2nd pipe         */
+   'var valid_files',                           /* Take this        */
+   '| split at ;',                              /* Split here       */
+   '| specs w1.1 1 w2.1 11',                    /* Adjust           */
+   '| l:',                                      /* Conn 2 lookup    */
+   '| stem work2.',                             /* Store here       */
+   '? p:',                                      /* Conn 2 pick      */
+   '| specs w2.1',                              /* Keep spool id    */
+   '| stem myown.',                             /* Store here       */
+   '? f:',
+   '| specs ~TAG QUERY FILE~ 1 w2.1 nw',
+   '| cp',
+   '| specs w4.2',
+   '| j:'
+'PIPE (NAME VMUTIL.EXEC:308 END ?)',
+   'stem work1. ',
+   '| l: lookup w5.1 w1.1 details',
+   '| fi: faninany',
+   '| if: if pick w5.1 \== ~~',
+   '|   specs w1.4 1',
+   '| if:',
+   '| stem accept.',
+   '?',
+   'var nodes',
+   '| split',
+   '| l:'
+If myown.0<>0 Then Do
+/*---------------------------------------------------------------+
+| Keep my own files                                              |
++---------------------------------------------------------------*/
+     Call Error '0 Moving my own files to PRT'
+     'PIPE (NAME VMUTIL.EXEC:325 END ?)',
+        'stem myown.',
+        '| specs ~TRANSFER * RDR~ 1 w1.1 nw ~* PRT~ nw',
+        pipecpout
+     End
+If return.0<>0 Then Do
+/*---------------------------------------------------------------+
+| These are unaccepted/unwanted files                            |
++---------------------------------------------------------------*/
+     Call Clean_Files
+     Call Return_Files
+     End
+If accept.0<>0 Then Call Accept_Files
+Return
+ 
+ 
+Check_Admin:
+/*---------------------------------------------------------------+
+| Check if this is an admin id...                                |
++---------------------------------------------------------------*/
+Parse Arg chkid .
+'PIPE (NAME VMUTIL.EXEC:346 END ?)',
+    'var admin',                                /* Take this        */
+    '| split',                                  /* Split into recs  */
+    '| locate ~'chkid'~',                       /* Locate this      */
+    '| count lines',                            /* How many...      */
+    '| var admin_ok'                            /* Store here       */
+Return admin_ok
+ 
+ 
+Clean_Files:
+/*---------------------------------------------------------------+
+| Removing unwanted files                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME VMUTIL.EXEC:359 END ?)',
+     'stem return.',                            /* Take these      */
+     '| buffer',                                /* Prevent loop    */
+     '| l: lookup w1.1 w1.1 details',           /* Compare         */
+     '| stem clean.',                           /* Keep these      */
+     '?',                                       /* 2nd pipe        */
+     'var remove_files',                        /* Take these      */
+     '| split',                                 /* Split into recs */
+     '| l:',                                    /* Conn 2 lookup   */
+     '| specs ~x~ 1 w1;* nw',                   /* Keep this       */
+     '| stem return.'                           /* Store here      */
+If clean.0<>0 Then Do
+       Call Error '0 Removing files from: 'remove_files
+       'PIPE (NAME VMUTIL.EXEC:372 END ?)',
+           'stem clean.',                       /* Take them       */
+           '| specs ~PURGE * RDR~ 1 w2.1 nw',   /* Compose cmds    */
+           pipecpout                            /* Run/Show        */
+           End
+Return
+ 
+ 
+Return_Files:
+/*---------------------------------------------------------------+
+| Returning files to sender                                      |
++---------------------------------------------------------------*/
+Call Error 0 Center(' Rejecting reader files ',ll,'-')
+'PIPE (NAME VMUTIL.EXEC:385 END ?)',
+  'stem return.',                               /* Take these       */
+  '| specs ~TRANSFER * RDR~ 1 w2.1 nw w1.1 nw ~RDR~ nw', /* Return to sender */
+  pipecpout                                     /* Show/run         */
+Call Error 0 Copies('-',ll)
+Return
+ 
+ 
+Accept_Files:
+/*---------------------------------------------------------------+
+| Accept the files found in the reader                           |
++---------------------------------------------------------------*/
+'PIPE (NAME VMUTIL.EXEC:397 END ?)',
+   'stem accept.',                              /* Take these       */
+   '| f: fanout',                               /* Dupl. recs       */
+   '| specs w1.1',                              /* Keep id          */
+   '| stem id.',                                /* Store here       */
+   '? f:',                                      /* Conn 2 fanout    */
+   '| specs w2.1',                              /* Keep spool id    */
+   '| stem spid.',                              /* Store her        */
+   '? f:',                                      /* Conn 2 fanout    */
+   '| specs w3.2',                              /* Keep fn & ft     */
+   '| stem file.'                               /* Store here       */
+Do i=1 To id.0
+   If Check_Admin(id.i) Then Do
+     If Check_File(file.i) Then Do
+        Call Save_File(file.i)
+        Call Read_File(spid.i)
+        End
+        Else Call Error 28 'File not on R/W disk: 'file.i
+   End
+   Else Call Error rc 'Not allowed/not an admin: 'id.i
+End i
+Return
+ 
+ 
+Read_File:
+/*---------------------------------------------------------------+
+| Finally receive the file...                                    |
++---------------------------------------------------------------*/
+Parse Upper Arg spid .
+Call Error '0 Receiving file 'spid
+receive_cmd='RECEIVE 'spid' (OLDDATE'
+Call Error '0' receive_cmd
+If \test_modus Then Address CMS receive_cmd
+Return
+ 
+ 
+ 
+Save_File:
+/*---------------------------------------------------------------+
+| Save the original file...                                      |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft .
+ftl=8-Length(ft)
+lastno=0
+nextno=0
+'PIPE (NAME VMUTIL.EXEC:442 END ?)',
+    'CMS LISTFILE 'fn ft'* * (NOH ISO',         /* Which files     */
+    '| sort w-2;-1 d',                          /* Sort on date    */
+    '| drop first 1',                           /* Remove this one */
+    '| f: fanout',                              /* Dupl. recs      */
+    '| stem list.',                             /* Store           */
+    '| take last 1',                            /* Oldest          */
+    '| specs w1.3',                             /* Keep fn ft      */
+    '| var oldest',                             /* Store here      */
+    '? f:',                                     /* Conn 2 fanout   */
+    '| take first 1',                           /* Take this       */
+    '| specs w1.2',                             /* Keep this       */
+    '| change ~'fn'~~',                         /* Remove this     */
+    '| change ~'ft'~~',                         /* ...and this     */
+    '| specs w1.1',                             /* Keep this       */
+    '| var lastno',                             /* Store as        */
+    '? f:',                                     /* Conn 2 fanout   */
+    '| drop first 'backup_no,                   /* Remove these    */
+    '| stem toclean.'                           /* Store here      */
+ 
+If lastno='LASTNO' Then lastno=0
+                   Else nextno=lastno+1
+If nextno>99 Then nextno=0
+nextno=Right(nextno,ftl,'0')
+Select
+When list.0 = 0         Then Call Error '0 New file'
+When list.0 < backup_no Then Call Error '0 Below no of backups: 'backup_no
+When list.0 = backup_no Then Call Error '0 Reached no of backups: ' backup_no
+When list.0 > backup_no Then Call Error '0 Over number of backups:' list.0 ' > ' backup_no
+Otherwise Call Error '0 Can not handle 'list.0 backup_no
+End
+ 
+rename_cmd='RENAME 'fn ft' A = 'ft||nextno' A0'
+Call Error '0' rename_cmd
+If \test_modus Then Address CMS rename_cmd
+ 
+If toclean.0 <> 0  Then Do
+       Call Error '0 Removing old files:'
+       'PIPE (NAME VMUTIL.EXEC:480 END ?) stem toclean.',  /* Take these      */
+          '| specs ~ERASE~ 1 w1.3 nw',          /* compose cmds    */
+          pipecmsout                            /* Run/Display     */
+        End
+Return
+ 
+ 
+Check_File:
+/*---------------------------------------------------------------+
+| Check if the file exists on a R/W disk                         |
++---------------------------------------------------------------*/
+Parse Arg fnft
+'PIPE (NAME VMUTIL.EXEC:492 END ?)',
+    'var fnft',                                 /* Take this        */
+    '| specs 1;* 1 ~*~ nw',                     /* Add fm           */
+    '| statew',                                 /* On r/w disk      */
+    '| count lines',                            /* How many         */
+    '| var file_ok'                             /* Store here       */
+Return file_ok
+ 
+ 
+VMCF_SMSG_MSG:
+/*---------------------------------------------------------------+
+| Did we receive a message                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME VMUTIL.EXEC:505 END ?)',
+   'stack',                                     /* Empty stack     */
+   '| specs ~/ID/~ 1 w2.1 nw ~!/CMD/~ n w3.1 nw ~!/INPUT/~ n w4;* n',
+   '| split at !',                              /* Split here      */
+   '| strip',                                   /* Remove spaces   */
+   '| varload'                                  /* Hand 2 rexx     */
+If Check_Admin(id) Then Do
+   If Valid_CMD(cmd) Then Do
+                       Select
+                       When cmd='RELOAD' Then Do
+                                 Call Error '0 ' Center('RELOAD by 'id' ',ll,'-')
+                                 Call Reload_Config
+                                 End
+                       When cmd='LOGOF'  Then Do
+                                 Call Error '0 ' Center('LOGOFF by 'id' ',ll,'-')
+                                 Address COMMAND 'CP LOGOFF'
+                                 End
+                       When cmd='STOP'   Then Do
+                                 Call Error '0 ' Center('STOPPED by 'id' ',ll,'-')
+                                 Exit
+                                 End
+                       When cmd='SEND'   Then Do
+                                 Call Error '0 ' Center('File 'input' requested by 'id' ',ll,'-')
+                                 Address CMS 'SENDFILE 'input id
+                                 End
+                       Otherwise Call Error '28 Command not understood 'cmd
+                       End
+                     End
+                     Else Call Error '28 Invalid command: 'cmd
+   End
+Return
+ 
+ 
+Valid_CMD:
+/*---------------------------------------------------------------+
+| Check the validity of the commands sent                        |
++---------------------------------------------------------------*/
+Parse Upper Arg cmd2chk .
+If Wordpos(cmd2chk,valid_commands)<>0 Then rrc=1
+                                      Else rrc=0
+Return rrc
+ 
+ 
+IOInt:
+ExtInt:
+Call Error rc 'IO or External interrupt received'
+Return

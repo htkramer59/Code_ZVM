@@ -1,0 +1,51 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/**/
+'PIPE (NAME DMCKERRO.EXEC:2 END ?)',
+  'cms LISTFILE * EXEC K (NOH',
+  '| stem file.',
+  '| specs w1.2 1.18',
+  '| stem label.'
+out.0=0
+Do f=1 To file.0
+  'PIPE (NAME DMCKERRO.EXEC:9 END ?)',
+     '< 'file.f,
+     '| specs pad 0 recno 1.4 right 1
+* nw',
+     '| locate anycase ~Call Exit~',
+     '| specs ~'label.f'~ 1 1
+* nw',
+     '| stem out. append'
+ 
+End f
+Do o=1 To out.0
+  Parse Value out.o With . 'Call Exit' src .
+  out.o=Subword(out.o,1,3) src
+End o
+'PIPE (NAME DMCKERRO.EXEC:21 END ?)',
+  'stem out.',
+  '| change x7D ~~',
+  '| specs w1.3 1 pad 0 w4.1 nw.3 right',
+  '| sort w4.1',
+  '| l: lookup w4.1 w1.1',
+  '| join 1 x4F',
+  '| fi: faninany',
+  '| > DM OVERVIEW A',
+  '?',
+  '< DM ERRORS *',
+  '| l:',
+  '| specs ~I~ 1 1
+* nw',
+  '| buffer',
+  '| if: if pick anycase w5.1 == ~xrc~ or w5.1 == ~0rc~ or w5.1 == ~000~',
+  '|     specs w1.1 1 w2
+* 20',
+  '| if:',
+  '| append literal 'copies('-',80),
+  '| fi:',
+  '? l:',
+  '| specs ~X~ 1 1
+* nw',
+  '| buffer',
+  '| append literal 'copies('-',80),
+  '| fi:'

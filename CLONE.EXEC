@@ -1,0 +1,381 @@
+/*---------------------------------------------------------------+
+| Function : Clone a Linux server...                             |
+|                                                                |
+| File     : CLONE    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files in : CLONE  NAMES   - control file for VMLINK            |
+|            CLONE  INPUT   - template file                      |
+|            CLONE  CONFIG  - config file                        |
+|            CLONE  LASTIP  - Last IP issued                     |
+|            CLONE  LASTFCP - Last FCP issued                    |
+| Files out: <toid> CLONE   - input for boot.clone (Linux)       |
+|            CLONE  LASTIP                                       |
+|            CLONE  LASTFCP                                      |
+|                                                                |
+| Called   : CLONE    <source> <disks> ; <target> ( <proto>      |
+|                                                                |
+| Comments : Requires a system where: chkconfig boot.clone on    |
+|            Prepares an input file for boot.clone script        |
+|            Need DIRM ADMIN rights & enough CP classes.         |
+|                                                                |
+| Install  : On LINUX191 (or what is in NAMES file)              |
+|            CLONE LASTIP                                        |
+|            CLONE LASTFCP                                       |
+|            On TOOLS (sfs: VMPS<env>:TOOLS.)                    |
+|            CLONE EXEC                                          |
+|            CLONE NAMES                                         |
+|            CLONE CONFIG                                        |
+|            CLONE INPUT                                         |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181030 13:28:46                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Get arguments, my own name, and node id                        |
++---------------------------------------------------------------*/
+Parse Upper Arg fr    ';' to '(' proto
+Parse Source . . myfn .
+out.0=0 /* Initializing for DIRM BATCH file */
+Call Get_Disk
+Call Read_Config
+Call Get_IP
+Call Get_FCP
+Call Get_Disk '<DETACH'
+Call Checking
+/*---------------------------------------------------------------+
+| M A I N - L i n e                                              |
++---------------------------------------------------------------*/
+Call Check_Ids
+Call Create_Add_Stmts
+Call Create_CloneDisk
+Call Create_Run_DirmBatch
+If sfs Then Call Create_Copy_SFS
+/*---------------------------------------------------------------+
+| Update some files....                                          |
++---------------------------------------------------------------*/
+Call Get_Disk 'WRITE'
+Call Create_Clone_File
+Call Update_Files
+Call Get_Disk '<DETACH WRITE'
+/*---------------------------------------------------------------+
+| End of show                                                    |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+Create_Run_DirmBatch:
+/*---------------------------------------------------------------+
+| Write to DIRM BATCH file...so only pw once                     |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:74 END ?)',
+   'stem out. ',                                /* Take these      */
+   '| sort w2.1',                               /* Sort            */
+   '| > 'myfn' DIRBATCH A ',                    /* Store here      */
+   '| cons'                                     /*   and show      */
+Address CMS 'DIRM BATCH 'myfn' DIRBATCH A'
+Return
+ 
+ 
+Checking:
+/*---------------------------------------------------------------+
+| Check some of the variables & set them when needed             |
++---------------------------------------------------------------*/
+If fr='' Then Exit 28
+If to='' Then Exit 29
+Parse Value fr With frid frdsk
+Parse Value to With toid todsk
+toid=toid||node
+/*---------------------------------------------------------------+
+| Check if the new id exists                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:95 END ?)',
+   'cp QUERY MDISK USER 'toid' 0 DIR',
+   '| locate ~HCPQMD040~',
+   '| count lines',
+   '| var exist'
+If exist Then Do
+          Say 'Userid: 'toid' already exist'
+          Exit rc
+          End
+'PIPE (NAME CLONE.EXEC:104 END ?)',
+   'var toid ',
+   '| xlate lower ',
+   '| var host_id'
+change=change'|CHANGE /HOST_ID/'host_id'/'
+/*---------------------------------------------------------------+
+| If frdsk equals * get them all                                 |
++---------------------------------------------------------------*/
+If frdsk='*' Then Do
+         'PIPE (NAME CLONE.EXEC:113 END ?)',
+             'CP QUERY MDISK USER 'frid' 100-1500 DIR', /* Ask CP */
+             '| pick w1.1 == w3.1',             /* Keep these      */
+             '| specs w2.1',                    /* Keep only this  */
+             '| join * x40',                    /* Make 1 record   */
+             '| var frdsk'                      /* Store here      */
+             End
+If todsk='=' | todsk='' Then todsk=frdsk
+If Words(frdsk)<>Words(todsk) Then Do
+                 Say 'Mismatch in number of disks:'
+                 Say 'From: 'frdsk
+                 Say 'To  : 'todsk
+                 Exit 88
+                 End
+If proto='' Then proto='SUSE12'
+Return
+ 
+ 
+Get_Disk:
+/*---------------------------------------------------------------+
+| Link the disk                                                  |
++---------------------------------------------------------------*/
+Parse Upper Arg what
+'PIPE (NAME CLONE.EXEC:136 END ?)',
+    'var what',                                 /* Take this       */
+    '| split',                                  /* Make recs       */
+    '| l: locate ~<DETACH~',                    /* Is this present */
+    '| count lines',                            /* How many        */
+    '| var detach',                             /* Store here      */
+    '? l:',                                     /* Con 2 locate    */
+    '| locate ~WRITE~',                         /* Is this present */
+    '| count lines',                            /* How many        */
+    '| var write'                               /* Store here      */
+/*---------------------------------------------------------------+
+| Some settings for VMLINK                                       |
++---------------------------------------------------------------*/
+If detach Then Do
+            detvar='<DETACH'
+            xfm=''
+          End
+          Else Do
+            detvar=''
+            xfm='.fm'
+          End
+If write Then writvar='WRITE'
+         Else writvar=''
+/*---------------------------------------------------------------+
+| Do the link....                                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'myfn detvar '(ONLY('myfn')' writvar xfm
+If \detach Then Do
+  If rc=0 Then Parse Pull . . wfm .
+          Else Exit rc
+End
+Drop what write detach
+Return
+ 
+ 
+Get_FCP:
+/*---------------------------------------------------------------+
+| Get last available FCP device                                  |
++---------------------------------------------------------------*/
+If \fcp Then Return
+'PIPE (NAME CLONE.EXEC:176 END ?)',
+     '< 'myfn' LASTFCP *',                      /* Read this       */
+     '| pick 1.1 \== ~*~',                      /* Ignore comments */
+     '| strip',                                 /* Remove blanks   */
+     '| var lastfcp'                            /* Store here      */
+nextfcp=d2x(x2d(lastfcp)-1)
+'PIPE (NAME CLONE.EXEC:182 END ?)',
+   'var nextfcp ',                              /* Take this       */
+   '| specs ~DEDICATE 5C51~ 1 w1.1 nw ',        /* Compose input   */
+   '| stem out. append'                         /* Add here        */
+Return
+ 
+ 
+Create_Clone_File:
+/*---------------------------------------------------------------+
+| Create the input file for boot.clone                           |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:193 END ?)',
+   '< 'myfn' INPUT * ',                         /* Read template   */
+   '| pick 1.1 \== ~*~',                        /* Ignore comments */
+   '| 'change' ',                               /* Do this         */
+   '| > 'toid' CLONE 'wfm                       /* Write file      */
+Return
+ 
+ 
+Update_Files:
+/*---------------------------------------------------------------+
+| Update all the stuff we need to keep                           |
++---------------------------------------------------------------*/
+Address CMS 'COPYFILE 'myfn' LASTIP  'wfm' = LASTIPO  = (REPLACE OLDDATE'
+Address CMS 'COPYFILE 'myfn' LASTFCP 'wfm' = LASTFCPO = (REPLACE OLDDATE'
+'PIPE (NAME CLONE.EXEC:207 END ?)',
+   'var nextip ',                               /* Take this       */
+   '| preface literal * Last IP issued',
+   '| > 'myfn' LASTIP 'wfm,                     /* Write file      */
+   '?',                                         /* 2nd pipe        */
+   'var nextfcp ',                              /* Take this       */
+   '| preface literal * Last FCP issued',
+   '| > 'myfn' LASTFCP 'wfm                     /* Write file      */
+Return
+ 
+ 
+Get_IP:
+/*---------------------------------------------------------------+
+| Get the last IP address                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:222 END ?)',
+     '< 'myfn' LASTIP 'wfm,                     /* Take this       */
+     '| pick 1.1 \== ~*~',                      /* Ignore comments */
+     '| strip',                                 /* Remove blanks   */
+     '| var lastip',                            /* Store as        */
+     '| f: fanout',                             /* Duplicate recs  */
+     '| specs fs . f1;-2',                      /* Keep 1st bit    */
+     '| var basip',                             /* Store as        */
+     '? f:',                                    /* Conn 2 fanout   */
+     '| specs fs . f-1;-1',                     /* Take last bit   */
+     '| var lst'                                /* Store as        */
+nxt=lst+1           /* Add one and hope we stay in range */
+nextip=basip'.'nxt  /* Create new ip */
+change=change'|CHANGE /HOST_IP/'nextip'/'
+Return
+ 
+ 
+Read_Config:
+/*---------------------------------------------------------------+
+| Read the various config files                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:243 END ?)',
+   'cms IDENTIFY ',                             /* Ask cms         */
+   '| specs substr -2;-1 of w3.1 ',             /* Keep last 2 char*/
+   '| var node',                                /* Store as        */
+   '?',                                         /* 2nd pipe        */
+   '< 'myfn' CONFIG *',                         /* Read this       */
+   '| t: totarget find * Network',              /* Separate parts  */
+   '| pick 1.1 \== ~*~',                        /* Remove comments */
+   '| specs ~GROUP.~ 1 w1.1 n w2.1 nw',         /* Compose new rec */
+   '| specs ~/~ 1 w1.1 n ~/~ n w2;* n',         /* Prep 4 varload  */
+   '| varload',                                 /* Hand to rexx    */
+   '? t:',                                      /* Conn 2 totarget */
+   '| pick 1.1 \== ~*~',                        /* Remove comments */
+   '| specs ~CHANGE /~ 1 w1.1 n ~/~ n w2.1 n ~/~ n', /* Make change*/
+   '| join * ~!~',                              /* Make 1 rec      */
+   '| var change'                               /* Store as        */
+change=Translate(change,'|','!')                /* Correc stmtm    */
+If group.fcp='GROUP.FCP' Then fcp=0
+                         Else fcp=group.fcp
+If group.sfs='GROUP.SFS' Then sfs=0
+                         Else sfs=group.sfs
+Drop group.fcp group.sfs
+Return
+ 
+ 
+Create_Copy_SFS:
+/*---------------------------------------------------------------+
+| This part only if we have to use SFS as A-disk                 |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Enroll the new users                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:275 END ?)',
+     'stem id.',
+     '| specs ~ENROLL USER~ 1 w1.1 nw ~VMUSERS~ nw',
+     '| cons',
+     '| cms',
+     '| cons'
+/*---------------------------------------------------------------+
+| Access & copy to target                                        |
++---------------------------------------------------------------*/
+Address CMS 'ACCESS VMUSERS:'proto'. F'
+Do i=1 To id.0
+   Address CMS 'ACCESS VMUSERS:'id.i' T (FORCERW'
+   Address CMS 'COPY PROFILE EXEC F = = T (OLDD'
+End i
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'REL T'
+Address CMS 'REL F'
+Return
+ 
+ 
+Create_Add_Stmts:
+/*---------------------------------------------------------------+
+| Create the user ids..from prototype...                         |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:301 END ?)',
+   'stem id.',                                  /* Take this       */
+   '| specs ~ADD~ 1 w1.1 nw ~LIKE 'proto' PW LBYONLY VPW LBYONLY~ nw',
+   '| stem out. append'                         /* Store here      */
+Return
+ 
+ 
+Create_CloneDisk:
+/*---------------------------------------------------------------+
+| Change the clone statements so we have unique ones             |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:312 END ?)',
+    'var frdsk',                                /* Take this       */
+    '| split',                                  /* make records    */
+    '| stem frdsk.',                            /* Store here      */
+    '?',                                        /* 2nd pipe        */
+    'var todsk',                                /* See above       */
+    '| split',                                  /*                 */
+    '| stem todsk.'                             /*                 */
+Do i=1 To frdsk.0
+/*---------------------------------------------------------------+
+| Compose CLONEDISK statements                                   |
++---------------------------------------------------------------*/
+  ptr=todsk.i
+  'PIPE (NAME CLONE.EXEC:325 END ?)',
+      'literal FOR 'id.1' CLONEDISK 'todsk.i frid frdsk.i' AUTOG 'group.ptr,
+      '| stem out. append'                      /* Store here      */
+End i
+Return
+ 
+ 
+Check_Ids:
+/*---------------------------------------------------------------+
+| Check if the requested user ids exist or not                   |
++---------------------------------------------------------------*/
+id.0=1
+id.1=toid
+'PIPE (NAME CLONE.EXEC:338 END ?)',
+   'stem id.',                                  /* Take these      */
+   '| buffer',                                  /* Read them all   */
+   '| f: fanout',                               /* Duplic recs     */
+   '| specs w1.1 1.9',                          /* Adjust          */
+   '| j: juxtapose',                            /* Gather results  */
+   '| p: pick w2.1 == ~HCPQMD053E~',            /* These are ok    */
+   '| specs w1.1',                              /* Keep this       */
+   '| stem id.',                                /* Refill stem     */
+   '? f:',                                      /* Conn 2 fanout   */
+   '| specs ~QUERY MDISK USER~ 1 w1.1 nw ~0 DIR~ nw', /* Compose cmds */
+   '| cp',                                      /* Ask cp          */
+   '| j:',                                      /* Conn 2 juxtapose*/
+   '? p:',                                      /* Conn 2 pick     */
+   '| stem exist.'                              /* Store errors    */
+/*---------------------------------------------------------------+
+| If they exist tell which ones                                  |
++---------------------------------------------------------------*/
+If exist.0<>0 Then Do
+    Say 'The following user ids allready exist'
+    'PIPE (NAME CLONE.EXEC:358 END ?)',
+       'stem exist. ',
+       '| specs w1.1 ',
+       '| cons'
+    Say
+    End
+Return
+ 
+ 
+Create_Ids:
+/*---------------------------------------------------------------+
+| Calculate no of copies                                         |
++---------------------------------------------------------------*/
+max=tonum-frnum
+/*---------------------------------------------------------------+
+| Create the range of names to use...                            |
++---------------------------------------------------------------*/
+'PIPE (NAME CLONE.EXEC:375 END ?)',
+    'var id_pref',                              /* Take this       */
+    '| dup 'max,                                /* Copies          */
+    '| specs recno from 'frnum' 1.3 1;* nw',    /* Add numbers     */
+    '| spec w2.1 1 pad 0 w1.1 n.3 right ~'node'~ n',/* Adjust serial */
+    '| stem id.'                                /* Store here      */
+Return

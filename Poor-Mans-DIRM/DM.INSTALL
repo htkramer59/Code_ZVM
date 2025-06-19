@@ -1,0 +1,61 @@
+Prerequisites:
+ REPLACE EXEC from the TOOLS
+ PIPEDDR package from VM Download page
+ 
+Installation:
+Unpack the zipfile: PMDIRM.ZIP
+   Place the content on a disk or filespace available to users and admins.
+   HELP files can be stored on a separate HELP DISK.
+   Place the DMC EXEC on a location available to the users/admins.
+ 
+Unpack the zipfile: PMDMSETUP.ZIP
+   These files can help you with the setup and configuration.
+ 
+ 
+Files to setup  DMSERVER
+Fn       Ft         Action/purpose
+DMSERVER DIRECT     Add to CP directory with apropriate MDISK stmts
+ 
+PROFILE  EXEC       Store on A-disk or Filespace, profile exec for DMSERVER
+PROFILE  DMSERVER   Store on A-disk or Filespace, items for profile exec
+DMSERVER SYNONYM    Store on A-disk or Filespace, sets the SYNONYMS
+DMSERVER TIMES      Store on A-disk or Filespace, arranges TIMING for the code
+ 
+VMLINK   NAMES      Store on A-disk or Filespace, Controls where code can be found
+                    and various settings
+VMLINK   CONTROL    Store on A-disk or Filespace, Controls the accessmode for VM
+CLNNETLG EXEC       Store on A-disk or Filespace, CLeans the NETLOG file
+ 
+ 
+ 
+Files to setup an additional filepool (optional)
+Fn       Ft         Action/purpose
+VMUSERS  DIRECT     Add to CP directory with apropriate MDISK stmts
+VMUSERS  DMSPARMS   Add to VMUSERS A-disk, controls the parms for the filepool
+                    e.g. the filepool ADMINS
+VMUSERS  POOLDEF    Add to VMUSERS A-disk, contains definitions for the filepool
+ 
+Creating the filepool:
+- Adjust the MDISK locations in VMUSERS DIRECT to your needs
+- Add the VMUSERS DIRECT to the current directory
+- Logon to VMUSERS
+- Copy the PROFILE EXEC form VMSERVP onto the A-disk
+- Copy VMUSERS DMSPARMS onto the A-disk
+- Adapt VMUSERS DMSPARMS to your requirements
+- Issue FILESERV GENERATE
+- Copy the delivered VMUSERS POOLDDEF into the file and issue file
+- When the GENERATE finishes without errors issue FILESERV START
+- Now you can enroll admins and users into the new filepool
+ 
+ 
+ 
+ 
+The code from PMDIRM ZIP can be installed on a MDISK or a filepool directory
+Check the control files.
+ 
+DM       COMMANDS helps you block or allow commands and gives an overview of wha
+                  implemented. Also shows the DIRMAINT equivalent.
+DM       ADMINS   Tells which user ids can be admins
+DM       ERRORS   Contains all the error messages
+DMCLIENT NAMES    Tells the client code to talk to which server/id
+DM       TESTCASE show the testcases I used

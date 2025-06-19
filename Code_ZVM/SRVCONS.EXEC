@@ -1,0 +1,165 @@
+/*---------------------------------------------------------------+
+| Function : Close consoles for a set of servers                 |
+|            and get them sent to CONPARK                        |
+|                                                                |
+| File     : SRVCONS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SRVCONS  NAMES    input file                        |
+|            CLOSCONS EXEC     tooling                           |
+|                                                                |
+| Called   : SRVCONS ( <dryrun>                                  |
+|                                                                |
+|            <dryrun> ; if not set only a display                |
+|                                                                |
+|            SRVCONS NAMES:                                      |
+|            :sleepsec. ; no of seconds to sleep between groups  |
+|            :group.    ; no of servers in a group               |
+|            :selection.; beginstrings for server names          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190611 09:31:16                                   |
+| Changes  : .                                                   |
+|            20220317 H.T.Kramer : Changed input file and group  |
+|                     processing                                 |
+|            20191111 H.T.Kramer : Changed selection to a file.. |
+|            20190911 H.T.Kramer : Using pipe wildcard now       |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Set some defaults...                                           |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Show help                                                      |
++---------------------------------------------------------------*/
+If arg1='?' Then Do
+         'VMFCLEAR'
+         'PIPE (NAME SRVCONS.EXEC:44 END ?)',
+             '< 'myfn myft' *',                 /* Read myself      */
+             '| totarget find Parse ',          /* to this label    */
+             '| cons'                           /* Show             */
+             Exit 9
+             End
+Call Read_Names
+/*---------------------------------------------------------------+
+| Setting the defaults                                           |
++---------------------------------------------------------------*/
+If \Datatype(group,'NUM')     Then group=5
+If \Datatype(sleepsec,'NUM')  Then sleepsec=2
+/*---------------------------------------------------------------+
+| Are we running in testmode?                                    |
++---------------------------------------------------------------*/
+If dryrun<>'' Then Do
+              cmsout='| cons | cms | cons'
+              test=0
+              End
+              Else Do
+              cmsout='| cons'
+              test=1
+              End
+/*---------------------------------------------------------------+
+| Display our input                                              |
++---------------------------------------------------------------*/
+Call Showmsg '0 Closing CONSOLEs'
+Call Showmsg '0 Sleep is set to: 'sleepsec
+Call Showmsg '0 No of items per group: 'group
+Call Showmsg '0 Selection of  user ids: 'allnwild
+Call Showmsg '0 Wildcards for user ids: 'allwildc
+/*---------------------------------------------------------------+
+| Get the selection and make it a stem                           |
+| Get all the names from the system                              |
++---------------------------------------------------------------*/
+'PIPE (NAME SRVCONS.EXEC:80 END ?)',
+    'cp QUERY NAMES',                           /* Ask cp           */
+    '| split at ,',                             /* Split here       */
+    '| strip',                                  /* Remove space     */
+    '| pick w3.1 \== ~TCPIP~',                  /* Ignore VSM       */
+    '| pick w3.1 == ~DSC~',                     /* Only these       */
+    '| specs w1.1',                             /* Keep this        */
+    '| stem name.'                              /* Store here       */
+/*---------------------------------------------------------------+
+| Loop thru the wildcard                                         |
++---------------------------------------------------------------*/
+server.0=0  /* Initialise */
+Do w=1 To wildc.0
+     'PIPE (NAME SRVCONS.EXEC:92 END ?)',
+         'stem name.',                          /* Take these       */
+         '| wildcard anycase w1.1 ~'wildc.w'~', /* Select these     */
+         '| stem server. append'                /* Add 2 stem       */
+End w
+/*---------------------------------------------------------------+
+| Add the non-wildcards...                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME SRVCONS.EXEC:100 END ?)',
+    'stem nwild.',                              /* Take these       */
+    '| stem server. append'                     /* Add them to...   */
+/*---------------------------------------------------------------+
+| Create groups                                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME SRVCONS.EXEC:106 END ?)',
+    'stem server.',                              /* Take selection   */
+    '| sort',                                    /* Sort them        */
+    '| join 'group-1' ~;~',                      /* Make groups      */
+    '| stem group.'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Process the groups                                             |
++---------------------------------------------------------------*/
+Do g=1 To group.0
+    start=((g*group)-group)+1                    /* Calculate start  */
+    Call Showmsg '0 Processing user ids from 'start' to 'g*group
+    'PIPE (NAME SRVCONS.EXEC:117 END ?)',
+        'literal 'group.g,                       /* Take this        */
+        '| split at ;',                          /* Split here       */
+        '| specs ~CLOSCONS~ 1 w1.1 nw',          /* Compose cmds     */
+        cmsout                                   /* Show/run         */
+    If test Then Call Showmsg '0 CP SLEEP 'sleepsec' SEC'
+            Else 'CP SLEEP 'sleepsec' SEC'
+End g
+Exit
+ 
+ 
+Showmsg:
+/*---------------------------------------------------------------+
+| Show a message                                                 |
++---------------------------------------------------------------*/
+Parse Arg exrc emsg
+Say Date('S') Time() myfn emsg
+Return
+ 
+ 
+Read_Names:
+/*---------------------------------------------------------------+
+| Read the names file                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME SRVCONS.EXEC:142 END ?)',
+   '< 'myfn' NAMES *',                           /* Read this file   */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~~',          /* Ignore comm&empty*/
+   '| xlate upper',                              /* Upper case       */
+   '| strip',                                    /* Remove spaces    */
+   '| join * x40',                               /* Make 1 record    */
+   '| split before string ~:~',                  /* Split here       */
+   '| n1: nlocate ~:SELECTION.~',                /* Move this away   */
+   '| change ~:~/~ 1',                           /* Replace this     */
+   '| change ~.~/~ 1',                           /* ...and this      */
+   '| varload',                                  /* Hand 2 rexx      */
+   '? n1:',                                      /* Conn 2 nlocate   */
+   '| specs fs . f2;* 1',                        /* Remove label     */
+   '| split',                                    /* Split            */
+   '| n2: nlocate ~*~',                          /* Move these away  */
+   '| stem nwild.',                              /* Store strings    */
+   '| join * x40',                               /* Make 1 record    */
+   '| var allnwild',                             /* Store as         */
+   '? n2:',                                      /* Conn 2 nlocate   */
+   '| stem wildc.',                              /* Store wildcards  */
+   '| join * x40',                               /* Make 1 record    */
+   '| var allwildc'                              /* Store as         */
+If allnwild='ALLNWILD' Then allnwild=''
+If allwildc='ALLWILDC' Then allwildc=''
+Return

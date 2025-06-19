@@ -1,0 +1,87 @@
+/*---------------------------------------------------------------+
+| Function : Format a new created mdisk or deleted mdisk         |
+|                                                                |
+| File     : DM_FORMT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|            GETFMADR MODULE                                     |
+|                                                                |
+| Called   : DM_FORMT <uid> <cuu> <dummy>                        |
+|                                                                |
+|                     <uid>     User id, owner of MDISK          |
+|                     <cuu>     MDISK address 0000-FFFF          |
+|                     <dummy>   If not empty a dummy file        |
+|                               will be created on the           |
+|                               formatted disk                   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250526 17:43:32                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu dummy .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Link and access the userid disk                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid cuu' (NONAMES WRITE .cu .fm'
+Select
+When rc=0    Then Parse Pull . . vcuu . wfm .
+When rc=2100 Then Call LinkOnly
+Otherwise Exit 264
+End
+/*---------------------------------------------------------------+
+| Compose label                                                  |
++---------------------------------------------------------------*/
+label=Substr(uid,1,3)Substr(Strip(cuu,'L','0'),1,3)
+/*---------------------------------------------------------------+
+| Format the disk                                                |
++---------------------------------------------------------------*/
+Queue '1'
+Queue label
+Address CMS 'FORMAT 'vcuu wfm' (BLK 4K'
+/*---------------------------------------------------------------+
+| Create the dummy file                                          |
++---------------------------------------------------------------*/
+If dummy<>'' Then 'PIPE (NAME DM_FORMT.EXEC:60 END ? 'S') Time()' | > DUMMY FILE 'wfm
+/*---------------------------------------------------------------+
+| Release the disk                                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid cuu' <DET (NONAMES WRITE'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ 
+LinkOnly:
+/*---------------------------------------------------------------+
+| Set up a LINK if VMLINK failed                                 |
++---------------------------------------------------------------*/
+'GETFMADR 120'
+If rc= 0 Then Parse Pull . wfm vcuu .
+         Else Call Exit 265
+Address COMMAND 'CP LINK 'uid cuu vcuu' M'
+If rc<>0 Then Call Exit 266
+Return

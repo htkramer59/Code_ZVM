@@ -1,0 +1,33 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+    F         Specifies that columns to be copied, moved or transferred
+              should be INSERTED FOLLOWING the column where the "F" is
+              positioned.
+ 
+    P         Specifies that columns to be copied, moved or transferred
+              should be INSERTED PRECEDING the column where the "P" is
+              positioned.  (So you can insert anything in front of the
+              first column).
+ 
+    U         Specifies that columns to be copied, moved or transferred
+              should REPLACE data starting at the column where the "U" is
+              positioned.
+.cs 7 on
+                     COLumn Edit Copy and Move Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL COPYCMDS (ALL       C      Copy a column
+COL COPYCMD2 (ALL       M      Move a column
+COL COPYCMD3 (ALL       X      Transfer (Xfer) a column
+COL COPYCMD4 (ALL       F,P,U  Targets for Copy, Move and Xfer
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

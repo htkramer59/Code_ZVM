@@ -1,0 +1,20 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Issue CP commands on the server                     |
+|                                                                |
+| File     : DM_CP    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_CP <cp command>                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

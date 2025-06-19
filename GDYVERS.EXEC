@@ -1,0 +1,66 @@
+/* This exec will inform end-user on latest news of a goodie
+  +---------------------------------------------------------------------+
+  | format: | CALL GDYVERS oldvers , newversion , gdy , fileid <,lines> |
+  +---------------------------------------------------------------------+
+  To see how this EXEC can be used, consult one of listed below
+    DRM EXEC,
+  Note that the "fileid" should some special cards, refer to above files
+  Written by: Kris Buelens IBM Belgium;  BUELENSC at IECVM 12 Mar 1990*/
+/* 22 Jun 1998: Version flag must be before col 8                  */
+/* 25 Jun 1998: Highlight the texts of the changes                 */
+parse upper source . . myname mytype . syn .
+address command
+ 
+parse source . how mefn meft mefm
+ if how='COMMAND' then do
+    say 'The' mefn meft 'can only be CALLed from a REXX EXEC or MACRO'
+    exit 100
+ end
+parse upper arg oldvers , newvers , goodie , fileid, lines
+ 
+if lines='' then lines=100 /* lines to scan in "history" file */
+if oldvers='' then oldvers='??'
+ 
+if oldvers^=0 then  Say 'You just started using a new version of' goodie,
+                    '. Version:' newvers
+'ESTATE' fileid
+if rc^=0 then do
+   say 'Update History not available, file' fileid 'not found.'
+   return rc
+end
+'EXECIO' lines 'DISKR' fileid '(SKIP FIND /UPDATE HISTORY/'
+if rc^=0 then do
+   say 'Start UPDATE HISTORY not found in file' fileid
+   return rc
+end
+'EXECIO' lines 'DISKR' fileid '(FINIS STEM HIST.'
+ Say 'Change history between Version' oldvers 'and Version' newvers ':'
+ Say ''
+ parse var oldvers oldv'.'oldr
+ Started=0
+ do i=1 to hist.0
+    parse var hist.i 2 vers . 8 0 w1 w2 w3 .
+    if w1 w2 w3='END UPDATE HISTORY:' then leave
+    parse var vers v'.'r
+    if v>oldv | (v=oldv & r>oldr) |,
+     (started & vers='')          then do /* Show the information */
+       if symbol('vmclr')<>'VAR' then do  /* Use a special color */
+          'CONWAIT'
+          parse value diag(8,'Q SCREEN') with 'VMOUT' vmclr . '15'x
+          color=word('PINK RED',(vmclr='PINK')+1)
+          call diag 8,'SCREEN VMOUT' Color
+       end
+       Started=1
+       say hist.i
+    end
+ end i
+ if symbol('vmclr')='VAR' then do
+    'CONWAIT';call diag 8,'SCREEN VMOUT' vmclr ; end
+ Say ''
+ Say '+'left('',70,'-')'+'
+ Say left('| To review the Change history:   "XEDIT' fileid'"',71)'|'
+ Say '+'left('',70,'-')'+'
+ Say ''
+ Say 'Press ENTER to continue   or    anything else to forget you saw this message.'
+ parse external ans
+ return ans

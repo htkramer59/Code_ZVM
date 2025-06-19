@@ -1,0 +1,176 @@
+/*---------------------------------------------------------------+
+| Function : Report FCP throughput                               |
+|                                                                |
+| File     : HOB-FCP  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOB-FCP  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220104 10:42:50                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our Caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOB-FCP.EXEC:27 END ?)',
+   'rexxvars 1 toload',
+   '| varload'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status1          /*  Send the result in status to bb write */
+              Call Close_Term_Socket     /* .                */
+              Call Init_Open_socket      /* .                */
+              Call Send status2          /*  Send the result in status to bb read */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOB-FCP.EXEC:43 END ?)',
+                  'var status1',
+                  '| split at x15',
+                  '| strip',
+                  '| append literal ',
+                  '| cons',
+                  '?',
+                  'var status2',
+                  '| split at x15',
+                  '| strip',
+                  '| cons'
+               End
+Exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Here we collect the information..                              |
++---------------------------------------------------------------*/
+qdiobuffer=64*1024
+'PIPE (NAME HOB-FCP.EXEC:63 END ?)',
+   'fcx QDIO',                                   /* Ask perfkit      */
+   '| zone w4.1 all ~FCP~',                      /* Select these     */
+   '| nlocate anycase ~Device~',                 /* Ignore these     */
+   '| sort w2.1 d',                              /* Sort on usage    */
+   '| specs w1.3 1',                             /* Rework layout    */
+           'w1.4 nw.4 right',                    /* .                */
+           'pad 0',                              /* .                */
+           'w-7;-7 nw.8 right',                  /* .                */
+           'w-5;-5 nw.8 right',                  /* .                */
+   '| specs w1 nw w2 nw w3 nw w4 nw ',           /* Rework to        */
+      'a: w5.1 .',                               /* .bytes per second*/
+      'b: w6.1 .',                               /* .                */
+      'set (#0:=a*'qdiobuffer';#1:=b*'qdiobuffer')',   /* .                */
+      'print #0 pict 99999999999 nw',            /* .                */
+      'print #1 pict 99999999999 nw',            /* .                */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs pad _ w2.1 1.8 ~@~ n w3.1 n ~:~ n w5.1 nw ', /* Select write info*/
+   '| siconv w2.1 B2K 20',                            /* Convert          */
+   '| specs w1.1 nw pad 0 w2.1 nw.20 right',     /* Rework for displ */
+   '| sort w2.1 d',                              /* Sort highest 1st */
+   '| siconv w2.1 B2K 20',                            /* Convers          */
+   '| change ~@~_~',                             /* Replace these    */
+   '| join * x15',                               /* Make 1 record    */
+   '| var fcpwrite',                             /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs pad _ w2.1 1.8 ~@~ n w3.1 n ~:~ n w6.1 nw ', /* Select read info */
+   '| siconv w2.1 B2K 20',                            /* Convert          */
+   '| specs w1.1 nw pad 0 w2.1 nw.20 right',     /* Rework for displ */
+   '| sort w2 d',                                /* Sort highest 1st */
+   '| siconv w2.1 B2K 20',                            /* Convert          */
+   '| change ~@~_~',                             /* Replace this     */
+   '| join * x15',                               /* Make 1 record    */
+   '| var fcpread'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Send the data if there is any...                               |
++---------------------------------------------------------------*/
+If fcpwrite="FCPWRITE" Then Do
+  status1='status' MACHINE'.fcp_write' green TimeStamp('TZ') cr 'NO DEVICES'
+  status2='status' MACHINE'.fcp_read'  green TimeStamp('TZ') cr 'NO DEVICES'
+  End
+  Else Do
+  status1='status' machine||'.fcp_write' green TimeStamp('TZ') 'FCP write bytes/s'cr||fcpwrite cr
+  status2='status' machine||'.fcp_read'  green TimeStamp('TZ') 'FCP read  bytes/s'cr||fcpread  cr
+  End
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCFCP'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOB-FCP.EXEC:169 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

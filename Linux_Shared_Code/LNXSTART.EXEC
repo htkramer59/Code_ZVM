@@ -1,0 +1,132 @@
+/*---------------------------------------------------------------+
+| Function : Start up Linux servers with specific settings       |
+|                                                                |
+| File     : LNXSTART EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : LNXSTART NAMES                                      |
+|            LNXDEFLT EXEC    Sets DEFAULTs for you              |
+|            LNXSTEXT EXEC    Preexit for VMLINK                 |
+|                                                                |
+| Called   : LNXSTART .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220516 12:51:51                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg switch .
+Parse Source . . myfn myft myfm .
+Say TimeStamp() Userid()
+/*---------------------------------------------------------------+
+| The below vmlink executes LNXDEFLT EXEC for you                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DEFAULT (ONLY('myfn')'
+/*---------------------------------------------------------------+
+| Some settings..                                                |
++---------------------------------------------------------------*/
+pfkeys='11 RETRIEVE FORWARD;12 RETRIEVE BACKWARD;',
+       '23 RETRIEVE FORWARD;14 RETRIEVE BACKWARD'
+/*---------------------------------------------------------------+
+| Check if we are running DISCONNECTED...                        |
++---------------------------------------------------------------*/
+'PIPE (NAME LNXSTART.EXEC:40 END ?)',
+   'cp QUERY USER 'Userid(),                     /* Am I             */
+   '| pick w3.1 == ~DSC~',                       /* running DSC      */
+   '| count lines',                              /* Make boolean     */
+   '| var dsc',                                  /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'var pfkeys',                                 /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| cp'                                        /* Hand 2 cp        */
+/*---------------------------------------------------------------+
+| Show instructions or go to start                               |
++---------------------------------------------------------------*/
+If \dsc &,
+   switch='' Then Do
+                  'VMFCLEAR'
+                  Say
+                  Say TimeStamp() Userid()
+                  Say
+                  Say 'Issue:   LNXSTART START    to invoke the start up'
+                  Say
+                  Exit
+                  End
+             Else Call RunStartup
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+RunStartup:
+/*---------------------------------------------------------------+
+| Run the actual start up...                                     |
++---------------------------------------------------------------*/
+Call Collect_Details
+If swaponvdisk<>'' Then Call Create_Vdisk
+/*---------------------------------------------------------------+
+| Start the specifics for this user id                           |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'Userid()' (ONLY('myfn')'
+Say Address COMMAND 'CP IPL 'bootdisk
+Return
+ 
+ 
+Collect_Details:
+/*---------------------------------------------------------------+
+| Read the NAMES file to get the defaults and user specifics     |
++---------------------------------------------------------------*/
+bootdisk='';linuxos='';swaponvdisk='';swapvdisksize='';swapdisk=''
+swapgenopts=''
+'PIPE (end ?)',
+  '< 'myfn' NAMES *',                            /* Read names file  */
+  '| xlate upper',                               /* Conv 2 upper     */
+  '| i: inside ~:DEFAULTS.~ ~:END.~',            /* Select this      */
+  '| strip',                                     /* Remove spaces    */
+  '| specs ~/DEF_~ 1 w1;* n',                    /* Compose vars     */
+  '| change ~:~~ 1',                             /* Remove first 1   */
+  '| change ~.~/~ 1',                            /* Replace first 1  */
+  '| fi: faninany',                              /* Take in others   */
+  '| varload',                                   /* Hand 2 rexx      */
+  '? i:',                                        /* Conn 2 inside    */
+  '| pick w1.1 == ~:NICK.'Userid()'~',           /* Select myself    */
+  '| split before string ~:~',                   /* Split here       */
+  '| strip',                                     /* Remove spaces    */
+  '| pick fs . f1 \== ~:NICK~ and',              /* Ignore these     */
+              'f1 \== ~:LIST~ and',              /* .                */
+              'f1 \== ~:TITLE~',                 /* .                */
+  '| change ~:~/~ 1',                            /* Replace first 1  */
+  '| change ~.~/~ 1',                            /* Replace first 1  */
+  '| fi:'                                        /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| If not present fill with the defaults                          |
++---------------------------------------------------------------*/
+If bootdisk      ='' Then bootdisk=def_bootdisk
+If linuxos       ='' Then linuxos=def_linuxos
+If swaponvdisk   ='' Then swaponvdisk=def_swaponvdisk
+If swapvdisksize ='' Then swapvdisksize=def_swapvdisksize
+If swapdisk      ='' Then swapdisk=def_swapdisk
+If swapgenopts   ='' Then swapgenopts=def_swapgenopts
+Return
+ 
+ 
+Create_Vdisk:
+/*---------------------------------------------------------------+
+| Set up the swap items, defined in the NAMES file               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK SWAPGEN (ONLY('myfn') QUIET'
+Do s=1 To Words(swaponvdisk)
+   swapvdisk=Word(swaponvdisk,s)
+   'PIPE (NAME LNXSTART.EXEC:74 END ?)',
+     'literal DETACH 'swapvdisk,                 /* Compose cmd      */
+     '| cp',                                     /* Issue cmd        */
+     '| hole'                                    /* Ignore output    */
+   Address CMS 'SWAPGEN  'swapvdisk swapvdisksize '(' swapgenopts
+End s
+Address CMS 'VMLINK SWAPGEN <DET (ONLY('myfn') QUIET'
+Return

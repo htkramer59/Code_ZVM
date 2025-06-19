@@ -1,0 +1,65 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1991                  */
+/*--------------------------------------------------------------*/
+/* Use this macro to translate and invoke COL by entering H or  */
+/* a pair of HH for a block to be altered.  The H or the first  */
+/* HH will become the current line.                             */
+/*                                                              */
+/* Place the following in XEDIT PROFILE.                        */
+/*                 SET PRE SYN H  PREFIXH                       */
+/*                 SET PRE SYN HH PREFIXH                       */
+/*--------------------------------------------------------------*/
+trace off
+numeric digits 10              /* Allow bigger numbers */
+arg pref func pline op extra
+parse source . . . . . name .
+prf = name || space(op extra)
+If pref ^= 'PREFIX' then call error1,
+  "8 646E 'PREFIXH' must be invoked from the prefix area."
+If func = 'CLEAR' then exit
+'COMMAND EXTRACT /SCOPE/DISPLAY/TERMINAL/FNAME/FTYPE/FMODE/'
+If func = 'SHADOW' & scope.1 = 'DISPLAY' Then call error,
+  "0 661E Prefix '"name"' is invalid for the line on",
+  "which it was entered."
+If func ^= 'SET' & func ^= 'SHADOW' then call error1,
+  "8 646E 'PREFIXH' must be invoked from the prefix area."
+Select
+    When length(name) = 1 then do   /* No block command */
+      If extra ^= '' then call error,
+        "0 659E Invalid prefix subcommand:" prf
+      If op = '' then op = 1
+      If (datatype(op,'W') & op > 0 & pos(op,'.') = 0) | op = '*' then do
+PUSH    'COMMAND :'pline 'MACRO COL' op
+        End
+      Else call error,
+        "0 659E Invalid prefix subcommand:" prf
+      End
+    When length(name) = 2 then do   /* Block cmd */
+      If op ^= '' then call error,
+        "0 659E Invalid prefix subcommand:" prf
+      'COMMAND EXTRACT /PENDING BLOCK' name ':0 :'pline '/'
+      If pending.0 ^= 0 then do
+        'COMMAND :'pending.1 'COMMAND SET PENDING OFF'
+        'COMMAND LOCATE :'pline
+        'COMMAND SET SCOPE ALL'
+        'COMMAND LOCATE :'pending.1
+PUSH    'COMMAND :'pending.1 'MACRO COL :'pline + 1
+PUSH    'COMMAND SET SCOPE' scope.1
+        End
+      Else 'COMMAND :'pline 'COMMAND SET PENDING BLOCK' left(prf,5)
+      End
+    Otherwise call error "0 686E Synonym '"name"' not",
+      "recognized by prefix macro 'PREFIXH'."
+    End
+Exit
+/*  Error routines  */
+error:  'COMMAND SET SCOPE ALL'
+        'COMMAND :'pline 'COMMAND SET PENDING ERROR' left(prf,5)
+        'COMMAND SET SCOPE' scope.1
+error1: parse arg err msg
+/*      'COMMAND RESTORE'*/
+        If msg ^= '' then 'COMMAND EMSG PXH' || strip(msg,'L')
+        Exit err

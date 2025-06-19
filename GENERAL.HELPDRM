@@ -1,0 +1,147 @@
+         General NOTES
+   -----------------------
+ 
+ 1. DRM uses the DIRMAP MODULE to map the directory and to know where
+    free space is available.
+      DIRMAP vmusers DIRECT produces
+         "vmusers MDISKMAP A"  with disk layout
+         "vmusers GAPFILE A"   containing all available gaps.
+    If you want to allocate Mdisks only from specific disks either do:
+     - use a DIRMAP option file as explained below in point 3.
+     - cheet:  1. press PF4 to ask DRM to recreate GAPFILE
+               2. enter "XEDIT = GAPFILE"
+               3. delete all lines where you don't want Mdisks
+                    (e.g. "ALL /VMSRES/ | /ESARES/ # DEL * # FILE"
+ 
+ 2. Whenever DRM executes the DIRMAP command and finds a nonzero returncode
+    DRM thinks DIRMAP found an overlap.  DRM then displays MDISKMAP and
+    directory in split screen.
+      Of the MDISKMAP you will see only the OVERLAPs; to see more:
+          type 'ALL' or use the 'S' prefix command.
+      A prefix 'FI' command is also available to locate an MDISK of the
+          MDISKMAP file in the CP-directory file.
+ 
+ 3. DIRMAP has many options, DRM needs only GAPFILE, if you want more
+    options to be used by $DRM$ XEDIT: modify DRM NAMES file.
+ 
+      To find all DIRMAP options: type "DIRMAP ?" or 'HELP DIRMAP"
+ 
+    Sometimes you might like that the GAPFILE only includes a subset of
+    the volumes used in your directory (by default dirmap reports for all
+    volsers included in the directory)
+    Then use some extra options and make one or more DIRMAP control files:
+     -option "INCLUDE" + file 'INCLUDE VOLSERS'
+       check only these volsers, and MDISKMAP + GAPFILE only for these
+     -option "EXCLUDE" + file 'EXCLUDE VOLSERS'
+       reverse of INCLUDE
+     -file 'GAPFILE VOLSERS' to list volid's you want in the GAPFILE
+       so you can control where MDISKs could get allocated
+ 
+ 4. A 'PROFILE' and 'EPIFILE' processing is foreseen:
+    These files are XEDIT execs in EXEC2 or REXX, you can do what you
+    want but for example don't kill DRM's SYNONYMS (as GET and GETV)
+  - After start of DRM, just before showing CP-directory on the screen
+    "PROFDRM XEDIT" will be executed (if existing). You could do some
+    processing (for example save a backup copy of your CP-Directory file)
+    or change PF-keys (do a Q PF while in DRM to see how the special
+    PF-keys for DRM are defined).
+  - Just before each SAVE (and thus before each DIRMAP and DIRECT)
+    "EPIFDRM XEDIT" will be executed (if existing). You could use this
+    for example to perform some extra checking in your directory, or
+    for example do SAVE, followed by MONMINI to make a new DIRECT UNSORT
+    file for VMMAP.
+ 
+ 5. Tailoring:
+    The following files are meant to be tailored by the user.  In order
+    of importance:   a. DRM NAMES
+                     b. PROFDRM XEDIT
+                     c. RACDRM SKEL*
+ 
+ 6. Requirements:
+    Even though DIRECTXA allows to abbreviate most statements (like USER,
+    MDISK, and LINK, often to just 1 character), it is not commonly done.
+    Consequently, and to simplify DRM's REXX code, DRM requires you to
+    code them not abbreviated.  Affected statements
+     USER, LINK, MDISK, PROFILE, INCLUDE, IDENTITY, SUBCONFIG, BUILD
+    (the last two cannot be abbreviated per DIRECTXA's syntax)
+ 
+ 
+ 
+TIP TIP TIP -- one -----------------------------------------------------------
+ 
+ For some tools, such as DIRECTXA and ICKDSF CPVOL, VM disks must be available
+ as fullpack minidisks too.  Therefore it is required to define fullpack
+ overlays as minidisks too.
+ 
+ Often, installations define fullpack overlays as addresses 123, 124, ...
+ under USER MAINT.  And, when other users need access to a fullpack, such as
+ SYSDUMP1, the fullpacks are defined again.
+ 
+ Define all your fullpack minidisks only once, under a single user - for
+ example under USER FULLPACK - and assign the real addresses to the fullpack
+ minidisks.
+ 
+ When you need access to a fullpack, simply issue
+   LINK FULLPACK realaddr vdev mode
+ instead of having to guess/remember/find the address assgined to it in USER
+ MAINT.
+ 
+ 
+ Advantages:
+  - user FULLPACK is the one with all addresses
+  - the real addresses are being used, something you'll remember better than
+    123, 124, 125, ...
+  - to exclude fullpack overlays from backup, simply tell your backup tool to
+    skip all minidisks of user FULLPACK
+ 
+ Example:
+  USER FULLPACK NOLOG
+  * Userid to hold full-pack definitions to all packs
+  * >>> PLEASE KEEP THE MDISK PASSWORDS, WE MIGHT NEED THEM IN RECOVERY
+  * >>>   SITUATIONS WHERE RACF WOULD NOT BE RUNNING
+    MDISK 0123 3390 0000 3339 VMSRES RR RSYSRES WSYSRES MSYSRES
+    MDISK 0124 3390 0000 3339 VMPK01 RR RSYSRES WSYSRES MSYSRES
+    * REAL 3390 addresses
+    MDISK 50A3 3390 0000 3339 VMSRES RR RSYSRES WSYSRES MSYSRES
+    MDISK 50A4 3390 0000 3339 VMPK01 RR RSYSRES WSYSRES MSYSRES
+    MDISK 50A5 3390 0000 3339 VMT002 RR RSYSRES WSYSRES MSYSRES
+ 
+ Remark that the "resident" is defined twice: once with the real address and
+ once as 123.  So for MAINT, DIRMAINT, SYSDUMP1, etc,
+ replace their  MDISK 123 ... MW   by  LINK FULLPACK 123 123 MW
+ a statement that remains the same, indepandent of the real address.
+ 
+TIP TIP TIP -- two -----------------------------------------------------------
+ It is good practice not to let "normal" minidisks start at cylinder 0
+ of the packs.  Because, when a minidisk starts at cylinder 0, the
+ minidisk label also becomes the real disk label.
+  --> Surly not wanted for end-user minidisks.
+ For guest minidisks, chances someone suddenly changes the disk label
+ are slim, so one could say: let those start in real cyl 0.  However:
+ maybe some day, you take a DDR copy of a guest pack, and as a result,
+ your system now has two packs with the same label.  Which one CP will
+ place online?
+  --> So, even for guest minidisks, starting at cyl 0 is not recommended
+ 
+ Therefore: we define an mdisk at cylinder 0 of each volume under user
+ $ALLOC$.  This way cylinder 0 seems no longer free to DIRMAP/DIRMAINT/..
+ 
+ 
+**** For more details, refer to the "RELATED" section (press PF11) ***
+.cs 7 on
+(c) Copyright International Business Machines Corporation 1985, 2012.
+    All Rights Reserved.
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER
+ 
+ 
+CMS DRM     (ALL        Overview ›&- An overview of DRM
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+.cs 7 off

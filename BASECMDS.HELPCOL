@@ -1,0 +1,42 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    I text    Inserts the given text after the column where the "I" is
+              positioned.  Text is everything that appears after the
+              character "I" up to the last nonblank character.  Do not
+              specify other commands right of the "I" command.  They will
+              be treated as text.  The text may contain blanks.  To get
+              trailing blanks you must use the blank character.
+ 
+              "/I text" will place the text at the "/" rather than
+              following the I.
+ 
+              EXAMPLE: ??????????iDept. ?????????????
+                       Bill Smith 567
+                       Tom Jones  765
+ 
+              Yields:
+                       Bill Smith Dept. 567
+                       Tom Jones  Dept. 765
+.cs 7 on
+                     COLumn Edit Base Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL BASECMD3 (ALL       A       Add or insert blanks into a column
+COL BASECMD5 (ALL       "       Duplicate a Column
+COL BASECMD2 (ALL       D       Delete a column
+COL BASECMDS (ALL       I       Insert text into a column
+COL BASECMD6 (ALL       /cmd    Do "here" rather than behind the command
+COL BASECMD6 (ALL       /       Shift the screen to this column
+COL BASECMD4 (ALL       O,R,',- Overlay, Replace, Pad or remove data
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

@@ -1,0 +1,142 @@
+/*---------------------------------------------------------------+
+| Function : Collect system summary info per day                 |
+|                                                                |
+| File     : SYSSUM   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : SYSSUM   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190606 14:54:36                                   |
+| Changes  : .                                                   |
+|            20200608 H.T.Kramer : Change PERFKIT call to print  |
+|                                  with pagesize off             |
+|            20190905 H.T.Kramer : Changes to filtering and      |
+|                                  adding to a file              |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+x=Time('R')
+Parse Source . . myfn .
+Say TimeStamp() 'Started'
+perfid='PERFSVM'      /* Who to ask for info */
+fn=Date('S')          /* Create unique filename */
+ft=myfn               /* Create unique filetype */
+store='.SYSSUM.'      /* Where to store the output */
+keep=60               /* Keep this amount of versions */
+sleep=1               /* No of seconds to sleep */
+line.0=0              /* Initialise the array */
+Address CMS 'VMLINK .DIR 'store' (NONAMES .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Check if the file of today exists                              |
++---------------------------------------------------------------*/
+'PIPE (NAME SYSSUM.EXEC:40 END ?)',
+   'statew 'fn ft wfm,                          /* This file...     */
+   '| count lines',                             /* is it there      */
+   '| var filexst'                              /* Store as         */
+If filexst Then Do
+    'PIPE (NAME SYSSUM.EXEC:45 END ?)',
+         '< 'fn ft wfm,                         /* Read the file    */
+         '| drop first 1',                      /* Remove header    */
+         '| stem line.'                         /* Store for later  */
+     Say 'File found'
+     End
+     Else Say 'New file to be made'
+/*---------------------------------------------------------------+
+| Ask perfsvm for the print                                      |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Asking 'perfid' for info'
+'PIPE (NAME SYSSUM.EXEC:56 END ?)',
+   'vmc 'perfid' print syssum (pagesize off to 'Userid(), /* Ask perfsvm      */
+   '| hole'                                     /* No need 4 answer */
+/*---------------------------------------------------------------+
+| Wait for it to arrive                                          |
++---------------------------------------------------------------*/
+'CP SLEEP 'sleep' SEC'
+/*---------------------------------------------------------------+
+| Find out the spool id                                          |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Finding spool id'
+'PIPE (NAME SYSSUM.EXEC:67 END ?)',
+   'cp QUERY RDR * ALL ISODATE',                /* Check my reader  */
+   '| pick w1.1 == ~'perfid'~',                 /* Check who sent   */
+   '| pick w-2;-2 == ~FCONMON~',                /* An other check   */
+   '| take last 1',                             /* Take latest      */
+   '| specs w2.1',                              /* Keep spool id    */
+   '| var spid'                                 /* Store as         */
+/*---------------------------------------------------------------+
+| Read the file...and clean up...                                |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Processing info'
+'PIPE (NAME SYSSUM.EXEC:78 END ?)',
+   'reader file 'spid,                          /* Take rdr file    */
+   '| pick 1.1 == x01',                         /* Keep these       */
+   '| specs 2;* 1',                             /* Remove printchars*/
+   '| strip',                                   /* Remove spaces    */
+   '| f: frlabel >>Mean>>',                     /* Remove top       */
+   '| pick 1.3 \== ~<--~',                      /* Clean up rest    */
+   '| pick w1.2 \== ~End Time~',                /* .                */
+   '| pick w1.1 \== ~Interval~',                /* .                */
+   '| nlocate ~Summary~',                       /* .                */
+   '| specs ~'Date('S')'~ 1',                   /* Add date         */
+           'w1.2 nw',                           /*  and keep these  */
+           'w12.1 nw',                          /* .                */
+           'w9.1 nw',                           /* .                */
+           'w6.2 nw',                           /* .                */
+   '| space ~;~',                               /* Replace spaces   */
+   '| change ~.~,~',                            /* Replace decimal .*/
+   '| pick fs ; f2 \== ~~',                     /* Remove empties   */
+   '| stem work.',                              /* Add to rest      */
+   '? f:',                                      /* Conn 2 frlabel   */
+   '| pick w1.1 == ~From~ or w1.1 == ~To~',     /* Take these 2     */
+   '| specs w2.2',                              /* Keep this        */
+   '| change ~/~~',                             /* Replace          */
+   '| change ~ ~;~',                            /*   and again      */
+   '| join * x40',                              /* Make 1 record    */
+   '| specs ~NOT OUTSIDE /'Date('S')';>>Mean>>/ /~ 1',  /* Compose filter */
+            'w2.1 n ~/~ n',                     /* .                */
+   '| var filter'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Select the correct interval                                    |
++---------------------------------------------------------------*/
+'pipe (NAME SYSSUM.EXEC:109 END ?)',
+   'stem work.',                                /* Take these       */
+   '| 'filter,                                  /* Filter           */
+   '| pick fs ; f2 \== ~>>Mean>>~',             /* Remove this      */
+   '| stem line. append'                        /* Add to stem      */
+/*---------------------------------------------------------------+
+| Write the combined file                                        |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Writing file'
+'PIPE (NAME SYSSUM.EXEC:118 END ?)',
+   'stem line.',                                /* Take these       */
+   '| sort unique fs ; f1.2',                   /* Remove duplicats */
+   '| preface literal date;time;%cpu;paging;i/o;logged;active',
+   '| > 'fn ft wfm                              /* (over)write file */
+Say TimeStamp() 'Clean up'
+'PIPE (NAME SYSSUM.EXEC:124 END ?)',
+   'cms LISTFILE * 'ft wfm' (NOHEADER',         /* Which files      */
+   '| sort w1.1 d',                             /* Sort on date     */
+   '| drop first 'keep,                         /* Keep these       */
+   '| specs ~ERASE~ 1 w1.3 nw',                 /* Compose cmds     */
+   '| cons',                                    /* Show             */
+   '| cms',                                     /* Issue cmds       */
+   '| cons'                                     /* Show results     */
+Address CMS 'VMLINK .DIR 'store' <DET (NONAMES'
+Say TimeStamp() 'Elapsed: 'Time('E')
+Exit
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Create a timestamp                                             |
++---------------------------------------------------------------*/
+timestamp=Date('S') Time() myfn
+Return timestamp

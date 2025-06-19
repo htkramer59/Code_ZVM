@@ -1,0 +1,135 @@
+.cm                                                                             
+›|Version Control Tool›%                                                        
+                                                                                
+    No command line implemented (yet)                                           
+                                                                                
+›|Client help›%                                                                 
+                                                                                
+    Invocation: CODE                                                            
+                                                                                
+  ›|PF1 ›%Help, this file                                                       
+  ›|PF2 ›%Get, get a copy of the code                                           
+  ›|PF3 ›%Quit/Return                                                           
+  ›|PF4 ›%Undo, revert back 1 generation of the code                            
+  ›|PF5 ›%Sync, not implemented yet                                             
+  ›|PF6 ›%Dist, not implemented yet                                             
+  ›|PF7 ›%Back, go back 1 page                                                  
+  ›|PF8 ›%Forw, go forward 1 page                                               
+  ›|PF9 ›%Add, add new code from the A-disk to the repository                   
+  ›|PF10›%Replace, replace updated code from the A-disk in the repository       
+  ›|PF11›%Edit, edit the copy of the code that is on your A-disk                
+  ›|PF12›%Quit/Return                                                           
+                                                                                
+.cm                                                                             
+›|Admin help›%›%                                                                
+                                                                                
+    Invocation: CODE ADMIN <cmd> <project>                                      
+                                                                                
+    <cmd> can be:                                                               
+        ›|empty   ›%then the content of the control file will be displayed      
+        ›|DISTLIST›%the control file will be edited and you will be directed to 
+        ›|USERS   ›%see above                                                   
+        ›|SERVER  ›%see above                                                   
+        ›|ENVIRON ›%see above                                                   
+        ›|CLIENT  ›%see above                                                   
+        ›|RELOAD  ›%will invoke a reload of code and control files              
+        ›|PROJECT ›%will open the admin panel for the project code              
+                    this will show all the available versions of each part of   
+                    the code for this project                                   
+                                                                                
+    ›|<project>›%any project that you have created                              
+                                                                                
+                                                                                
+  ›|PF1 ›%Help, this file                                                       
+  ›|PF2 ›%Remove, remove one or more parts of the code on the repository        
+  ›|PF3 ›%Quit/Return                                                           
+  ›|PF4 ›%Unlock, unlock a piece of code in case someone forgot to unlock code  
+  ›|PF5 ›%Sync, not implemented yet                                             
+  ›|PF6 ›%Dist, not implemented yet                                             
+  ›|PF7 ›%Back, go back 1 page                                                  
+  ›|PF8 ›%Forw, go forward 1 page                                               
+  ›|PF9 ›%Add, add new code from the A-disk to the repository                   
+  ›|PF10›%Replace, replace updated code from the A-disk in the repository       
+  ›|PF11›%Show, show the code from the repository                               
+  ›|PF12›%Quit/Return                                                           
+                                                                                
+.cm                                                                             
+›|Server help›%                                                                 
+                                                                                
+    The server does not require any classes other than CP class G.              
+                                                                                
+    If the code is stored on SFS the server                                     
+     needs to be owner of the filespace - or -                                  
+     needs to be allowed to write to the filespace - or -                       
+     needs to be admin for the filepool                                         
+                                                                                
+    If the code is stored on MINIDISK the servers                               
+     needs to be owner of the minidisk(s) - or -                                
+     needs to be able to link the minidisk(s) read/write                        
+                                                                                
+    Make sure the CODE is invoked from the PROFILE EXEC                         
+    Example of the PROFILE EXEC:                                                
+                                                                                
+   +------------------------------------------------------------------------+   
+    'PIPE (End ?)',                                                             
+       'cp QUERY 'Userid(),                                                     
+       '| specs fs - f2',                                                       
+       '| locate /DSC/',                                                        
+       '| count lines',                                                         
+       '| var dsc'                                                              
+    Address CMS 'VMLINK .dir VMUSERS:xxxxx.CODE. <* K (NONAMES'                 
+    Address CMS 'VMLINK .dir VMUSERS:xxxxx.CODE_SERVER. <* N (NONAMES'          
+    If dsc Then Address CMS 'CODE'                                              
+           Else Do                                                              
+           'VMFCLEAR'                                                           
+           Say 'To start CODE Server ENTER:'                                    
+           Say '    CODE'                                                       
+           Say '    and then'                                                   
+           Say '    #CP DISC'                                                   
+           End                                                                  
+   +------------------------------------------------------------------------+   
+                                                                                
+                                                                                
+.cm                                                                             
+›|Installation help›%                                                           
+                                                                                
+    Install the various parts of the code on separate minidisks or              
+    sfs directories                                                             
+                                                                                
+    The code requires a total of 50 4k blocks.                                  
+                                                                                
+    Make sure the generic part of the code is accessed first in the             
+    the client, admin and server user id                                        
+    On the client access the client code after that.                            
+    On the admin access the admin code after the generic and client code.       
+    On the server access the server code after the generic code.                
+                                                                                
+   ›|Example for the client:›%                                                  
+      Generic code accessed as K                                                
+      Client code accessed as L                                                 
+                                                                                
+   ›|Example for the admin:›%                                                   
+      Generic code accessed as K                                                
+      Client code accessed as L                                                 
+      Admin  code accessed as M                                                 
+                                                                                
+   ›|Example for the server:›%                                                  
+      Generic code accessed as K                                                
+      Server code accessed as N                                                 
+                                                                                
+   ›|Files:›%                                                                   
+    VMARC for the generic part: CODE_G VMARC                                    
+    VMARC for the CLIENT:       CODE_C VMARC                                    
+    VMARC for the ADMIN:        CODE_A VMARC                                    
+    VMARC for the SERVER:       CODE_S VMARC                                    
+                                                                                
+   ›|Installation:›%                                                            
+    VMARC UNP CODE_G VMARC A = = <gfm> (OLDDATE REPLACE                         
+    VMARC UNP CODE_C VMARC A = = <cfm> (OLDDATE REPLACE                         
+    VMARC UNP CODE_A VMARC A = = <afm> (OLDDATE REPLACE                         
+    VMARC UNP CODE_S VMARC A = = <sfm> (OLDDATE REPLACE                         
+                                                                                
+    <gfm> filemode of generic code filepool directory or minidisk               
+    <cfm> filemode of client  code filepool directory or minidisk               
+    <afm> filemode of admin   code filepool directory or minidisk               
+    <sfm> filemode of server  code filepool directory or minidisk               

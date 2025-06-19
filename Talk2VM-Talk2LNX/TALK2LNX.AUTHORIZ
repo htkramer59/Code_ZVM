@@ -1,0 +1,19 @@
+*                                                                               
+* List of userids or wildcard which are allowed to talk to the proxy            
+*                                                                               
+:authorized_users.                                                              
+ICU*                                                                            
+ICUTEST                                                                         
+CLDCONB1                                                                        
+SLD* SLB*                                                                       
+:end_authorized_users.                                                          
+                                                                                
+                                                                                
+*                                                                               
+* The commands the proxy is allowed to issue on behalf of the managers          
+*                                                                               
+:authorized_commands.                                                           
+cp                                                                              
+cms                                                                             
+qn                                                                              
+:end_authorized_commands.                                                       

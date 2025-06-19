@@ -1,0 +1,28 @@
+/*---------------------------------------------------------------+
+| Function : Client part of DM (Poor Mans DirMaint)              |
+|                                                                |
+| File     : DMC      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DMC <dm command>                                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20241114 18:47:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg input
+Select
+When Word(input,1)='HELP' Then Do
+                        If Wordpos('DM',input)<>2 Then input=Word(input,1)' DM 'Subword(input,2)
+                        input=Subword(input,2)
+                        Address CMS 'HELP 'input
+                        End
+Otherwise Address CMS 'VMLINK DM (QUIET INVOKE DMCLIENT 'input
+End
+Exit

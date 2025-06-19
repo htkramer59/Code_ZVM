@@ -1,0 +1,169 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This exec will perform the process test on a z/VM system, which
+    will verify that some virtual machines are running and report the
+    results back to the Xymon network monitor.
+ 
+    Rich Smrcina 04/04/2k+1  Original V1.0
+    Rich Smrcina 12/30/03    Revised  V1.1
+        change for new HOBVARS format
+    Rich Smrcina 06/10/05    Revised  V1.2
+        Added disk test to check SFS filepool usage
+    Rich Smrcina 02/10/07    Revised  V1.3
+        Modified to handle local and remote configuration mode.
+    Rich Smrcina 02/10/09
+        Changed project name to Xymon.
+                                                                      */
+arg test
+cr='15'x         /*  Carriage return  */
+emsgstart=date('U') time() 'HOBVMPRC:'  /* Start of error message line */
+'GLOBALV STACK BBDISPLAY BBPORT FQDN CFGMODE'
+pull bbdisplay
+pull bbport
+pull fqdn
+pull mode
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+'globalv stack PROC'
+pull proc
+call get_users             /*  Get the number of users         */
+if mode='CLIENT' then do
+  if datatype(word(proc,1))='NUM' then do
+    vm_count=word(proc,1)  /*  Check if first word is numeric */
+    proc=delword(proc,1,1)  /*  if it is, use it in vm  count  */
+    end
+  else
+    vm_count=0
+  call init_open_socket    /*  Initialize and Open the socket  */
+  call do_the_test_client  /*  Execute the test                */
+  call send                /*  Send the result in status to bb */
+  call close_term_socket   /*  Close and terminate the socket  */
+  end
+else do
+  'erase HOBVM500 CLIENT A'
+  queue '[UserID]'
+  call do_the_test_server
+  end
+exit
+ 
+init_open_socket:
+ret=Socket('Initialize','SOCVMPRC')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+ret=Socket('Send',sid,status)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+do_the_test_client:
+color='green'
+/*  Check the output of Q USERS to get the number of            */
+/*  virtual machines logged on.                                 */
+parse var qusers.1 numvms .
+if vm_count=0 then
+  nop
+else do
+  if numvms  > vm_count then
+    color='yellow'
+  end
+vm_tbl=''
+do i=1 to words(proc)
+  machcheck=word(proc,i)   /*  Machine name to look for  */
+  found=0
+  do j=1 to qnames.0
+    if wordpos(machcheck,qnames.j) > 0 then do
+      found=1
+      leave
+      end
+    end
+  if found=1 then
+    vm_tbl=vm_tbl||'&green' machcheck 'Logged on'||cr
+  else do
+    color='red'
+    vm_tbl=vm_tbl||'&red'   machcheck 'Not logged on'||cr
+    end
+  end
+status='status' machine'.procs' color date() time() ,
+       'There are 'numvms' users logged on.'||cr||vm_tbl
+return
+ 
+do_the_test_server:
+do j=1 to qnames.0
+  parse var qnames.j id1 ',' id2 ',' id3 ',' id4
+  if left(qnames.j,4)='VSM ' then iterate
+  parse var id1 u1 .
+  parse var id2 u2 .
+  parse var id3 u3 .
+  parse var id4 u4 .
+  if u1<>'' then
+    queue u1
+  if u2<>'' then
+    queue u2
+  if u3<>'' then
+    queue u3
+  if u4<>'' then
+    queue u4
+  end
+queue ''
+'execio * diskw HOBVM500 CLIENT A (finis'
+return
+ 
+get_users:
+'execio * CP (stem' QUSERS. 'string Q USERS'
+'execio * CP (stem' QNAMES. 'string Q NAMES'
+return
+ 
+/*  Convert parameter to lower case.  */
+lower:
+arg string
+lc_chars='abcdefghijklmnopqrstuvwxyz'
+uc_chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+string=translate(string,lc_chars,uc_chars)
+return string

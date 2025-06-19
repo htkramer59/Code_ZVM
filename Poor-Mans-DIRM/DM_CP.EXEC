@@ -1,0 +1,49 @@
+/*---------------------------------------------------------------+
+| Function : Issue CP commands on the server                     |
+|                                                                |
+| File     : DM_CP    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_CP <cp command>                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cpcmd
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Get some settings                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CP.EXEC:34 END ?)',
+   'var cpcmd',
+   '| cp',
+   '| cons'
+If rc<>0 Then Call Exit rc "Invalid CMS command"
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 

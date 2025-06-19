@@ -1,0 +1,67 @@
+/*---------------------------------------------------------------+
+| Function : SEND a Linux disk over the net to an other systen   |
+|                                                                |
+| File     : LNXSEND  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : PIPEDDR EXEC                                        |
+|                                                                |
+| Called   : LNXSEND  <uid> <vdev> <ip>                          |
+|                                                                |
+| Comments : Only works with LNXRECV, which needs to be started  |
+|            first on the other end.                             |
+|            IP can be specified as B1, O1, etc.                 |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181123 09:07:39                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid vdev to .
+/*---------------------------------------------------------------+
+| Check input                                                    |
++---------------------------------------------------------------*/
+If uid=''  Then Exit 128
+If vdev='' Then Exit 228
+/*---------------------------------------------------------------+
+| Check to...and if possible translate it                        |
++---------------------------------------------------------------*/
+to=LNXSNDRC(to)
+/*---------------------------------------------------------------+
+| Save terminal setting and check if id/vdev combo exists         |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'CP QUERY TERM',
+   '| split at ,',
+   '| all ~HOLD~ ! ~MORE~',
+   '| join * x40',
+   '| var termholdmore',
+   '?',
+   'CP QUERY MDISK USER 'uid vdev' DIR',
+   '| drop first 1',
+   '| count lines',
+   '| var exists'
+If \exists Then Do
+          Say uid vdev' do NOT exist'
+          Exit 428
+          End
+/*---------------------------------------------------------------+
+| Make sure we scroll on                                         |
++---------------------------------------------------------------*/
+Address COMMAND 'CP TERM HOLD OFF MORE 0 0'
+/*---------------------------------------------------------------+
+| Reset timer                                                    |
++---------------------------------------------------------------*/
+nix=Time('R')
+/*---------------------------------------------------------------+
+| Start copy...                                                  |
++---------------------------------------------------------------*/
+Address CMS 'PIPEDDR DUMP 'uid vdev to' 2080 (CMSDDR'
+/*---------------------------------------------------------------+
+| How long did it take and reset some stuff                      |
++---------------------------------------------------------------*/
+seconds=Time('E')
+Say 'Elapsed time in Seconds: 'Format(seconds,,4)' Minutes: 'Format(seconds/60,,4)
+Address COMMAND 'CP TERM 'termholdmore
+Exit

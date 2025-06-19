@@ -1,0 +1,26 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+                       COL Screen Setup and Definitions
+ 
+    +----------------------------------------------------------------------
+<1> |<<->>                                                                |
+    |=<2>= ?????????????????????????  <3>  ???????????????????????????????|
+    |=<4>= 739 Information Center                                         |
+    |=<4>= 849 PC Store                                                   |
+    |=<4>= 123 Payroll                                                    |
+    |=<4>= 321 Communications                                             |
+<1> |<<->>                                                                |
+<5> |====>                                                                |
+    +----------------------------------------------------------------------
+ 
+<1>  The top and bottom boundaries of the column and COL range.
+<2>  The COL command line prefix area.  The ='s adjacent to the ?'s.
+<3>  The COL command line .
+<4>  The XEDIT prefix area.
+<5>  The XEDIT command line.
+ 

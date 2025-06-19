@@ -1,0 +1,136 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    +(nn)     Does an addition of the numbers in the columns at the
+ or +    +    position of the "+" characters.  All numbers within the
+ or ++  ++    column limit are summed resulting in one total.  The answers
+ or ++++++    will be placed in the message area.  If a blank spot is
+              found at the end of the column, then the answer is
+              also placed in that blank spot.  The answer will be right
+              justified to the last "+" symbol.  Non-numeric data within
+              the column is ignored.  Dollar signs and commas are handled
+              and placed in the answer if the data contains the same.
+              Negative signs do not need to be adjacent to the number,
+              and trailing negative signs (i.e. 5-) are accepted as
+              negative.  Make sure the column width is adequate to
+              include the negative signs.  The accuracy is set to 12
+              digits.
+ 
+ 
+              EXAMPLE:  ???????????+++????????????????????????????????????
+                                     1      4
+                                     2      5
+                                     3      6
+              yields:
+                                     6
+ 
+              Note that it is possible to sum numbers across if the
+              COL depth is 1. For example:
+ 
+                        ???++++++++++++++++++++++++++++???????????????????
+                           1  2  3  4  5  6  7  8
+              Yields:
+                           1  2  3  4  5  6  7  8    36
+ 
+              All numbers within the area defined by the COL depth and
+              the +'s will be summed, such that:
+ 
+                        ???????????++++++++++?????????????????????????????
+                                     1      4
+                                     2      5
+                                     3      6
+              yields:
+                                           21
+ 
+Three options are available to perform line totals, cumulative
+line totals and subtotals.
+ 
+  L = Line totals
+      Example:
+                ???????????++++++++++++++++++++++(L???????????????
+                             1      4
+                             2      5
+                             3      6
+      Yields:
+                             1      4           5
+                             2      5           7
+                             3      6           9
+ 
+  C = Cumulative line totals
+      Example:
+                ???????????++++++++++++++++++++++(C???????????????
+                             1      4
+                             2      5
+                             3      6
+      Yields:
+                             1      4           5
+                             2      5          12
+                             3      6          21
+ 
+  S = Subtotals (issued at blank columns and end of COL range)
+      Example:
+                ???????????+++++++++++(S??????????????????????????
+                              1
+                              2
+ 
+                              3
+                              4
+ 
+      Yields:
+                              1
+                              2
+                                     3
+                              3
+                              4
+                                     7
+ 
+Three options are available for the form of the decinal point in the
+numbers being added.
+ 
+        PERIOD     for 1,234,567.89 (The Default)
+        COMMA      for 1.234.567,89
+        FRENCH     for 1 234 567,89 or 1 234 567.89
+ 
+These options may be entered in PROFCOL XEDIT, COL prefix command area or
+as an option in the COL macro call.
+ 
+The numeric digits for the SUM command ++ may be changed from the default
+setting of 12 in PROFCOL XEDIT or the COL prefix command area.
+ 
+Macro writers:
+When using the summ operation, the results of the addition operation ++
+when calling COL as a macro are available in lastmsg.1 from Xedit
+EXTRACT /LASTMSG/.  The form of the values in the returned message is:
+ 
+    count total minimun maximum average results
+ 
+matching the message displayed on the screen in interactive mode.
+Only the numeric results are in lastmsg.1.  The extraneous text
+has been removed.  In addition a "result" paramater has been added
+which contains a "Y" or "N" depending on if the answer has been
+placed in the file.
+.cs 7 on
+                     COLumn Edit Column Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL COLMCMD5 (ALL       Y,^    Exclude columns from XEDIT PREFIX commands
+COL COLMCMDS (ALL       +      Add or sum numbers in a column
+COL COLMCMD2 (ALL       N      Place sequence numbers in a column
+COL COLMCMD3 (ALL       E      Emulate (copy forward) data down a column
+COL COLMCMD3 (ALL       _      Blank duplicate or redundant data ("de-emulate")
+COL COLMCMD3 (ALL       !      Insert blank separator lines when data changes
+COL COLMCMD4 (ALL       S,G    Sort data within a column
+COL COLMCMD6 (ALL       \      Reverse the command or swap column end for end
+COL MATHCMDS (BRIEF     math   Mathematical operations between columns
+COL MATHCMDS (BRIEF     logic  Logic operations between columns
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

@@ -1,0 +1,44 @@
+/*---------------------------------------------------------------+
+| Function : Console parking bootstrap                           |
+|                                                                |
+| File     : CONPARK  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CONPARK  NAMES                                      |
+|            CONPARKC EXEC                                       |
+|            VMLINK   EXEC                                       |
+|                                                                |
+| Called   : CONPARK  <userid/wildcard> <action>                 |
+|                                                                |
+|                     <userid>    any user id or * for yourself  |
+|                     <wildcard>  as valid for filelist          |
+|                     <action>    allows you to look at the      |
+|                                 nth file of a users files      |
+|                                                                |
+| Comments : If no arguments entered a list will be displayed.   |
+|            For wildcards also a list will be displayed.        |
+|            If the userid is found the contents will be shown.  |
+|            or the indicated file will be shown                 |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180618 11:31:52                                   |
+| Changes  : .                                                   |
+|            20250526 H.T.Kramer : Added action                  |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg logid action .
+Parse Source . . myfn myft .
+If logid='?' Then Do
+         'VMFCLEAR'
+         'PIPE (NAME CONPARK.EXEC:33 END ?)',
+             '< 'myfn myft' *',
+             '| totarget find Parse',
+             '| cons'
+         Exit
+         End
+If logid='*' Then logid=Userid()
+'VMLINK CONPARKC (ONLY(CONPARK) NOTYPE'
+Exit rc

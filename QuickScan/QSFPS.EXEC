@@ -1,0 +1,213 @@
+/*---------------------------------------------------------------+
+| Function : Check filepools                                     |
+|                                                                |
+| File     : QSMEMORY EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSMEMORY REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSMEMORY <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSMEMORY REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* .                */
+vdisk.0=0                                        /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSFPS.EXEC:41 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSFPS.EXEC:52 END ?)',
+   'literal 'TimeStamp(),                        /* Get some         */
+   '| append var filepool_header 1',             /* ..variables      */
+   '| join * x40',                               /* ...from          */
+   '| var filepool_header',                      /* ....our          */
+   '?',                                          /* .....caller      */
+   'var storgrp1 1',                             /* and              */
+   '| specs fs . f2',                            /* hand them 2 rexx */
+   '| var storgrp1',                             /* .                */
+   '?',                                          /* .                */
+   'var storgrp2 1',                             /* .                */
+   '| specs fs . f2',                            /* .                */
+   '| var storgrp2',                             /* .                */
+   '?',                                          /* .                */
+   'var logspace 1',                             /* .                */
+   '| specs fs . f2',                            /* .                */
+   '| var logspace'                              /* .                */
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| Checking FILEPOOL admins, users and filling                    |
++---------------------------------------------------------------*/
+'PIPE (NAME QSFPS.EXEC:73 END ?)',
+   'cp Q RESOURCE ALL',                          /* Ask cp           */
+   '| pick anycase w1.1 == ~RESOURCE:~',         /* Select these     */
+   '| pick anycase w-1;-1 \== ~PERFSVM~ and',    /* Ignore these     */
+                  'w-1;-1 \== ~VMSERVR~',        /* .                */
+   '| specs w2.1',                               /* Keep this        */
+   '| stem fp.'                                  /* Hand 2 rexx      */
+fpdata.0=0
+Do f=1 To fp.0
+   Call GetFPInfo 'ADMIN' fp.f
+   Call GetFPInfo 'USER' fp.f
+   Call GetFPUsage fp.f
+End f
+'PIPE (NAME QSFPS.EXEC:86 END ?)',
+    'stem fpdata.',                              /* Take this        */
+    '| buffer',                                  /* Prevent loop     */
+    '| sort 1.8',                                /* Sort on          */
+    '| join keylen 8',                           /* Join on fpname   */
+    '| stem fpdata.',                            /* Store as         */
+    '| specs w1.1',                              /* Keep this        */
+    '| stem fpid.'                               /* Store as         */
+Call Check_Userids 'fpid. novalid.'
+'PIPE (NAME QSFPS.EXEC:95 END ?)',
+    'stem fpdata.',                              /* Take this        */
+    '| l: lookup w1.1 w1.1 details',             /* Compare          */
+    '| stem noidfp.',                            /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'stem novalid.',                             /* Take these       */
+    '| l:'                                       /* Conn 2 lookup    */
+If noidfp.0<>0 Then Call Add2Output 'noidfp.,IDs enrolled on filepool, NOT in CP directory'
+If stgrp1.0<>0 Then Call Add2Output 'stgrp1.,Storage Group 1 over 'storgrp1'% filled'
+If stgrpn.0<>0 Then Call Add2Output 'stgrpn.,Storage Group 2 (and higher) over 'storgrp2'% filled'
+If fplog.0<>0  Then Call Add2Output 'fplog.,Filepool log disks over over 80% filled'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If work.0=0 Then Do
+            work.0=1
+            work.1='No findings'
+            End
+'PIPE (NAME QSFPS.EXEC:113 END ?)',
+   'stem fp.',                                   /* Take this        */
+   '| preface literal Checked the following filepools:',   /* Add header       */
+   '| append literal ',                          /* Spacing          */
+   '| append stem work.',                        /* Add these        */
+   '| preface var filepool_header',              /* Add header       */
+   '| preface literal ',                         /* Add 2 empties    */
+   '| preface literal ',                         /* .                */
+   output                                        /* Hand back        */
+Return
+ 
+ 
+GetFPInfo:
+/*---------------------------------------------------------------+
+| Do Q QUERY ENROLL USER/ADMIN                                   |
++---------------------------------------------------------------*/
+Parse Upper Arg usrtype fpname .
+'PIPE (NAME QSFPS.EXEC:130 END ?)',
+   'cms Q ENROLL 'usrtype' FOR ALL 'fpname,      /* Ask filepool     */
+   '| drop first 1',                             /* Remove header    */
+   '| nlocate anycase ~<PUBLIC>~',               /* Ignore this      */
+   '| specs w1.1 1.8',                           /* Keep this        */
+           '~'Substr(usrtype,1,5) fpname'~ nw',  /* .                */
+   '| stem fpdata. append'                       /* Add 2 stem       */
+Return
+ 
+ 
+GetFPUsage:
+/*---------------------------------------------------------------+
+| Get Usage statistics from the filepool                         |
++---------------------------------------------------------------*/
+Parse Upper Arg fpname .
+fplog.0=0
+stgrp1.0=0
+stgrpn.0=0
+'PIPE (NAME QSFPS.EXEC:148 END ?)',
+    'cms QUERY FILEPOOL STORGRP 'fpname,         /* Ask filepool     */
+    '| inside / Group/ /====/',                  /* Select this part */
+    '| specs ~'fpname'~ 1.8',                    /* Compose info     */
+            '1;* nw ',                           /* .                */
+            'substr 1;-2 of w4.1 nw',            /* .                */
+    '| p: pick w2.1 == ~1~',                     /* Select this      */
+    '| pick w-1;-1 > ~'storgrp1'~',              /* Compare          */
+    '| specs w1;-2',                             /* Keep this        */
+    '| stem stgrp1. append',                     /* Add 2 stem       */
+    '? p:',                                      /* Conn 2 pick      */
+    '| pick w-1;-1 > ~'storgrp2'~',              /* Select this      */
+    '| specs w1;-2',                             /* Keep this        */
+    '| stem stgrpn. append',                     /* Add 2 stem       */
+    '?',                                         /* 2nd pipe         */
+    'cms QUERY FILEPOOL LOG 'fpname,             /* Ask filepool     */
+    '| take last 3',                             /* Keep these       */
+    '| take first 1',                            /* Now keep this    */
+    '| specs ~'fpname'~ 1.8',                    /* Compose info     */
+            '1;* nw ',                           /* .                */
+            'substr 1;-2 of w1.1 nw',            /* .                */
+    '| pick w-1;-1 > ~'logspace'~',              /* Compare 2...     */
+    '| specs w1;-2',                             /* Keep this        */
+    '| stem fplog. append'                       /* Add 2 stem       */
+Return
+ 
+ 
+Check_Userids:
+/*---------------------------------------------------------------+
+| Check if user ids do  exist                                    |
++---------------------------------------------------------------*/
+Parse Upper Arg in_stem out_stem
+'PIPE (NAME QSFPS.EXEC:180 END ?)',
+    'stem 'in_stem,                              /* Take these       */
+    '| f: fanout',                               /* Dupl. records    */
+    '| specs w1.1 1.10',                         /* Rework           */
+    '| j: juxtapose',                            /* Join them        */
+    '| pick anycase w2.1 \== ~HCPQMD040E~',      /* Remove these     */
+    '| specs w1.1',                              /* Keep this        */
+    '| stem 'out_stem,                           /* Store as         */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~QUERY MDISK USER~ 1',              /* Compose cmds     */
+             'w1.1 nw ',                         /* .                */
+             '~0 DIR~ nw',                       /* .                */
+    '| cp',                                      /* Hand 2 cp        */
+    '| j:'                                       /* Conn 2 juxtapose */
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSFPS.EXEC:208 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| preface literal ',                       /* Add header       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

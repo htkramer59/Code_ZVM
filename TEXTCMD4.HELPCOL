@@ -1,0 +1,158 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    W(nn)     Perform "Wordflow":  i.e. assemble lines of text, placing
+ or WW  WW    as many words as possible per line and doing left and
+ or W    W    right justification.  A blank intermediate line can be used
+ or WWWWWW    to create 'paragraphs'.
+ 
+              EXAMPLE:  ???ww??????????????????????????????ww?????????????
+                        *  A big fat cow was eating all the    Text
+                        *    green grass, while   the sun      outside of
+                        *    was shining. So too were the      the column
+                        *    birds.                            will not
+                        *                                      be
+                        *  But a lion was watching             altered
+                        *  this cow.                           at all.
+ 
+              yields:
+                        *  A big  fat cow was eating  all the  Text
+                        *  green  grass,  while the  sun  was  outside of
+                        *  shining.  So too were the birds.    the column
+                        *                                      will not
+                        *                                      be
+                        *  But a lion was watching this cow.   altered
+                        *                                      at all.
+ 
+    <(nn)     Same as "Wordflow" above except that the text is LEFT
+ or <<  <<    justified.
+ or <    <
+ or <<<<<<    EXAMPLE:  ???<<??????????????????????????????<<?????????????
+                        *  A big fat cow was eating all the    Text
+                        *    green grass, while   the sun      outside of
+                        *    was shining. So too were the      the column
+                        *    birds.                            will not
+                        *                                      be
+                        *  But a lion was watching             altered
+                        *  this cow.                           at all.
+ 
+              yields:
+                        *  A big fat cow was eating all the    Text
+                        *  green grass, while the sun was      outside of
+                        *  shining.  So too were the birds.    the column
+                        *                                      will not
+                        *                                      be
+                        *  But a lion was watching this cow.   altered
+                        *                                      at all.
+ 
+    >(nn)     Same as "Wordflow" above except that the text is RIGHT
+ or >>  >>    justified.
+ or >    >
+ or >>>>>>    EXAMPLE:  ???>>??????????????????????????????>>?????????????
+                        *  A big fat cow was eating all the    Text
+                        *    green grass, while   the sun      outside of
+                        *    was shining. So too were the      the column
+                        *    birds.                            will not
+                        *                                      be
+                        *  But a lion was watching             altered
+                        *  this cow.                           at all.
+ 
+              yields:
+                        *    A big fat cow was eating all the  Text
+                        *      green grass, while the sun was  outside of
+                        *    shining.  So too were the birds.  the column
+                        *                                      will not
+                        *                                      be
+                        *   But a lion was watching this cow.  altered
+                        *                                      at all.
+ 
+              The above three wordflow commands all belong to the
+              same family, they may be intermixed as to the left side
+              character, vs the right side character.  The last
+              character to the right will determine the operation to be
+              performed.
+ 
+              The above three wordflow commands may be used in
+              combination with the Zone command to "squeeze" text into a
+              narrower column.
+ 
+              EXAMPLE:  ??<<??z?????????????????????????z??<<?????????????
+                        *  A big fat cow was eating all the    Text
+                        *  green grass, while the sun was      outside of
+                        *  shining.  So too were the birds.    the column
+                        *                                      will not
+                        *                                      be
+                        *  But a lion was watching this cow.   altered
+                        *                                      at all.
+                                                                         ?
+             yields:
+                        *     A big fat cow was eating         Text
+                        *     all the green grass, while       outside of
+                        *     the sun was shining.  So         the column
+                        *     too were the birds.              will not
+                        *                                      be
+                        *     But a lion was watching          altered
+                        *     this cow.                        at all.
+ 
+             Some comments on the "squeeze" operation.
+             1)  If the text flows past the blank lines defining
+                 paragraphs, then the text in the next paragraph will be
+                 flowed together with the original text.  A WARNING
+                 message will be issued to indicate that this has
+                 occurred.  The text may come out as follows:
+ 
+                        *         A big fat cow was            Text
+                        *         eating all the green         outside of
+                        *         grass, while the sun         the column
+                        *         was shining.  So too         will not
+                        *         were the birds.  But         be
+                        *         a lion was watching          altered
+                        *         this cow.                    at all.
+ 
+                                                                         ?
+             2)  If the text flows past the end of the defined column
+                 depth, then an error message is issued, indicating the
+                 start of the text that would be lost.  Text flow will
+                 not be performed.
+ 
+             3)  An unbalanced line command with one character
+                 on the left and a double character on the right as in
+                 ?????<?????????????????????????????????<<????????????
+                 will put COL into a COLUMN PENDING mode but will still
+                 execute the command and then redisplay the command.
+                 This is useful when trying to progressively "squeeze"
+                 or ("unsqueeze") text a step at a time.  Only the Z's
+                 need to be re-entered.  Reset the command line when
+                 finished.
+ 
+             4)  If only one z is entered, it is assumed to be the left
+                 zone and the right zone is assumed to be the right
+                 textflow character.
+.cs 7 on
+                     COLumn Edit Text Alignment Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL TEXTCMD3 (ALL       J      Justify Text
+COL TEXTCMDS (ALL       Q      Line up or Queue text
+COL TEXTCMD2 (ALL       B      Remove trailing blanks up to a column
+COL TEXTCMD4 (ALL       W,<,>  Wordflow text within a column as in Script
+COL TEXTCMD5 (ALL       K,L    Change text in a column to upper or lower case
+ 
+COL PREFIX (NOTE        Text Alignment prefix commands.
+COL PREFIX (NOTE          ATAB   Auto Text Alignment.
+COL PREFIX (NOTE          TS     Auto Text Spacing.
+COL PREFIX (NOTE          TAB    Manual Text Alignment.
+COL PREFIX (NOTE          COMP   Compress Text.
+COL PREFIX (NOTE          TRigh  Right justify text between all tabs.
+COL PREFIX (NOTE          TLeft  Left  justify text between all tabs.
+COL PREFIX (NOTE          TCent  Center text between all tabs.
+COL PREFIX (NOTE          Both   Justify both left and right.
+.cs 7 off

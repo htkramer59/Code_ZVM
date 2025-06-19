@@ -1,0 +1,280 @@
+/*---------------------------------------------------------------+
+| Function : Scan a file or set of files for a certain string    |
+|                                                                |
+| File     : SCAN     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SCAN     OUTPUT  contains results of the scan       |
+|                                                                |
+| Called   : SCAN     <fn> <ft> <fm> <scanstring> ( <options>    |
+|                                                                |
+|                     <fn>         Filename or wildcard          |
+|                                  Must be present or            |
+|                                  ? to show help                |
+|                     <ft>         Filetype or wildcard,         |
+|                                  defaults to *                 |
+|                     <fm>         Filemode or wildcard,         |
+|                                  defaults to A                 |
+|                     <scanstring> string we are scanning for    |
+|                                  Must be present               |
+|                     <options>    Can be "ANYCASE' or empty     |
+|                                  case will be ignored during   |
+|                                  scanning of the files.        |
+|                                  Can be "RESPECT" and the      |
+|                                  case will be respected during |
+|                                  scanning of the files.        |
+|                                  Can be "STEM stemname" to     |
+|                                  output to a stem              |
+|                                  Can be "CONS" to just show    |
+|                                                                |
+| Example  : scan dms* exec u 29c                                |
+|                                                                |
+| Comments : The code can handle COPYFILE packed files.          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20230113 17:32:28                                   |
+| Changes  : .                                                   |
+|            20230214 H.T.Kramer : Small update to make more     |
+|                           ways of output available             |
+|            20230117 H.T.Kramer : Fixed small detail in         |
+|                           collecting offsets                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Arg fn ft fm scanstring . '(' options
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Determine what was used for input                              |
++---------------------------------------------------------------*/
+z=Time('R')
+If fn='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME SCAN.EXEC:52 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+/*---------------------------------------------------------------+
+| Check some of th einput                                        |
++---------------------------------------------------------------*/
+If fn='' Then Call Exit '28 No input'
+If ft='' Then ft='*'
+If fm='' Then fm='*'
+If scanstring='' Then Call Exit '28 No scan string entered'
+/*---------------------------------------------------------------+
+| Do some stuff with the options                                 |
++---------------------------------------------------------------*/
+Upper options
+If options=''                    Then sens='ANYCASE'
+If Wordpos('CONS',options)<>0    Then cons=1
+If Wordpos('CONS',options)=0     Then cons=0
+If Wordpos('STEM',options)<>0    Then Do
+                   Parse Value options With part1 'STEM' stemname part2
+                   options=part1 part2
+                   stem=1
+                   End
+If Wordpos('STEM',options)=0     Then stem=0
+If Wordpos('ANYCASE',options)=0  Then sens='ANYCASE'
+If Wordpos('RESPECT',options)<>0 Then sens=''
+Upper fn;Upper ft;Upper fm
+/*---------------------------------------------------------------+
+| Initialise                                                     |
++---------------------------------------------------------------*/
+fs='FF'x
+fnd.0=0
+file.0=0
+subhdr='Line-no  Column(s)              Code/Text;-------  ---------              ---------'
+/*---------------------------------------------------------------+
+| M a i n                                                        |
++---------------------------------------------------------------*/
+Call Check_Files
+Call Extract_Matches
+Call Extract_Offsets
+Call Extract_Matches_per_File
+Call Sum_Matches
+/*---------------------------------------------------------------+
+| Link and access the work disk if present                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull  . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If stem |,
+   cons Then output='| stem out.'
+        Else output='| > SCAN OUTPUT 'wfm
+/*---------------------------------------------------------------+
+| Combine hitcount and results                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME SCAN.EXEC:111 END ?)',
+    'stem hitcount.',                            /* Take these       */
+    '| append stem fnd.',                        /* .and these       */
+    '| sort w1.4',                               /* Sort on fileid   */
+    '| if: if pick w4.1 == ~2~',                 /* Remove fileids   */
+    '|     specs fs 'fs' f2.1 strip 1.30',       /* ..from these     */
+                'f3 nw',                         /* .                */
+    '| if:',                                     /* Conn 2 if        */
+    '|     specs ~; ;~ 1',                       /* Add subhdrs      */
+                '1.20 n.20',                     /* .                */
+                '23;* nw',                       /* .                */
+                '~;'subhdr'~ n',                 /* .                */
+    '|     split at ;',                          /* And empty lines  */
+    '| if:',                                     /* Conn 2 if        */
+    '| preface literal Total hits for > 'scanstring' <: 'tothits' in 'filecount' files',
+    output
+/*---------------------------------------------------------------+
+| Xedit the output file and remove the work disk                 |
++---------------------------------------------------------------*/
+info='Scanned 'file.0' files in 'Time('E')' seconds'
+Select
+When stem Then Do
+        'PIPE (NAME SCAN.EXEC:133 END ?)',
+             'stem out.',
+             '| preface var info',
+             '| stem 'stemname' 1'
+        End
+When cons Then Do
+        'PIPE (NAME SCAN.EXEC:139 END ?)',
+             'stem out.',
+             '| preface var info',
+             '| cons'
+        End
+Otherwise Do
+        Queue 'INPUT 'info
+        Address CMS 'XEDIT SCAN OUTPUT 'wfm
+        If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+        End
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Single point of exit                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg' RC: 'exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+TimeStamp:
+Return Date('S') Time()
+ 
+ 
+Check_Files:
+/*---------------------------------------------------------------+
+| Check if the requested files exist if so store in stem         |
++---------------------------------------------------------------*/
+'PIPE (NAME SCAN.EXEC:170 END ?)',
+    'cms LISTFILE 'fn ft fm' (NOH',              /* Ask CMS          */
+    '| pick w1.1 \== ~DMSLST002E~',              /* Ignore this      */
+    '| stem file.'                               /* Hand 2 rexx      */
+If file.0=0 Then Call Exit '28 No files found 'fn ft fm
+Return
+ 
+ 
+Extract_Matches:
+/*---------------------------------------------------------------+
+| Read the files, add record number & look for the string        |
++---------------------------------------------------------------*/
+Do f=1 To file.0
+   'PIPE (NAME SCAN.EXEC:183 END ?)',
+      '< 'file.f,                                /* Read the file    */
+      '| unpack',                                /* De-compress      */
+      '| specs pad 0 recno 1.6 right 1;* nw',    /* Add record no's  */
+      '| locate 'sens' 8-* ~'scanstring'~',      /* Find the string  */
+      '| specs ~'file.f'~ 1.20 1;* nw',          /* Prefix wiht fn,ft*/
+      '| stem fnd. append'                       /* Add 2 stem       */
+End f
+Return
+ 
+ 
+Extract_Offsets:
+/*---------------------------------------------------------------+
+| Find offsets with records and count the matches                |
++---------------------------------------------------------------*/
+Do f=1 To fnd.0
+  work=fnd.f
+  'PIPE (NAME SCAN.EXEC:200 END ?)',
+      'var work',                                    /* Take this        */
+      '| specs 29;* 1',                              /* Remove file id   */
+      '| split 'sens' before string ~'scanstring'~', /* Split here       */
+      '| split 'sens' after  string ~'scanstring'~', /* .and here        */
+      '| stem work.'                                 /* Hand 2 rexx      */
+   offset=1
+   Do w=1 To work.0
+      itemlen=Length(work.w)
+      work.w=work.w offset
+      offset=offset+itemlen
+   End w
+   strlen=Length(scanstring)
+   'PIPE (NAME SCAN.EXEC:213 END ?)',
+       'stem work.',                                 /* Take these       */
+       '| pick 'sens' 1;'strlen' == ~'scanstring'~', /* Select scansstr  */
+       '| specs w2;* 1',                             /* Keep offsets     */
+       '| join * x40',                               /* Join them        */
+       '| var offsets'                               /* Hand 2 rexx      */
+   fnd.f=fnd.f 'FF'x Strip(offsets)  /* Add offsets to original string   */
+   Drop work. work offsets
+End f
+Return
+ 
+ 
+Extract_Matches_per_File:
+/*---------------------------------------------------------------+
+| Extract the matches per file and count the no of files         |
++---------------------------------------------------------------*/
+'PIPE (NAME SCAN.EXEC:229 END ?)',
+    'stem fnd.',                                 /* Take these       */
+    '| buffer',                                  /* Prevent loop     */
+    '| f: fanout',                               /* Dupl. records    */
+    '| specs 1.20 1.20',                         /* Reshuffle        */
+            'fs 'fs' substr 28;* of f1 nw',      /* ...layout        */
+            'xFF nw',                            /* .                */
+            'f2 nw',                             /* .                */
+            'xFF nw',                            /* .                */
+            'w4.1 nw',                           /* .                */
+    '| specs 1.20 1.20',                         /* Add a no for     */
+            '~2~ nw',                            /* ...sorting       */
+            'xFF nw',                            /* ....later on     */
+            'fs 'fs' f3.1 nw',                   /* .                */
+            'f2.1 nw',                           /* .                */
+            'xFF nw',                            /* .                */
+            'substr 23;* of f1 nw',              /* .                */
+    '| stem fnd.',                               /* Hand 2 rexx      */
+    '| chop 20',                                 /* Keep file ids    */
+    '| sort unique',                             /* Remove duplicates*/
+    '| count lines',                             /* How many         */
+    '| var filecount',                           /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs w1.3 1.20 fs 'fs' f2 nw',           /* Adjust layout    */
+    '| join keylen 20',                          /* Join on file id  */
+    '| stem hitcount.'                           /* Hand 2 rexx      */
+Return
+ 
+ 
+Sum_Matches:
+/*---------------------------------------------------------------+
+| Sum the matches                                                |
++---------------------------------------------------------------*/
+tothits=0
+Do h=1 To hitcount.0
+   work=hitcount.h
+   'PIPE (NAME SCAN.EXEC:265 END ?)',
+      'var work',                                /* Take this        */
+      '| f: fanout',                             /* Dupl. records    */
+      '| specs w1.3 1.20 ~1 Hits: ~ nw',         /* Compose subhdr   */
+      '| j: juxtapose',                          /* Make complete    */
+      '| var temp',                              /* Hand 2 rexx      */
+      '? f:',                                    /* Conn 2 fanout    */
+      '| specs w4;*',                            /* Keep this        */
+      '| split',                                 /* Split into recs  */
+      '| count lines',                           /* How many         */
+      '| var hits',                              /* Hand 2 rexx      */
+      '| j:'                                     /* Conn 2 juxtapose */
+   hitcount.h=temp
+   tothits=tothits+hits
+End h
+Return

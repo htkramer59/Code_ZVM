@@ -1,0 +1,36 @@
+* Defaults forall servers
+:defaults.
+* The default mdisk we are going to use to boot from
+  :bootdisk.100
+* The default mdisk where the OS residees
+  :linuxos.200
+* If we are using swap on VDISK we define them here
+  :swaponvdisk.300 301
+* Define the size of the swapdisk(s)
+  :swapvdisksize.512000
+* Define the options for SWAPGEN, see SWAPGEN docu
+  :swapgenopts.
+* The swapdisk we have defined on MDISK
+  :swapdisk.1300
+:end.
+:nick.DEFAULT     :invoke.LNXDEFLT
+* Identify where we can find the SWAPGEN tooling
+:nick.SWAPGEN :product.TOOLS 200 :title.Swapgen code
+*
+* DB2 sets, Note: the preexit is required since VMLINK can not deal with Linux filesystems
+:nick.DB2V111   :product.DB2     111 <400 :preexit.lxnstext :title.DB2 version 11.1
+:nick.DB2V121   :product.DB2     121 <400 :preexit.lnxstext :title.DB2 version 12.1
+*
+* Websphere sets, Note: the preexit is required since VMLINK can not deal with Linux filesystems
+:nick.WASV855   :product.WAS     855 <500 :preexit.lnxstext :title.Websphere version 8.5.5
+:nick.WASV90    :product.WAS     090 <500 :preexit.lnxstext :title.Websphere version 9.0
+*
+* The various servers and their needs
+:nick.LXSRV1    :list.DB2V111       :title.Test server 1
+:nick.LXSRV2    :list.DB2V111       :title.Test server 2
+:nick.LXSRV3    :list.WASV855       :title.Test server 3
+:nick.LXSRV4    :list.WASV90        :title.Test server 4
+:nick.LXSRV5                        :title.Test server 5    :bootdisk.101
+*
+* No requirements just start it
+:nick.LXSRV6                        :title.Test server 6

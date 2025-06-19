@@ -1,0 +1,24 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Set the PRIORITY for a user/identity                |
+|                                                                |
+| File     : DM_PRIOR EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DMPRIOR  <uid> <priority>                           |
+|          : PRIOR    <uid> <priority>                           |
+|                     <priority> is a value between 1-64         |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

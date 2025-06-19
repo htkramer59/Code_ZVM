@@ -1,0 +1,25 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change, Delete or Add secuser 2 console stmt        |
+|                                                                |
+| File     : DM_SECU  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_SECU  <uid> <newsecuser> <observer>              |
+|          : SECU     <uid> <newsecuser> <observer>              |
+|                           QRY                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

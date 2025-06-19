@@ -1,0 +1,255 @@
+/*---------------------------------------------------------------+
+| Function : Check some of the monitoring settings               |
+|                                                                |
+| File     : QSMONITO EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSMONITO REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSMONITO <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSMONITO REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* Stem 2 append to */
+stemname='report.'                               /* Stem of caller   */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSMONITO.EXEC:40 END ? .EXEC:41)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Composing the header                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME QSMONITO.EXEC:51 END ?)',
+   'literal 'TimeStamp(),                        /* Compose header   */
+   '| var monitor_header 1',                     /* .                */
+   '| join * x40',                               /* .                */
+   '| var monitor_header'                        /* .                */
+/*---------------------------------------------------------------+
+| Collect some info                                              |
++---------------------------------------------------------------*/
+Call GetInfo
+/*---------------------------------------------------------------+
+| Evaluate the results                                           |
++---------------------------------------------------------------*/
+If perfid.0=0 Then msg='; ;No known PERFKIT users running'
+              Else msg='; ;The following default PERFKIT users are running'
+Call Add2Output 'perfid.,'msg
+/*---------------------------------------------------------------+
+| Check if PERFKIT is running and if we are allowed to use it    |
++---------------------------------------------------------------*/
+Do p=1 To perfid.0
+    perfnotaut='1'
+    perfrun='0'
+    'PIPE (NAME QSMONITO.EXEC:72 END ?)',
+       'vmc 'perfid.p' MENU',                    /* Talk 2 a possible*/
+       '| p: pick w1.1 == ~FCXVMC040E~',         /* Nope not running */
+       '| specs ~'perfid.p'~ 1 1;* nw',          /* Add id           */
+       '| count lines',                          /* Count lines      */
+       '| var perfnotauth',                      /* Set var          */
+       '? p:',                                   /* Conn 2 pick      */
+       '| pick w1.1 ==  ~FCX124~',               /* Yep running      */
+       '| count lines',                          /* How many         */
+       '| var perfrun'                           /* Set var          */
+   If perfrun         Then msg='Userid 'perfid.p' is running PERFKIT'
+                      Else msg='Userid 'perfid.p' is NOT running PERFKIT'
+   Call Add2Output 'msg,; ;'
+   If perfnotauth Then msg='Userid 'perfid.p' is running but we ('Userid()') are NOT authorised'
+                  Else msg='Userid 'perfid.p' is running we are authorised'
+   Call Add2Output 'msg,; ;'
+End p
+If monint < 60 | monint > 60  Then Do
+       msg='; ;Monitoring interval is best at 60 seconds: 'monint
+       Call Add2Output 'msg'
+       End
+/*---------------------------------------------------------------+
+| Checking some of the monitor settings                          |
++---------------------------------------------------------------*/
+Call CheckSwitches pcif event_pcif
+If ena<>'' Then Do
+   If ena Then msg='; ;Need to Enable EVENT PCIF CLASS'
+          Else msg='; ;Need to Disable EVENT PCIF CLASS'
+   Call Add2Output 'msg'
+End
+Call CheckSwitches isfc event_isfc
+If ena<>'' Then Do
+  If ena Then msg='Need to Enable EVENT ISCF DOMAIN'
+         Else msg='Need to Disable EVENT ISFC DOMAIN'
+   Call Add2Output 'msg'
+End
+Call CheckSwitches ssi  event_ssi
+If ena<>'' Then Do
+  If ena Then msg='Need to Enable EVENT SSI  DOMAIN'
+         Else msg='Need to Disable EVENT SSI  DOMAIN'
+   Call Add2Output 'msg'
+End
+ 
+Call CheckSwitches pcif sample_pcif
+If ena<>'' Then Do
+   If ena Then msg='Need to Enable SAMPLE PCIF CLASS'
+       Else msg='Need to Disable SAMPLE PCIF CLASS'
+   Call Add2Output 'msg'
+End
+Call CheckSwitches isfc sample_isfc
+If ena<>'' Then Do
+  If ena Then msg='Need to Enable SAMPLE ISCF DOMAIN'
+         Else msg='Need to Disable SAMPLE ISFC DOMAIN'
+   Call Add2Output 'msg'
+End
+Call CheckSwitches ssi  sample_ssi
+If ena<>'' Then Do
+  If ena Then msg='Need to Enable SAMPLE SSI  DOMAIN'
+         Else msg='Need to Disable SAMPLE SSI  DOMAIN'
+   Call Add2Output 'msg'
+End
+/*---------------------------------------------------------------+
+| Here we return output to our caller                            |
++---------------------------------------------------------------*/
+'PIPE (NAME QSMONITO.EXEC:136 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var monitor_header',              /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Hand back        */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Adding stuff to an existing stem                               |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSMONITO.EXEC:156 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* Split here       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return
+ 
+ 
+CheckSwitches:
+/*---------------------------------------------------------------+
+| Check how some of the switches are set and make them boolean   |
++---------------------------------------------------------------*/
+Parse Arg bool . switch .
+switch=Word(event_pcif,2)
+Select
+When pcif  & switch='ENABLED'  Then ena='0'
+When pcif  & switch='DISABLED' Then ena=1
+When \pcif & switch='ENABLED'  Then ena=0
+When \pcif & switch='DISABLED' Then ena='1'
+End
+Return
+ 
+ 
+GetInfo:
+/*---------------------------------------------------------------+
+| Get various details from the system                            |
++---------------------------------------------------------------*/
+perfids='PERFSVM PERSMAPI'
+perfid.0=0
+'PIPE (NAME QSMONITO.EXEC:185 END ?)',
+    'var perfids',                               /* Take these       */
+    '| split',                                   /* Split            */
+    '| specs ~QUERY~ 1 w1.1 nw',                 /* Compose cmds     */
+    '| cp',                                      /* Issue cmds       */
+    '| pick w3.1 == ~DSC~',                      /* If this          */
+    '| specs w1.1',                              /* Keep this        */
+    '| stem perfid.',                            /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY SSI',                              /* Are we on SSI    */
+    '| count lines',                             /* How many?        */
+    '| if1: if pick w2.1 > ~1~',                 /* If it is 1       */
+    '|     specs ~1~ 1',                         /* ...we set this   */
+    '| if1:',                                    /* Conn 2 if        */
+    '|     specs ~0~ 1',                         /* ... otherwise.   */
+    '| if1:',                                    /* Conn 2 if        */
+    '| var ssi',                                 /* Store as         */
+    '?',                                         /* 3rd pipe         */
+    'cp QUERY ISFC TRANSPORT ALL',               /* Do we have this  */
+    '| frtarget pick anycase w1.1 == ~SENT:~',   /* Take from here   */
+    '| strip',                                   /* Remove spaces    */
+    '| change ~ ~_~ 1',                          /* Replace this     */
+    '| specs printonly eof',                     /* Add up the       */
+            'a: w2.1 .',                         /* ...counters      */
+            'set #0+=a',                         /* .                */
+            'eof',                               /* .                */
+            'print #0 1',                        /* .                */
+    '| if2: if pick w1.1 \== ~0~',               /* If it is zero    */
+    '|    specs ~1~ 1',                          /* ...no ISFC       */
+    '| if2:',                                    /* Conn 2 if        */
+    '| strip',                                   /* ..remove spaces  */
+    '| var isfc',                                /* Store as         */
+    '?',                                         /* 4th pipe         */
+    'cp QUERY PCIF',                             /* Do we have pcif  */
+    '| if4: if pick anycase w-2;-1 == ~NOT FOUND.~',   /* Look for this    */
+    '|     specs ~0~',                           /* Then we set it   */
+    '| if4:',                                    /* Conn 2 if        */
+    '|     specs ~1~',                           /* Otherwise this   */
+    '| if4:',                                    /* Conn 2 if        */
+    '| var pcif',                                /* Set var          */
+    '?',                                         /* 5th pipe         */
+    'cp QUERY MONITOR INTERVAL',                 /* Ask cp           */
+    '| specs w3.2',                              /* Keep this        */
+    '| if3: if pick w2.1 == ~MINUTES~',          /* If this          */
+    '|   specs a: w1.1 .',                       /* Rework to        */
+              'set #0:=a*60',                    /* ...seconds       */
+              'print #0 1',                      /* .                */
+    '| if3:',                                    /* Conn 2 if        */
+    '|   specs w1.1 1',                          /* ...we keep this  */
+    '| if3:',                                    /* Conn 2 if        */
+    '| strip',                                   /* Remove spaces    */
+    '| var monint',                              /* Set var          */
+    '?',                                         /* 6th pipe         */
+    'cp QUERY MONITOR EVENT',                    /* Ask cp           */
+    '| pick w1.1 == ~ISFC~ or',                  /* Select these     */
+           'w1.1 == ~PCIF~ or',                  /* .                */
+           'w1.1 == ~SSI~',                      /* .                */
+    '| strip',                                   /* Remove spaces    */
+    '| specs ~/EVENT_~ 1 1;* n',                 /* Compose varname  */
+    '| specs w1.1 1 ~/~ n w2;* n',               /* Prep 4 varload   */
+    '| varload',                                 /* Hand 2 rexx      */
+    '?',                                         /* 7th pipe         */
+    'cp QUERY MONITOR SAMPLE',                   /* Ask cp           */
+    '| pick w1.1 == ~ISFC~ or',                  /* Select these     */
+           'w1.1 == ~PCIF~ or',                  /* .                */
+           'w1.1 == ~SSI~',                      /* .                */
+    '| strip',                                   /* Remove spaces    */
+    '| specs ~/SAMPLE_~ 1 1;* n',                /* Compose varname  */
+    '| specs w1.1 1 ~/~ n w2;* n',               /* Prep 4 varload   */
+    '| varload'                                  /* Hand 2 rexx      */
+Return

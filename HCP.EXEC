@@ -1,0 +1,442 @@
+/*---------------------------------------------------------------+
+| Function : Display offsets of labels within control blocks     |
+|                                                                |
+| File     : HCP      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : *        MACLIB all maclibs available               |
+|                                                                |
+| Called   : HCP      <block> <labels> ( <options?               |
+|                                                                |
+|                     <block>  any block for CP/CMS              |
+|                     <labels> any label within the block/macro  |
+|                     <options> HEX, DEC, VAR, STEM or FILE      |
+|                                                                |
+|                               DEC will return the DECIMAL      |
+|                               offset, length and statement     |
+|                                                                |
+|                               HEX will return the HEXADECIMAL  |
+|                               offset length and statement      |
+|                                                                |
+|                               FILE will output to file         |
+|                                                                |
+|                               VAR followed by a varname        |
+|                               will create a new variable       |
+|                                                                |
+|                               STEM followed by a stemname      |
+|                               will create a new stem           |
+|                                                                |
+|                               If HEX and DEC are not used both |
+|                               will be displayed                |
+|                                                                |
+| Comments : Info derived from CP Data Areas and Control Blocks  |
+|                                                                |
+|            When using VAR or STEM you need to run the code     |
+|            from within REXX and PIPE will return the variable/ |
+|            stem to the calling REXX EXEC.                      |
+|                                                                |
+|            EXECLOAD the code and it is usable as PIPE stage    |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220413 17:45:09                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg vmblk labels '(' options
+Parse Source . . myfn myft .
+hdr='Dec Offs Hex Offs Length   Label/Code'
+x=Time('R')
+/*---------------------------------------------------------------+
+| Show some help if asked or when no vmblock was entered         |
++---------------------------------------------------------------*/
+if vmblk='?' |,
+   vmblk=''  Then Do
+             'VMFCLEAR'
+             'PIPE (NAME HCP.EXEC:56 END ?)',
+                '< 'myfn myft' *',                /* Read myself      */
+                '| tolabel Parse',                /* Up to here       */
+                '| cons'                          /* Display          */
+              Call Exit
+              End
+/*---------------------------------------------------------------+
+| Act on the way we are invoked                                  |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC' Then Do
+               runasexec=1
+               'VMFCLEAR'
+               pipecmd='PIPE'
+               output='| cons'
+               End
+When myft='REXX' Then Do
+               runasexec=0
+               pipecmd='CALLPIPE'
+               header=''
+               output='| *:'
+               End
+Otherwise Do
+     Call Exit '99 Can not run as 'myft
+     Exit
+     End
+End
+/*---------------------------------------------------------------+
+| Check some settings and/or options                             |
++---------------------------------------------------------------*/
+header=''
+If labels='' Then search=0
+             Else search=1
+If Wordpos('HEX',options)<>0 Then hexonly='1'
+                             Else hexonly='0'
+If Wordpos('DEC',options)<>0 Then deconly='1'
+                             Else deconly='0'
+If Wordpos('VAR',options)<>0 Then Do
+                              Parse Value options With . 'VAR' varname .
+                              header=''
+                              output='| var 'varname' 1'
+                              End
+If Wordpos('STEM',options)<>0 Then Do
+                              Parse Value options With . 'STEM' stemname .
+                              header=''
+                              output='| stem 'stemname' 1'
+                              End
+If Wordpos('FILE',options)<>0 Then Do
+                              header='| preface var hdr'
+                              output='| > 'vmblk' macro a'
+                              End
+/*---------------------------------------------------------------+
+| M A I N                                                        |
++---------------------------------------------------------------*/
+Call GetLibName
+Call SetConstants
+Call ExtractBlock
+Call ReplaceConstants
+Call CalculateLengths
+Call MoveOffsets
+Call RemoveZeros
+/*---------------------------------------------------------------+
+| Post-processing                                                |
++---------------------------------------------------------------*/
+If search  Then Call ExtractLabels
+If hexonly Then Call Reduce '| specs w2.1 1.10 right w3.1 nw.10 right w4;* nw'
+If deconly Then Call Reduce '| specs w1.1 1.10 right w3.1 nw.10 right w4;* nw'
+/*---------------------------------------------------------------+
+| Display or send output                                         |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:126 END ?)',
+    'stem work.',                                /* Take this        */
+    header,
+    output                                       /* Show or ???      */
+If runasexec Then Say 'Elapsed: 'Time('E')
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+RemoveZeros:
+/*---------------------------------------------------------------+
+| Here we remove the leading zero's in the first 3 columns       |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:145 END ?)',
+  'stem work.',                                  /* Take these       */
+  '| buffer',                                    /* Prevent loop     */
+  '| if1: if pick substr 1.1 of w1.1 == ~0~',    /* If this          */
+  '|    specs a: w1.1 .',                        /* Rework layout    */
+             'print a pict -------9 1',          /* .                */
+             'w2;* nw',                          /* .                */
+  '| if1:',                                      /* Conn 2 if        */
+  '| if2: if pick substr 1.1 of w3.1 == ~0~',    /* If this          */
+  '|    specs b: w3.1 .',                        /* Rework layout    */
+             'w1.1 1.8 right',                   /* .                */
+             'w2.1 nw.8 right',                  /* .                */
+             'print b pict -------9 nw',         /* .                */
+             'w4;* nw',                          /* .                */
+  '| if2:',                                      /* Conn 2 if        */
+  '| if3: if pick substr 1.1 of w2.1 == ~0~',    /* If this          */
+  '|     specs w2.1 1',                          /* Rework layout    */
+              'w1.1 nw.8 right',                 /* .                */
+              'w3.1 nw.8 right',                 /* .                */
+              'w4;* nw',                         /* .                */
+  '|     if4: if pick w2.1 \== ~0~',             /* And if this      */
+  '|         strip leading ~0~',                 /* Remove leading 0 */
+  '|     if4:',                                  /* Conn 2 if        */
+  '|        specs ~0~ 1 w2;* nw',                /* Else add this    */
+  '|     if4:',                                  /* Conn 2 if        */
+  '|     specs w2.1 1.8 right',                  /* Smarten layout   */
+              'w1.1 nw.8 right',                 /* .                */
+              'w3.1 nw.8 right',                 /* .                */
+              'w4;* nw',                         /* .                */
+  '| if3:',                                      /* Conn 2 if        */
+  '| change ~________~       _~',                /* Smarten layout   */
+  '| stem work.'                                 /* Return 2 rexx    */
+Return
+ 
+ 
+Reduce:
+/*---------------------------------------------------------------+
+| Chop of HEX or DEC offset when required                        |
++---------------------------------------------------------------*/
+Parse Upper Arg specvar
+pipecmd' (NAME HCP.EXEC:185 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   specvar,                                      /* Use spec         */
+   '| stem work.'                                /* Store as         */
+Return
+ 
+ 
+ExtractLabels:
+/*---------------------------------------------------------------+
+| Extract the labels we needed                                   |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:197 END ?)',
+   'var labels',                                 /* Take this        */
+   '| split',                                    /* Split into record*/
+   '| l: lookup w1.1 w4.1 master',               /* Search for       */
+   '| stem work.',                               /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'stem work.',                                 /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| l:'                                        /* Conn 2 lookup    */
+Return
+ 
+ 
+MoveOffsets:
+/*---------------------------------------------------------------+
+| Move the offsets to the right length                           |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:213 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| join * xFF',                               /* Join records     */
+   '| split at string xFFF0',                    /* Split here       */
+   '| f: fanout',                                /* Duplicate recs   */
+   '| drop first 1',                             /* Ignore this      */
+   '| specs pad 0 recno 1.10 right',             /* Add record no    */
+                       'w1.1 nw',                /* ...keep this     */
+                       'w4;* nw',                /* ....and this     */
+   '| fi: faninany',                             /* Take in rest     */
+   '| sort 1.10',                                /* Sort on recno    */
+   '| join keylen 10',                           /* Join them        */
+   '| specs 12;* 1',                             /* Keep this        */
+   '| change 18.2 xFF6D ~ ~',                    /* Replace this     */
+   '| change w3.1 ~_~~',                         /* and these        */
+   '| split at xFF',                             /* Split here       */
+   '| nlocate ~*END*~',                          /* Ignore this      */
+   '| if: if pick 1.1 == ~0~',                   /* Adjust when      */
+   '|    specs w1.2 1',                          /* this is a 0      */
+              'pad 0 w3.1 nw.8 right',           /* .                */
+              'w4;* nw',                         /* .                */
+   '| if:',                                      /* Conn 2 if        */
+   '| drop last 1',                              /* Remove last rec  */
+   '| stem work.',                               /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs pad 0 recno 1.10 right',             /* Add recno        */
+                       'w2.2 nw',                /* ...keep this     */
+   '| fi:'                                       /* Conn 2 faninany  */
+Return
+ 
+ 
+CalculateLengths:
+/*---------------------------------------------------------------+
+| Here we calculate the lengths of the labels                    |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:249 END ?)',
+    'stem work.',                                /* Take these       */
+    '| buffer',                                  /* Prevent loop     */
+    '| if1: if pick 1.1 \== ~_~',                /* If we find this  */
+    '|    change ~_~ x40',                       /* Change this      */
+    '|    specs 10;* strip 10',                  /* Calculate        */
+               'a: w1.1 .',                      /* lengths          */
+               'b: w2.1 .',                      /* .                */
+               'set #0:=a*b',                    /* .                */
+               'print #0  pict 99999999 1',      /* .                */
+    '| if1:',                                    /* Conn 2 if        */
+    '| preface literal 00000000',                /* Add this         */
+    '| if2: if pick 1.1 \== ~_~',                /* If we find this  */
+    '|     specs 1;* 1',                         /* Start adding up  */
+                'a: w1.1 .',                     /* .                */
+                'set #0+=a',                     /* .                */
+                'print #0 pict 99999999 nw',     /* .                */
+    '|     specs w1.1 1',                        /* Translate to hex */
+                'w-1;-1 nw',                     /* ...here          */
+                'w-1;-1 d2x nw',                 /* .                */
+                'w2;-2 nw',                      /* .                */
+    '| if2:',                                    /* Conn 2 if        */
+    '|     specs w1.1 1',                        /* Rework           */
+                'w1.1 nw',                       /* .                */
+                'w1.1 nw',                       /* .                */
+                'w2;* nw',                       /* .                */
+    '| if2:',                                    /* Conn 2 if        */
+    '| append literal ________ ________ ________ *END*', /* Add end marker   */
+    '| stem work.'                               /* Hand 2 rexx      */
+Return
+ 
+ 
+GetLibName:
+/*---------------------------------------------------------------+
+| Find all the maclibs we have                                   |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:285 END ?)',
+  'cms LISTFILE * MACLIB * (NOH',                /* List all maclibs */
+  '| specs w1.1',                                /* Keep filename    */
+  '| stem maclib.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Search for the block in the maclibs                            |
++---------------------------------------------------------------*/
+lib=''
+Do m=1 To maclib.0
+  pipecmd' (NAME HCP.EXEC:294 END ?)',
+      'cms MACLIB MAP 'maclib.m' (TYPE',         /* Get the content  */
+      '| pick w1.1 == ~'vmblk'~',                /* Search this      */
+      '| count lines',                           /* How many??       */
+      '| var found'                              /* Hand 2 rexx      */
+   If found Then Do
+                 lib=maclib.m
+                 leave m
+                 End
+End
+If lib=''  Then Call Exit '29 Macro 'vmblk' not found in any maclib'
+If runasexec Then Say 'Macro 'vmblk' found in: 'lib' MACLIB'
+Return
+ 
+ 
+SetConstants:
+/*---------------------------------------------------------------+
+| The following list derived from HLASM Language Reference       |
+| The constant name, its length and its description              |
++---------------------------------------------------------------*/
+constants=,
+     'A   4  Address;',
+     'AL  4  Address;',
+     'AD  8  Doubleword address;',
+     'B   1  Binary;',
+     'C   1  Character;',
+     'CL  1  Character;',
+     'CA  1  Character ASCII;',
+     'CU  1  Character Unicode;',
+     'D   8  Floating point;',
+     'DH  8  Floating point HEX;',
+     'DB  8  Floating point BIN;',
+     'DD  8  Floating point DEC;',
+     'E   4  Floating point;',
+     'EH  4  Floating point HEX;',
+     'EB  4  Floating point BIN;',
+     'ED  4  Floating point DEC;',
+     'F   4  Fixed point;',
+     'FL  4  Fixed point;',
+     'FD  8  Doubleword Fixed point;',
+     'G   1  Graphics;',
+     'H   2  Fixed point;',
+     'J   4  Length;',
+     'L  16  Floating point;',
+     'LH 16  Floating point HEX;',
+     'LB 16  Floating point BIN;',
+     'LD 16  Floating point DEC;',
+     'LQ 16  Floating point HEX;',
+     'P   1  Decimal;',
+     'Q   4  Offset;',
+     'QY  3  Offset;',
+     'R   4  Address;',
+     'S   2  Address;',
+     'SY  3  Address;',
+     'V   4  Address;',
+     'X   1  Hexadecimal;',
+     'XL  1  Hexadecimal;',
+     'Y   2  Address;',
+     'Z   1  Decimal'
+specials='FL*S'
+/*---------------------------------------------------------------+
+| Here we put it into stems                                      |
++---------------------------------------------------------------*/
+pipecmd' (NAME HCP.EXEC:357 END ?)',
+   'var constants',                              /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| strip',                                    /* Remova spaces    */
+   '| sort 2.1 D',                               /* Sort on this     */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs w2.1 1',                             /* Keep this        */
+   '| stem constvalue.',                         /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.1',                               /* Keep this        */
+   '| stem constname.',                          /* Hand 2 rexx      */
+   '?',                                          /* .                */
+   'var specials',                               /* .                */
+   '| split at ;',                               /* .                */
+   '| strip',                                    /* .                */
+   '| stem special.'                             /* .                */
+Drop constants
+Return
+ 
+ 
+ExtractBlock:
+/*---------------------------------------------------------------+
+| Here we extract the required block from the MACLIB             |
++---------------------------------------------------------------*/
+/*    '|     specs 16.7 1.8 1;* nw',                /* Move a part      */ */
+pipecmd' (NAME HCP.EXEC:382 END ?)',
+   'members 'lib' MACLIB * 'vmblk,               /* Read the block   */
+   '| specs 1.63 1',                             /* Remove excess    */
+   '| pick 1.1 \== ~*~',                         /* Ignore these     */
+   '| pick 10.5 == ~DSECT~ or',                  /* Select these     */
+          '10.2 == ~DS~ or',                     /* .                */
+          '10.2 == ~DC~ or',                     /* .                */
+          '10.3 == ~EQU~',                       /* .                */
+   '| if2: if pick 1.8 == ~        ~',          /* If we find this  */
+   '|      specs ~........~ 1.8',                /* .                */
+                '10;* nw',                       /* .                */
+   '| if2:',                                     /* Conn 2 if        */
+   '| if1: if pick 10.5 \== ~DSECT~ and',        /* If we find this  */
+                 '10.2 == ~DS~ or 10.2 == ~DC~', /* .                */
+   '| specs substr w1.1 of w3;* 1.8 1;* nw',
+   '| if1:',                                     /* Conn 2 if        */
+   '|     specs ~________~ 1.8 1;* nw',          /* Else add this    */
+   '| if1:',                                     /* Conn 2 if        */
+   '| specs fs ( f1 1.8 w2;* nw',                /* .                */
+   '| change 1.8 ~0FL~FL ~',                     /* Maybe other      */
+   '| change 1.8 ~0XL~XL ~',                     /* ...solution      */
+   '| change 1.8 ~0D~D ~',                       /* .....needed      */
+   '| change 1.8 x40 ~_~',                       /* Replace these    */
+   '| stem work.'                                /* Hand 2 rexx      */
+Return
+ 
+ 
+ReplaceConstants:
+/*---------------------------------------------------------------+
+| Here we replace the constants with the values                  |
++---------------------------------------------------------------*/
+Do s=1 To special.0
+   sl=Pos('*',special.s)
+   srcl=Length(special.s)
+   chrl=Substr(Reverse(special.s),1,1)
+   pipecmd' (NAME HCP.EXEC:417 END ?)',
+       'stem work.',                             /* Take these       */
+       '| buffer',                               /* Prevent loop     */
+       '| if: if wildcard 1.'srcl' /'special.s'/',   /* Select           */
+       '|       specs pad _ 1.'sl' 1.8 w2;* nw', /* Adjust           */
+       '| if:',                                  /* Conn 2 if        */
+       '| stem work.'                            /* Hand 2 rexx      */
+End s
+Do c=1 To constname.0
+   cl=Length(constname.c)
+   pipecmd' (NAME HCP.EXEC:427 END ?)',
+       'stem work.',                             /* Take these       */
+       '| buffer',                               /* Prevent loop     */
+       '| change 1.'cl+1' ~'constname.c'_~1'constname.c'~',   /* Fix single H, F, D, etc.*/
+       '| if1: if pick 1.'cl' == ~'constname.c'~', /* If this          */
+       '|     change 1.9 ~'constname.c'~'constvalue.c'_~',   /* Replace this     */
+       '| if1:',                                 /* Conn 2 if        */
+       '|     change 1.9 ~'constname.c'~_'constvalue.c'_~',   /* Replace this     */
+       '| if1:',                                 /* Conn 2 if        */
+       '| stem work.'                            /* Hand 2 rexx      */
+End c
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

@@ -1,0 +1,25 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add a minidisk to a user                            |
+|                                                                |
+| File     : DM_AMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_MAP   EXEC   Find free space                     |
+|            DM_VMLNK EXEC   Link disks                          |
+|            DM_CKUID EXEC   Check userid                        |
+|            DM_CKMDK EXEC   Check minidisk                      |
+|            DM_ONLIN EXEC   Check & put directory online        |
+|                                                                |
+| Called   : DM_AMD   <uid> <size> <location> <linkmode> <pws>   |
+|          : AMD      <uid> <size> <location> <linkmode> <pws>   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240619 13:32:29                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

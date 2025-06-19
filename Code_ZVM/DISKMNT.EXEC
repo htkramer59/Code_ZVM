@@ -1,0 +1,100 @@
+/*---------------------------------------------------------------+
+| Function : Do maintenance on MDISK or Directories on all       |
+|            nodes                                               |
+|                                                                |
+| File     : DISKMNT  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : PUT      EXEC                                       |
+|            REPLACE  EXEC                                       |
+|            BACKOUT  EXEC                                       |
+|                                                                |
+| Called   : DISKMNT  <uid> <mdisk> <cmd> <fn> <ft> ( <options>  |
+|            for a directory or filespace use                    |
+|            for the uid ".DIR" and for mdisk the filespace/     |
+|            directory                                           |
+|            <options> can be REMOTE and/or TO and a nickname    |
+|                      (a nickname mentioned in your             |
+|                      <userid> NAMES file)                      |
+|                      REMOTE will run the REMOTE part of this   |
+|                      code                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220526 15:22:31                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid mdisk cmd fn ft fm . '(' options
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Evaluating the input                                           |
++---------------------------------------------------------------*/
+If uid='?' Then Do
+           'VMFCLEAR'
+           'PIPE (NAME DISKMNT.EXEC:37 END ?)',
+              '< 'myfn myft' *',                 /* Read my self     */
+              '| tolabel Parse',                 /* To here          */
+              '| cons'                           /* Show             */
+            Call Exit
+            End
+If uid=''   Then Call Exit '128 No input'
+If mdisk='' Then Call Exit '228 No mdisk address specified'
+If cmd=''   Then Call Exit '328 No command given'
+If fn=''    Then Call Exit '428 No filename specified'
+If ft=''    Then Call Exit '528 No filetype specified'
+If fm=''    Then fm='A'
+If Wordpos('REMOTE',options)<>0 Then Call Remote
+                                Else Call Local
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Local:
+/*---------------------------------------------------------------+
+| This is where we kick off the commands to the other side       |
++---------------------------------------------------------------*/
+If Wordpos('TO',options)<>0 Then Parse Value options With . 'TO' target
+                            Else target='ALL'
+'PIPE (NAME DISKMNT.EXEC:69 END ?)',
+   'cms LISTFILE 'fn ft' * (NOH ISODATE',        /* List files       */
+   '| count lines',                              /* How many         */
+   '| var filefnd'                               /* Hand 2 rexx      */
+If filefnd=0 Then Call Exit '628 Input file not found 'fn ft
+Select
+When cmd='REPLACE' Then Do
+          Address CMS 'PUT 'fn ft fm target
+          Address CMS 'RMCMD CMS 'myfn uid mdisk cmd fn ft fm' (REMOTE,'target',,FILE'
+          End
+When cmd='BACKOUT' Then Address CMS 'RMCMD CMS 'myfn uid mdisk cmd fn ft fm' (REMOTE,'target',,FILE'
+When cmd='ERASE'   Then Address CMS 'RMCMD CMS 'myfn uid mdisk cmd fn ft fm' (REMOTE,'target',,FILE'
+Otherwise Call Exit '222 Do not understand 'cmd
+End
+Return
+ 
+ 
+Remote:
+/*---------------------------------------------------------------+
+| This is to be done at the remote end....                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid mdisk' (NONAMES WRITE .fm'
+If rc=0 Then Parse Pull . .  wfm .
+             Else Call Exit rc' Problem with VMLINK'
+Select
+When cmd='REPLACE' Then Address CMS 'REPLACE 'fn ft' A 'wfm
+When cmd='BACKOUT' Then Address CMS 'BACKOUT 'fn ft wfm
+When cmd='ERASE'   Then Address CMS 'ERASE 'fn ft wfm
+Otherwise NOP
+End
+Address CMS 'VMLINK 'uid mdisk' <DET (NONAMES WRITE'
+Return

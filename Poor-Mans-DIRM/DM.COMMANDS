@@ -1,0 +1,161 @@
+*DM_Cmds On/    Check Code_Used Switch    Dirm_Cmds        Test     Remarks
+*        Off    Admin           .                                   NI=Not implemented, ! To be created/imp
+ACC      1      1     DM_ACCNT  .         ACCOUNT          Ok
+ACI      1      1     DM_ACI    .         ACIGROUP         Ok
+         0      0               .         ACNTADD                   NI See DM_ACCNT
+         0      0               .         ACNTDEL                   NI See DM_ACCNT
+ADD      1      0     DM_ADD    .         ADD              Ok
+AMD      1      1     DM_AMD    .         AMDISK           Ok
+         0      0               .         APPCPASS                  NI Use GET/REPLACE
+         0      0               .         AUTHBY                    NI
+         0      0               .         AUTHFOR                   NI
+         0      0               .         AUTHLINK                  NI
+         0      0               .         AUTHSCIF                  NI
+         0      0               .         AUTOLOG                   NI Implemented by XAUTOLOG
+         0      0               .         BACKUP                    NI Implemented by DM_ONLIN
+BATCH    1      0     DM_BATCH  .         BATCH            Ok
+         0      0               .         CHECK                     NI
+         0      0               .         CHKSUM                    NI
+CHNGID   1      1     DM_CHID   .         CHNGID           Ok
+CHV      1      1     DM_CHV    .         CHVADDR          Ok
+CLASS    1      1     DM_CLASS  .         CLASS            Ok
+         0      0               .         CLEANUP                   NI All code cleans up after itself
+CLONE    1      1     DM_CLONE  .         CLONEDISK        Ok
+CMD      1      1     DM_CMD    .         CMDISK           Ok
+CMS      1      0     DM_CMS    .         CMS              Ok
+         0      0               .         COMMAND                   NI
+         0      0               .         CONSOLE                   NI
+CP       1      0     DM_CP     .         CP               Ok
+CPU      1      1     DM_CPU    .         CPU              Ok
+CRYPTO   1      1     DM_CRYPT  .         CRYPTO           Ok
+         0      0               .         DASD                      NI
+         0      0               .         DASDOPT                   NI
+         0      0               .         DATAMOVE                  NI
+DATEF    1      1     DM_DATEF  .         DATEFORM         Ok
+         0      0               .         DEDICATE                  NI Use GET/REPLACE
+         0      0               .         DEFAULTS
+GLOBALV  1      0               .         GLOBALV          Ok       NI Use CMS GLOBALV.....
+         0      0               .         DEFINESTAG
+DIRECT   0      0     DM_ONLIN  .         DIRECT           Ok
+         0      0               .         DIRECTORY                 NI
+         0      0               .         DIREDIT                   NI
+MAP      1      0     DM_MAP    .         DIRMAP           Ok          Problem with second call
+         0      0               .         DISABLE                   NI
+         0      0               .         DISTRIB                   NI Outdated/obsolete
+         0      0               .         DLINK                     NI See LINK
+DMD      1      1     DM_DMD    .         DMDISK           Ok
+         0      0               .         DROPBY                    NI
+         0      0               .         DROPFOR                   NI
+         0      0               .         DROPSCIF                  NI
+         0      0               .         DSECUSER                  NI See secuser
+         0      0               .         DUMP                      NI
+         0      0               .         D8ONECMD                  NI
+         0      0               .         ELINK                     NI
+         0      0               .         ENABLE                    NI
+         0      0               .         EXECDROP                  NI
+         0      0               .         EXECLOAD                  NI
+         0      0               .         EXTNCHK                   NI
+         0      0               .         FILE                      NI
+FREE     1      0     DM_MAP    FREE      FREEXT           Ok          With input FREE
+FORMAT   1      0     DM_FORMT  .         .                Ok
+GET      1      1     DM_GET    .         GET              Ok
+         0      0               .         GETCONSOLE                NI
+         0      0               .         GLOBALOPTS                NI
+         0      0               .         DEFAULTS                  NI
+HELP     1      0     .         .         HELP             Ok
+         0      0               .         HISTORY                   NI See conpark
+INCLU    1      1     DM_INCLU  .         INCLUDE          Ok
+INDEX    1      0     DM_INDEX  .         .                Ok          Create the index
+         0      0               .         INVEN                     NI
+IOPRIOR  1      1     DM_IOPRI  .         IOPRIORITY       Ok
+IPL      1      1     DM_IPL    .         IPL              Ok
+         0      0               .         IUCV                      NI Use GET/REPLACE
+         0      0               .         IVP                       NI
+LINK     1      1     DM_LINK   .         LINK             Ok
+         0      0               .         LOADDEV                   NI Use GET/REPLACE
+         0      0               .         LOCK                      NI
+         0      0               .         LOGMSG                    NI
+LOGONBY  1      1     DM_LBY    .         LOGONBY          Ok
+MACHINE  1      1     DM_MACH   .         MACHINE          Ok
+         0      0               .         MAIL                      NI
+         0      0               .         MAXSPOOL                  NI
+MAX      1      1     DM_STOR   MAX       MAXSTORAGE       Ok
+         0      0               .         MAXSTORE                  NI See MAX
+         0      0               .         MDAUDIT                   NI
+MDISK    1      1     DM_MDISK  .         MDISK            Ok          Change passwords
+         0      0               .         MDPW                      NI Use SHOWME
+         0      0               .         MINIOPT                   NI Use GET/REPLACE
+MMDISK   1      1     DM_MMDSK  .         MMDISK           Ok
+NAME     1      1     DM_NMSAV  .         NAMESAVE         Ok
+         0      0               .         NEEDPASS                  NI
+         0      0               .         NEWS                      NI
+         0      0               .         NICDEF                    NI Use GET/REPLACE
+         0      0               .         NOPDATA                   NI
+         0      0               .         NOTAPE                    NI
+         0      0               .         OFFLINE                   NI
+         0      0               .         ONLINE                    NI
+OPTION   1      1     DM_OPTION .         OPTION           Ok
+         0      0               .         PAVALIAS                  NI Use GET/REPLACE
+         0      0               .         POOL                      NI
+         0      0               .         POSIXFSROOT               NI
+         0      0               .         POSIXGLIST                NI
+         0      0               .         POSIXGROUP                NI
+         0      0               .         POSIXINFO                 NI
+         0      0               .         POSIXIUPGM                NI
+         0      0               .         POSIXIWDIR                NI
+         0      0               .         POSIXOPT                  NI
+PRIOR    1      1     DM_PRIOR  .         PRIORITY         Ok
+         0      0               .         PRIOSET                   NI See DM_PRIOR
+         0      0               .         PRIVCLASS                 NI See DM_CLASS
+PURGE    1      1     DM_PURGE  .         PURGE            Ok
+         0      0               .         PW                        NI See DM_SETPW
+         0      0               .         PW?                       NI
+         0      0               .         PWGEN                     NI
+         0      0               .         PWMON                     NI
+         0      0               .         QLOG                      NI
+         0      0               .         QUERY                     NI
+         0      0               .         QRY                       NI
+REPL     1      1     DM_REPL   .         REPLACE          Ok
+         0      0               .         REVIEW                    NI
+         0      0               .         RLDCODE                   NI
+RELOAD   1      0     DMSERVER  .         RLDDATA                      Built into DMSERVER
+         0      0               .         RLDEXTN                   NI
+         0      0               .         RMDISK                    NI See DM_CMD
+         0      0               .         SATELLITE                 NI
+         0      0               .         SCAN                      NI
+         0      0               .         SCREEN                    NI Use CP SCREEN in PROFILE EXEC
+SEC      1      1     DM_SECU   .         SECUSER          Ok
+         0      0               .         SEND                      NI Use CMS SENDFILE ....
+         0      0               .         SETACNT                   NI See ACT
+         0      0               .         SETCLASS                  NI See CLASS
+         0      0               .         SETCPU                    NI See CPU
+         0      0               .         SETMACH                   NI See MACHINE
+         0      0               .         SETOPTN                   NI See OPTION
+         0      0               .         SETPRIORITY               NI See PRIOR
+SETPW    1      1     DM_SETPW  .         SETPW            Ok
+         0      0               .         SETSTAG                   NI
+         0      0               .         SHARE                     NI Use GET/REPLACE
+         0      0               .         SHUTDOWN                  NI
+         0      0               .         SPECIAL                   NI Use GET/REPLACE
+         0      0               .         SPOOL                     NI Use CP SPOOL in PROFILE EXEC
+         0      0               .         SSI                       NI
+         0      0               .         STAG                      NI
+         0      0               .         STATUS                    NI
+         0      0               .         STDEVOPT                  NI
+STOR     1      1     DM_STOR   .         STORAGE          Ok
+         0      0               .         SUBSCRIBE                 NI
+         0      0               .         SUPGLIST                  NI
+         0      0               .         SYSAFFIN                  NI Only with SSI (unsupported)
+         0      0               .         TERM                      NI Use CP TERM in PROFILE EXEC
+         0      0               .         TESTPW                    NI
+TMD      1      1     DM_MMDSK  .         TMDISK           Ok
+         0      0               .         UNDOSSI                   NI
+         0      0               .         UNLOCK                    NI
+USED     1      0     DM_MAP    USED      USEDEXT          Ok          With input USED
+         0      0               .         USER                      NI Implemented with DM_GET
+         0      0               .         USERMAP                   NI Implemented with DM_MAP
+         0      0               .         USEROPTN                  NI
+         0      0               .         VMRELOCATE                NI maybe?
+         0      0               .         WORKUNIT                  NI
+XAU      1      1     DM_XALOG  .         XAUTOLOG         Ok
+         0      0               .         XCONFIG                   NI

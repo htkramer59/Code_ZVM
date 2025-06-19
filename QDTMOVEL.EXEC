@@ -1,0 +1,102 @@
+/* This exec helps to determine why DATAMOVE cannot finish a WORKUNIT.
+   Most of the time, other users still have a LINK to an mdisk to
+   clean/move.
+ 
+ *----------------------------------------------------------------*
+ *  The normal use is via the DIRMW EXEC.                         *
+ *----------------------------------------------------------------*
+     DIRMW will create a CMS command like:
+       +-----------------------------------------------------------+
+       | format:  | QDTMOVEL requester dirmcmd':' vdevs            |
+       +-----------------------------------------------------------+
+     and send that to DATAMOVE as a CMS command.
+ 
+This EXEC must be installed on a disk accessed by DATAMOVE
+ 
+  To install it on DATAMOVE:
+     SF QDTMOVEL EXEC DATAMOVE
+  DATAMOVE then complains as it doesn't understand the request
+  (and transfers to file into its PUNCH queue)
+  The trick to receive it is sending one PIPE that transfers the file
+  into and reader and receives it.
+  If you have my RCVRDR EXEC
+     DIRM DATAMOVE CMS PIPE CP TRANS PUN ALL * RDR|HOLE |CMS EXEC RCVRDR
+                                          QDTMOVEL EXEC FROM KRIS
+  Otherwise: find out which spoolid the file has and issue
+     DIRM DATAMOVE CMS PIPE CP TRANS PUN nnnn * RDR|HOLE |CMS EXEC
+                                                             RECEIVE nnnn
+ 
+20 Feb 2007: Also check for LINKs that cause LINK W to fail, but that are
+             not reported by Q LINKS (eg mdisk in same cylinder range
+             prohibits LINK W, but Q LINKS only reports mdisks starting
+             at same cylinder as queried minidisk).
+Written by: Kris Buelens IBM Belgium;  KRIS at VMKBBR01 28 Jan 2005*/
+ 
+parse upper source . . myname mytype . syn .
+address command
+parse arg from cmd ':' vdevs
+if vdevs='' then call ErrExit 5,'Missing parameters'
+ 
+/* Get a free vdev no to LINK */
+'GETFMADR'
+parse pull . . cuu .
+userid= userid()
+ 
+/* Check all VDEVS we are asked for */
+do while vdevs<>''
+   parse var vdevs vdev vdevs
+   parse value diagrc(8,'LINK *' vdev cuu 'RR') with rc . 17 emsg '15'x
+   if rc<>0 then do
+      call Msg emsg /* cannot LINK at all */
+      iterate
+   end
+   /* Who has links to this minidisk */
+   'PIPE (end ?) CP Q LINKS' cuu,
+      '|SPLIT at string /, /',
+      '|PICK 1.13 ^== /'left(Userid,8) right(cuu,4,0)'/',
+      '|SORT 17 D 1.8', /* R/W links first */
+      '|JOIN 2 /, /',
+      '|T: take',
+      '|I: Fanin|Stem Msg.',
+      '?T:|Count lines|NFIND 0|INSERT / more lines supresses/ after|I:'
+   do i=1 to msg.0; call msg msg.i; end
+   call diag 8,'DET' cuu
+   if msg.0=0 then do /* No-one links, maybe another mdisk overlaps */
+      parse value diagrc(8,'LINK *' vdev cuu 'W') with rc . 17 emsg '15'x
+      if rc<>0 then do; cprc=rc
+         call Msg emsg /* cannot LINK in W-mode */
+         if cprc>=104 & cprc<=106 then do
+            call Msg 'LINK W fails, but Q LINKS doesn''t find links:'
+            call Msg 'probable cause: another VM system has a link or'
+            call Msg 'mdisk of other user is in same cylinder area'
+         end
+      end
+   end
+   call diag 8,'DET' cuu
+end
+ 
+call diag 8,'DET' cuu
+If symbol('MsgCmd')<>'VAR' then
+   call Msg 'No LINKs prohibits' cmd,'NOHEAD'
+exit
+ 
+/*-----------------------------------------------------------------*/
+Msg: /*                                                            */
+/*-----------------------------------------------------------------*/
+ If symbol('MsgCmd')<>'VAR' then do
+    parse value diag(8,'Q COMMAND MSGNOH') with '=' class '15'x
+    if class='NONE' then MsgCmd='CP MSG' from
+                    else MsgCmd='CP MSGNOH' from userid()':'
+    if arg(2)<>'NOHEAD' then MsgCmd 'Next LINKs prohibit' cmd':'
+ end
+ MsgCmd arg(1)
+return
+ 
+/*-----------------------------------------------------------------*/
+ERREXIT: /* general errorexit routine                              */
+/*-----------------------------------------------------------------*/
+ parse upper source . . myname mytype . syn .
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)

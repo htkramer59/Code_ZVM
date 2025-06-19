@@ -1,0 +1,23 @@
+************************************************************************
+* (c) Copyright International Business Machines Corporation 1997.
+* All rights reserved.
+* Steve Hayes, IBM Global Services Network Services  EMEA SNA I & S
+************************************************************************
+* :nick.TCPIPIPE   :sec.Unclassified                  :disk.VMTOOLS
+* :title.CMS TCP/IP driver stages (Beta)
+* :version.0.99i   :date.97/05/30   :summary.ANNOUNCE :support.N
+* :oname.Steve Hayes                :onode.GFORD1     :ouser.TSGSH
+* :aname.Steve Hayes                :anode.GFORD1     :auser.TSGSH
+* :sw.Pipelines 1.1.10x07 TCP/IP
+* :ops.VM/ESA                       :lang.REXX        :source.Y
+* :kwd.TCP/IP TCPIP FTP Socks Pipelines
+* :abs.Beta release of CMS Pipelines TCP/IP drivers with (versatile
+* socks support).  FTP REXX and Socksified TCPCLIENT
+* :lic.By placing material on this conference, I agree to grant
+* IBM a non-exclusive, royalty-free license for the material
+* as set forth in the LICENSE AGREEMNT file on this conference.
+************************************************************************
+      TCPIPIPE ANNOUNCE * Introduction
+      FTP      REXX     * FTP device driver
+      TCPCLIEN REXX     * Versatile socks variant of TCPCLIENT
+      SOCKSCFG REXX     * Versatile socks filter

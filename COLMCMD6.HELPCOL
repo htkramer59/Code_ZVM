@@ -1,0 +1,62 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    \eeeee    When a backslash (\) is used in conjunction with
+or   eeeee\   emulate "E", de-emulate "_", number "N" or sum "+", it
+              causes the command to execute from the bottom up rather
+              than from the top down.
+ 
+              EXAMPLE:  eeeeeeeeee\???????????????????????????????????????
+                        Jan86               845
+                                            467
+                                            478
+                        Feb86               743
+                                            234
+                        Mar86               743
+              yields:
+                        Jan86               845
+                        Feb86               467
+                        Feb86               478
+                        Feb86               743
+                        Mar86               234
+                        Mar86               743
+ 
+    \\  \\    Reverse (swap end for end) the block of columns starting at
+ or \\\\\\    the position  of the first  "\" up  to the position  of the
+ or \*        last "\".  "\*"  will reverse up to the ending zone.
+ 
+              EXAMPLE:  ???\\\\\\\\\\\??????????\\\\??????????????????????
+                  =====    1    a    v          Joe
+                  =====    2    b    w          Gary
+                  =====    3    c    x          Jim
+                  =====    4    d    y          Tom
+                  =====    5    e    z          Bill
+              yields:
+                  =====    v    a    1           eoJ
+                  =====    w    b    2          yraG
+                  =====    x    c    3           miJ
+                  =====    y    d    4           moT
+                  =====    z    e    5          lliB
+.cs 7 on
+                     COLumn Edit Column Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL COLMCMD5 (ALL       Y,^    Exclude columns from XEDIT PREFIX commands
+COL COLMCMDS (ALL       +      Add or sum numbers in a column
+COL COLMCMD2 (ALL       N      Place sequence numbers in a column
+COL COLMCMD3 (ALL       E      Emulate (copy forward) data down a column
+COL COLMCMD3 (ALL       _      Blank duplicate or redundant data ("de-emulate")
+COL COLMCMD3 (ALL       !      Insert blank separator lines when data changes
+COL COLMCMD4 (ALL       S,G    Sort data within a column
+COL COLMCMD6 (ALL       \      Reverse the command or swap column end for end
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

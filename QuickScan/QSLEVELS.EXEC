@@ -1,0 +1,89 @@
+/*---------------------------------------------------------------+
+| Function : Report on some of the software levels               |
+|                                                                |
+| File     : QSLEVELS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSLEVELS REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSLEVELS <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSLEVELS REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname=report.
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSLEVELS.EXEC:38 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSLEVELS.EXEC:49 END ?)',
+   'var levels_cmds 1',                          /* Take these       */
+   '| split at ;',                               /* Split here       */
+   '| stem cmd.',                                /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'literal 'TimeStamp(),                        /* Compose ts       */
+   '| append var levels_header 1',               /* Add header       */
+   '| join * x40',                               /* Make 1 record    */
+   '| var levels_header',                        /* Hand 2 rexx      */
+   '?',                                          /* 3rd pipe         */
+   'cp QUERY CPLEVEL',                           /* Ask cp           */
+   '| take first 1',                             /* Keep this        */
+   '| specs w3.1 1 w5.1 nw',                     /* Reduce to this   */
+   '| change ~.~~',                              /* Replace these    */
+   '| change ~,~~',                              /* .                */
+   '| var lvlsfx 1'                              /* Hand back        */
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+work.0=0
+Do c=1 To cmd.0
+   'PIPE (NAME QSLEVELS.EXEC:71 END ?)',
+       cmd.c,                                    /* Issue cmd        */
+       '| preface literal * 'cmd.c,              /* Add header       */
+       '| append literal ',                      /* Add empty        */
+       '| stem work. append'                     /* Add 2 stem       */
+End c
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSLEVELS.EXEC:80 END ?)',
+    'stem work.',                                /* Take this        */
+    '| preface var levels_header',               /* Add header       */
+    '| append var pipeversion 1',                /* Add this         */
+    output                                       /* Hand back        */
+Exit
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

@@ -1,0 +1,452 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*--------------------------------------------------------------*/
+XCOLTFLO
+.*  Lincoln     "Fourscore and seven years ago our                 01
+.*  Speech      fathers brought forth on this continent a          02
+.*  Draft #1    new nation, conceived in liberty, and              03
+.*              dedicated to the proposition that all men          04
+.*              are created equal.  Now we are engaged in          05
+.*              a great civil war, testing whether that            06
+.*              nation, or any nation so conceived and so          07
+.*              dedicated, can long endure.  We are met            08
+.*              on a great battlefield of that war.  We            09
+.*              have come to dedicate a portion of that            10
+.*              field, as a final resting place for those          11
+.*              who here gave their lives that this                12
+.*              nation might live.  It is altogether               13
+.*              fitting and proper that we should do               14
+.*              this.  But, in a larger sense, we cannot           15
+.*              dedicate - we cannot consecrate - we               16
+.*              cannot hallow this ground.  The brave              17
+.*              men, living and dead, who struggled here,          18
+.*              have consecrated it, far above our poor            19
+.*              power to add or detract.  The world will           20
+.*              little note, nor long remember, what we            21
+.*              say here, but it can never forget what             22
+.*              they did here.  It is for us the living,           23
+.*              rather, to be dedicated here to the                24
+.*              unfinished work which they who fought              25
+.*              here have thus far so nobly advanced.  It          26
+.*              is rather for us to be here dedicated to           27
+.*              the great task remaining before us, -              28
+.*              that from these honored dead we take               29
+.*              increased devotion to that cause for               30
+.*              which they gave the last full measure of           31
+.*              devotion - that we here highly resolve             32
+.*              that these dead shall not have died in             33
+.*              vain - that this nation, under God, shall          34
+.*              have a new birth of freedom - and that             35
+.*              government of the people, by the people,           36
+.*              for the people, shall not perish from the          37
+.*              earth."                                            38
+.*                                                                 39
+.*                                                                 40
+.*                                                                 41
+.*                                                                 42
+.*                                                                 43
+.*                                                                 44
+.*                                                                 45
+XCOLSUBT
+ ACI GPD NSW                  2800
+ 
+ ADI                         10840
+                             54200
+ 
+ AGC LTD                     24942
+ 
+ ALCAN AUST                   8000
+                              1000
+                             10000
+                              8000
+                             17921
+                             25088
+                             12000
+                             46100
+                             50858
+ 
+ 
+ ALCOA HARDWARE               4200
+                              4850
+                             10000
+                             40650
+ 
+XCOLSEPS
+A73  Webb, (K) Karen
+A73  Webb, (S) Sandi
+841  Trahern, (RS) Steve
+841  Vacek, (D) Doug
+841  Vair, (GG) Gary
+841  Vela, (HA) Helen
+841  Webb, (G) George
+849  Webber, (R) Bob
+849  Wedgwood, (R) Bob
+849  Weeks, (JR) Jack
+849  Weller, (RD) Richard
+849  Woodward, (L) Lynn
+985  Wright, (CM) Carl
+985  Wu, (C) Ching-Chen
+985  Wykle, (WJ) Bill
+985  Ziegler, (J) June
+XCOLHEAA
+1Department    Employees     Total Yearly
+ Number        in Dept.      Salary
+ 433            9            324,555
+ 311            8            768,000
+ 913            5            123,000
+ 433           10            535,980
+1Department    Employees     Total Yearly
+ Number        in Dept.      Salary
+ 221            2            984,999
+ 913            4            429,321
+ 831            3             44,254
+ 739            7             10,000
+1Department    Employees     Total Yearly
+ Number        in Dept.      Salary
+ 542            6            432,920
+ 433            6             42,033
+ 433            8             88,888
+ 223           11              9,678
+XCOLHEAD
+1Department    Employees     Total Yearly
+ Number        in Dept.      Salary
+ 433            9            324,555
+ 311            8            768,000
+ 913            5            123,000
+ 433           10            535,980
+1Department    Employees     Total Yearly
+ Number        in Dept.      Salary
+ 221            2            984,999
+ 913            4            429,321
+ 831            3             44,254
+ 739            7             10,000
+1Department    Employees     Total Yearly
+ Number        in Dept.      Salary
+ 542            6            432,920
+ 433            6             42,033
+ 433            8             88,888
+ 223           11              9,678
+XCOLSORT
+                   |
+                   |
+                   |
+  -----------------------------------
+  |                |                |
+  |                |                |
+  |                |                |
+  |            T. Smith             |
+  |            A. Smith         B. Good
+G. Vair        M. Krieger       D. Day
+A. Class       B. Kaser         G. Night
+XCOLPIPE
+Trahern, (RS) Steve                 3123 3493 841 001 3 BLDVM1 TRAHERN  T274373
+Vacek, (D) Doug                     4151 4389 849 001 3 BLDVM1 VACEK    V101945
+Vair, (GG) Gary                     9122      844 001 3 BLDVM1 VAIR     V392281
+Vela, (HA) Helen                    6773 4940 A73 001 3 BLDVM3 ENNY
+Webb, (G) George                    7184 6884 A73 001 3 BLDVM3 GWEBB
+Webb, (K) Karen                     6884      A73 001 3 BLDVM3 KWEBB
+Webb, (S) Sandi                     6884      A73 001 3
+Webber, (R) Bob                     3126 4389 849 001 3 BLDVM1 WEBBER   ASA4818
+Wedgwood, (R) Bob                   3253      846 001 3 BLDVM3 WEDGWOOD W896493
+Weeks, (JR) Jack                    6530 7650 843 001 3 BLDVM3 WEEKS    W395444
+Weller, (RD) Richard                3626 4207 842 001 3 BLDVM3 WELLER
+Woodward, (L) Lynn                  7448      844 001 3 BLDVM1 WOODWARD
+Wright, (CM) Carl                   6357 6358 985 001 3 BLDVM1 SCHUESSL
+Wu, (C) Ching-Chen                  6150      841 001 3 BLDVM1 WU
+Wykle, (WJ) Bill                    7895 4207 842 001 3 BLDVM1 WYKLE    W999194
+Ziegler, (J) June                   5109 6548 846 001 3 BLDVM3 ZIEGLER  Z424251
+XCOLUMN
+Trahern, (RS) Steve                 3123 3493 841 001 3 BLDVM1 TRAHERN  T274373
+Vacek, (D) Doug                     4151 4389 849 001 3 BLDVM1 VACEK    V101945
+Vair, (GG) Gary                     9122      844 001 3 BLDVM1 VAIR     V392281
+Vela, (HA) Helen                    6773 4940 A73 001 3 BLDVM3 ENNY
+Webb, (G) George                    7184 6884 A73 001 3 BLDVM3 GWEBB
+Webb, (K) Karen                     6884      A73 001 3 BLDVM3 KWEBB
+Webb, (S) Sandi                     6884      A73 001 3
+Webber, (R) Bob                     3126 4389 849 001 3 BLDVM1 WEBBER   ASA4818
+Wedgwood, (R) Bob                   3253      846 001 3 BLDVM3 WEDGWOOD W896493
+Weeks, (JR) Jack                    6530 7650 843 001 3 BLDVM3 WEEKS    W395444
+Weller, (RD) Richard                3626 4207 842 001 3 BLDVM3 WELLER
+Woodward, (L) Lynn                  7448      844 001 3 BLDVM1 WOODWARD
+Wright, (CM) Carl                   6357 6358 985 001 3 BLDVM1 SCHUESSL
+Wu, (C) Ching-Chen                  6150      841 001 3 BLDVM1 WU
+Wykle, (WJ) Bill                    7895 4207 842 001 3 BLDVM1 WYKLE    W999194
+Ziegler, (J) June                   5109 6548 846 001 3 BLDVM3 ZIEGLER  Z424251
+XCOLSRTD
+:dt.lawn
+:dd.Gopher Highway.
+:p.Can be identified by dinner-plate-size
+mounds of dirt where grass used to be.
+:dt.gopher
+:dd.A burrowing rodent that feeds on roots
+of plants.
+:dt.agapanthus
+:dd.A lovely flowering plant
+the roots of which are the
+preferred food of gophers.
+:P.If your flourishing agapanthus suddenly keels over,
+it means a gopher has had a
+feast.
+XCOLTWO
+D.J. Compton         985 001-3             K.A. Dahle           985 001-3
+D.   Bolander        846 001-3             J.R. Degner          846 001-3
+D.C. Bogott-Palinkx  844 001-3             J.M. Devins          843 001-3
+J.R. Bettge          826 001-3             K.T. Gambon          825 001-3
+L.E. Bending         849 001-3             G.D. Dillon          826 001-3
+D.H. Brookins        844 001-3             W.H. Dillon          849 001-3
+D.L. Clapp           6W6 001-3             P.A. Douglas         36H 001-3
+XCOLTWOA
+D.J. Compton         985 001-3             K.A. Dahle           985 001-3
+D.   Bolander        846 001-3             J.R. Degner          846 001-3
+D.C. Bogott-Palinkx  844 001-3             J.M. Devins          843 001-3
+J.R. Bettge          826 001-3             K.T. Gambon          825 001-3
+L.E. Bending         849 001-3             G.D. Dillon          826 001-3
+D.H. Brookins        844 001-3             W.H. Dillon          849 001-3
+D.L. Clapp           6W6 001-3             P.A. Douglas         36H 001-3
+XCOLTALI
+Trahern, (RS) Steve                 3123 3493 841 001 3 BLDVM1 TRAHERN  T274373
+Vacek, (D) Doug                     4151 4389 849 001 3 BLDVM1 VACEK    V101945
+Vair, (GG) Gary                     9122      844 001 3 BLDVM1 VAIR     V392281
+Vela, (HA) Helen                    6773 4940 A73 001 3 BLDVM3 ENNY
+Webb, (G) George                    7184 6884 A73 001 3 BLDVM3 GWEBB
+Webb, (K) Karen                     6884      A73 001 3 BLDVM3 KWEBB
+Webb, (S) Sandi                     6884      A73 001 3
+Webber, (R) Bob                     3126 4389 849 001 3 BLDVM1 WEBBER   ASA4818
+Wedgwood, (R) Bob                   3253      846 001 3 BLDVM3 WEDGWOOD W896493
+Weeks, (JR) Jack                    6530 7650 843 001 3 BLDVM3 WEEKS    W395444
+Weller, (RD) Richard                3626 4207 842 001 3 BLDVM3 WELLER
+Woodward, (L) Lynn                  7448      844 001 3 BLDVM1 WOODWARD
+Wright, (CM) Carl                   6357 6358 985 001 3 BLDVM1 SCHUESSL
+Wu, (C) Ching-Chen                  6150      841 001 3 BLDVM1 WU
+Wykle, (WJ) Bill                    7895 4207 842 001 3 BLDVM1 WYKLE    W999194
+Ziegler, (J) June                   5109 6548 846 001 3 BLDVM3 ZIEGLER  Z424251
+XCOLEXAM
+.se name='Alan W. Cunningham'
+.im pdpcert8
+.se name='Kathryn C. Murray'
+.im pdpcert8
+.se name='Mary C. Slater'
+.im pdpcert8
+.se name='Edward Timothy Osborne'
+.im pdpcert8
+.se name='James T. Paul'
+.im pdpcert8
+.se name='Ramon A. Garcia'
+.im pdpcert8
+.se name='Lourdes S. (Emay) Hardies'
+.im pdpcert8
+.se name='Kurt A. Rotter'
+.im pdpcert8
+.se name='Bruce A. Thomas'
+.im pdpcert8
+.se name='John D. Bliss'
+.im pdpcert8
+.se name='Diane F. Hearn'
+.im pdpcert8
+.se name='William C. Cavanaugh'
+.im pdpcert8
+.se name='Michael A. Weis'
+.im pdpcert8
+.se name='Charles H. Steele'
+.im pdpcert8
+.se name='Thomas E. Cooper'
+.im pdpcert8
+.se name='Mark G. Call'
+.im pdpcert8
+.se name='Thomas G. Lytle'
+.im pdpcert8
+.se name='Michael G. Sloan'
+.im pdpcert8
+.se name='Michael T. Moore'
+.im pdpcert8
+.se name='Kirsten A. Holub'
+.im pdpcert8
+XCOLTRAN
+;       ;       ;       ;       ;       ;       ;       ;
+1109    676     805     1724    11      1074    2490    2234
+TRSTST  TRSANS  TRSANS  TRSRWK  TRSANS  TRSANS  TRSASG  TRSANS
+J36MOL  CATANIA CATANIA WATERS  JRALLEN JRALLEN CATANIA BOLES
+RALVM29 RALVM29 RALVM29 RALVM29 RALVM29 RALVM29 RALVM29 RALVM29
+XCOLATAB
+.ti ^ 05
+.tp 10 20 30 40 50 60
+Gary Vair
+^835^1370^Nagel^664.60^2749
+^821^1376^Russ^469.90^2885
+^821^1549^Greene^429.30^2987
+^811^1211^Williams^544.40^5386
+^835^1467^Myer^496.68^6453
+^811^^Carson^^8356
+^815^1473^Werg^769.20^8653
+^811^^Most^111.00^9583
+XCOLBLAN
+ ACCESS CONT.SYS.             1650
+ 
+ ACI GPD NSW                  2800
+ 
+ ADI                         10840
+ 
+ ADP SNACK FOODS             35842
+ 
+ ADVENTIST HOSPITAL           1500
+ 
+ ADVERTISER NEWSPAPERS        1400
+ 
+ AEROSPACE TECHNOLOGIES       3667
+ 
+ AGC LTD                     24942
+ 
+ AINSWORTH NOMINEES           2000
+ 
+XCOLNUMB
+    9   9   0.0                X    Z             E
+ 
+ 
+    5
+XCOLCOUN
+12345678
+99999999
+12345678
+A4369824
+43291842
+87654321
+90123456
+43983412
+12345678
+87654321
+43291842
+12345678
+90123456
+A4369824
+43291842
+87654321
+A4369824
+99999999
+XCOLDEL
+12345678
+99999999
+12345678
+A4369824
+43291842
+87654321
+90123456
+43983412
+12345678
+87654321
+43291842
+12345678
+90123456
+A4369824
+43291842
+87654321
+A4369824
+99999999
+XCOLMARK
+48566778   Bray, (PA) Patricia
+12345678   Breno, (MJ) Mary Jo
+74939234   Trahern, (RS) Steve
+99999999   Vacek, (D) Doug
+12345678   Vair, (GG) Gary
+A4369824   Vela, (HA) Helen
+84540302   Webb, (G) George
+87654321   Webb, (K) Karen
+90123456   Webb, (S) Sandi
+43983412   Webber, (R) Bob
+98632185   Wedgwood, (R) Bob
+49586677   Weeks, (JR) Jack
+39485643   Weller, (RD) Richard
+84540302   Woodward, (L) Lynn
+89845674   Wright, (CM) Carl
+B7374563   Wu, (C) Ching-Chen
+34959697   Wykle, (WJ) Bill
+84875678   Ziegler, (J) June
+XCOLCOMP
+48566778   Bray, (PA) Patricia       48566778
+12345678   Breno, (MJ) Mary Jo       12345678
+74939234   Trahern, (RS) Steve       74939234
+99999999   Vacek, (D) Doug           99999999
+12345678   Vair, (GG) Gary           12345678
+A4369824   Vela, (HA) Helen          A4379824
+84540302   Webb, (G) George          84540302
+87654321   Webb, (K) Karen           87654321
+90123456   Webb, (S) Sandi           90124456
+43983412   Webber, (R) Bob           43983412
+98632185   Wedgwood, (R) Bob         98632185
+49586677   Weeks, (JR) Jack          49586677
+39485643   Weller, (RD) Richard      39485643
+84540302   Woodward, (L) Lynn        84540302
+89845674   Wright, (CM) Carl         89845674
+B7374563   Wu, (C) Ching-Chen        B7374563
+34959697   Wykle, (WJ) Bill          34959697
+84875678   Ziegler, (J) June         84875678
+XCOLADD
+ ALCAN AUST                  $8,000
+                              1,000
+                             10,000
+                              8,000
+                             17,921
+                             25,088
+                             12,000
+                             46,100
+                             50,858
+                            =======
+ 
+XCOLREMO
+ This report showing $ gain  $321,345.00    0104
+ for the year is given for       $321.43    0001
+ your enjoyment.               $5,897.45    4100
+                              $43,789.20    0088
+                                   $0.00    0000
+XCOLTITL
+In Harm's Way (1956)
+In Old Chicago (1938)
+The Informer (1935)
+Irma La Douce (1963)
+In The Heat Of The Night (1967)
+I Wonder Who's Kissing Her Now (1947)
+I Was a Male War Bride (1949)
+Inherit The Wind (1960)
+I'll Be Seeing You (1944)
+I'm No Angel (1933)
+It's A Mad, Mad, Mad, Mad World (1963)
+Indiscreet (1958)
+Inn Of The Sixth Happiness (1958)
+I Wanted Wings (1941)
+It's A Wonderful Life (1946)
+I Remember Mama (1948)
+It Happened One Night (1934)
+I Met Him In Paris (1937)
+Interrupted Melody (1955)
+Ivanhow (1952)
+Imitation Of Life (1934)
+Island In The Sum (1957)
+Is Paris Burning? (1966)
+I'm No Angel (1982)
+XCOLREXX:
+ 271  661
+ 682   18
+  36  324
+  39  300
+ 241  160
+ 718  612
+ 697  289
+ 169  868
+ 276  403
+ 120  759
+ 434  279
+ 912  404
+ 863  253
+ 323  979
+   2  857
+  33  363
+  23  656
+ 179  473
+ 774  344
+ 503  301
+ 204  746
+ 280   11
+ 968  701
+ 135  280

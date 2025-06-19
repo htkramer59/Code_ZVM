@@ -1,0 +1,253 @@
+/*---------------------------------------------------------------+
+| Function : Check SYSTEM CONFIG against the VSWITCHes           |
+|                                                                |
+| File     : CONF2VSW EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SYSTEM   CONFIG                                     |
+|                                                                |
+| Called   : CONF2VSW ( <run>                                    |
+|                                                                |
+|                        <run> If empty only displays, if filled |
+|                              commands will be issued and       |
+|                              results will be displayed         |
+|                                                                |
+| Comments : Need CP classes for CP DEFINE/MODIFY, etc.          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200609 16:51:40                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' teston .
+Parse Source . . myfn myft .
+Trace "O"
+If what='?' Then Do
+             'VMFCLEAR'
+             'PIPE (NAME CONF2VSW.EXEC:28 END ?)',
+                '< 'myfn myft' *',
+                '| tolabel Parse',
+                '| cons'
+             Exit
+             End
+If what<>'' Then Do
+             Say 'No input allowed'
+             Exit
+             End
+If teston='' Then test=1
+             Else test=0
+If test Then out=''
+        Else out='| cp | cons'
+/*---------------------------------------------------------------+
+| Where are we running...used while gathering infp               |
++---------------------------------------------------------------*/
+'PIPE (NAME CONF2VSW.EXEC:45 END ?)',
+   'cp QUERY USERID',
+   '| specs w3.1',
+   '| var node'
+/*---------------------------------------------------------------+
+| M A I N - L i n e                                              |
++---------------------------------------------------------------*/
+Call Get_Config_Info
+Call Get_Vswitch_Info
+Call Split_Into_Parts
+Call Check_Rdev
+Call Check_VMLAN
+Call Check_Vswitch
+Call Modify_Vswitch
+/*---------------------------------------------------------------+
+| The only way out                                               |
++---------------------------------------------------------------*/
+Exit
+
+/*---------------------------------------------------------------+
+| S U B R O U T I N E S                                          |
++---------------------------------------------------------------*/
+
+Modify_Vswitch:
+/*---------------------------------------------------------------+
+| Modify VSWITCHes if needed                                     |
++---------------------------------------------------------------*/
+Say TimeStamp()' Issuing MODIFY statements'
+'PIPE (NAME CONF2VSW.EXEC:73 END ?)',
+    'stem vswmod.',
+    '| cons',
+    out
+Return
+
+
+Check_Vswitch:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking VSWITCHes'
+'PIPE (NAME CONF2VSW.EXEC:85 END ?)',
+   'stem vsw.',                                 /* Take these       */
+   '| f: fanout',                               /* Dupl records     */
+   '| specs w3.1 1.8 ~;~ nw w1;* nw ~;~ nw',    /* Prefix w switch  */
+   '| fi: faninany',                            /* Take in other    */
+   '| sort w1.1',                               /* Sort on switch   */
+   '| join keylen 8',                           /* Gather info      */
+   '| pick fs ; substr 2.3 of f3 == ~HCP~',     /* Does it have     */
+   '| specs fs ; f2 strip  1',                  /* Keep def cmd     */
+   '| cons',                                    /* Show             */
+   out,                                         /* Issue when needed*/
+   '? f:',                                      /* Conn  2 fanout   */
+   '| specs w3.1 1.9',                          /* Adjust           */
+   '| j: juxtapose',                            /* Gather items     */
+   '| fi:',                                     /* Conn 2 faninany  */
+   '? f:',                                      /* Conn 2 fanout    */
+   '| specs ~QUERY VSWITCH NAME~ 1 w3.1 nw',    /* Compose cmd      */
+   '| cp',                                      /* Ask cp           */
+   '| j:'                                       /* Conn 2 juxtapose */
+Return
+
+
+Check_VMLAN:
+/*---------------------------------------------------------------+
+| Checking VMLAN settings vs CONFIG                              |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking VMLAN settings vs CONFIG'
+'PIPE (NAME CONF2VSW.EXEC:112 END ?)',
+   'stem vmlan.',                               /* Take these       */
+   '| specs 1;* 1 ~C~ nw',                      /* Add config marker*/
+   '| fi: faninany',                            /* Take in others   */
+   '| sort',                                    /* Sort them        */
+   '| join 1 ~;~',                              /* Join 2           */
+   '| pick fs ; substr w1;-2 of f1 \== substr w1;-2 of f2',  /* If unequal       */
+   '| cons',                                    /* Display          */
+   '?',                                         /* 2nd pipe         */
+   'cp QUERY VMLAN',                            /* Ask CP           */
+   '| casei all /PREFIX/!/TRANSIENT/',          /* Find these       */
+   '| if1: if pick anycase w2.1 == ~PREFIX:~',  /* Rework this one  */
+   '|    specs ~VMLAN MACPREFIX~ 1 w3.1 nw ~Q~ nw',  /* to this          */
+   '| if1:',                                    /* Conn 2 if        */
+   '| if2: if pick w1.1 == ~TRANSIENT~',        /* Rework this one  */
+   '|   specs ~VMLAN LIMIT TRANSIENT~ 1 w3.1 nw ~Q~ nw',  /* to this          */
+   '| if2:',                                    /* Conn 2 if        */
+   '| strip',                                   /* Remove space     */
+   '| fi:'                                      /* Conn 2 faninany  */
+Return
+
+
+Check_Rdev:
+/*---------------------------------------------------------------+
+| Checking if the RDEVs are available                            |
++---------------------------------------------------------------*/
+new.0=0
+'PIPE (NAME CONF2VSW.EXEC:139 END ?)',
+   'stem rdev.',                                /* Take these       */
+   '| specs w2.1',                              /* Keep this        */
+   '| stem xrange.',                            /* Store as         */
+   '| change ~-~ ~',                            /* Replace this     */
+   '| specs w1.1 x2d 1 w2.1 x2d nw',            /* Conv 2 decvals   */
+   '| stem drange.'                             /* Store as          */
+Do d=1 To drange.0
+   Say TimeStamp()' Checking RDEV range: 'xrange.d
+   Parse Value drange.d With sval eval .
+   lines=eval-sval
+   'PIPE (NAME CONF2VSW.EXEC:150 END ?)',
+      'literal ',                               /* Make 1 record    */
+      '| dup 'lines,                            /* Duplicate x times*/
+      '| specs recno from 'sval' d2x 1.4 right',/* Add hex recno    */
+      '| f: fanout',                            /* Dupl  recs       */
+      '| specs 1;* 1 x40 n',                    /* Add a space      */
+      '| j: juxtapose',                         /* Join results     */
+      '| pick substr 1.3 of w2.1 == ~HCP~',     /* If this...       */
+      '| cons',                                 /* ...show em       */
+      '? f:',                                   /* Conn 2 fanout    */
+      '| specs ~QUERY~ 1 w1.1 nw',              /* Compose cmd      */
+      '| cp',                                   /* Issue cmd        */
+      '| j:'                                    /* Conn 2 juxtapose */
+End d
+Return
+
+
+Split_Into_Parts:
+/*---------------------------------------------------------------+
+| Split what we found into parts which will be handled           |
++---------------------------------------------------------------*/
+Say TimeStamp()' Splitting VSWITCH info'
+'PIPE (NAME CONF2VSW.EXEC:172 END ?)',
+   'var vswdet',                                /* Take these       */
+   '| split at x00',                            /* Split here       */
+   '| p1: pick anycase substr 1.4 of w1.1 == ~RDEV~',  /* Select these     */
+   '| locate ~OSA~',                            /* Finer selection  */
+   '| stem rdev.',                              /* Store as         */
+   '? p1:',                                     /* Conn 2 pick      */
+   '| p2: pick anycase w1.1 == ~VMLAN~',        /* Select these     */
+   '| stem vmlan.',                             /* Store as         */
+   '? p2:',                                     /* Conn 2 pick      */
+   '| p3: pick anycase w1.1 == ~DEFINE~ and w2.1 == ~VSWITCH~',  /* More filtering   */
+   '| stem vsw.',                               /* Store as         */
+   '? p3:',                                     /* Conn 2 pick      */
+   '| p4: pick anycase w1.1 == ~MODIFY~ and w2.1 == ~VSWITCH~',  /* More filtering   */
+   '| stem vswmod.',                            /* Store as         */
+   '? p4:',                                     /* Conn 2 pick      */
+   '| stem unhandled.'                          /* Put them here    */
+If unhandled.0<>0 Then Do
+              Say TimeStamp()' Some unhandled items in section'
+              'PIPE (NAME CONF2VSW.EXEC:191 END ?)',
+                 'stem unhandled.',
+                 '| cons'
+              End
+Return
+
+
+TimeStamp:
+Return Date('S') Time() myfn
+
+
+Get_Config_Info:
+/*---------------------------------------------------------------+
+| Link & access the CONFIG file...                               |
++---------------------------------------------------------------*/
+Say TimeStamp()' Reading SYSTEM CONFIG'
+Address CMS 'VMLINK CONFIG (QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Extract the lpar specifics                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME CONF2VSW.EXEC:213 END ?)',
+   '< SYSTEM CONFIG 'wfm,                       /* Read this        */
+   '| strip',                                   /* Remove spaces    */
+   '| specs 1;* 1.80 recno 85.3 right',         /* Add lineno       */
+   '| pick 1.2 /== ~/*~',                       /* Remove comments  */
+   '| stem conf.',                              /* Store 4 later    */
+   '| pick anycase w2.1 == ~BEGIN~ or',         /* Select these     */
+                  'w2.1 == ~END~',              /* ....and these    */
+   '| pick w1.1 == ~'node':~',                  /* Filter this      */
+   '| specs w3.1',                              /* Keep linenos     */
+   '| join 1 x40',                              /* Pair them        */
+   '| specs ~/~ 1 w1.1 n ~/ /~ n w2.1 n ~/~ n', /* Prep 4 inside    */
+   '| stem range.'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Release the config                                             |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK CONFIG <DET (QUIET'
+Drop wfm
+Return
+
+
+Get_Vswitch_Info:
+/*---------------------------------------------------------------+
+| Loop thru the ranges found and find the VSWITCH                |
++---------------------------------------------------------------*/
+Say TimeStamp()' Extracting VSWITCH info'
+Do r=1 To range.0
+   'PIPE (NAME CONF2VSW.EXEC:240 END ?)',
+      'stem conf.',                             /* Take these       */
+      '| specs w-1;-1 1 w1;-2 nw',              /* Prefix linenos   */
+      '| inside 'range.r,                       /* Make selection   */
+      '| specs w2;* 1',                         /* Remove linenos   */
+      '| join * x00',                           /* Make 1 record    */
+      '| var vswdet',                           /* Store as         */
+      '| locate anycase ~VSWITCH~',             /* Find these       */
+      '| count lines',                          /* How many         */
+      '| var vswpres'                           /* Store as         */
+   If vswpres Then Leave r                      /* Quit when found  */
+End r
+Drop conf. range.
+Return

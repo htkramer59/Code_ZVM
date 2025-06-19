@@ -1,0 +1,401 @@
+/*---------------------------------------------------------------+
+| Function : Show usage by user of the CONPARK filespace         |
+|                                                                |
+| File     : ALLCNP   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC                                       |
+|            MAXMARK  REXX                                       |
+|            ALLCNP   ALLNODES                                   |
+|            ALLCNP   OVERVIEW                                   |
+|                                                                |
+| Called   : ALLCNP   <shortnode> the column of this node sorted |
+|                     A1, A2, B1, B2, O1, P1 or P2               |
+|                     Defaults to P1                             |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210907 09:43:24                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Check for RMCMD and output    |
+|                     of it are now built in                     |
+|            20220301 H.T.Kramer : To reduce the use of the      |
+|                     A-disk we now use VMLINK                   |
+|            20220203 H.T.Kramer : Reversed order for LPARS &    |
+|                         minor adjustments.                     |
+|            20220127 H.T.Kramer : Enlarged the columns and      |
+|                         improved highlighting of selected col. |
+|            20211104 H.T.Kramer : Changed so we can sort the    |
+|                         columns by pressing F4                 |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg sorton arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+If sorton='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME ALLCNP.EXEC:40 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Upto here        */
+               '| cons'                          /* Show             */
+             Exit
+             End
+ 
+'PIPE (NAME ALLCNP.EXEC:47 END ?)',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Do
+              Say 'Can not run: RMCMD EXEC is missing'
+              Exit 28
+              End
+Select
+When myft='EXEC'    Then Call RunExec
+When myfn='CNPSORT' &,
+     myft='XEDIT'   Then Call RunXedit
+Otherwise Nop
+End
+Exit
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| Now do as if we are an exec and do some settings               |
++---------------------------------------------------------------*/
+filler='.. . .'
+/*       Node Cols   Cols    Sort     */
+/*            Head   Totals  Columns  */
+details.0=7
+details.1='P1  3  2  15  28  10  16'
+details.2='P2  5  4  30  42  26  33'
+details.3='O1  7  6  44  56  42  48'
+details.4='B1  7  8  58  70  58  65'
+details.5='B2 11 10  72  84  74  81'
+details.6='A1 13 12  86  98  90  96'
+details.7='A2 15 14 100 112 106 113'
+/*---------------------------------------------------------------+
+| Select the proper details and settings                         |
++---------------------------------------------------------------*/
+Select
+When sorton=''   Then Do
+                      sorton='P1'
+                      details=details.1
+                      Call Collect_Info
+                      End
+When sorton='A1' Then Do
+                      details=details.6
+                      Call Collect_Info
+                      End
+When sorton='A2' Then Do
+                      details=details.7
+                      Call Collect_Info
+                      End
+When sorton='B1' Then Do
+                      details=details.4
+                      Call Collect_Info
+                      End
+When sorton='B2' Then Do
+                      details=details.5
+                      Call Collect_Info
+                      End
+When sorton='O1' Then Do
+                      details=details.3
+                      Call Collect_Info
+                      End
+When sorton='P1' Then Do
+                      details=details.1
+                      Call Collect_Info
+                      End
+When sorton='P2' Then Do
+                      details=details.2
+                      Call Collect_Info
+                      End
+When sorton='DATA' Then Call Get_Data
+When sorton='?'  Then Do
+                      'VMFCLEAR'
+                      'PIPE (NAME ALLCNP.EXEC:119 END ?)',
+                          '< 'myfn myft' *',     /* Read file        */
+                          '| tolabel Parse',     /* To here          */
+                          '| cons'               /* Show             */
+                      Exit
+                      End
+Otherwise Do
+          Say 'Do not understand 'sorton
+          Exit 99
+          End
+End
+Return
+ 
+ 
+RunXedit:
+/*---------------------------------------------------------------+
+| No act as if we are an xedit macro                             |
++---------------------------------------------------------------*/
+':1'
+'EXTRACT /CURSOR'
+Address CMS 'PIPE (NAME ALLCNP.EXEC:139 END ?)',
+   'stem details. 1',                            /* Take these       */
+   '| pick w4.1 <<= ~'cursor.6'~ and',           /* Pick these       */
+          'w5.1 >>= ~'cursor.6'~',               /* .                */
+   '| var details',                              /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'var head 1',                                 /* Take some vars   */
+   '| change ~%G~ ~',                            /* Replace this     */
+   '| change ~%W~ ~',                            /* Replace this     */
+   '| var head',                                 /* .                */
+   '?',                                          /* .                */
+   'var totals 1',                               /* .                */
+   '| change ~%G~ ~',                            /* .                */
+   '| change ~%W~ ~',                            /* .                */
+   '| var totals'                                /* .                */
+Parse Value details With sorton sortcol colintot . . xcol1 xcol2 .
+'SORT * D 'xcol1 xcol2
+Call Change_Head
+'SET RESERVED 3 WHITE NOH 'head
+'SET RESERVED 4 WHITE NOH 'totals
+Return
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Ask the info from all the nodes                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+Address CMS 'RMCMD CMS ALLCNP DATA , , , FILE , 'myfn'  ALLNODES 'wfm
+If rc<>0 Then Do
+              Say 'Can not execute RMCMD'
+              Exit 128
+              End
+Parse Value details With . sortcol colintot .
+/*---------------------------------------------------------------+
+| Processing the info from all the nodes                         |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLCNP.EXEC:179 END ?)',
+    '< ALLCNP ALLNODES 'wfm,                     /* Read file        */
+    '| nlocate anycase ~RMCMD~',                 /* Ignore this      */
+    '| pick anycase  1.1 \== ~ ~ and 1.1 \== ~*~',   /* and this         */
+    '| if: if pick anycase w2.1 == ~Totals:~',   /* Change these     */
+    '|     specs 1;* strip 1 w2.1 nw',           /* Rework           */
+    '| if:',                                     /* Conn 2 if        */
+    '| specs w-1;-1 1.8 w1.1 nw w4.1 nw w5.1 nw x40 n', /* Move id to start */
+    '| sort w1.1 a substr 1.1 of w2.1 d',        /* Sort on id & node */
+    '| join keylen 8',                           /* Join on id       */
+    '| if1: if pick w2.1 \== ~P1~',              /* Complete the     */
+    '|     specs w1.1  1 ~'filler'~ nw w2;* nw', /* ...records       */
+    '| if1:',                                    /* .                */
+    '| if2: if pick w5.1 \== ~P2~',              /* .                */
+    '|     specs w1.4 1 ~'filler'~ nw w5;* nw',  /* .                */
+    '| if2:',                                    /* .                */
+    '| if3: if pick w8.1 \== ~O1~',              /* .                */
+    '|     specs w1.7 1 ~'filler'~ nw w8;* nw',  /* .                */
+    '| if3:',                                    /* .                */
+    '| if4: if pick w11.1 \== ~B1~',             /* .                */
+    '|     specs w1.10 1 ~'filler'~ nw w11;* nw', /* .                */
+    '| if4:',                                    /* .                */
+    '| if5: if pick w14.1 \== ~B2~',             /* .                */
+    '|     specs w1.13 1 ~'filler'~ nw w14;* nw', /* .                */
+    '| if5:',                                    /* .                */
+    '| if6: if pick w17.1 \== ~A1~',             /* .                */
+    '|     specs w1.16 1 ~'filler'~ nw w17;* nw', /* .                */
+    '| if6:',                                    /* .                */
+    '| if7: if pick w20.1 \== ~A2~',             /* .                */
+    '|     specs w1.19 1 ~'filler'~ nw w20;* nw', /* .                */
+    '| if7:',                                    /* .                */
+    '| specs w1.1  1.8',                         /* Adjust layout    */
+    '        w3.1  nw.7 right',                  /* .                */
+    '        w4.1  nw.7 right',                  /* .                */
+    '        w6.1  nw.7 right',                  /* .                */
+    '        w7.1  nw.7 right',                  /* .                */
+    '        w9.1  nw.7 right',                  /* .                */
+    '        w10.1 nw.7 right',                  /* .                */
+    '        w12.1 nw.7 right',                  /* .                */
+    '        w13.1 nw.7 right',                  /* .                */
+    '        w15.1 nw.7 right',                  /* .                */
+    '        w16.1 nw.7 right',                  /* .                */
+    '        w18.1 nw.7 right',                  /* .                */
+    '        w19.1 nw.7 right',                  /* .                */
+    '        w21.1 nw.7 right',                  /* .                */
+    '        w22.1 nw.7 right',                  /* .                */
+    '| sort w'sortcol'.1 D',                     /* Do sort          */
+    '| n: nlocate anycase ~Totals:~',            /* Move this        */
+    '| maxmark w2.1 w4.1 w6.1 w8.1 w10.1 w12.1 w14.1',
+    '| > 'myfn' OVERVIEW 'wfm,                  /* Store as         */
+    '? n:',                                      /* Conn 2 nlocate   */
+    '| specs 1;* 7 x40 n',                       /* Add space        */
+    '| var totals'                               /* Save as          */
+Call Change_Head
+Call SetPfKeys
+/*---------------------------------------------------------------+
+| Show what we collected                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLCNP.EXEC:237 END ?)',
+    'cms EXECMAP CNPSORT XEDIT',                 /* Ask cms          */
+    '| drop first 1',                            /* Ignore header    */
+    '| count lines',                             /* How many         */
+    '| var exldd'                                /* Hand 2 rexx      */
+If exldd Then Address CMS 'EXECDROP CNPSORT XEDIT'
+Address CMS 'EXECLOAD 'myfn myft' * CNPSORT XEDIT'
+Queue ':1'
+Queue 'SET RESERVED 3 WHITE NOH 'head
+Queue 'SET RESERVED 4 WHITE NOH 'totals
+Queue 'SET RESERVED -1 WHITE NOH 'pfkresrvd
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+Address CMS 'EXECDROP CNPSORT XEDIT'
+Address CMS 'ERASE 'myfn' ALLNODES 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+SetPfKeys:
+/*--------------------------------------------------------------------+
+| Set my PF keys, using 1 to 12, separated by ;                       |
++--------------------------------------------------------------------*/
+pfkeys='HELP; ;ONLY QQUIT;CNPSORT;SCREEN 2; ;BACKWARD;FORWARD; ;',
+       'TOP#NEXT;BOT;ONLY QQUIT'
+pfkeyline='Help;_;Quit;SortSel;<->;Scr2;Back;Forw;_;Top;Bot;Quit'
+Address CMS 'PIPE (NAME ALLCNP.EXEC:265 END ?)',
+    'var pfkeys',                                /* Take these       */
+    '| dup 1',                                   /* Duplicate        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET PF~ 1',                        /* Compose          */
+            'pad 0 recno n.2 right',             /* ....setting      */
+            'w1;* nw',                           /* .                */
+    '| stack'                                    /* Hand 2 xedit     */
+Address CMS 'PIPE (NAME ALLCNP.EXEC:273 END ?)',
+     'var pfkeyline',                            /* Take this        */
+     '| split at ;',                             /* Split here       */
+     '| specs recno 1.2',                        /* Compose          */
+             '~=%G~ n',                          /* ...setting       */
+             'w1.1 n',                           /* .                */
+             '~%W~ n',                           /* .                */
+     '| join *',                                 /* Make 1 record    */
+     '| space 0',                                /* Suppress spaces  */
+     '| specs ~%W~ 6 1;* n',                     /* Shift 6          */
+     '| var pfkresrvd'                           /* Store as         */
+Return
+ 
+ 
+Change_Head:
+/*---------------------------------------------------------------+
+| Change colors in head and totals                               |
++---------------------------------------------------------------*/
+input=Subword(totals,colintot,2)
+outpt='%G'input'%W'
+head='      Userid ',
+     '%w.%WP1 Blks     %'||,
+     '%w.%WP2 Blks     %'||,
+     '%w.%WO1 Blks     %'||,
+     '%w.%WB1 Blks     %'||,
+     '%w.%WB2 Blks     %'||,
+     '%w.%WA1 Blks     %'||,
+     '%w.%WA2 Blks     %'
+'PIPE (NAME ALLCNP.EXEC:301 END ?)',
+    'var head',                                  /* Take this        */
+    '| change ~%G~%W~',
+    '| change ~%g~%w~',
+    '| change ~%W'sorton'~%G'sorton'~',          /* Replace this     */
+    '| var head',                                /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'var totals',                                /* Take this        */
+    '| change ~%G~%W~',
+    '| change ~%g~%w~',
+    '| change ~ 'input' ~'outpt'~',              /* Replace this     */
+    '| var totals'                               /* Hand 2 rexx      */
+Return
+ 
+ 
+Get_Data:
+/*---------------------------------------------------------------+
+| Get the data from the other nodes                              |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLCNP.EXEC:320 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Some defaults                                                  |
++---------------------------------------------------------------*/
+id='CONPARK'
+filepool='VMUSERS'
+filespace=filepool':'id'.'
+/*---------------------------------------------------------------+
+| Ask some stuff from the filepool                               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLCNP.EXEC:335 END ?)',
+    'cms QUERY LIMITS FOR 'id filepool,          /* Ask values       */
+    '| drop first 1',                            /* Remove hdr       */
+    '| specs w3.1 1 w4.1 nw',                    /* Adjust layout    */
+    '| change ~-~ ~',                            /* Translate these  */
+    '| change ~%~.00~',                          /* Replace this     */
+    '| specs ~Totals:~ 1 w1;* nw',               /* Compose output   */
+    '| cons',                                    /* Show 4 recording */
+    '| specs w2.1 1',                            /* Keep this        */
+    '| var maxblks',                             /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'cms LISTDIR 'filespace,                     /* Ask this         */
+    '| drop first 2',                            /* Remove hdr       */
+    '| specs w2;* 1',                            /* Keep this        */
+    '| stem dir.'                                /* Store as         */
+adj=Length(maxblks)
+/*---------------------------------------------------------------+
+| Now process all the subdirectories                             |
++---------------------------------------------------------------*/
+Do d=1 To dir.0
+  'PIPE (NAME ALLCNP.EXEC:355 END ?)',
+      'cms QUERY BLOCKS * * 'dir.d,              /* Ask this         */
+      '| drop first 2',                          /* Remove hdr       */
+      '| specs w-2;-1',                          /* Keep this        */
+      '| change ~-~0~',                          /* Change 2 calcul. */
+      '| specs ',                                /* Summing          */
+      '        printonly eof',                   /* ...these 2       */
+      '        a: w1.1 .',                       /* .....columns     */
+      '        b: w2.1 .',                       /* .                */
+      '        set #0+=a',                       /* .                */
+      '        set #1+=b',                       /* .                */
+      '        eof',                             /* .                */
+      '        print #0 1',                      /* .                */
+      '        print #1 nw',                     /* .                */
+      '| specs w1.2 1',                          /* Adding up        */
+      '        a: w1.1 .',                       /* ...the 2         */
+      '        b: w2.1 .',                       /* .                */
+      '        set #0:=a+b',                     /* .                */
+      '        print #0 nw',                     /* .                */
+      '| specs w1.3 1',                          /* Add a            */
+      '        a: w3.1 . ',                      /* ...percentage    */
+      '        set #0:=(a/'maxblks')*100',       /* .                */
+      '        print #0 pic -99.99 nw',          /* .                */
+      '| specs 1;* 1 ~'dir.d'~ nw',              /* Add the dir      */
+      '| specs w1;-2 1 fs . substr f2.1 of w-1;-1 nw',   /* Keep the id      */
+      '| specs w1.1 1.'adj' right',              /* Rework           */
+      '        w2.1 nw.'adj' right',             /* ...layout        */
+      '        w3.1 nw.'adj' right',             /* .                */
+      '        w4.1 nw.6 right',                 /* .                */
+      '        w5.1 nw.8',                       /* .                */
+      '| specs pad 0 w1.1 1.'adj' right 1;* nw', /* Adjust layout    */
+      '| var work'                               /* Hand 2 rexx      */
+      dir.d=work                                 /* Replace in stem  */
+End d
+/*---------------------------------------------------------------+
+| Show the outcome                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLCNP.EXEC:392 END ?)',
+    'stem dir.',                                 /* Take these       */
+    '| sort w1.1 d',                             /* Sort them        */
+    '| specs 'adj+1';* 1',                       /* Adjust columns   */
+    '| cons'                                     /* Show them        */
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

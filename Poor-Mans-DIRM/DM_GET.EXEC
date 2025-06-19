@@ -1,0 +1,51 @@
+/*---------------------------------------------------------------+
+| Function : Get a copy of a directory of a user id              |
+|                                                                |
+| File     : DM_GET   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_GETID EXEC                                       |
+|            <dirfnft>                                           |
+|                                                                |
+| Called   : DM_GET   <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 15:23:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Locate the userid                                              |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_GET.EXEC:37 END ?)',
+   'stem uid.',                                  /* get these        */
+   '| specs 7;* 1.80',                           /* Adjust records   */
+   '| > 'uid' DIRECT 'ws' FIXED 80'                 /* Write to file    */
+If rc<>0 Then Call Exit '628'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

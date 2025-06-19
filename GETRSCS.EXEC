@@ -1,0 +1,133 @@
+/*---------------------------------------------------------------+
+| Function : Receive a file from an other node                   |
+|                                                                |
+| File     : GETRSCS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC                                       |
+|            RECEIVE  EXEC                                       |
+|                                                                |
+| Called   : GETRSCS  <fn> <ft> <fm> <node> <nwfn> <nwft> <nwfm> |
+|                     ( <options>                                |
+|                                                                |
+|            <fn>      file name                                 |
+|            <ft>      file type                                 |
+|            <fm>      file mode, can be a single letter,        |
+|                      filespace/dir combo or <user>.<mdisk>     |
+|            <node>    the node where the file resides           |
+|            <nwfn>    new file name if ommited <fn> is used     |
+|            <nwft>    new file type if ommited <ft> is used     |
+|            <nwfm>    new file mode if ommited defaults to A    |
+|            <options> options for the receive command           |
+|                      valid options: OLDDATE, REPLACE, NOLOG    |
+|                            NOPROMPT                            |
+|                                                                |
+| Comments : See HELP RECEIVE for extra options                  |
+|                                                                |
+| Note(s)  : On the VMLINK the options and commands are in the   |
+|            shortest forms possible due to restrictions on      |
+|            the command lengths for XAUTOLOG                    |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20230118 14:16:30                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm fromnode nwfn nwft nwfm '(' options
+Parse Source . . myfn myft .
+If fn='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME GETRSCS.EXEC:41 END ?)',
+             '< 'myfn myft' *',            /* Read myself */
+             '| tolabel Parse',            /* Up to here  */
+             '| cons'                      /* Show        */
+           Call Exit
+           End
+/*---------------------------------------------------------------+
+| Initialise some things                                         |
++---------------------------------------------------------------*/
+receiveopts=''
+own=0
+spid=''
+/*---------------------------------------------------------------+
+| Compose return address                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME GETRSCS.EXEC:56 END ?)',
+    'cp QUERY USERID',                           /* Ask CP           */
+    '| specs w1.1 1 ~AT~ nw w3.1 nw',            /* Keep id & node   */
+    '| var sendto'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Checks
+/*---------------------------------------------------------------+
+| Prepare cmdline                                                |
++---------------------------------------------------------------*/
+If own Then cmdline='SENDFILE 'fn ft fm sendto
+       Else cmdline='VMLINK 'fm' (NON NOT I SF 'fn ft' .fm'
+/*---------------------------------------------------------------+
+| Issue the command                                              |
++---------------------------------------------------------------*/
+Address CMS 'RMCMD CMS 'cmdline sendto','fromnode',,QUIET'
+/*---------------------------------------------------------------+
+| Receive the file                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME GETRSCS.EXEC:76 END ?)',
+   'cp QUERY RDR * ALL ISO DIST',                /* Ask CP           */
+   '| drop first 1',                             /* Remove hdr       */
+   '| pick w10.1 == ~'fn'~ and',                 /* Is requested file*/
+          'w11.1 == ~'ft'~',                     /* .present?        */
+   '| sort w8.2',                                /* Sort on date/time*/
+   '| take last 1',                              /* Take latest vers.*/
+   '| specs w2.1 1',                             /* Keep this        */
+   '| var spid'                                  /* Hand 2 rexx      */
+If Datatype(spid,'NUM') Then Address CMS 'RECEIVE 'spid nwfn nwft nwfm '(' receiveopts
+                        Else Call Exit'928 No rdr file found'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Checks:
+/*---------------------------------------------------------------+
+| Do all the checks on the input                                 |
++---------------------------------------------------------------*/
+If fn='' Then Call Exit '128 No input specified'
+If ft='' Then Call Exit '228 No filetype specified'
+If fm='' Then Call Exit '328 No filemode specified'
+/*---------------------------------------------------------------+
+| Determine if we need to link a dir or a mdisk                  |
++---------------------------------------------------------------*/
+Select
+When Length(fm)>1 &,
+     Pos(':',fm)<>0 Then Do
+                         fm='.DIR 'fm
+                         own=0
+                         End
+When Length(fm)>1 &,
+     Pos(':',fm)=0  Then Do
+                         fm=Translate(fm,' ','.')
+                         own=0
+                         End
+Otherwise own=1
+End
+If fromnode='' Then Call Exit '428 No node specified'
+If nwfn='=' Then nwfn=fn
+If nwft='=' Then nwfn=ft
+If nwfm='=' Then nwfn=fm
+/*---------------------------------------------------------------+
+| Check options if present                                       |
++---------------------------------------------------------------*/
+If Pos('REPL',options)<>0 Then receiveopts=receiveopts' REPLACE'
+If Pos('OLDD',options)<>0 Then receiveopts=receiveopts' OLDDATE'
+If Pos('NOL',options)<>0  Then receiveopts=receiveopts' NOLOG'
+If Pos('NOP',options)<>0  Then receiveopts=receiveopts' NOPROMPT'
+Return

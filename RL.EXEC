@@ -1,0 +1,6 @@
+/**/
+'PIPE cp q files * | specs w2.1 | pick w1.1 == ~NO~ | count lines | var nordr'
+If \nordr Then Do
+     Queue 'SORT * D 60 79'
+     'RDRLIST'
+     End

@@ -1,0 +1,86 @@
+/*---------------------------------------------------------------+
+| Function : Rename a user id                                    |
+|                                                                |
+| File     : DM_CHID  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_CHUID EXEC                                       |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_CHID  <uid1> <uid2>                              |
+|          : CHGID    <uid1> <uid2> MOVElinks                    |
+|                                   KEEPlinks                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240701 15:28:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid1 uid2 option .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Do some basic checks                                           |
++---------------------------------------------------------------*/
+If uid1='' Then Call Exit 540
+If uid2='' Then Call Exit 542
+If DM_CKUID(uid2) Then Call Exit 651
+If option='' |,
+   Substr(option,1,4)='MOVE' Then adjlink='| change ~LINK 'uid1'~ ~LINK 'uid2'~'
+                             Else adjlink=''
+/*---------------------------------------------------------------+
+| Get the id                                                     |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid1
+/*---------------------------------------------------------------+
+| Process the record                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CHID.EXEC:51 END ?)',
+   'stem uid.',                                  /* Take this        */
+   '| take first 1',                             /* Keep this        */
+   '| var user',                                 /* Hand 2 rexx      */
+   '| f: fanout',                                /* Dupl. record     */
+   '| pick w1.1 == ~SUBCONFIG~',                 /* Check for this   */
+   '| count lines',                              /* How many         */
+   '| var invtype',                              /* Store as boolean */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.2 1 ~'uid2'~ nw w4;* nw',         /* Compose new rcrd */
+   '| var newuser'                               /* Hand 2 rexx      */
+If invtype Then Call Exit 652
+/*---------------------------------------------------------------+
+| Write the USER DIRECT file and apply changes                   |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CHID.EXEC:66 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'user'~ ~'newuser'~',              /* Replace this one */
+   adjlink,                                      /* Change links?    */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write to file    */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put directory online                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLINE'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

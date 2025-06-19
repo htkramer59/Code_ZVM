@@ -1,0 +1,241 @@
+/*---------------------------------------------------------------+
+| Function : .                                                   |
+|                                                                |
+| File     : QSCAN    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSCAN    REPORT    Output                           |
+|          : QSCAN    NAMES     Control file                     |
+|          : QSxxxxxx EXEC      Various execs specified in NAMES |
+|          : QN       EXEC                                       |
+|          : SICONV   REXX                                       |
+|                                                                |
+| Called   : QSCAN    .                                          |
+|                                                                |
+| Authoris.: CP Classes: A-G (all that is available)             |
+|            Directory options: DEVMAINT, MAINTCCW & LNKNOPAS    |
+|            RSCS: admin                                         |
+|            RACF: operations                                    |
+|            ADMIN for filepools                                 |
+|                                                                |
+| Comments : Need 2 check on SSI as well..                       |
+|            Only tested on FBA devices                          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200909 09:24:23                                   |
+| Changes  : .                                                   |
+|            20210324 H.T.Kramer : .                             |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+Say TimeStamp()' Starting Quick Scan'
+x=Time('R')
+If what='?' Then Do
+            Address CMS 'HELP 'myfn
+            Exit
+            End
+/*---------------------------------------------------------------+
+| Preparations                                                   |
++---------------------------------------------------------------*/
+Call Initialise
+Call CheckFile myfn' NAMES *'
+Call ReadNames
+Call LoadCode
+/*---------------------------------------------------------------+
+| Run the tests if the switches are on (1)                       |
++---------------------------------------------------------------*/
+If reportstyle='SINGLE' Then reportsw='PIPE'
+If Abbrev(reportstyle,'INDIV') Then reportsw='FILE'
+If levels   Then Address CMS levels_exec   reportsw
+If hardware Then Address CMS hardware_exec reportsw
+If memory   Then Address CMS memory_exec   reportsw
+If nss      Then Address CMS nss_exec      reportsw
+If vswitch  Then Address CMS vswitch_exec  reportsw
+If dasd     Then Address CMS dasd_exec     reportsw
+If spool    Then Address CMS spool_exec    reportsw
+If qnames   Then Address CMS qnames_exec   reportsw
+If dirmaint Then Address CMS dirmaint_exec reportsw
+If nodirm   Then Address CMS nodirm_exec   reportsw
+If filepool Then Address CMS filepool_exec reportsw
+If tcp      Then Address CMS tcp_exec      reportsw
+If rscs     Then Address CMS rscs_exec     reportsw
+If nfs      Then Address CMS nfs_exec      reportsw
+If smtp     Then Address CMS smtp_exec     reportsw
+If snmpd    Then Address CMS snmpd_exec    reportsw
+If ssl      Then Address CMS ssl_exec      reportsw
+If ldap     Then Address CMS ldap_exec     reportsw
+If erep     Then Address CMS erep_exec     reportsw
+If monitor  Then Address CMS monitor_exec  reportsw
+If racfvm   Then Address CMS racf_exec     reportsw
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call WriteReport
+Call UnloadCode
+Exit:
+/*---------------------------------------------------------------+
+| Only way to the exit                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc emsg
+If exrc='' | exrc='EXRC' Then exrc=0
+If exrc<>0 Then Say TimeStamp() emsg
+Say TimeStamp()' Quick Scan ended elapsed time: 'Time('E')' seconds'
+Exit exrc
+ 
+ 
+ReadNames:
+/*---------------------------------------------------------------+
+| Read the control file                                          |
++---------------------------------------------------------------*/
+Say TimeStamp()' Reading 'myfn' NAMES (control file)'
+'PIPE (NAME QSCAN.EXEC:95 END ?)',
+    '< 'filename,                                /* Read this file   */
+    '| pick 1.1 \== ~~ and 1.1 \== ~*~',         /* Ignore these     */
+    '| strip',                                   /* Remove spaces    */
+    '| change anycase ~<NODE>~'node'~',          /* Replace these    */
+    '| join * x40',                              /* Make 1 record    */
+    '| split anycase before string ~:NICK.~',    /* Split here       */
+    '| split anycase before string ~:CHECK.~',   /* and here         */
+    '| p: pick anycase 1.6 ==  ~:NICK.~',        /* Select these     */
+    '| specs fs . f2;*',                         /* Keep this        */
+    '| xlate w1.1 upper',                        /* Uppercase this   */
+    '| specs ~/~ 1',                             /* Prep 4 varload   */
+            'w1.1 n',                            /* .                */
+            '~/~ n ',                            /* .                */
+            'w2;* n',                            /* .                */
+    '| fi: faninany',                            /* Take in other    */
+    '| strip',                                   /* Remove space     */
+    '| varload',                                 /* Hand 2 rexx      */
+    '? p:',                                      /* Conn 2 pick      */
+    '| specs fs . f2;*',                         /* Keep this        */
+    '| f: fanout',                               /* Dupl records     */
+    '| specs w1.1 1',                            /* Keep this        */
+    '| xlate upper',                             /* Uppercase this   */
+    '| j: juxtapose',                            /* Join to this     */
+    '| change ~:~_~',                            /* Replace this     */
+    '| change anycase ~_SWITCH.YES~/1~',         /* and this         */
+    '| change anycase ~_SWITCH.NO~/0~',          /* ....and this     */
+    '| change ~.~/~ 1',                          /* Replace this     */
+    '| specs ~/~ 1 1;* n',                       /* Prep 4 varload   */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs w2;* 1',                            /* Reduce 2 this    */
+    '| split before string ~:~',                 /* Split here       */
+    '| xlate fs . f1 upper',                     /* Uppercase part   */
+    '| j:'                                       /* Conn 2 juxtapose */
+Parse Value output With . '.' outputfile
+Parse Upper Value quiet  With . '.' quiet
+If quiet='YES' Then vmlinkquiet='QUIET'
+               Else vmlinkquiet=''
+Parse Value reportstyle With . '.' reportstyle .
+Upper reportstyle
+Return
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Add stuff to the output array                                  |
++---------------------------------------------------------------*/
+Parse Arg what','header
+'PIPE (NAME QSCAN.EXEC:144 END ?)',
+      'var what',                                /* Take this        */
+      '| specs -1;-1',                           /* Keep this        */
+      '| pick 1.1 == ~.~',                       /* Select this      */
+      '| count lines',                           /* How many         */
+      '| var stemvar'                            /* Hand 2 rexx      */
+If stemvar Then what='stem 'what
+           Else what='var 'what
+If header<>'' Then header='| preface literal 'TimeStamp() header
+'PIPE (NAME QSCAN.EXEC:153 END ?)',
+      what,                                      /* Take this        */
+      header,                                    /* ....and this     */
+      '| append literal ',                       /* Add empty line   */
+      '| append literal ',                       /* a second one     */
+      '| stem report. append'                    /* Add 2 stem       */
+Return
+ 
+ 
+WriteReport:
+/*---------------------------------------------------------------+
+| Create the report                                              |
++---------------------------------------------------------------*/
+Say TimeStamp()' Writing output to disk'
+'PIPE (NAME QSCAN.EXEC:167 END ?)',
+   'stem report.',                               /* Take stem        */
+   '| > 'outputfile                              /* Write 2 file     */
+Return
+ 
+ 
+CheckFile:
+/*---------------------------------------------------------------+
+| Check If the input file exists                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg filename
+'PIPE (NAME QSCAN.EXEC:178 END ?)',
+    'var filename',                              /* Take from rexx   */
+    '| strip',                                   /* Remove spaces    */
+    '| statew isodate',                          /* Check if exists  */
+    '| var inputstatus',                         /* Store as         */
+    '| count lines',                             /* How many lines   */
+    '| var input'                                /* Store as boolean */
+If \input Then Call Exit 28 filename 'Not found'
+          Else Call Add2Output 'inputstatus,Control file used:'
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn
+ 
+ 
+Initialise:
+/*---------------------------------------------------------------+
+| Initialise some items                                          |
++---------------------------------------------------------------*/
+Say TimeStamp()' Initialising'
+Address COMMAND 'CP SET EMSG ON'
+Address COMMAND 'CP SET IMSG ON'
+report.0=0
+rcpuid=c2x(diag(218))
+'PIPE (NAME QSCAN.EXEC:203 END ?)',
+    'query version',                             /* Ask myself       */
+    '| var pipeversion',                         /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY USERID',                           /* Ask cp           */
+    '| specs w3.1',                              /* Keep this        */
+    '| var node'                                 /* Store as         */
+Return
+ 
+ 
+LoadCode:
+/*---------------------------------------------------------------+
+| Execload the items from the NAMES file                         |
++---------------------------------------------------------------*/
+Say TimeStamp()' Loading additional code'
+'PIPE (NAME QSCAN.EXEC:218 END ?)',
+    'var loadcode',                              /* Take from rexx   */
+    '| specs fs . f2;*',                         /* Keep this        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~EXECLOAD~ 1 1;* nw',               /* Prepare cmd      */
+    '| cms'                                      /* Hand 2 cms       */
+Return
+ 
+ 
+Unloadcode:
+/*---------------------------------------------------------------+
+| Execdrop the items from the NAMES file                         |
++---------------------------------------------------------------*/
+Say TimeStamp()' Removing additional code'
+'PIPE (NAME QSCAN.EXEC:232 END ?)',
+    'var loadcode',                              /* Take from rexx   */
+    '| specs fs . f2;*',                         /* Keep this        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~EXECDROP~ 1',                      /* Compose cmds     */
+            'w1.1 nw',                           /* .                */
+            'w-2;-2 nw ',                        /* .                */
+            'w3.1 nw',                           /* .                */
+    '| cms'                                      /* Hand 2 cms       */
+Return

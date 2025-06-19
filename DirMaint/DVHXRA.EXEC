@@ -1,0 +1,372 @@
+/*---------------------------------------------------------------+
+| Function : Multi function exit for dirmaint                    |
+|                                                                |
+| File     : DVHXRA   EXEC                                       |
++----------------------------------------------------------------+
+|                                                                |
+| Version  : 1.2.0                                               |
+|                                                                |
+| Files in : *        CLUSTER      Part of dirmaint directory    |
+|       in : *        DIRMPART     Part of dirmaint directory    |
+|       in : CONFIG   DVHXRA       Config file for this code     |
+| Used     : DVHDEDCT EXEC         Dirmaint dedicate code        |
+|                                                                |
+| Called   : DVHXRA   .                                          |
+|                                                                |
+| Comments : Requires DIRMAINT as ADMIN!!                        |
+|                     PRIVCLASS B                                |
+|            Max 8 fcp devices can be DEDICATEd during ADD       |
+|            See DIRMAINT docu on how to code exits              |
+|                                                                |
+| Testing changes to the code, make sure you have access to:     |
+|            this exec                                           |
+|            CONFIG  DVHXRA                                      |
+|            LVL2XRA EXEC                                        |
+|            LVL1XRA EXEC                                        |
+|                                                                |
+| Run LVL1XRA EXEC to check the changes                          |
+|                                                                |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190426 13:02:56                                   |
+| Changes  : .                                                   |
+|            20210105 H.T.Kramer : Rewrite after finding a       |
+|                       faulty assignment of FCPs                |
+|            20200401 H.T.Kramer : Fixed wrong input for         |
+|                       DVHDEDCT, items were reversed            |
+|            20200323 H.T.Kramer : Small correction for single   |
+|                        FCP devices found.                      |
+|            20191122 H.T.Kramer : Changed processing of free    |
+|                        devices and directory dedicates         |
+|                        Now more correct 4 user & identity      |
+|                        More selective as to where ADD is done  |
+|                        Changed max dedicate to 8 devices       |
+|            20191120 H.T.Kramer : Added first time processing   |
+|            20191008 H.T.Kramer : Optimised.                    |
+|            20190923 H.T.Kramer : Updated 4 SSI,                |
+|                        in cooperation with C.Beukers, ICU      |
+|            20190920 H.T.Kramer : Some rework and moved         |
+|                        variables to a CONFIG file              |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg prvrc cmdname '(' run .
+Parse Source . . myfn myft .
+Parse Value cmdname With cmdname 'LIKE' .
+x=Time('R')                                     /* Reset timer      */
+myname=Userid()                                 /* Who running code?*/
+Call Start_Display
+If run='TEST' Then test=1
+              Else test=0
+If test Then Do
+          Say TimeStamp()' Running in test mode'
+          myname='DIRMAINT'                     /* 4 testing only   */
+          End
+/*---------------------------------------------------------------+
+| Main line                                                      |
++---------------------------------------------------------------*/
+Select
+When cmdname='ADD' &,
+     myname='DIRMAINT' Then Call Dirmaint_Add
+Otherwise Say TimeStamp() 'No actions for: 'cmdname' on 'myname
+End
+/*---------------------------------------------------------------+
+| End of the code                                                |
++---------------------------------------------------------------*/
+Exit:
+Say TimeStamp() 'Exiting, duration: 'Time('E')' seconds'
+Exit
+ 
+ 
+Start_Display:
+/*---------------------------------------------------------------+
+| Display some stuff & get some info from caller                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DVHXRA.EXEC:84 END ?)',
+    '< 'myfn myft' *',                          /* Read myself      */
+    '| locate ~Version~',                       /* Locate this      */
+    '| take first 1',                           /* Keep this        */
+    '| specs ~Entered;~ 1 w2.3 nw ',            /* Adjust layout    */
+    '| split at ~;~',                           /* Split here       */
+    '| specs ~'TimeStamp()'~ 1 w1;* nw',        /* Add timestamp    */
+    '| cons'                                    /* Show             */
+Return
+ 
+ 
+Dirmaint_Add:
+/*---------------------------------------------------------------+
+| Processing for ADD in DIRMAINT                                 |
++---------------------------------------------------------------*/
+Call Init_Add
+Call Read_Config
+/*---------------------------------------------------------------+
+| Do processing after the add                                    |
++---------------------------------------------------------------*/
+Parse Value cmd_string With cmdname newid .
+If CheckId() Then Do
+    Say TimeStamp() 'Need to add FCP devices for: 'newid
+    Call Get_Free_FCP
+    Call Get_Dir_FCP
+    If dir_fcp.0<>0 Then Call Select_FCP
+                    Else Call First_FCP
+    If dedic.0<>0 Then Do
+             Do i=1 To dedic.0
+               cmd='DVHDEDCT 'newid dedic.i
+               Say TimeStamp() cmd
+               If \test Then Address CMS cmd
+             End i
+             End
+        Else Do
+             Say TimeStamp()' Problems finding FCP devices'
+             End
+    End
+    Else Do
+    Say TimeStamp() 'Id 'newid' not found in CP directory'
+    End
+Return
+ 
+ 
+Init_Add:
+/*---------------------------------------------------------------+
+| Initialise some items & defaults                               |
++---------------------------------------------------------------*/
+dedic.0=0                /* initialise stem */
+dir_fcp.0=0              /* idem */
+free_fcp.0=0             /* idem */
+work.0=0                 /* idem */
+fs='FF'x                 /* Fieldseparator */
+def_subch='50'           /* Default subchannels xx50 & xx50 */
+channels2='E0 F0'        /* Default channels E0xx & F0xx */
+channels4='E0 E5 F0 F5'  /* Default channels E0xx & E5xx & F0xx & F5xx */
+channels6=''             /* Default channels .... */
+channels8=''             /* Default channels .... */
+def_accept='SLD* SLB*'   /* Only for these wildcards */
+def_wfm='E'              /* Where to find DIRMPART & CLUSTER info */
+def_vcuu='5C50 5C51'     /* How to dedicate...*/
+def_srch='DOWN'          /* Where to start finding free fcps */
+/*---------------------------------------------------------------+
+| Get values from our callers                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DVHXRA.EXEC:149 END ?)',
+    'rexxvars 2 toload',                        /* Ask 2 lvls up    */
+    '| all ~ORIGNODE~!~ASNODE~!~CMD_STRING~!~LOG_STRING~',  /* We need these    */
+    '| xlate upper',                            /* Just in case     */
+    '| varload'                                 /* Hand 2 rexx      */
+Return
+ 
+ 
+Read_Config:
+/*---------------------------------------------------------------+
+| Read the values from the config                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DVHXRA.EXEC:161 END ?)',
+    '< CONFIG 'myfn' *',                        /* Read my config   */
+    '| pick 1.1 \== ~*~',                       /* Remove comments  */
+    '| xlate upper',                            /* Uppercase all    */
+    '| specs ~/~ 1 1;* n',                      /* Prep 4 varload   */
+    '| change ~=~/~',                           /*  more prepping   */
+    '| varload'                                 /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If no values entered...assume these                            |
++---------------------------------------------------------------*/
+If subch=''    | subch='SUBCH'        Then subch=def_subch
+If channels='' | channels='CHANNELS'  Then channels=def_channels
+If accept=''   | accept='ACCEPT'      Then accept=def_accept
+If wfm=''      | wfm='WFM'            Then wfm=def_wfm
+If vcuu=''     | vcuu='VCUU'          Then vcuu=def_vcuu
+If search=''   | search='SEARCH'      Then search=def_srch
+If search='DOWN' Then search='| take last 1'
+If search='UP'   Then search='| take first 1'
+'PIPE (NAME DVHXRA.EXEC:179 END ?)',
+    'var vcuu',                                 /* Take this        */
+    '| specs w1.4',                             /* Max 4 devices    */
+    '| split',                                  /* Split            */
+    '| stem vcuu.',                             /* Put into stem    */
+    '| specs ~/DEDICATE~ 1 w1.1 nw ~/~ n',      /* Add this         */
+    '| join * ~!~',                             /* Make 1 record    */
+    '| var vcuusrch'                            /* Store as         */
+Return
+ 
+ 
+CheckId:
+/*---------------------------------------------------------------+
+| Check if the id matches any of the wildcards                   |
++---------------------------------------------------------------*/
+check=0
+Do a=1 To Words(accept)
+     wildc=Word(accept,a)
+     'PIPE (NAME DVHXRA.EXEC:197 END ?)',
+         'var newid',                           /* Take this        */
+         '| wildcard w1.1 /'wildc'/',           /* Check againt card*/
+         '| count lines',                       /* How many         */
+         '| var validid'                        /* Store as         */
+     check=check+validid                        /* Cumulate outcome */
+End a
+If check>1 Then check=1
+Return check
+ 
+ 
+Get_Free_FCP:
+/*---------------------------------------------------------------+
+| List all free FCP devices...                                   |
++---------------------------------------------------------------*/
+If orignode<>asnode Then satnode='AT 'orignode' CMD'
+                    Else satnode=''
+Say TimeStamp() 'ORIGNODE is ' orignode
+Say TimeStamp() 'ASNODE   is ' asnode
+Select
+When vcuu.0=2 Then channels=channels2
+When vcuu.0=4 Then channels=channels4
+When vcuu.0=6 Then channels=channels6
+When vcuu.0=8 Then channels=channels8
+Otherwise Do
+          Say TimeStamp() 'Can not handle 'vcuu.0' devices'
+          Call Exit
+          End
+End
+incompl=vcuu.0+1
+'PIPE (NAME DVHXRA.EXEC:227 END ?)',
+   'var channels',                              /* Take this        */
+   '| split',                                   /* Split info record*/
+   '| specs ~/~ 1 w1.1 n ~/~ n',                /* Add strings      */
+   '| join * ~!~',                              /* Make 1 record    */
+   '| var slct'                                 /* Store as         */
+'PIPE (NAME DVHXRA.EXEC:233 END ?)',
+   'cp 'satnode' QUERY FCP FREE',               /* Ask cp           */
+   '| split at ,',                              /* Split here       */
+   '| strip',                                   /* Remove spaces    */
+   '| specs w2.1',                              /* Keep this        */
+   '| specs pad 0 -2;-1 1.4 right w1.1 nw',     /* Add a label      */
+   '| specs pad 0 w1.1 x2d 1.10 right w2.1 nw', /* Conv label 2 dec */
+   '| sort',                                    /* Sort             */
+   '| zone substr 1.2 of w2.1 all 'slct,        /* Select on channls*/
+   '| join keylen 10',                          /* Join on key      */
+   '| pick w'incompl'.1 \== ~~',                /* Keep compl sets  */
+   '| specs 1;* 1 ~.~ nw',                      /* Add indicator    */
+   '| stem free_fcp.'                           /* Store as         */
+/*---------------------------------------------------------------+
+| No FCP devices found...                                        |
++---------------------------------------------------------------*/
+If free_fcp.0=0 Then Do
+           Say TimeStamp() 'Can not find any FCP free devices'
+           Call Exit
+           End
+Return
+ 
+ 
+Get_Dir_FCP:
+/*---------------------------------------------------------------+
+| Get all used FCP devices from the Directory                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DVHXRA.EXEC:260 END ?)',
+   'cms LISTFILE * DIRMPART 'wfm' (NOH',        /* Get dir info     */
+   '| append cms LISTFILE * CLUSTER 'wfm' (NOH',/* and this         */
+   '| getfiles',                                /* Read what is fnd */
+   '| xlate upper',                             /* Upper case...    */
+   '| specs 1.71',                              /* Remove recno     */
+   '| strip',                                   /* Remove spaces    */
+   '| pick 1.1 \== ~*~',                        /* Remove comments  */
+   '| join * xFF',                              /* Make one         */
+   '| split before string /USER /',             /* Split here       */
+   '| split before string /IDENTITY /',         /* ....and here     */
+   '| all /USER /!',                            /* Keep these       */
+         '/INDENTITY /&',                       /* .                */
+         '/DEDICATE /',                         /* .                */
+   '| split at xFF',                            /* Split here       */
+   '| all /USER /!',                            /* Select these     */
+         '/IDENTITY /!',                        /* .                */
+          vcuusrch,                             /* .                */
+   '| join * xFF',                              /* Make 1 recodr    */
+   '| split before string /USER /',             /* Split here       */
+   '| split before string /IDENTITY /',         /* ...and here      */
+   '| locate /DEDICATE/',                       /* Keep these       */
+   '| spec fs 'fs'  substring w3.1 of f2 1',    /* Now keep only    */
+                   'substring w3.1 of f3 nw',   /* ...dedicated     */
+                   'substring w3.1 of f4 nw',   /* ....devices      */
+                   'substring w3.1 of f5 nw',   /* ......max 8      */
+                   'substring w3.1 of f6 nw',   /* .                */
+                   'substring w3.1 of f7 nw',   /* .                */
+                   'substring w3.1 of f8 nw',   /* .                */
+                   'substring w2.1 of f1 nw',   /* .                */
+   '| stem work.'                               /* Store 4 later    */
+/*---------------------------------------------------------------+
+| Take all the found FCP Dedicates and filter the wildcards...   |
++---------------------------------------------------------------*/
+Do a=1 To Words(accept)
+     wildc=Word(accept,a)
+     'PIPE (NAME DVHXRA.EXEC:296 END ?)',
+        'stem work.',                           /* Take these       */
+        '| wildcard w3.1 /'wildc'/',            /* Filter           */
+        '| stem dir_fcp. append'                /* Add to stem      */
+End a
+/*---------------------------------------------------------------+
+| Add a key based on the last 3 pos of the (1st) device          |
++---------------------------------------------------------------*/
+'PIPE (NAME DVHXRA.EXEC:304 END ?)',
+   'stem dir_fcp.',                             /* Take these       */
+   '| buffer',                                  /* Prevent loop     */
+   '| specs pad 0 substr -2;-1 of w1.1 1.4 right', /* Add key..        */
+           '1;* nw',                            /* .                */
+   '| specs pad 0 w1.1 x2d 1.10 right w2;* nw', /* Smarten key      */
+   '| sort w1.1',                               /* Sort on key      */
+   '| stem dir_fcp.'                            /* Store as         */
+Drop work.                                      /* Forget these     */
+Return
+ 
+ 
+Select_FCP:
+/*---------------------------------------------------------------+
+| Select a set of FCP devices for this new id                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DVHXRA.EXEC:320 END ?)',
+   'stem free_fcp.',                            /* Take these       */
+   '| append stem dir_fcp.',                    /* Add these        */
+   '| sort w1.1',                               /* Sort on key      */
+   '| join keylen 10',                          /* Join on key      */
+   '| pick w'vcuu.0+3'.1 == ~~',                /* Take free ones   */
+   '| pick w'vcuu.0+2'.1 == ~.~',               /* Take unused ones */
+   '| stem infcp.'                              /* Store as         */
+Call Pick_and_Compose 'infcp.'
+Return
+ 
+ 
+Pick_and_Compose:
+/*---------------------------------------------------------------+
+| Pick the higher addresses, take 1 and compose list             |
++---------------------------------------------------------------*/
+Parse Arg instem .                              /* Use this stem    */
+'PIPE (NAME DVHXRA.EXEC:337 END ?)',
+   'stem 'instem,                               /* Take these       */
+   '| pick w1.1 >>= ~'Right(x2d(subch),10,'0')'~',  /* Take higher than */
+   search,                                      /* Take 1st avail   */
+   '| specs w2;*',                              /* Remove key       */
+   '| specs w1;-2',                             /* Remove indicator */
+   '| split',                                   /* Make records     */
+   '| specs pad 0 recno 1.1 right 1;* nw',      /* Add number       */
+   '| fi: faninany',                            /* Take in others   */
+   '| sort w1.1',                               /* Sort on new key  */
+   '| join keylen 1',                           /* Join on key      */
+   '| specs w2;*',                              /* Remove excess    */
+   '| pick w2.1 \== ~~',                        /* Remove empties   */
+   '| specs w2.1 1 w1.1 nw',                    /* Prep 4 dedicate  */
+   '| stem dedic.',                             /* Store as         */
+   '?',                                         /* 2nd pipe         */
+   'stem vcuu.',                                /* Take this stem   */
+   '| specs pad 0 recno 1.1 right 1;* nw',      /* Add number       */
+   '| fi:'                                      /* Conn 2 faninany  */
+Return
+ 
+ 
+First_FCP:
+/*---------------------------------------------------------------+
+| This is the first time we are doing this...                    |
++---------------------------------------------------------------*/
+Say TimeStamp()' Taking first set of free FCP addresses:'
+Call Pick_and_Compose 'free_fcp.'
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Create a timestamp with filename                               |
++---------------------------------------------------------------*/
+Return Date('S') Time() myfn

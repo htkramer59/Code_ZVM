@@ -1,0 +1,62 @@
+/* Run all the code thru a test */
+Parse Upper Arg fm .
+Parse Source . . myfn myft .
+If fm='' Then Exit 28
+Address CMS 'ERASE XYMVM15  VMARC A'
+Address CMS 'ERASE XYMVM15A VMARC A'
+'PIPE (end ?)',
+    '< 'myfn myft' *',
+    '| f: fanout',
+    '| inside ~/*INPUT*/~ ~/*ENDINPUT*/~',
+    '| specs ~VMARC PACK~ 1 w1.2 nw ~'fm' XYMVM15 VMARC A (APPEND~ nw',
+    '| cms',
+    '? f:',
+    '| inside ~/*ADDITIONAL*/~ ~/*ENDADDITIONAL*/~',
+    '| specs ~VMARC PACK~ 1 w1.2 nw ~* XYMVM15A VMARC A (APPEND~ nw',
+    '| cms'
+Exit
+ 
+/*INPUT*/
+    PROFILE      EXEC    A
+    HOBBIT       TIMES   A
+    HOBSTART     EXEC
+    HOBVARS      CONTROL A
+    HOBVARS      EXEC
+    HOBTEST      EXEC
+    HOBTALL      EXEC
+    HOBINST      EXEC
+    HOBGFITS     EXEC
+    HOB-SAMP     EXEC
+    HOBVM        EXEC
+    HOB-FCP      EXEC
+    HOB-LPAR     EXEC
+    HOBACTIV     EXEC
+    HOBGCONF     EXEC
+    HOBGPG       EXEC
+    HOBGUEST     EXEC
+    HOBGWAIT     EXEC
+    HOBLUNS      EXEC
+    HOBMEM       EXEC
+    HOBOSA       EXEC
+    HOBPARS      EXEC
+    HOBPLACE     EXEC
+    HOBSPOOL     EXEC
+    HOBVMCD      EXEC
+    HOBVMCPU     EXEC
+    HOBVMDSK     EXEC
+    HOBVMIFC     EXEC
+    HOBVMLOG     EXEC
+    HOBVMPOR     EXEC
+    HOBVMPRC     EXEC
+    HOBVMPRT     EXEC
+    HOBVMSTT     EXEC
+    HOBVNIC      EXEC
+    XYMONVM      SYNONYM A
+/*ENDINPUT*/
+/*ADDITIONAL*/
+    FCX          EXEC
+    RSCS         EXEC
+    WINDOW       REXX
+    SICONV       REXX
+    ROUND        REXX
+/*ENDADDITIONAL*/

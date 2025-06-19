@@ -1,0 +1,44 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    L(nn)     Converts the block of columns starting at the position of
+              the "L" to lower case.
+ 
+    LL  LL    Converts the block of columns starting at the position of
+ or LLLLLL    the first "L" up to the position of the last "L" to lower
+ or L*        case.  "L*" will convert up to the ending zone.
+ 
+    K(nn)     Converts the block of columns starting at the position
+              of the "K" to upper case.
+ 
+    KK  KK    Converts the block of columns starting at the position of
+ or KKKKKK    the first "K" up to the position of the last "K" to upper
+ or K*        case.  "K*" will convert up to the ending zone.
+.cs 7 on
+                     COLumn Edit Text Alignment Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL TEXTCMD3 (ALL       J      Justify Text
+COL TEXTCMDS (ALL       Q      Line up or Queue text
+COL TEXTCMD2 (ALL       B      Remove trailing blanks up to a column
+COL TEXTCMD4 (ALL       W,<,>  Wordflow text within a column as in Script
+COL TEXTCMD5 (ALL       K,L    Change text in a column to upper or lower case
+ 
+COL PREFIX (NOTE        Text Alignment prefix commands.
+COL PREFIX (NOTE          ATAB   Auto Text Alignment.
+COL PREFIX (NOTE          TS     Auto Text Spacing.
+COL PREFIX (NOTE          TAB    Manual Text Alignment.
+COL PREFIX (NOTE          COMP   Compress Text.
+COL PREFIX (NOTE          TRigh  Right justify text between all tabs.
+COL PREFIX (NOTE          TLeft  Left  justify text between all tabs.
+COL PREFIX (NOTE          TCent  Center text between all tabs.
+COL PREFIX (NOTE          Both   Justify both left and right.
+.cs 7 off

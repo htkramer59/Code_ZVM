@@ -1,0 +1,415 @@
+/*---------------------------------------------------------------+
+| Function : Rexx syntax coloring t o o l                        |
+|                                                                |
+| File     : ST       XEDIT                                      |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : ST       RULES   defines the colors and what        |
+|                             color per instruction/function     |
+|                                                                |
+| Called   : ST       .                                          |
+|                                                                |
+| Comments : No changes to the actual code..                     |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20240608 18:12:58                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+Call Settings
+Call Read_Config
+Call Get_File_Content
+Call Process_Comments
+Call Process_Quotes
+Call Process_Calls
+Call Process_Slct
+Call Process_Others
+'PIPE (end ?) stem line. | > temp file a'
+Call Display
+Call Actions
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General exit point                                             |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Actions:
+/*---------------------------------------------------------------+
+| Infinite loop                                                  |
++---------------------------------------------------------------*/
+Do x=1
+   'READ ALL NUMBER'
+   Address CMS 'PIPE (NAME ST.XEDIT:49 END ?)',
+      'stack',
+      '| var cmd'
+   Select
+   When cmd=''         Then Nop
+   When cmd='QUIT' |,
+        cmd='QQUIT'    Then Do
+                              Queue 'QQUIT'
+                              Leave x
+                            End
+   When cmd='BACKWARD' Then Call Display '-'scrnsize
+   When cmd='FORWARD'  Then Call Display '+'scrnsize
+   Otherwise Call Exit '23 Unknown instruction'
+   End
+End x
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Display the new data                                           |
++---------------------------------------------------------------*/
+Parse Arg input .
+direct=Substr(input,1,1)
+size=Substr(input,2)
+Address CMS 'PIPE (NAME ST.XEDIT:74 END ?)',
+   'literal .',
+   '| dup 'scrnsize-1,
+   '| specs ~SET RESERVED~ 1 recno from 'scrnstrt' nw.2 ~NON NOH~ nw x40 n',
+   '| subcom xedit'
+Select
+When direct=''  Then start=curpos-1
+When direct='-' Then start=start-scrnsize
+When direct='+' Then start=start+scrnsize
+Otherwise Nop
+End
+If start<0 Then dropvar=''
+           Else dropvar='| drop first 'start
+If start+scrnsize>filesize Then takevar=''
+                           Else takevar='| take first 'scrnsize
+Address CMS 'PIPE (NAME ST.XEDIT:89 END ?)',
+   'stem line.',
+   dropvar,
+   takevar,
+   '| specs 6;* 1',
+   '| specs ~'prfcolor'~ 1 pad space w1.1 n.5 right ~'filcolor'~ n 7;* nw',
+   '| specs ~SET RESERVED~ 1 recno from 'scrnstrt' nw.2 ~NON NOH~ nw 1;* nw',
+   '| subcom xedit'
+Return
+ 
+ 
+Process_Comments:
+/*---------------------------------------------------------------+
+| Processing all comments found                                  |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:104 END ?)',
+   'stem line.',
+   '| buffer',
+   '| a: all x615C & x5C61',
+   '| stem single.',
+   '? a:',
+   '| all x615C ! x5C61',
+   '| specs w1.1',
+   '| join 1 x40',
+   '| stem block.'
+color=Get_Color('615C'x)
+/*---------------------------------------------------------------+
+| Comments on 1 line                                             |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:118 END ?)',
+  'stem single.',
+  '| change x615C x'c2x(color)'615C',
+  '| change x5C61 x5C61'c2x(filcolor),
+  '| specs w1.1 1 ~/~ n  w1.1 n 12;* nw',
+  '| strip leading ~0~',
+  '| specs ~/LINE.~ 1 1;* n',
+  '| varload'
+/*---------------------------------------------------------------+
+| Processing the comments blocks...                              |
++---------------------------------------------------------------*/
+Do b=1 To block.0
+   strt=Word(block.b,1)-1
+   last=Word(block.b,2)
+   block=last-strt
+   Address CMS 'PIPE (NAME ST.XEDIT:132 END ?)',
+      'stem line.',
+      '| drop first 'strt,
+      '| take first 'block,
+      '| specs w1.1 1 ~/~ n w1.1 n ~'color'~ nw 12;* n ~'filcolor'~ n',
+      '| strip leading ~0~',
+      '| specs ~/LINE.~ 1 1;* n',
+      '| varload'
+End b
+Drop single. block.
+Return
+ 
+ 
+ 
+Process_Quotes:
+/*---------------------------------------------------------------+
+| Processing the Quotes                                          |
++---------------------------------------------------------------*/
+singlecolor=Get_Color('7D'x)
+doublecolor=Get_Color('7F'x)
+Address CMS 'PIPE (NAME ST.XEDIT:151 END ?)',
+   'stem line.',
+   '| all x7D ! x7F',
+   '| change x7D x00007D0000',
+   '| change x7F x00007F0000',
+   '| stem quoted.'
+/*---------------------------------------------------------------+
+| Find the locations of the quotes                               |
++---------------------------------------------------------------*/
+Do q=1 To quoted.0
+   work=quoted.q
+   Address CMS 'PIPE (NAME ST.XEDIT:162 END ?)',
+      'var work',
+      '| deblock 1',
+      '| specs recno strip 1 1.1 nw',
+      '| all x7D ! x7F',
+      '| specs w1.1',
+      '| join * x40',
+      '| stem pair.'
+/*---------------------------------------------------------------+
+| Apply the changes to the locations                             |
++---------------------------------------------------------------*/
+   Do p=1 To pair.0
+      Do t=1 To Words(pair.p) by 2
+        fq=Subword(pair.p,t,1)-2
+        lq=Subword(pair.p,t+1,1)-2
+        Address CMS 'PIPE (NAME ST.XEDIT:176 END ?)',
+          'var work',
+          '| change 'fq'.5 x00007D0000 x'c2x(singlecolor)'7D0000',
+          '| change 'fq'.5 x00007F0000 x'c2x(doublecolor)'7F0000',
+          '| change 'lq'.5 x00007D0000 x00007D'c2x(filcolor),
+          '| change 'lq'.5 x00007F0000 x00007F'c2x(filcolor),
+          '| var work'
+       End t
+   End p
+   quoted.q=work
+End q
+/*---------------------------------------------------------------+
+| Replace the lines in the array                                 |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:190 END ?)',
+   'stem quoted.',
+   '| change x0000 ~~',
+   '| specs w1.1 1 ~/~ n w1.1 n 12;* nw',
+   '| strip leading ~0~',
+   '| specs ~/LINE.~ 1 1;* n',
+   '| varload'
+Drop pair. quoted. work
+Return
+ 
+ 
+Process_Calls:
+/*---------------------------------------------------------------+
+| The label tells it all                                         |
++---------------------------------------------------------------*/
+callcolor=Get_Color('C3C1D3D3'x)
+signcolor=Get_Color('E2C9C7D5C1D3'x)
+/*---------------------------------------------------------------+
+| Find the subroutines                                           |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:208 END ?)',
+   'stem line.',
+   '| buffer',
+   '| specs w1.2',
+   '| pick -1;-1 == ~:~',
+   '| f: fanout',
+   '| specs w1.1 1 ~'callcolor'~ nw w2.1 n ~'filcolor'~ n',
+   '| specs w1.1 1 ~/~ n pad 0 w1.1 n 12;* nw',
+   '| strip leading ~0~',
+   '| specs ~/LINE.~ 1 1;* n',
+   '| varload',
+   '? f:',
+   '| specs substr 1;-2 of w2.1 1',
+   '| stem calsigsub.'
+/*---------------------------------------------------------------+
+| Add the colors                                                 |
++---------------------------------------------------------------*/
+Do s=1 To calsigsub.0
+   string=c2x(calsigsub.s)
+   Address CMS 'PIPE (NAME ST.XEDIT:226 END ?)',
+      'stem line.',
+      '| buffer',
+      '| change anycase xC3C1D3D340'string' x'c2x(callcolor)'C3C1D3D340'string||c2x(filcolor),
+      '| change anycase xE2C9C7D5C1D340'string' x'c2x(signcolor)'E2C9C7D5C1D340'string||c2x(filcolor),
+      '| change anycase ~'calsigsub.s'(~ ~'callcolor||calsigsub.s||'('||filcolor'~',
+      '| stem line.'
+End s
+/*---------------------------------------------------------------+
+| Add colors to end of subroutines                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:237 END ?)',
+   'stem line.',
+   '| buffer',
+   '| change anycase xD9C5E3E4D9D5 x'c2x(callcolor)'D9C5E3E4D9D5'c2x(filcolor),
+   '| stem line.'
+Drop calsigsub. string
+Return
+ 
+ 
+Process_Slct:
+/*---------------------------------------------------------------+
+| Color the se le ct statements                                  |
++---------------------------------------------------------------*/
+slctcolor=Get_Color('E2C5D3C5C3E3'x)
+Address CMS 'PIPE (NAME ST.XEDIT:251 END ?)',
+   'stem line.',
+   '| buffer',
+   '| pick anycase from substr w1.1 of 12;* == ~SELECT~ to after substr w1.1 of 12;* == ~OTHERWISE~',
+   '| change anycase ~OTHERWISE~'slctcolor'OTHERWISE'filcolor'~',
+   '| change anycase ~THEN~'slctcolor'THEN'filcolor'~',
+   '| change anycase ~WHEN~'slctcolor'WHEN'filcolor'~',
+   '| change anycase ~SELECT~'slctcolor'SELECT'filcolor'~',
+   '| specs w1.1 1 ~/~ n w1.1 n 12;* nw',
+   '| strip leading ~0~',
+   '| specs ~/LINE.~ 1 1;* n',
+   '| varload'
+Return
+ 
+ 
+Process_Others:
+/*---------------------------------------------------------------+
+| Process the rest of the statements                             |
++---------------------------------------------------------------*/
+Do r=1 To rule.0
+   color=Word(rule.r,1)
+   stmts=Word(rule.r,2)
+   Address CMS 'PIPE (NAME ST.XEDIT:269 END ?)',
+      'var stmts',
+      '| split at ;',
+      '| change ~_~ ~',
+      '| stem stmt.'
+   Do s=1 To stmt.0
+      Call Add_Color color stmt.s
+   End s
+End r
+Return
+ 
+ 
+Add_Color:
+/*---------------------------------------------------------------+
+| Add a color to a function/instruction found                    |
++---------------------------------------------------------------*/
+Parse Arg colr stmt .
+Address CMS 'PIPE (NAME ST.XEDIT:285 END ?)',
+   'stem line.',
+   '| buffer',
+   '| change anycase 12;* ~'stmt'~ ~'colr||stmt||filcolor'~',
+   '| stem line.'
+Return
+ 
+ 
+Get_Color:
+/*---------------------------------------------------------------+
+| Get colors for certain items                                   |
++---------------------------------------------------------------*/
+Parse Arg srch .
+Address CMS 'PIPE (NAME ST.XEDIT:298 END ?)',
+   'stem rule.',
+   '| buffer',
+   '| l: locate anycase ~'srch'~',
+   '| specs w1.1',
+   '| var fndcolor tracking',
+   '? l:',
+   '| stem rule.'
+Return fndcolor
+ 
+ 
+ 
+Get_File_Content:
+/*---------------------------------------------------------------+
+| Get the content of the file and add the line numbers           |
++---------------------------------------------------------------*/
+':1'
+Address CMS 'PIPE (NAME ST.XEDIT:315 END ?)',
+   'xedit',
+   '| specs pad 0 recno 1.10 right 1;* nw',
+   '| stem line.'
+Return
+ 
+ 
+Read_Config:
+/*---------------------------------------------------------------+
+| Reading the config file                                        |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:326 END ?)',
+   '< 'myfn' CONFIG *',
+   '| pick 1.1 \== ~ ~ and 1.1 \== ~*~',
+   '| join * ~@~',
+   '| split anycase before string ~:REXX.~',
+   '| split anycase before string ~:COLORS.~',
+   '| p1: pick anycase fs . f1 == ~:COLORS~',
+   '| split at anyof ~;@~',
+   '| drop first 1',
+   '| p2: pick anycase w2.1 == ~ESCAPE~',
+   '| specs w1.1',
+   '| var escape',
+   '? p2:',
+   '| specs w1.1 1 w2.1 x2c nw w3;* nw',
+   '| stem color.',
+   '| change anycase ~DEFAULT~~',
+   '| specs ~SET CTLCHAR~ 1 w2;* nw',
+   '| subcom xedit',
+   '? p1:',
+   '| pick anycase fs . f1 == ~:REXX~',
+   '| split at ~@~',
+   '| drop first 1',
+   '| stem rule.'
+/*---------------------------------------------------------------+
+| Replace the one char. colorcode with the hex value             |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME ST.XEDIT:352 END ?)',
+   'stem rule.',
+   '| buffer',
+   '| append var defcolor',
+   '| l: lookup w1.1 w1.1',
+   '| join keylen 1',
+   '| specs ~'escape'~ 1  -1;-1 n 3;-2 nw',
+   '| stem rule.',
+   '?',
+   'stem color.',
+   '| specs w1.2',
+   '| l:'
+prfcolor=Transl_Color(prfcolor)
+filcolor=Transl_Color(filcolor)
+Return
+ 
+ 
+Transl_Color:
+/*---------------------------------------------------------------+
+| Change these se le ct ed values to hex values                  |
++---------------------------------------------------------------*/
+Parse Arg oldval .
+Address CMS 'PIPE (NAME ST.XEDIT:374 END ?)',
+   'stem color.',
+   '| pick w1.1 == ~'oldval'~',
+   '| specs ~'escape'~ 1 w2.1 n',
+   '| var newval'
+Return newval
+ 
+ 
+Settings:
+/*---------------------------------------------------------------+
+| Do setting and determine some stuff                            |
++---------------------------------------------------------------*/
+'EXTRACT /SIZE/RECFM/TRUNC/LRECL/FNAME/FTYPE/FMODE/SCREEN/CURLINE/LINE/COLOR *'
+'SET TOFEOF OFF'
+'SET PF3 QQUIT'
+'SET PF15 QQUIT'
+'SET PF7 BACKWARD'
+'SET PF19 BACKWARD'
+'SET PF8 FORWARD'
+'SET PF20 FORWARD'
+'SET PF12 QQUIT'
+'SET PF24 QQUIT'
+curpos=line.1
+max=Word(screen.1,2)
+scrnsize=Word(screen.1,2)-curline.1
+scrnstrt=curline.1
+filesize=size.1
+filcolor=Substr(Word(color.4,2),1,1)
+prfcolor=Substr(Word(color.8,2),1,1)
+Return

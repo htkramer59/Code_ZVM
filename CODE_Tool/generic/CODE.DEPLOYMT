@@ -1,0 +1,27 @@
+* :nick. identifies the project                                                 
+* :code. identifies filename & filetype (wildcards allowed)                     
+* :product. identifies where the piece of code is to land                       
+* :shortnode. the shortname of the node for which this is valid                 
+*                                                                               
+:nick.source                                                                    
+:code.*        EXEC   :product..dir vmusers:tools. :shortnode.b1                
+:code.*        EXEC   :product..dir vmusers:tools. :shortnode.b2                
+:code.*        EXEC   :product..dir vmusers:toolx. :shortnode.o1                
+:code.ALLMDU   EXEC   :product..dir vmusers:tooly. :shortnode.o1                
+:code.*        XEDIT  :product..dir vmusers:tools. :shortnode.b1                
+:code.*        XEDIT  :product..dir vmusers:tools. :shortnode.b2                
+:code.*        XEDIT  :product..dir vmusers:tools. :shortnode.o1                
+:code.*        REXX   :product..dir vmusers:tools. :shortnode.b1                
+:code.*        REXX   :product..dir vmusers:tools. :shortnode.b2                
+:code.*        REXX   :product..dir vmusers:tools. :shortnode.o1                
+                                                                                
+:nick.cobol                                                                     
+:code.*        COBOL  :product.COBOL 200 :shortnode.b1                          
+:code.*        COBOL  :product.COBOL 200 :shortnode.b2                          
+:code.*        COBOL  :product.COBOL 200 :shortnode.o1                          
+:code.*        TEXT   :product.COBOL 191 :shortnode.b1                          
+:code.*        TEXT   :product.COBOL 191 :shortnode.b2                          
+:code.*        TEXT   :product.COBOL 191 :shortnode.o1                          
+:code.*        MODULE :product.COBOL 191 :shortnode.b1                          
+:code.*        MODULE :product.COBOL 191 :shortnode.b2                          
+:code.*        MODULE :product.COBOL 191 :shortnode.o1                          

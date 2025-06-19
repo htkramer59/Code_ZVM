@@ -1,0 +1,23 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change the virtual address of a MDISK               |
+|                                                                |
+| File     : DM_CHV   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_CKMDK EXEC   check minidisk                      |
+|            DM_INDEX EXEC   locate user id                      |
+|                                                                |
+| Called   : DM_CHV   <uid1> <cuu1> <uid2> <cuu2>                |
+|          : CHV      <uid1> <cuu1> <uid2> <cuu2> MOVElinks      |
+|                                                 KEEPlinks      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 14:16:26                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

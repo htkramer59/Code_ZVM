@@ -1,0 +1,167 @@
+/*---------------------------------------------------------------+
+| Function : Link, Access and Filelist an MDISK or SFS directory |
+|                                                                |
+| File     : L        EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|                                                                |
+| Called   : L        <userid> <mdisk>  <fn> <ft> ( <options>    |
+|                     <filepool:userid> <fn> <ft> ( <options>    |
+|                                                                |
+|            <userid> any valid userid or .DIR                   |
+|            <mdisk>  any valid mdisk or a filespace/directory   |
+|                     in combination with .DIR                   |
+|            <filepool:userid>  any valid filespace or           |
+|                               a combination with directory     |
+|            <fn>      any filename you are looking for          |
+|                      defaults to *                             |
+|            <ft>      any filetype you are looking for          |
+|                      defaults to *                             |
+|            <options> If set to WRITE the target will be        |
+|                      access R/W                                |
+|                      If set to DEBUG locations will be shown   |
+|                      where we call Exit                        |
+|                      Maybe combined in any order               |
+|                                                                |
+| Comments : If no <mdisk> is specified this will default to     |
+|            191 or a filespace on VMUSERS e.g. VMUSERS:SOMEID.  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180214 13:49:24                                   |
+| Changes  : .                                                   |
+|            20190510 H.T.Kramer : added filepool support        |
+|            20220526 H.T.Kramer : Rewrite for more defaults     |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid mdisk fn ft '(' options
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Do we have the WRITE option asked...                           |
++---------------------------------------------------------------*/
+If Wordpos('WRITE',options)<>0 Then vmlopt='WRITE'
+                               Else vmlopt=''
+If Wordpos('DEBUG',options)<>0 Then debug=1
+                               Else debug=0
+/*---------------------------------------------------------------+
+| Here we check if the input is empty, help or SFS               |
++---------------------------------------------------------------*/
+sfs=0
+Select
+When uid=''     Then Call Exit '28 No input specified'
+When uid='?'    Then Do
+                'VMFCLEAR'
+                'PIPE (NAME L.EXEC:57 END ?)',
+                   '< 'myfn myft' *',            /* Read my self     */
+                   '| tolabel Parse',            /* Up to here       */
+                   '| cons'                      /* Show             */
+                Call Exit '0'
+                End
+When uid='*'    Then uid=Userid()
+When uid='.DIR' Then Do
+                If Substr(Reverse(mdisk),1,1)<>'.' Then mdisk=mdisk||'.'
+                Parse Value mdisk With filespace '.' .
+                filespace=filespace'.'
+                Parse Value mdisk With . ':' chkuid '.' .
+                uid=''
+                sfs=1
+                End
+When Pos(':',uid)<>0 Then Do
+                If Substr(Reverse(uid),1,1)<>'.' Then uid=uid||'.'
+                Parse Value uid With filespace '.' .
+                filespace=filespace'.'
+                Parse Value uid With . ':' chkuid '.' .
+                fn=mdisk
+                ft=fn
+                sfs=1
+                End
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Here we check if we can find the MDISK of non SFS              |
++---------------------------------------------------------------*/
+nomd=0
+If \sfs Then Do
+     If mdisk='' Then mdisk='191'
+     chkuid=uid
+     'PIPE (NAME L.EXEC:90 END ?)',
+          'cp QUERY MDISK USER 'uid mdisk' DIR LOC',   /* Ask CP 4 info    */
+          '| pick w1.1 == ~HCPQMD040E~',         /* Select this      */
+          '| count lines',                       /* How many         */
+          '| var nomd'                           /* Store as boolean */
+     End
+If nomd Then Do
+          filespace='VMUSERS:'uid'.'
+          chkuid=uid
+          uid=filespace
+          mdisk=''
+          sfs=1
+          End
+/*---------------------------------------------------------------+
+| Here we process the files                                      |
++---------------------------------------------------------------*/
+If fn='' Then fn='*'
+If ft='' Then ft='*'
+/*---------------------------------------------------------------+
+| We check if the id exists                                      |
++---------------------------------------------------------------*/
+idok=0
+'PIPE (NAME L.EXEC:112 END ?)',
+   'cp QUERY MDISK USER 'chkuid' 0000 DIR LOC',  /* Ask cp 4 info    */
+   '| pick w1.1 == ~HCPQMD040E~',                /* Select this      */
+   '| count lines',                              /* How many         */
+   '| var idok'                                  /* Store as boolean */
+If \idok Then Call Exit '53 Userid does not exist: 'chkuid
+/*---------------------------------------------------------------+
+|  Now we check if the filespace exists if we are going SFS      |
++---------------------------------------------------------------*/
+If sfs Then Do
+    'PIPE (NAME L.EXEC:122 END ?)',
+       'cms QUERY DIRATTR 'filespace,            /* Ask cms 4 info   */
+       '| pick w1.1 == ~FILECONTROL~ or',        /* Select these     */
+              'w1.1 == ~DIRCONTROL~',            /* .                */
+       '| count lines',                          /* How many         */
+       '| var fsok'                              /* Store as boolean */
+    If \fsok Then Call Exit '33 No valid filespace: 'filespace
+    End
+/*---------------------------------------------------------------+
+| Compose the input for the VMLINK                               |
++---------------------------------------------------------------*/
+If sfs Then vmlinput='.DIR 'uid mdisk
+       Else vmlinput=uid mdisk
+Address CMS 'VMLINK 'vmlinput' (MODE0 NOTYPE 'vmlopt' NONAMES FILELIST 'fn ft' .fm'
+If rc=0 Then Parse Pull .
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Show error messages if present and exit with rc                |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If debug Then Call GetLocation exrc
+If Datatype(exrc,'NUM') Then Do
+                             Say errmsg
+                             If debug Then Say location
+                             End
+                        Else exrc=0
+Exit exrc
+ 
+ 
+GetLocation:
+/*---------------------------------------------------------------+
+| Get the location where the exit is called from                 |
++---------------------------------------------------------------*/
+Parse Upper Arg src .
+'PIPE (NAME L.EXEC:157 END ?)',
+   '< 'myfn myft' *',                            /* Read my self     */
+   '| specs pad 0 recno 1.5 right 1;* nw',       /* Preface w lineno */
+   '| locate anycase 6;* ~Call Exit~',           /* Select these     */
+   '| locate ~'src'~',                           /* Select this      */
+   '| strip leading ~0~',                        /* Remove zeros     */
+   '| specs ~Called from: 'myfn myft' Line:~ 1', /* Compose output   */
+            'w1.1 nw',                           /* .                */
+   '| var location'                              /* Hand 2 rexx      */
+Return

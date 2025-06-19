@@ -1,0 +1,146 @@
+/*---------------------------------------------------------------+
+| Function : Create history file and reports                     |
+|                                                                |
+| File     : EREPRPT  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : lots                                                |
+|                                                                |
+| Called   : EREPRPT  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : Sample author, Sample location, 333.44.55           |
+| Created  : 20190405 15:36:54                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . how myfn myft .
+cleanup_after=60  /* Clean up after 60 days */
+/*---------------------------------------------------------------+
+| Define all the input files and titles                          |
++---------------------------------------------------------------*/
+reportlist='SYSUM System Summary;',
+     'SYSEXN System Exception;',
+     'SYSEHR Event History;',
+     'SYSTSR Threshold Summary;',
+     'SYSMC  CCH & MCH;',
+     'SYSMO  MDR & OBR;',
+     'SYSIOE I/O Errors'
+/*---------------------------------------------------------------+
+| Make it into a stem                                            |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'var reportlist',
+    '| split at ;',
+    '| strip',
+    '| stem report.'
+'VMFCLEAR'
+/*---------------------------------------------------------------+
+| Access the code and data                                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK *     201 (QUIET'
+Address CMS 'VMLINK *     192 (QUIET'
+/*---------------------------------------------------------------+
+| Set up libraries needed                                        |
++---------------------------------------------------------------*/
+'GLOBAL TXTLIB ERPTFLIB EREPLIB'
+Call Clean_Up
+/*---------------------------------------------------------------+
+| Create history file                                            |
++---------------------------------------------------------------*/
+Call Create_History
+/*---------------------------------------------------------------+
+| Run the reports                                                |
++---------------------------------------------------------------*/
+Do r=1 To report.0
+   Call Create_Report report.r
+End r
+/*---------------------------------------------------------------+
+| Remove the code & data                                         |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK *     192 <DET (QUIET'
+Address CMS 'VMLINK *     201 <DET (QUIET'
+/*---------------------------------------------------------------+
+| End of the show                                                |
++---------------------------------------------------------------*/
+'CP LOGOFF'
+Exit
+ 
+ 
+Clean_Up:
+/*---------------------------------------------------------------+
+| Clean up files older than cleanup_after                        |
++---------------------------------------------------------------*/
+cut_of_date=Date('S',Date('B')-cleanup_after,'B')
+Say TimeStamp() 'Log & report files older than 'cut_of_date' will be removed'
+'PIPE (end ?)',
+    'cms LISTFILE * SYS* A (NOHEADER ISODATE',
+    '| pick w1.1 \== ~PARMFILE~',
+    '| specs w1.3 1 w-2;-2 nw',
+    '| change ~-~~',
+    '| pick w4.1 < ~'cut_of_date'~',
+    '| specs ~ERASE~ 1 w1.3 nw',
+    '| stem erase.',
+    '| cons'
+If erase.0<>0 Then Do
+     TimeStamp() 'ERASEing files'
+     'PIPE stem erase. | cms | cons'
+     End
+Say
+Return
+ 
+ 
+Create_Report:
+/*---------------------------------------------------------------+
+| Create the specific report                                     |
++---------------------------------------------------------------*/
+Parse Arg report title
+title=Strip(title)
+logfn='L'Substr(Date('S'),3)
+repfn='R'Substr(Date('S'),3)
+Say TimeStamp() 'Creating 'title' report'
+Say TimeStamp() 'Report file: 'repfn report
+Say TimeStamp() 'Log    file: 'logfn report
+'FILEDEF ACCIN   DISK EHISTORY DAILY    A'
+'FILEDEF TOURIST DISK 'logfn report' A'
+'FILEDEF EREPPT  DISK 'repfn report' A (BLKSIZE 133'
+'CPEREPXA PARMFILE 'report' A'
+Say
+Return
+ 
+ 
+Create_History:
+/*---------------------------------------------------------------+
+| Find the input...                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'cms LISTFILE * RECORD * (NOH',
+    '| specs w1.3',
+    '| var inputfile'
+/*---------------------------------------------------------------+
+| Create a history file                                          |
++---------------------------------------------------------------*/
+report='ACCHIST'
+logfn='L'Substr(Date('S'),3)
+repfn='R'Substr(Date('S'),3)
+Say TimeStamp() 'Creating History file'
+Say TimeStamp() 'Report file: 'repfn report
+Say TimeStamp() 'Log    file: 'logfn report
+'FILEDEF ACCIN   DISK 'inputfile
+'FILEDEF ACCDEV  DISK EHISTORY DAILY    A (RECFM VB BLKSIZE 12000'
+'FILEDEF TOURIST DISK 'logfn report' A'
+'FILEDEF EREPPT  DISK 'repfn report' A'
+'CPEREPXA PARMFILE 'report' A'
+'FILEDEF ACCIN  CLEAR'
+'FILEDEF ACCDEV CLEAR'
+Say
+Return
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Create a timestamp with filename                               |
++---------------------------------------------------------------*/
+timestamp=Date('S') Time() myfn
+Return timestamp

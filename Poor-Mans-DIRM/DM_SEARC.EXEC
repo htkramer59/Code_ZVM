@@ -1,0 +1,60 @@
+/*---------------------------------------------------------------+
+| Function : Search in the source directory and display          |
+|            users which have the statement                      |
+|                                                                |
+| File     : DM_SEARC EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : USER     DIRECT                                     |
+|            VMLINK   EXEC                                       |
+|                                                                |
+| Called   : DM_SEARC <search string>                            |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240712 15:50:44                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Arg search
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK MAINT 2CC (NON NOTYPE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_SEARC.EXEC:31 END ?)',
+   '< USER DIRECT 'wfm,                          /* Read this        */
+   '| specs pad 0 recno 1.5 right 1.72 nw',      /* Add recnos       */
+   '| pick anycase w2.1 == ~USER~ or',           /* Select           */
+                  'w2.1 == ~IDENTITY~ or',       /* .  therse        */
+                  'w2.1 == ~SUBCONFIG~ or',      /* .                */
+                  'w2.1 == ~PROFILE~ or',        /* .                */
+                  'w2.1 == ~'search'~',          /* .specially this 1*/
+   '| if: if pick anycase w2.1 == ~USER~ or',    /* If this          */
+                         'w2.1 == ~IDENTITY~ or',  /* .                */
+                         'w2.1 == ~SUBCONFIG~ or', /* .                */
+                         'w2.1 == ~PROFILE~',    /* .                */
+   '    | specs ~%~ 1 w2.1 n.20 1;* nw',         /* Add this         */
+   '| if:',                                      /* Conn 2 if        */
+   '    | strip',                                /* Remove spaces    */
+   '    | specs 1;* 1 ~;~ nw',                   /* Add semicolon    */
+   '| if:',                                      /* Conn 2 iff       */
+   '| join * x40',                               /* Make 1 record    */
+   '| split anycase before string ~%USER~',      /* Split here       */
+   '| split anycase before string ~%IDENTITY~',  /* .and             */
+   '| split anycase before string ~%SUBCONFIG~', /* ..and            */
+   '| split anycase before string ~%PROFILE~',   /* ...and           */
+   '| locate anycase ~'search'~',                /* Take these       */
+   '| specs 23;* 1',                             /* Remove label     */
+   '| cons'                                      /* Show findings    */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK MAINT 2CC <DET (NON NOTYPE'
+Exit

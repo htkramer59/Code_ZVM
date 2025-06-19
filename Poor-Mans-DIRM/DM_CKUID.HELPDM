@@ -1,0 +1,20 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Check if a userid exists                            |
+|                                                                |
+| File     : MD_CKUID EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : MD_CKUID .                                          |
+|                                                                |
+| Comments : Returns 1 of ok, 0 if not ok                        |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240619 09:49:46                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

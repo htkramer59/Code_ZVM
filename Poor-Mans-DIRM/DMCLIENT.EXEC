@@ -1,0 +1,154 @@
+/*---------------------------------------------------------------+
+| Function : Talk 2 the server and receive output                |
+|                                                                |
+| File     : DMCLIENT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DMCLIENT NAMES                                      |
+|                                                                |
+| Called   : DMCLIENT <dm commands>                              |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240716 17:43:17                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline '(' verbose .
+Parse Source . . myfn myft .
+'PIPE (NAME DMCLIENT.EXEC:21 END ?)',
+  '< 'myfn' NAMES',
+  '| pick 1.1 \== ~*~ and 1.1 \== ~ ~ and 1.1 \== ~~',
+  '| change ~:~/~ 1',
+  '| change ~.~/~ 1',
+  '| xlate fs / f2 upper',
+  '| varload'
+If verbose<>'' Then silent=''
+               Else silent='| pick anycase w-1;-1 \== ~Starting~ and w-1;-1 \== ~Exiting~'
+'PIPE (NAME DMCLIENT.EXEC:30 END ?)',
+   'cp QUERY USER 'server,
+   '| nfind HCPCQU045E',
+   '| count lines',
+   '| var loggedon'
+If \loggedon Then Do
+                  Say 'Server 'server' NOT LOGGED ON'
+                  Call Exit
+                  End
+/*---------------------------------------------------------------+
+| Set some items to receive msgs                                 |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET MSG IUCV'
+Address COMMAND 'CP SET SMSG IUCV'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+cmd=Word(cmdline,1)
+uid=Word(cmdline,2)
+Select
+When cmd='ADD'   Then Call File_and_Command uid' DIRECT A 'server
+When cmd='BATCH' Then Call File_and_Command uid' BATCH  A 'server
+When cmd='REPL'  Then Call File_and_Command uid' DIRECT A 'server
+When cmd='SETPW' Then Call Get_Password
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Start talking 2 the server and receive the replies             |
++---------------------------------------------------------------*/
+fnft=''
+'PIPE (NAME DMCLIENT.EXEC:60 END %)',
+   'literal +3',                                 /* Set to 1 sec     */
+   '| delay',                                    /* Wait             */
+   '| g: gate strict',                           /* Gating           */
+   '%',                                          /* 2nd stage        */
+   'starmsg cp smsg 'server cmdline ,            /* Cmd 2 server     */
+   '| g:',                                       /* Conn 2 gate      */
+   '| d: dam',                                   /* Waiting 2 break  */
+   '| specs 17;* 1',                             /* Adjust records   */
+   silent,                                       /* silent?          */
+   '| nlocate anycase ~**end**~',                /* Remove this      */
+   '| if: if pick anycase w5.3 == ~SENT TO 'Userid()'~', /* If we find this  */
+   '|     specs w2.1 1.8 w3.1 nw.8',             /* Keep this        */
+   '|     var fnft tracking',                    /* Hand 2 rexx      */
+   '| if:',                                      /* Conn 2 if        */
+   '|      cons',
+   '| if:',
+   '% d:',                                       /* Conn 2 dam       */
+   '| cons'                                      /* Display          */
+If fnft<>'' Then Do
+   'PIPE (NAME DMCLIENT.EXEC:80 END ?)',
+       'CP QUERY RDR * ALL ISO',
+       '| drop first 1',
+       '| pick anycase w-2;-2 == ~'Word(fnft,1)'~ and w-1;-1 == ~'Word(fnft,2)'~',
+       '| take last 1',
+       '| specs ~RECEIVE~ 1 w2.1 nw ~'fnft' (REPLACE OLDDATE~ nw',
+       '| cons',
+       '| cms',
+       '| cons'
+   Address CMS 'XEDIT 'fnft' *'
+End
+/*---------------------------------------------------------------+
+| Reset some stuff                                               |
++---------------------------------------------------------------*/
+Exit:
+Parse Arg exrc errmsg
+If \Datatype(exrc,'NUM') Then exrc=0
+                        Else Call ErrorMsg
+Address COMMAND 'CP SET SMSG OFF'
+Address COMMAND 'CP SET MSG ON '
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+ErrorMsg:
+/*---------------------------------------------------------------+
+| Find the message and display it                                |
++---------------------------------------------------------------*/
+exrc=Right(exrc,3,0)
+'PIPE (NAME DMCLIENT.EXEC:111 END ?)',
+    '< DM ERRORS *',                             /* Read the file    */
+    '| find 'exrc,                               /* Locate error     */
+    '| specs ~'myfn'-'exrc'~ 1 w2;* nw ~'errmsg'~ nw',   /* Compose msg      */
+    '| cons'                                     /* Show             */
+Return
+ 
+ 
+File_and_Command:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Upper Arg ifn ift ifm server .
+Address CMS 'SENDFILE 'ifn ift ifm server
+Address COMMAND 'CP SLEEP 2 SEC'
+Return
+ 
+ 
+Get_Password:
+/*---------------------------------------------------------------+
+| Ask for pw and confirmation                                    |
++---------------------------------------------------------------*/
+Say "Enter new password:"
+'PIPE (NAME DMCLIENT.EXEC:134 END ?) cons dark | var pw1'
+Say "Re-enter password:"
+'PIPE (NAME DMCLIENT.EXEC:136 END ?) cons dark | var pw2'
+/*---------------------------------------------------------------+
+| Check the contents of the pw                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME DMCLIENT.EXEC:140 END ?)',
+   'var pw1',                                    /* Take this        */
+   '| deblock 1',                                /* Split into recs  */
+   '| sort count',                               /* Count occurences */
+   '| specs 1.10 1 11;* nw',                     /* Adjust recs      */
+   '| pick w1.1 >>= ~3~',                        /* Select these     */
+   '| count lines',                              /* How many         */
+   '| var dupchars'                              /* Store            */
+If pw1<>pw2       Then Call Exit '38'
+If Length(pw1)<3  Then Call Exit '138'
+If Length(pw1)>8  Then Call Exit '238'
+If dupchars       Then Call Exit '438'
+If pw1=uid        Then Call Exit '538'
+cmdline=cmdline pw1
+Return

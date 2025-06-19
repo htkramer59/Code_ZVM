@@ -1,0 +1,305 @@
+/*---------------------------------------------------------------+
+| Function : Automated and checked start up of user ids from     |
+|            AUTOLOG1                                            |
+|                                                                |
+| File     : STRTUSRS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.2.0                                               |
+|                                                                |
+| Files    : STRTUSRS LIST                                       |
+|            STRTUSRS <node id>    for node specifics            |
+|            SRVSTAT  LIST         what was running prev. day..  |
+|            VMLINK   EXEC                                       |
+|                                                                |
+| Called   : STRTUSRS .                                          |
+|                                                                |
+| Comments : SRVSTAT SRV* files are created by SRVSTAT exec on   |
+|            VMUTIL once a day                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180927 13:59:05                                   |
+| Changes  : .                                                   |
+|            20190829 H.T.Kramer : Replaced wildcard processing  |
+|                                  Changed exitonerro logic.     |
+|                                  Moved warnids and sourcedir   |
+|                                  to input file                 |
+|            20190821 H.T.Kramer : Added exitonerror label...    |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg '(' test
+/*---------------------------------------------------------------+
+| Get my own name                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Get the node id we are running on and version number           |
++---------------------------------------------------------------*/
+'PIPE (NAME STRTUSRS.EXEC:39 END ?)',
+   'cms IDENTIFY ',                             /* Ask cms          */
+   '| spec w3.1 ',                              /* Keep this        */
+   '| var node',                                /* Store as         */
+   '?',                                         /* 2nd pipe         */
+   '< 'myfn myft' *',                           /* Read myself      */
+   '| locate ~Version~',                        /* Find this        */
+   '| specs w4.1',                              /* Keep this        */
+   '| var version'                              /* Store as         */
+Call Error '0 Running version: 'version
+If test='' Then Do
+                Call Error '0 Running display mode'
+                cmsout='| CONS'
+                cpout='| CONS'
+                End
+           Else Do
+                Call Error '0 Running execution mode'
+                cmsout='| CONS | CMS | CONS'
+                cpout='| CONS | CP | CONS'
+                End
+/*---------------------------------------------------------------+
+| Read the input files                                           |
++---------------------------------------------------------------*/
+Address CMS 'ACC 192 D' /* To make sure we have SRVSTAT LIST */
+'PIPE (NAME STRTUSRS.EXEC:63 END ?)',
+  '< 'myfn' LIST *',                            /* Read this list  */
+  '| append disk 'myfn node' *',                /* add this if fnd */
+  '| append disk SRVSTAT LIST *',               /* add this if fnd */
+  '| pick 1.1 \== ~*~',                         /* Remove comments */
+  '| strip',                                    /* Remove spaces   */
+  '| n1: nlocate anycase ~DEFAULTS~',           /* Take these out  */
+  '| n2: nlocate anycase ~*~',                  /* .               */
+  '| n3: nlocate anycase ~:WARNIDS~',           /* .               */
+  '| n4: nlocate anycase ~:SOURCEDIR~',         /* .               */
+  '| stem id.',                                 /* Store here      */
+  '? n1:',                                      /* Conn 2 nlocate  */
+  '| split before string ~:~',                  /* Split here      */
+  '| change ~:~/DEF_~',                         /* Adjust          */
+  '| fi: faninany',                             /* Take in others  */
+  '| change ~:~/~',                             /* Adjust          */
+  '| change ~.~/~',                             /* Prep 4 varload  */
+  '| strip',                                    /* Remove spaces   */
+  '| specs w1.1 1 x40 n',                       /* Add 1 space     */
+  '| xlate fs / f2 upper',                      /* Prep 4 varload  */
+  '| varload',                                  /* Hand to rexx    */
+  '? n2:',                                      /* Conn 2 nlocate  */
+  '| stem wildc.',                              /* Store as        */
+  '? n3:',                                      /* Conn 2 nlocate  */
+  '|fi:',                                       /* Conn 2 faninany */
+  '? n4:',                                      /* conn 2 nlocate  */
+  '| fi:'                                       /* Conn 2 faninany */
+Call Error '0 Following users will be warned of problems: 'warnids
+If wildc.0<>0 Then Call Expand_Wildcards
+/*---------------------------------------------------------------+
+| Loop thru the found records                                    |
++---------------------------------------------------------------*/
+Do i=1 To id.0
+   'PIPE (NAME STRTUSRS.EXEC:96 END ?)',
+      'literal 'id.i,                           /* Take this       */
+      '| split before string ~:~',              /* Split into recs */
+      '| change ~:~/~',                         /* Prep 4 varload  */
+      '| change ~.~/~',                         /* ............... */
+      '| xlate fs / f2 upper',                  /* Prep 4 varload  */
+      '| varload'                               /* Hand to rexx    */
+   If CheckRunning() Then Do
+                     Drop id wait depends pre post
+                     Iterate
+                     End
+/*---------------------------------------------------------------+
+| If variables not filled use the defaults...                    |
++---------------------------------------------------------------*/
+   If wait='WAIT'               Then wait=def_wait
+   If depends='DEPENDS'         Then depends=def_depends
+   If pre='PRE'                 Then pre=def_pre
+   If post='POST'               Then post=def_post
+   If title='TITLE'             Then title=def_title
+   If exitonerror='EXITONERROR' Then exitonerror=def_exitonerror
+/*---------------------------------------------------------------+
+| Check if the user id exists...if not skip the rest             |
++---------------------------------------------------------------*/
+   If \CheckId() Then Iterate
+/*---------------------------------------------------------------+
+| Is wait filled...then we wait                                  |
++---------------------------------------------------------------*/
+   If wait<>'' & wait<>0 Then Do
+        Call Error '0 Wait started for 'id' for 'wait' seconds'
+        Address COMMAND 'CP SLEEP 'wait' SEC'
+        End
+/*---------------------------------------------------------------+
+| Is there something that needs to be run before...              |
++---------------------------------------------------------------*/
+   If pre<>'' Then Do
+        Call Error '0 Invoking PRE-EXIT: 'pre
+        'PIPE (NAME STRTUSRS.EXEC:132 END ?)',
+            'var pre',                          /* Take this        */
+            cmsout                              /* Run&display      */
+        If rc<>0 Then Do
+        Call Error '0 Non-zero rc from PRE-EXIT' pre rc
+        If Wordpos(rc,exitonerror)<>0 Then Do
+              Call Error rc 'Can not continue, exiting ' pre rc
+              Call Exit rc
+              End
+        End
+        End
+/*---------------------------------------------------------------+
+| If depends is filled...we check if these are running...        |
++---------------------------------------------------------------*/
+   If depends<>'' Then Call Check_Depends
+                  Else deprc=1
+/*---------------------------------------------------------------+
+| If title is filled...we display it...                          |
++---------------------------------------------------------------*/
+   If title<>'' & title<>'TITLE' Then Call Error '0 *** 'node title
+/*---------------------------------------------------------------+
+| Start the server/id                                            |
++---------------------------------------------------------------*/
+   If deprc Then Do
+        'PIPE (NAME STRTUSRS.EXEC:156 END ?)',
+             'literal XAUTOLOG 'id' SYNCH',     /* Compose cmd      */
+             cpout                              /* Run&display      */
+        If rc<>0 Then Do
+        Call Error rc 'Problem with XAUTOLOG of 'id
+        If Wordpos(rc,exitonerror)<>0 Then Do
+               Call Error rc 'Can not continue, exiting ' pre rc
+               Call Exit rc
+               End
+        End
+        End
+/*---------------------------------------------------------------+
+| Is there something that needs to be done after start           |
++---------------------------------------------------------------*/
+   If post<>'' Then Do
+        Call Error '0 Invoking POST-EXIT: 'post
+        'PIPE (NAME STRTUSRS.EXEC:172 END ?)',
+              'var post',                       /* Take this        */
+              cmsout                            /* Run&display      */
+        If rc<>0 Then Do
+        Call Error rc 'Non-zero rc from POST-EXIT' pre rc
+        If Wordpos(rc,exitonerror)<>0 Then Do
+              Call Error rc 'Can not continue, exiting ' pre rc
+              Call Exit rc
+              End
+        End
+        End
+   Drop id wait depends pre post title
+End i
+ 
+Exit:
+Parse Upper Arg exrc .
+If exrc='' | exrc='EXRC' Then exrc=0
+Exit exrc
+ 
+ 
+Expand_Wildcards:
+/*---------------------------------------------------------------+
+| Expand the wildcards we found...                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'sourcedir' (QUIET NONAMES .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Do
+        Call Error rc 'Problems with VMLINK of 'sourcedir
+        Exit
+        End
+/*---------------------------------------------------------------+
+| Take identities and users from the directory                   |
++---------------------------------------------------------------*/
+'PIPE (NAME STRTUSRS.EXEC:205 END ?)',
+    '< USER DIRECT 'wfm,                     /* Read this       */
+    '| pick w2.1 == ~I~ or w2.1 == ~U~',     /* Users & identities */
+    '| specs w3.1 1',                        /* Remove some     */
+    '| stem uid.'
+/*---------------------------------------------------------------+
+| Loop thru the wildcards and add findings to stem id.           |
++---------------------------------------------------------------*/
+Do w=1 To wildc.0
+   Parse Value wildc.w With . '.' wildc '*' rest
+   'PIPE (NAME STRTUSRS.EXEC:215 END ?)',
+       'stem uid.',                             /* Read this       */
+       '| wildcard w1.1 ~'wildc'~',             /* Select          */
+       '| specs ~:ID.~ 1 w3.1 n ~'rest'~ nw',   /* Rebuild recs    */
+       '| stem id. append'                      /* Append 2 stem   */
+End w
+Address CMS 'VMLINK 'sourcedir' (QUIET NONAMES'
+Return
+ 
+ 
+Error:
+/*---------------------------------------------------------------+
+| Uniform way to display messages....                            |
++---------------------------------------------------------------*/
+Parse Arg erc line
+If erc=0 Then rcdisp=''
+         Else rcdisp='RC: 'erc','
+msg_line=Date('S') Time() myfn rcdisp line
+Say msg_line
+If erc<>0 Then Do
+               'PIPE (NAME STRTUSRS.EXEC:235 END ? ) ',
+                   'var warnids',               /* Take these       */
+                   '| split',                   /* Split here       */
+                   '| specs ~MSG~ 1',           /* Compose cmds     */
+                           'w1.1 nw',           /* .                */
+                           '~'msg_line'~ nw',   /* .                */
+                   cpout                        /* Show&run         */
+             End
+Return
+ 
+ 
+Check_Depends:
+/*---------------------------------------------------------------+
+| Check if the ids we are depending on are running...            |
++---------------------------------------------------------------*/
+'PIPE (NAME STRTUSRS.EXEC:250 END ?)',
+    'var depends',                              /* Take this       */
+    '| split at anyof ~ ,.;~',                  /* Split it..      */
+    '| l: lookup w1.1 w1.1',                    /* Compare         */
+    '?',                                        /* 2nd pipe        */
+    'cp QUERY NAMES',                           /* Ask CP          */
+    '| split at ,',                             /* Split also      */
+    '| strip',                                  /* Remove spaces   */
+    '| specs fs - f1',                          /* Keep this field */
+    '| l:',                                     /* Conn 2 lookup   */
+    '| stem depnotav.'                          /* Store here      */
+If depnotav.0<>0 Then Do
+     Call Error '0 User dependencies not resolved'
+     Do d=1 To depnotav.0
+        Call Error '22 'depnotav.d' Not running, start of 'id' withheld'
+     End d
+     deprc=0
+     End
+     Else deprc=1
+Return
+ 
+ 
+CheckRunning:
+/*---------------------------------------------------------------+
+| Check if the id we want to start is already running...         |
++---------------------------------------------------------------*/
+'PIPE (NAME STRTUSRS.EXEC:276 END ?)',
+    'cp QUERY USER 'id,                         /* Ask CP          */
+    '| specs fs - f2',                          /* Keep this field */
+    '| strip',                                  /* Remove spaces   */
+    '| var status'                              /* Store here      */
+/*---------------------------------------------------------------+
+| Already running say how and what                               |
++---------------------------------------------------------------*/
+If status='DSC' | Substr(status,1,1)='L' Then Do
+         Call Error '29 'id' Already running: 'status
+         rrc=1
+         End
+         Else rrc=0
+rrc=0
+Return rrc
+ 
+ 
+CheckId:
+/*---------------------------------------------------------------+
+| Here we check if the id exists...                              |
++---------------------------------------------------------------*/
+'PIPE (NAME STRTUSRS.EXEC:297 END ?)',
+    'cp QUERY MDISK USER 'id' 0 DIR',           /* Ask this        */
+    '| locate ~HCPQMD040E~',                    /* Check for this  */
+    '| count lines',                            /* How many        */
+    '| var retcode'                             /* Store here      */
+Drop rc
+If retcode<>0 Then retcode=1
+              Else Call Error '53 User id 'id' does not exist, ignoring startup'
+Return retcode

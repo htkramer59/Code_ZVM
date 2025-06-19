@@ -1,0 +1,236 @@
+/*---------------------------------------------------------------+
+| Function : Display pool usage (DIRMAINT)                       |
+|                                                                |
+| File     : POOLUSG  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : EXTENT   CONTROL   input...                         |
+|            *        VCONTROL  input...                         |
+|            BLK2SIZE EXEC                                       |
+|            CYL2SIZE EXEC                                       |
+|                                                                |
+| Called   : POOLUSG  <pool ids> ( SILENT <output>               |
+|                                                                |
+|            <pool ids>  is list of disk pools in EXTENT CONTROL |
+|            SILENT      if specified no output on console,      |
+|                        rc will be the percentage               |
+|                        Note: only 1 POOL allowed when running  |
+|                              silent                            |
+|            <output>    Can be FREE to return percentage        |
+|                        free space or USED to return            |
+|                        used percentage.                        |
+|                        Default is USED.                        |
+|                                                                |
+| Comments : Not taken into account mixed architectures          |
+|            Need access to EXTENT CONTROL and VCONTROL files    |
+|            No other special authorisations required            |
+|            Errors will give rc 99990 and up                    |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200428 17:04:56                                   |
+| Changes  : .                                                   |
+|            20210804 H.T.Kramer : Adapted so we show an         |
+|                     error message in the output.               |
+|            20210608 H.T.Kramer : Rework to accomodate more     |
+|                     than 1 pool if we are not SILENT           |
+|            20210527 H.T.Kramer : Added some checking           |
+|            20210224 H.T.Kramer : Added output in GB.           |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg pools '(' how output .
+Parse Source  . . myfn myft .
+Numeric Digits 40
+head=''
+'VMFCLEAR'
+/*---------------------------------------------------------------+
+| Check my parameters                                            |
++---------------------------------------------------------------*/
+If how='SILENT' Then quiet=1
+                Else quiet=0
+Call Check_Output_Var
+Call Read_Extent_Control
+Call Check_Pools_Var
+/*---------------------------------------------------------------+
+| Loop thru the pools that were in the input                     |
++---------------------------------------------------------------*/
+out.0=0
+ 
+Do p=1 To qpool.0
+  Call Check_Pool_Req
+  /*---------------------------------------------------------------+
+  | Show the outcome                                               |
+  +---------------------------------------------------------------*/
+  If \quiet & poolok Then Do
+                  work=Substr(qpool.p,1,8) Right(total,16) toting' | '||,
+                       Right(used,16) totuse' | '||,
+                       Right(free,16) totfre' | '||,
+                       Right(percused,5),
+                       Right(percfree,5)
+                  'PIPE (NAME POOLUSG.EXEC:72 END ?) var work | stem out. append'   /* Add 2 stem       */
+                  End
+ 
+End p
+/*---------------------------------------------------------------+
+| Loose the access to EXTENT CONTROL and VCONTROL files          |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF <DET (NONAMES QUIET'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If out.0<>0 Then 'PIPE (NAME POOLUSG.EXEC:80 END ?) var head | append stem out. | cons'   /* If filled display*/
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Uniform way to exit                                            |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If exrc='' | \Datatype(exrc,'N') Then exrc=0
+/* If errmsg<>'' & Datatype(errmsg,'A') & quiet Then Say errmsg */
+Parse Value errmsg With '(' errmsg
+If Wordpos('silent',errmsg)=0 & Wordpos('free',errmsg)=0 & Wordpos('used',errmsg)=0 Then display=1
+                             Else display=0
+If errmsg<>'' & display Then Say errmsg
+/*---------------------------------------------------------------+
+| If this is SILENT we compose the exit return code              |
++---------------------------------------------------------------*/
+If quiet & exrc=0 Then Do
+   If usedsw Then exrc=Format(percused,,0)
+             Else exrc=Format(percfree,,0)
+   End
+Exit exrc
+ 
+ 
+Check_Pool_Req:
+/*---------------------------------------------------------------+
+| Check if the requested POOL exists                             |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLUSG.EXEC:111 END ?)',
+    'stem fpool.',                               /* Take these       */
+    '| pick w1.1 == ~'qpool.p'~',                /* Select this      */
+    '| count lines',                             /* How many         */
+    '| var poolok'                               /* Store as boolean */
+If poolok Then Call ProcessInfo
+          Else Do
+          input='99996 Dirmaint disk pool 'qpool.p' does not have any regions or does not exist'
+          If quiet Then Call Exit input
+                   Else 'PIPE (NAME POOLUSG.EXEC:120 END ?) var input | stem out. append'
+          End
+Return
+ 
+ 
+Read_Extent_Control:
+/*---------------------------------------------------------------+
+| Get access to EXTENT CONTROL and VCONTROL files                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc
+/*---------------------------------------------------------------+
+| Read EXTENT CONTROL and check if the pool exists               |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLUSG.EXEC:135 END ?)',
+    '< EXTENT CONTROL 'wfm,                      /* Read this file   */
+    '| strip',                                   /* Remove spaces    */
+    '| inside ~:GROUPS.~ ~:END.~',               /* Need this section*/
+    '| nlocate ~ALLOCATE~',                      /* Ignore this      */
+    '| stem poolinfo.',                          /* Store 4 later    */
+    '| specs w1.1',                              /* Keep this        */
+    '| sort unique',                             /* Remove dups      */
+    '| stem fpool.'                              /* Store as         */
+If quiet & qpool.0>1 Then Do
+            percused=0
+            percfree=0
+            Call Exit '99998 Can not return multiple percentages. Only 1 pool id allowed for SILENT mode'
+            End
+Return
+ 
+ 
+Check_Output_Var:
+/*---------------------------------------------------------------+
+| Check the content of the output variable                       |
++---------------------------------------------------------------*/
+Select
+When output='' Then usedsw=1
+When output='USED' Then usedsw=1
+When output='FREE' Then usedsw=0
+Otherwise Call Exit '99997 Invalid output 'output
+End
+Return
+ 
+ 
+Check_Pools_Var:
+/*---------------------------------------------------------------+
+| Check the content of pools variable                            |
++---------------------------------------------------------------*/
+If pools=''  Then Call Exit '99928 No pool(s) supplied'
+If pools='?' Then Do
+                 'PIPE (NAME POOLUSG.EXEC:171 END ?)',
+                     '< 'myfn myft' *',         /* Read myself      */
+                     '| tolabel Parse',         /* Up to here       */
+                     '| cons'                   /* Show all         */
+                 Call Exit
+                 End
+'PIPE (NAME POOLUSG.EXEC:177 END ?)',
+    'var pools',                                 /* Take this        */
+    '| split at anyof ~,; ~',                    /* Split at......   */
+    '| stem qpool.'                              /* Store as         */
+If quiet & qpool.0>1 Then Call Exit '99999 Only 1 pool allowed when using SILENT'
+Return
+ 
+ 
+ProcessInfo:
+/*---------------------------------------------------------------+
+| Process the info and read the VCONTROL files                   |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLUSG.EXEC:189 END ?)',
+    'stem poolinfo.',
+    '| pick w1.1 == ~'qpool.p'~',               /* Get these        */
+    '| specs w2.1 1 ~VCONTROL 'wfm'~ nw',       /* Compose filenames*/
+    '| getfiles',                               /* Read the files   */
+    '| a: all ~MAXBLK=~ ! ~ENTRY=~',            /* Need these       */
+    '| n: nlocate ~MAXBLK=~',                   /* Skip out these   */
+    '| specs w1.3',                             /* Adjust record    */
+    '| specs b: w2.1 .',                        /* How many         */
+    '        c: w3.1 .',                        /* .  used blocks   */
+    '     set #1:=c-b+1',                       /* .   or cylinders */
+    '     print #1 1 ',                         /* .                */
+    '| specs printonly eof',                    /* Totalise blocks  */
+            'd: w1.1     .',                    /* .   or cylinders */
+         '   set #2+=d',                        /* .                */
+         'eof',                                 /* .                */
+         '   print #2 1',                       /* .                */
+    '| var used',                               /* Store as         */
+    '? n:',                                     /* Conn 2 nlocate   */
+    '| specs printonly eof',                    /* Totalise the     */
+         'a: w2.1     .',                       /* .available blocks*/
+         '   set #0+=a',                        /* .   or cylinders */
+         'eof',                                 /* .                */
+         '   print #0 1',                       /* .                */
+    '| var total',                              /* Store as         */
+    '? a:',                                     /* Conn 2 all       */
+    '| all ~ARCH=~',                            /* Select these     */
+    '| specs fs = f2',                          /* Keep this        */
+    '| unique',                                 /* Remove dups      */
+    '| var arch'                                /* Store as         */
+If rc<>0 Then Call Exit rc
+free=total-used
+percused=Format(((used/total)*100),,2)
+percfree=Format(((free/total)*100),,2)
+If arch='FBA' Then Do
+                label='Blocks'
+                toting=Right(blk2size(total 'G'),8)
+                totuse=Right(blk2size(used  'G'),8)
+                totfre=Right(blk2size(free  'G'),8)
+                End
+If arch='CKD' Then Do
+                label='Cyls__'
+                toting=Right(cyl2size(total  'G'),8)
+                totuse=Right(cyl2size(used   'G'),8)
+                totfre=Right(cyl2size(free   'G'),8)
+                End
+head='Pool     Available 'label' GB       | '||,
+     'Used 'label'      GB       | '||,
+     'Free 'label'      GB       | '||,
+     '%Used %Free'
+Return

@@ -1,0 +1,142 @@
+/*---------------------------------------------------------------+
+| Function : Report on page rate                                 |
+|                                                                |
+| File     : HOBVMPRT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBVMPRT .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220104 13:05:04                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMPRT.EXEC:28 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+ 
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status           /*  Send the result in status to bb */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOBVMPRT.EXEC:39 END ?)',
+                 'var status',
+                 '| split at x15',
+                 '| strip',
+                 '| cons'
+              End
+Exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Var paging yellow red
+'PIPE (NAME HOBVMPRT.EXEC:53 END ?)',
+    'cp IND',                                    /* Ask CP           */
+    '| locate anycase ~PAGING-~',                /* Find this        */
+    '| var ind_output',                          /* Store as         */
+    '| specs fs - f2 1',                         /* Keep this        */
+    '| specs fs / f1 1',                         /* Reduce 2 this    */
+    '| var page_rate',                           /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY CPLEVEL',                          /* Ask cp           */
+    '| take first 1',                            /* Keep this        */
+    '| var cplevel'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Change the color of the status                                 |
++---------------------------------------------------------------*/
+Select
+  When page_rate>red  Then color='red'
+  When page_rate>yellow & page_rate<red Then color='yellow'
+  Otherwise color='green'
+  End
+status='status 'machine'.paging' color TimeStamp('TZ'),
+        'Paging ' page_rate cr 'paging :' page_rate ,
+        cr cr cplevel cr cr ind_output
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,HOBVMPRT'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBVMPRT.EXEC:136 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

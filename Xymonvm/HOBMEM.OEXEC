@@ -1,0 +1,238 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*
+/-  Herald ten Dam 10/04/2019                                       -/
+/-      z/VM Memory overview                                        */
+ /*---------------------------------------------------------------+
+ | H.T.Kramer 20200608 Removed GLOBALV PUT because it is filling  |
+ |                     the A-disk unneeded                        |
+ +---------------------------------------------------------------*/
+trace off
+parse source with . call_type myname .
+cr='15'x                                         /*  Carriage return   */
+emsgstart=date('U') time() myname':'   /* Start of error message line  */
+'globalv stack BBDISPLAY BBPORT FQDN VMPTK PTKSVM LPAR'
+pull bbdisplay
+pull bbport
+pull fqdn
+pull vmptk
+pull ptksvm
+pull thresholds
+parse value thresholds with yellow red .
+if vmptk <> 1 then exit 4
+rc = diagrc('8','QUERY USER' ptksvm)
+if word(rc,1) <> 0 then notloggedon=1
+call init_open_socket      /*  Initialize and Open the socket  */
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call get_timestamp         /*  Get a linux-like timestamp      */
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+call send status           /*  Send the result in status to bb */
+call close_term_socket     /*  Close and terminate the socket  */
+exit
+ 
+do_the_test:
+/*  Check logged on flag, if true send yellow icon with message.  */
+if notloggedon=1 then do
+  msg = ptksvm 'Not logged on'
+  msg = 'yellow' dow month day time() tz year msg
+  status = 'status' machine||'.zvm_mem' msg
+  return
+end
+k='*1024 '
+m='*1024*1024 '
+g='*1024*1024*1024 '
+t='*1024*1024*1024*1024 '
+'pipe cp q alloc map ',
+  '| locate /PAGE/ ',
+  '| specs w4 1 w6 nw ',
+  '| change w1;* K'k'',                    /* Add for K       */
+  '| change w1;* M'm'',                    /* Add for M       */
+  '| change w1;* G'g'',                    /* Add for G       */
+  '| change w1;* T't'',                    /* Add for T       */
+  '| change w2;* K'k'',                    /* Add for K       */
+  '| change w2;* M'm'',                    /* Add for M       */
+  '| change w2;* T't'',                    /* Add for T       */
+  '| change w2;* G'g'',                    /* Add for G       */
+  '| stem alloc.'
+msg   = 'Paging '
+totaalgrootte  = 0
+totaalgebruik = 0
+lstat = cr
+/* multiple cpus display, lpar is not visable after 1th cpu */
+do i = 1 to alloc.0
+  parse value alloc.i with grootte gebruik
+interpret 'grootte='grootte
+interpret 'gebruik='gebruik
+  totaalgrootte=totaalgrootte+grootte
+  totaalgebruik=totaalgebruik+gebruik
+end
+util=totaalgebruik/totaalgrootte*100
+lstat=lstat||'PAGING:           'format(util,3,2)' 'cr
+lstat=lstat||'USEDPAGING_GB:     'format(totaalgebruik/1024/1024*4,5,0)' 'cr
+lstat=lstat||'TOTALPAGING_GB:    'format(totaalgrootte/1024/1024*4,5,0)' 'cr
+/* Total users in z/VM */
+ 
+'pipe vmc 'ptksvm' 28 | drop 5 | specs w1 1 w8 nw ',
+  '| change w2;* ~K~'k'~',                    /* Add for K       */
+  '| change w2;* ~M~'m'~',                    /* Add for M       */
+  '| change w2;* ~G~'g'~',                    /* Add for G       */
+  '| change w2;* ~T~'t'~',                    /* Add for T       */
+  '| stem gsize.'
+ 
+tot_gsize=0
+do i = 1 to gsize.0
+  parse value gsize.i with guest grootte
+  interpret 'grootte='grootte
+  tot_gsize=tot_gsize+grootte
+end
+ 
+tot_gsize=tot_gsize/1024/1024/1024
+lstat=lstat||'TOTALSIZEUSERS_GB: 'format(tot_gsize,5,0)' 'cr
+/* Memory/storage */
+ 
+'pipe (end ?) vmc 'ptksvm' 2 ',
+  '|n: find _Total_available ',
+  '| specs w3 1 ',
+  '| change /''//',
+  '| change /MB/M/ ',
+  '| change /GB/G/ ',
+  '| change /KB/K/ ',
+  '| change /TB/T/ ',
+  '| change w1;* ~K~'k'~',                    /* Add for K       */
+  '| change w1;* ~M~'m'~',                    /* Add for M       */
+  '| change w1;* ~G~'g'~',                    /* Add for G       */
+  '| change w1;* ~T~'t'~',                    /* Add for T       */
+  '| var memory ',
+ '? n: ',
+ '| find _Standby ',
+ '| specs w5 1 ',
+ '| change /''//',
+ '| change /MB/M/ ',
+ '| change /GB/G/ ',
+ '| change /KB/K/ ',
+ '| change /TB/T/ ',
+ '| change w1;* K'k'',                    /* Add for K       */
+ '| change w1;* M'm'',                    /* Add for M       */
+ '| change w1;* G'g'',                    /* Add for G       */
+ '| change w1;* T't'',                    /* Add for T       */
+ '| var standby'
+interpret 'standby='standby
+standby=standby/1024/1024/1024
+interpret 'memory='memory
+memory=memory/1024/1024/1024
+lstat=lstat||'MEMORY_GB:         'format(memory,5,0)' 'cr
+lstat=lstat||'STANDBY_GB:        'format(standby,5,0)' 'cr
+/* vdisken size is in blocken */
+vsize=0
+'pipe vmc' ptksvm 'cms erase vdisks listing a | hole'
+'cp sleep 1 sec'
+'pipe vmc 'ptksvm' print b (tofile vdisks listing a close | hole'
+'reacc quiet'
+'cp sleep 1 sec'
+'pipe (end ?) < vdisks listing | locate /VDISK$/ | specs w1 1 w2 nw w3 nw | sort unique | stem vdisk.'
+do i = 1 to vdisk.0
+  parse value vdisk.i with guest devno gsize
+  vsize=vsize+(gsize/2/1024/1024)
+end
+lstat=lstat||'VDISK_GB:          'format(vsize,5,0)' 'cr
+tot_mem=tot_gsize+vsize
+lstat=lstat||cr||cr||'V to R memory='format(tot_mem/memory*100,5,2)'% 'cr
+color='green'
+if util > 80 then
+  color = 'red'
+else
+  if util > 60 then
+    color = 'yellow'
+msg = color dow month day time() tz year msg
+status = 'status' machine||'.zvm_mem' msg lstat
+/* 'pipe var status | split at x15 | console' */
+return
+ 
+init_open_socket:
+ret=Socket('Initialize','SOCMEM')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+ret=socket('Gethostname')
+parse var ret rc hostname .
+if rc<>0 then
+  say 'Gethostname:' ret
+ret=socket('Getdomainname')
+parse var ret rc domainame .
+if rc<>0 then
+  say 'Getdomainname:' ret
+/* fullname=hostname||'.'||domainame */
+/*  Change periods to commas  */
+/* fullname=translate(fullname,',','.') */
+/* 'globalv put hostname' */
+/* 'globalv put domainame' */
+/* 'globalv put fullname' */
+bbdate=date('U')
+'globalv put bbdate'
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return
+ 
+get_timestamp:
+'PIPE CP QUERY TIMEZONE' ,
+  '| locate /Active/' ,
+  '| specs w1 1' ,
+  '| var TZ'
+dow = substr(date('W'),1,3)
+parse value date('N') with day month year .
+timestamp = dow month day time() tz year
+return

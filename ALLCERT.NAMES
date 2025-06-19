@@ -1,0 +1,24 @@
+**
+** If you have specific requirements for a node
+** copy the tag adapt it and add a :node. tag
+**
+** Generic items
+* The directory names where the key database is found
+:db_dir.VMBFS:VMSYS:GSKSSLDB/
+* The database name
+:dbname.CADatabase.kdb
+* The number of days the certificate/keys are valid
+:days.365
+* Start extra warnings when we are nn days from the expiry
+:lim.10
+**
+** Node specific items
+**
+* The directory names where the key database is found
+:db_dir.VMBFS:VMSYS:GSKSSLDB.mynode/ :node.mynode
+* The database name
+:dbname.mynode.kdb                   :node.mynode
+* The number of days the certificate/keys are valid
+:days.180                            :node.mynode
+* Start extra warnings when we are nn days from the expiry
+:lim.15                              :node.mynode

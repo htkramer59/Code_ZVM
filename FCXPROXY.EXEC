@@ -1,0 +1,124 @@
+/*---------------------------------------------------------------+
+| Function : Be a proxy for Linux servers to obtain data from    |
+|            PERFSVM                                             |
+|                                                                |
+| File     : FCXPROXY EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : perfsvm  output                                     |
+|            FCX      EXEC       Tool to talk to PERFSVM         |
+|            FCXPROXY AUTHORIZ   Authorized servers (wildcards)  |
+|                                                                |
+| Called   : FCXPROXY .                                          |
+|                                                                |
+| Comments : The proxy id needs to be authorized in PERFSVM      |
+|            If you need to restrict certain commands/queries    |
+|            copy FCX LIST and comment the items you do not      |
+|            want to share.                                      |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200707 08:35:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+Address CMS 'EXECLOAD FCX EXEC * = REXX'
+Address COMMAND 'CP SET SMSG IUCV'
+timer='+00:30:00'                                /* Change this if needed   */
+wakeupparms=''                                   /* Extra wakeup parms */
+/*---------------------------------------------------------------+
+| For ever loop                                                  |
++---------------------------------------------------------------*/
+Do main=1
+  Address CMS 'WAKEUP 'timer' (CC SMSG CONS 'wakeupparms
+  Select
+  When rc=1    Then Call DoFcx
+  When rc=3    Then Say TimeStamp()' Timer expired'
+  When rc=6    Then Do
+                    Say TimeStamp()' Console interrupt'
+                    Leave main
+                    End
+  Otherwise Say TimeStamp()' Unhandled return code from WAKEUP 'rc
+  End
+End main
+/*---------------------------------------------------------------+
+| Clean up and exit                                              |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET SMSG OFF'
+Address CMS 'EXECDROP FCX REXX'
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Authorized:
+/*---------------------------------------------------------------+
+| Check if the server is authorized to talk to the proxy         |
++---------------------------------------------------------------*/
+auth=0
+authid=0
+authwild=0
+'PIPE (NAME FCXPROXY.EXEC:64 END ?)',
+   'disk 'myfn' AUTHORIZ *',                     /* Read this file   */
+   '| pick w1.1 \== ~*~',                        /* Remove comments  */
+   '| split',                                    /* Split on 1 line  */
+   '| strip',                                    /* Remove spaces    */
+   '| sort unique',                              /* Remove duplicates*/
+   '| n: nlocate ~*~',                           /* Take out these   */
+   '| locate ~'returnid'~',                      /* Find the id      */
+   '| count lines',                              /* How many         */
+   '| stem authid',                              /* Store as         */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| stem wild.'                                /* Store as         */
+If wild.0<>0 Then Do w=1 To wild.0
+        'PIPE (NAME FCXPROXY.EXEC:77 END ?)',
+          'var returnid',                        /* Take this        */
+          '| wildcard anycase w1.1 ~'wild.w'~',  /* Check if fits    */
+          '| count lines',                       /* How many         */
+          '| var authwrk'                        /* Store as         */
+        authwild=authwild+authwrk                /* Add up 4 later   */
+        End w
+        Else authwild=0
+auth=authid+authwild
+Return auth
+ 
+ 
+DoFcx:
+/*---------------------------------------------------------------+
+| Analyse the output from wakeup                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME FCXPROXY.EXEC:93 END ?)',
+    'stack',                                     /* Read from stack  */
+    '| specs w2;*',                              /* Keep this        */
+    '| f: fanout',                               /* Duplicate lines  */
+    '| specs ~/RETURNID/~ 1',                    /* Compose 4        */
+            'w1.1 n ~;/OUTFT/~ n',               /* .....varload     */
+            'w2.1 n ~;/CMDLINE/~ n',             /* .                */
+            'w2;* n',                            /* .                */
+    '| split at ;',                              /* Split            */
+    '| varload',                                 /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~'TimeStamp()'~ 1 1;* nw',          /* Add timestamp    */
+    '| cons'                                     /* Show             */
+If Authorized() Then Do
+/*---------------------------------------------------------------+
+| Talk to PERFSVM                                                |
++---------------------------------------------------------------*/
+     'PIPE (NAME FCXPROXY.EXEC:110 END ?)',
+         'fcx 'cmdline,                               /* Talk 2 perfsvm   */
+         '| > FCX 'outft' A'                          /* Store as         */
+/*---------------------------------------------------------------+
+| Send the results to the caller & cleanup                       |
++---------------------------------------------------------------*/
+     Say TimeStamp()' Returning results to 'returnid
+     Address COMMAND 'CP SPOOL PRINT TO 'returnid
+     Address CMS 'PRINT FCX 'outft' A '
+     Address COMMAND 'CP SPOOL PRINT OFF'
+     Say TimeStamp()' Cleaning up'
+     Address CMS 'ERASE FCX 'outft' A '
+     End
+     Else Say TimeStamp()' Server not authorized: 'returnid
+Return

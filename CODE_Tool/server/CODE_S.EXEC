@@ -1,0 +1,312 @@
+/*---------------------------------------------------------------+
+| Function : Server CODE for the CODE tool                       |
+|                                                                |
+| File     : CODE_S   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CODE     NAMES    Control file                      |
+|            CODE*    EXEC     Parts of the server code          |
+|            WAKEUP   MODULE   Wakeup when rdr file or msg       |
+|                              received                          |
+|                                                                |
+| Called   : CODE_S   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220323 17:04:17                                   |
+| Changes  : .                                                   |
+|            20221124 H.T.Kramer : Changed to remove dirmaint    |
+|                     related files from the rdr                 |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Read_Names
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Run_Wakeup
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+Exit
+ 
+ 
+Read_Names:
+/*---------------------------------------------------------------+
+| Read the NAMES file to find my values                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CODE_S.EXEC:51 END ?)',
+   '< CODE NAMES *',                             /* Read this file   */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~ ~',         /* Ignore these     */
+   '| join * x40',                               /* Make 1 record    */
+   '| split anycase before string ~:SERVER.~',   /* Split here       */
+   '| split anycase before string ~:USERS.~',    /* .                */
+   '| p1: pick anycase fs . f1 == ~:SERVER~',    /* Select this      */
+   '| specs w2;* 1',                             /* Keep this        */
+   '| xlate upper',                              /* Make sure we are.*/
+   '| split before string ~:NICK.~',             /* Split here       */
+   '| pick anycase w1.1 \== ~:NICK.IN~ and',     /* Ignore these     */
+                  'w1.1 \== ~:NICK.OUT~',        /* .                */
+   '| change ~:NICK.~/~',                        /* Replace this     */
+   '| change ~:VALUE.~/~',                       /* ...and this      */
+   '| specs w1.1 1 w2;* n',                      /* Compose cmds     */
+   '| fi: faninany',                             /* Take in others   */
+   '| varload',                                  /* Hand 2 rexx      */
+   '? p1:',                                      /* Conn 2 pick      */
+   '| p2: pick anycase fs . f1 == ~:USERS~',     /* Select these     */
+   '| specs w2;* 1',                             /* Keep this        */
+   '| xlate upper',                              /* Make uppercase   */
+   '| change ~:NICK.~~',                         /* Replace this     */
+   '| specs ~/USERS/~ 1 1;* n',                  /* Adjust           */
+   '| fi:',                                      /* Conn 2 faninany  */
+   '? p2:',                                      /* Conn 2 pick      */
+   '| pick anycase fs . f1 == ~:ADMINS~',        /* Select these     */
+   '| specs ~/ADMINS/~ 1 w2;* n',                /* Prep 4 varload   */
+   '| fi:'                                       /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Process the ignore labels                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME CODE_S.EXEC:82 END ?)',
+    'var ignore_rdr_files',                      /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| strip',                                   /* Remove spaces    */
+    '| specs ~w10.2 \== /~ 2',                   /* Prep for pick    */
+            'w1.1 n.9 left',                     /* .                */
+            'w2.1 nw',                           /* .                */
+            '~/~ n',                             /* .                */
+            'x40 n',                             /* .                */
+    '| join * ~and~',                            /* Make 1 record    */
+    '| specs x4F 1 ~p2: PICK~ nw 1;* nw',        /* Compose pick     */
+    '| var ignore_rdr_files',                    /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'var ignore_dist_codes',                     /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| strip',                                   /* Remove spaces    */
+    '| specs ~w12.1 \== /~ 2',                   /* Prep 4 pick      */
+            'w1.1 n',                            /* .                */
+            '~/~ n',                             /* .                */
+            'x40 n',                             /* .                */
+    '| join * ~and~',                            /* Make 1 record    */
+    '| specs x4F 1 ~p3: PICK~ nw 1;* nw',        /* Compose pick     */
+    '| var ignore_dist_codes'                    /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If this is filled compose secondary part for pick              |
++---------------------------------------------------------------*/
+If Words(ignore_rdr_files)<>0 Then ignore_rdr_part2='? p2: | specs ~PURGE RDR~ 1 w2.1 nw|stem purge. append'
+                    Else Do
+                    ignore_rdr_files=''
+                    ignore_rdr_part2=''
+                    End
+/*---------------------------------------------------------------+
+| If this is filled compose secondary part for pick              |
++---------------------------------------------------------------*/
+If Words(ignore_dist_codes)<>0 Then ignore_dist_part2='? p3: | specs ~PURGE RDR~ 1 w2.1 nw|stem purge. append'
+                    Else Do
+                    ignore_dist_codes=''
+                    ignore_dist_part2=''
+                    End
+Return
+ 
+ 
+VMCF_SMSG_MSG:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CODE_S.EXEC:128 END ?)',
+  'stack',                                       /* Take from stack  */
+  '| specs ~/USERID/~ 1 w2.1 n',                 /* Prep 4 varload   */
+          '~;/CMD/~ n w3.1 n',                   /* .                */
+          '~;/INPUT/~ n w4;* n',                 /* .                */
+  '| split at ;',                                /* Split here       */
+  '| varload'                                    /* Hand 2 rexx      */
+Call Check_Admin userid
+Call Check_Valid_Commands cmd
+Call Check_User  userid
+ 
+/*---------------------------------------------------------------+
+| Handle user commands                                           |
++---------------------------------------------------------------*/
+If valus & valcmd Then Do
+     Select
+     When cmd='LOCK'           Then Address CMS 'CODELOCK 'userid input
+     When cmd='UNLOCK'         Then Address CMS 'CODEUNLK 'userid input
+     When cmd='REPLACE'        Then Address CMS 'CODEREPL 'userid input
+     When cmd='DEPL'           Then Address CMS 'CODEDEPL 'userid input
+     When cmd='SYNC'           Then Address CMS 'CODESYNC 'userid input
+     When cmd='CLEAN'          Then Address CMS 'CODEREMO 'userid input
+     Otherwise 'SMSG 'userid' 28'
+     End
+     reply=rc
+     End
+     Else Call Admin
+'SMSG 'userid reply
+Return
+ 
+ 
+Admin:
+/*---------------------------------------------------------------+
+| Handle admin commands                                          |
++---------------------------------------------------------------*/
+If admin Then Do
+     Select
+     When cmd='REMOVE' Then Address CMS 'CODEREMO 'userid input
+     When cmd='RELOAD' Then Address CMS 'CODERELD 'userid input
+     When cmd='UNLOCK' Then Address CMS 'CODEUNLK 'userid input
+     Otherwise reply=0
+     End
+     reply=rc
+End
+Return
+ 
+ 
+Check_RDR:
+/*---------------------------------------------------------------+
+| Check for files in the reader                                  |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Check for files in the reader                                  |
++---------------------------------------------------------------*/
+purge.0=0
+'PIPE (NAME CODE_S.EXEC:183 END ?)',
+  'cp QUERY RDR * ALL ISO DIST',                 /* Check rdr        */
+  '| drop first 1',                              /* Ignore hdr       */
+  '| p1: pick w4.1 \== ~CON~',                   /* Ignore these     */
+  '| buffer',                                    /* Prevent stall    */
+  ignore_rdr_files,                              /* If filled...     */
+  '| buffer',                                    /* Prevent stall    */
+  ignore_dist_codes,                             /* .                */
+  '| buffer',                                    /* Prevent stall    */
+  '| l: lookup w1.1 w1.1 DETAILS',               /* Compare          */
+  '| specs ~RECEIVE~ 1',                         /* Compose cmds     */
+          'w2.1 nw',                             /* .                */
+          'w-3;-2 nw',                           /* .                */
+          '~A (REPLACE OLDDATE NOLOG~ nw',       /* .                */
+  '| stem accept.',                              /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'var users',                                   /* Take this        */
+  '| split',                                     /* Split here       */
+  '| l:',                                        /* Conn 2 lookup    */
+  '| specs ~TRANSFER * READER~ 1',               /* Compose cmds     */
+          'w2.1 nw',                             /* .4 unwanted files*/
+          'w1.1 nw',                             /* .                */
+          '~READER~ nw',                         /* .                */
+  '| stem reject.',                              /* Hand 2 rexx      */
+  '? p1:',                                       /* Conn 2 pick      */
+  '| pick w1.1 == ~'Userid()'~',                 /* Select my own    */
+  '| specs ~TRANSFER * READER~ 1 w2.1 nw ~* PRT~ nw',   /* Compose cmd      */
+  '| stem keep.',                                /* Hand 2 rexx      */
+  ignore_rdr_part2,                              /* .                */
+  ignore_dist_part2                              /* .                */
+/*---------------------------------------------------------------+
+| Issue various commands                                         |
++---------------------------------------------------------------*/
+If reject.0<>0 Then Do
+          Say TimeStamp() 'Rejecting files:'
+          Call Issue_Commands 'reject. cp'
+          End
+If keep.0<>0   Then Do
+          Say TimeStamp() 'Files moved to PRT queue:'
+          Call Issue_Commands 'keep. cp'
+          End
+If accept.0<>0 Then Do
+          Say TimeStamp() 'Processing files:'
+          Call Issue_Commands 'accept. cms'
+          End
+If purge.0<>0  Then Do
+          Say TimeStamp() 'Purging unwanted files:'
+          Call Issue_Commands 'purge. cp'
+          End
+Return
+ 
+ 
+Issue_Commands:
+/*---------------------------------------------------------------+
+| Show commands, issue them and show results                     |
++---------------------------------------------------------------*/
+Parse Upper Arg stemname envir .
+'PIPE (NAME CODE_S.EXEC:240 END ?)',
+    'stem 'stemname,
+    '| cons',
+    '| 'envir,
+    '| cons'
+Return
+ 
+ 
+Check_Valid_Commands:
+/*---------------------------------------------------------------+
+| Check if we are asked for a valid command                      |
++---------------------------------------------------------------*/
+If Wordpos(cmd,valid_commands)=0 Then valcmd=0
+                                 Else valcmd=1
+Return
+ 
+ 
+Check_User:
+/*---------------------------------------------------------------+
+| Check if the user is allowed to talk to me                     |
++---------------------------------------------------------------*/
+If Wordpos(userid,users)=0 Then valus=0
+                           Else valus=1
+Return
+ 
+ 
+Check_Admin:
+/*---------------------------------------------------------------+
+| Check if this an admin                                         |
++---------------------------------------------------------------*/
+If Wordpos(userid,admins)=0 Then admin=0
+                            Else admin=1
+Return
+ 
+ 
+Run_WakeUp:
+/*---------------------------------------------------------------+
+| Run wakeup in a loop...                                        |
++---------------------------------------------------------------*/
+Do main=1 /* Forever */
+ Address CMS 'WAKEUP 'wakeup_interval' (FILE(CODE_S) 'wakeup_options
+ wrc=rc
+/*---------------------------------------------------------------+
+| The following is from the HELP WAKEUP                          |
+| WAKEUP return codes (not complete)                             |
+| 0       Nothing to wait for--all timer file options are done   |
+| 1       VMCF/SMSG received and stacked                         |
+| 2       The specified time period has elapsed                  |
+| 3       A time from the timer file has been reached            |
+| 4       A reader file of the proper class has arrived          |
+| 5       A message has arrived                                  |
+| 6       Interrupt from the virtual console                     |
+| 7       I/O interrupt                                          |
+| 8       External interrupt                                     |
++---------------------------------------------------------------*/
+ Select
+ When wrc=1 Then Call VMCF_SMSG_MSG
+ When wrc=2 Then Call Read_Names
+ When wrc=3 Then Nop
+ When wrc=4 Then Call Check_RDR
+ When wrc=5 Then Call VMCF_SMSG_MSG
+ When wrc=6 Then Call Exit wrc 'Console Interrupt'
+ When wrc=7 Then Call Exit wrc 'I/O Interrupt'
+ When wrc=8 Then Call Exit wrc 'External Interrupt'
+ Otherwise Call ShowMsg 'Return code 'wrc' from WAKEUP (unhandled)'
+ End
+'PIPE (NAME CODE_S.EXEC:306 END ?) stack | hole'
+End main
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

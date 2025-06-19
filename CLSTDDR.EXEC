@@ -1,0 +1,239 @@
+/* This exec uses DDR to copy a list of Minidisks.  This list may
+   have been made by MVMDISKS XEDIT, or by hand.
+ +-----------------------------------------------------------------+
+ | format:  | CLSTCMS   listfid  <( <RACFDEF> <RACFDEL> <RR|MR> >  |
+ +-----------------------------------------------------------------+
+ Options: RACFDEF   tells that RACF RDEFINEs and PERMITs will be given
+          RACFDEL   is to undo the RACF defines after the copy
+          RR or MR  can be used to LINK input disk in RR.  BUT, your COPY
+                    becomes worthless if someone else changes the disk.
+ 
+Sample input List:
+==================
+ EXEC XXX MAINTEST 174 MMAINT   MAINTEST 1174 MMAINT
+ EXEC XXX MAINT    343 MULT     MAINT    1343 MULT
+ EXEC XXX VMUTIL   191 MUTIL    VMUTIL   1191 MMAINT
+ 
+  Description: first 2 words are ignored
+               words 3-5 define input disk (userid, cuu, multpswd)
+               words 6-8 define output disk (userid, cuu, multpswd)
+  Records starting with an * are ignored, also, if you write a - sign
+  in col 1, the copy is not attempted, you can use this to signal CLSTSMS
+  it should not retry a copy that failed before.
+Output list:
+============
+ This exec will read the input list and create a LOGfile in which it will
+ write the state of each copy.  This same file can be used as input list
+ when the copy has to be restarted.  Lines for successfull copies are
+ preceded by an *, so they are not re-attempted. Sample
+* EXEC XXX MAINTEST 174 MMAINT   MAINTEST 1174 MMAINT      OK 20 Jan 1992
+* EXEC XXX MAINT    343 MULT     MAINT    1343 MULT        OK 20 Jan 1992
+  EXEC XXX VMUTIL   191 MUTIL    VMUTIL   1191 MUTIL       +++Failed+++
+ 
+Prereq:
+ -if using RACF, you'll need RACF authority to link to the disks
+  (e.g. you could define yourself as OPERATIONS)
+ 
+  Written by: Kris Buelens IBM Belgium;  BUELENSC at IECVM 14 Jan 1992*/
+parse upper source . . myname mytype . syn .
+address command
+parse upper arg copylist '(' options
+ 
+parse value 0     0       0      'M'       userid(),
+       with MaxRc RacfDef RacfDel LinkMode userid
+ 
+do while Options<>''
+   parse var options option options
+   select
+    when option='RACFDEF' then RacfDef=1
+    when option='DEFRACF' then RacfDef=1
+    when option='RACFDEL' then RacfDel=1
+    when option='DELRACF' then RacfDel=1
+    when option='RR'      then LinkMode='RR'
+    when option='MR'      then LinkMode='MR'
+    Otherwise
+     call errexit 5,'Invalid parameter:' option
+   end
+end
+ 
+if copylist='' then call errexit 5,'Fileid of list missing'
+CopyList=subword(CopyList 'A',1,3)
+'EXECIO * DISKR' copylist '(FINIS STEM LIST.'
+if rc^=0 then call errexit rc,'+++++++++++> EXECIO DISKR failed'
+ 
+loglist=word(copylist,1) 'LOG A'
+'ESTATE' loglist
+if rc^=0 then 'COPYFILE' copylist loglist '(RECFM F LRECL 200'
+ 
+'CP SP CON START TO * CONT CLOSE'
+'CP CLOSE CONS NAME' myname 'ERROR'
+do i=1 to list.0
+   parse var list.i c1 2 1 . . inu ina inpw outu outa outpw .
+   if c1='*' then iterate i
+   if c1='-' then iterate i /* no retry if error */
+   if inu='*' then inu=userid
+   if outu='*' then outu=userid
+   if outa='=' then outa=ina
+   if outu='=' then outu=inu
+   if outpw='=' then outpw=inpw
+   Say '===============' inu ina 'TO' outu outa '======================='
+   If RacfDef then call RACFDEF inu ina outu outa
+   parse value copyDDR() with copyrc error
+   if copyrc=0 then str='*' left(list.i,60) 'OK' date() time()
+   else do
+      say '+++Failed+++' error
+      str=left(list.i,60) '+++Failed+++ rc='copyrc error
+      maxrc=max(maxrc,copyrc)
+   end
+   'EXECIO 1 DISKW' loglist i '(FINIS STRING' str
+   if inlinked  then call diag 8,'DET' my_ina
+   if outlinked then call diag 8,'DET' my_outa
+   If RacfDel then call RACFDEL inu ina outu outa
+   if copyrc=0 then 'VMFCLEAR'
+end
+ 
+call errexit maxrc
+ 
+Errexit:
+ do i=2 to arg()
+    Say arg(i)
+ end i
+ if arg(1)=0 then name='DONE'
+             else name='FAIL'
+ 'CP CLOSE CONS NAME' myname name
+ 'CP SP CON STOP CLOSE NOCONT'
+exit arg(1)
+ 
+/*-----------------------------------------------------------------*/
+COPYDDR: /*                                                        */
+/*-----------------------------------------------------------------*/
+ inlink=1   ;outlink=1   /* suppose we have to link to the disks */
+ inlinked=0 ;outlinked=0 /* not yet linked */
+ signal on Error
+ 'GETFMADR';Parse Upper Pull . my_infm my_ina .
+ if inu=myself then do
+    parse value diagrc(8,'Q V' ina) with rc . 17 type . . . stat .
+    if rc=0 & stat type='R/W DASD' then parse value ina    0,
+                                        with  my_ina inlink
+ end
+ if inlink then do
+    parse value diagrc(8,'LINK' inu ina my_ina LinkMode inpw),
+                with rc . 17 cpans
+    if (rc>=101 & rc<=103) then do; rc=0;say cpans;end /* forced R/O*/
+    if rc^=0 then return rc 'LINK-in ' cpans
+    inlinked=1
+ end
+ Say myname':      ' inu ina 'linked as:' my_ina
+ 
+ 'GETFMADR';Parse Upper Pull . my_outfm my_outa .
+ if outu='*' | outu=myself then do
+    parse value diagrc(8,'Q V' outa) with rc . 17 type . . . stat .
+    if rc=0 & stat type='R/W DASD' then parse value outa    0,
+                                        with  my_outa outlink
+ end
+ if outlink then do
+    parse value diagrc(8,'LINK' outu outa my_outa 'M' outpw),
+                with rc . 17 cpans
+    if rc^=0 then return rc 'LINK-out' cpans
+    outlinked=1
+ end
+ Say myname':      ' outu outa 'linked as:' my_outa
+ 
+/* Now we have both Mdisks, get some more info on devtype ect. */
+'DEVTYPE' my_ina '(STACK'
+Parse Upper Pull a b type inrw . invol . 0 alldevt 0 . inmodel .
+select
+   when a='DASD'     then indtype = left(b,4)
+   when a='FBA-DASD' then indtype = 'FB-512'
+   otherwise return 6 'Input device is not a know DASD-type:' alldevt
+end
+if type='MDISK' | type='TDISK' then do
+   parse value diag(8,'Q V' my_ina,80) with . . . . . insize .
+   tocopy='0' insize-1;end
+else tocopy='ALL'
+ 
+'DEVTYPE' my_outa '(STACK'
+Parse Upper Pull a b type outrw . outvol . 0 alldevt 0 . outmodel .
+select
+   when a='DASD'     then outdtype = left(b,4)
+   when a='FBA-DASD' then outdtype = 'FB-512'
+   otherwise return 6 'Input device is not a know DASD-type:' alldevt
+end
+if outrw^='R/W' then return 6 'Output device is not a R/W DASD:' alldevt
+if indtype^=outdtype then return 6 'Input & output device have not same devicetype.'
+ 
+ Say 'To copy:' left(inu,8) ina '('my_ina')' invol right(insize,4),
+     'cyls  To' left(outu,8) outa '('my_outa')'
+ 
+if type='MDISK' | type='TDISK' then do
+   parse value diag(8,'Q V' my_outa,80) with . . . . . outsize .
+   if outsize<insize then return 6 'Output disk is smaller than input.'
+   if outsize>insize then return 6 'Output disk is bigger than input.'
+end
+ 
+signal off error
+'ERASE COPYDDR DDR A'
+signal on error
+'EXECIO 1 DISKW COPYDDR DDR A3 1 (STRING INPUT' my_ina indtype invol
+'EXECIO 1 DISKW COPYDDR DDR A3 2 (STRING OUTPUT' my_outa outdtype 'SCRATCH'
+'EXECIO 1 DISKW COPYDDR DDR A3 3 (STRING COPY' tocopy
+'EXECIO 1 DISKW COPYDDR DDR A3 4 (FINIS STRING'
+ 
+signal off error
+'MAKEBUF'
+if inmodel^=outmodel then /* Different dasd model */
+   queue 'YES' /* Stack reply to DDR will prompt */
+ 
+'DDR COPYDDR DDR';DDRrc=rc
+'DROPBUF'
+ 
+if DDRrc^=0 then return DDRrc 'DDR ended with rc:' DDRrc
+return 0
+ 
+ 
+ERROR:
+ Say '+++++++ A Command failed:'
+ Say 'Retcode' rc 'from' condition('D')
+ select
+  when word(condition('D'),2)='DFSMS'    then error='DFSMS CHECK'
+  when word(condition('D'),2)='LINK'     then error='CP LINK'
+  when word(condition('D'),1)='FORMAT'   then error='CMS FORMAT'
+  when word(condition('D'),1)='ACCESS'   then error='CMS ACCESS'
+  when word(condition('D'),1)='COPYFILE' then error='COPYFILE rc' rc
+  otherwise error=subword(condition('D'))
+ end
+ return rc error
+ 
+RACFDEF:
+ procedure expose userid
+ parse arg u1 a1 u2 a2
+ signal off error
+ 'CP SET MSG OFF'
+ 'SET CMSTYPE HT'
+ 'MAKEBUF'
+ queue 'RDEFINE VMMDISK' u1'.'a1' OWNER('userid')'
+ queue 'PERMIT' u1'.'a1' CLASS(VMMDISK) ID('userid') ACCESS(CONTROL)'
+ queue 'RDEFINE VMMDISK' u2'.'a2' OWNER('userid')'
+ queue 'PERMIT' u2'.'a2' CLASS(VMMDISK) ID('userid') ACCESS(CONTROL)'
+ queue 'END'
+ 'RACF (BATCH'
+ 'DROPBUF'
+ 'CP SET MSG ON'
+ 'SET CMSTYPE RT'
+return
+ 
+RACFDEL:
+ procedure expose userid
+ parse arg u1 a1 u2 a2
+ signal off error
+ 'CP SET MSG OFF'
+ 'SET CMSTYPE HT'
+ 'MAKEBUF'
+ queue 'PERMIT' u1'.'a1' CLASS(VMMDISK) ID('userid') DELETE'
+ queue 'RDELETE VMMDISK' u2'.'a2
+ queue 'END'
+ 'RACF (BATCH'
+ 'DROPBUF'
+ 'CP SET MSG ON'
+ 'SET CMSTYPE RT'
+return

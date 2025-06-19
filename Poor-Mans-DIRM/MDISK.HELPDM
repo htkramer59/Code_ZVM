@@ -1,0 +1,26 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change a mode or password for a MDISK               |
+|                                                                |
+| File     : DM_MDISK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_RNDOM EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_MDISK <uid> <cuu> <mode> <rpw> <wpw> <mpw>       |
+| Called   : MDISK    <uid> <cuu> <mode> <rpw> <wpw> <mpw>       |
+|                                                                |
+| Comments : Use = to keep the current password                  |
+|                \ to delete the password                        |
+|                % to generate a password                        |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240706 16:05:24                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

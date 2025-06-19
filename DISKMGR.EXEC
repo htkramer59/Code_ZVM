@@ -1,0 +1,385 @@
+/*---------------------------------------------------------------+
+| Function : Create a disk/directory inventory over all nodes    |
+|                                                                |
+| File     : DISKMGR  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DISKMGR  ALLNODES    input                          |
+|            DISKMGR  OVERVIEW    output                         |
+|            RMCMD    EXEC        tooling                        |
+|                                                                |
+| Called   : DISKMGR  <uid> <cuu>                                |
+|                                                                |
+| Comments : All commands and parms for remote use are           |
+|            written in their shortest form to be able to        |
+|            use XAUTOLOG <id>#<cmd>                             |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210917 14:23:40                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Added check for RMCMD EXEC and|
+|                     its output                                 |
+|            20220511 H.T.Kramer : Changed so we have 2 panels   |
+|                     Use switch key to see the other.           |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu . '(' option .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Show help                                                      |
++---------------------------------------------------------------*/
+If uid='?' Then Do
+           'VMFCLEAR'
+           'PIPE (NAME DISKMGR.EXEC:34 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show             */
+           Exit
+           End
+Select
+When myfn='DISKMGR' & myft='XEDIT' Then Call RunXedit
+When myfn='DISKMGR' & myft='EXEC'  Then Call RunExec
+Otherwise Nop
+End
+Exit:
+/*---------------------------------------------------------------+
+| End of the show                                                |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg
+                       Else exrc=0
+Exit exrc
+ 
+ 
+RunXedit:
+/*---------------------------------------------------------------+
+| The XEDIT part of the code                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DISKMGR.EXEC:59 END ?)',
+   'var node 1',                                 /* Take from caller */
+   '| var node',                                 /* Store as         */
+   '| var curnode',                              /* .and as          */
+   '?',                                          /* 2nd pipe         */
+   'var shortnode 1',                            /* Take from caller */
+   '| var shortnode'                             /* Store as         */
+receiver=Userid()
+Select
+When option='SYN' Then Call RunDMSync
+When option='GET' Then Call RunDMGet
+When option='DEL' Then Call RunDMDel
+When option='PROFILE'Then Call RunDMProfile
+Otherwise Nop
+End
+Return
+ 
+ 
+RunDMProfile:
+/*---------------------------------------------------------------+
+| Act as profile xedit                                           |
++---------------------------------------------------------------*/
+Call Preface
+ctlchars='% ESCAPE;',
+         'Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;',
+         'W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;',
+         'B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;',
+         'G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;',
+         'R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;',
+         '$ OFF'
+settings='SCALE ON 3;CMDLINE TOP;CURLINE ON 6;PREF NULLS LEFT;NUM ON;VERIFY 1 100',
+         ';COLOR FILEAREA YELLOW;CASE MIXED IGNORE'
+pfkeys='HELP;MACRO DISKMGR GET;QQUIT;MACRO DISKMGR (SYN;XEDIT; ;BACKWARD;FORWARD;MACRO DISKMGR (DEL;:1;BOT#BACK#NEXT 2;QQUIT'
+Address CMS 'PIPE (NAME DISKMGR.EXEC:92 END ?)',
+               'var settings',
+               '| split at ;',
+               '| specs ~SET~ 1 1;* nw',
+               '| fi: faninany',                 /* Add this         */
+               '| subcom xedit',                 /* Hand 2 xedit     */
+               '?',
+               'var ctlchars',                   /* Take this        */
+               '| split at ;',                   /* Split here       */
+               '| specs ~SET CTLCHAR~ 1 1;* nw', /* Compose cmds     */
+               '| fi:',
+               '?',
+    'var pfkeys',
+    '| dup 1',
+    '| split at ;',
+    '| specs ~SET PF~ 1 recno strip n 1;* nw',
+    '| fi:'
+'EXTRACT /FTYPE'
+If ftype.1 = 'MULTI' Then text='File is present on ALL nodes'
+                     Else text='File is present on ONE or MORE nodes'
+ 
+'SET RESERVED 4 WHITE NON NOH       Disk/directory overview for:%B'uid cuu'%G'text
+'SET RESERVED 5 WHITE NON NOH       Filename Filetype Format Lrecl    Records     Blocks Date       Time    Cnt Nodes'
+'SET RESERVED -1 WHITE NON NOH      1=%GHelp%W2=%GGet%W3=%GQuit%W4=%GSync%W5=%GSwitch%W6=%G_%W7=%GBack%W8=%GForw%W9=%GDel%W'||,
+      '10=%GTop%W11=%GBot%W12=%GQuit%W'
+':1'
+Return
+ 
+ 
+RunDMSync:
+/*---------------------------------------------------------------+
+| Sync the file to all the nodes                                 |
++---------------------------------------------------------------*/
+Call Preface
+'PIPE (NAME DISKMGR.EXEC:126 END ?)',
+      'var curline',                             /* Take content     */
+      '| specs 76;*',                            /* Keep this        */
+      '| specs ~/NODE/~ 1',                      /* Compose 4        */
+              'w1.1 n',                          /* ....varload      */
+              '~;/FN/~ nw',                      /* .                */
+              'w-2;-2 n',                        /* .                */
+              '~;/FT/~ nw',                      /* .                */
+              'w-1;-1 n',                        /* .                */
+      '| split at ;',                            /* Split here       */
+      '| varload'                                /* Hand 2 rexx      */
+Call Send_Receive_File
+If myid Then Address CMS 'PUT 'fn ft' A ALL'
+        Else 'Not implemented yet'
+'CLOCATE :75'
+'COVERLAY Synced_________________________'
+':'oldpos
+Return
+ 
+ 
+RunDMDel:
+/*---------------------------------------------------------------+
+| Delete the file from the nodes found                           |
++---------------------------------------------------------------*/
+Call Preface
+Address CMS 'PIPE (NAME DISKMGR.EXEC:151 END ?)',
+     'var curline',                              /* Take this        */
+     '| f: fanout',                              /* Duplicate        */
+     '| specs 77;* 1',                           /* Keep this        */
+     '| specs ~/NODE/~ 1',                       /* Prepare 4        */
+             'w1;-3 n',                          /* ...varload       */
+             '~;/FN/~ n',                        /* .                */
+             'w-2;-2 n',                         /* .                */
+             '~;/FT/~ n',                        /* .                */
+             'w-1;-1 n',                         /* .                */
+     '| split at ;',                             /* Split here       */
+     '| varload',                                /* Hand 2 rexx      */
+     '? f:',                                     /* Conn 2 fanout    */
+     '| change ~ ~ xFF',                         /* Replace this     */
+     '| deblock 1',                              /* Split into bytes */
+     '| if: if pick 1 \== xFF',                  /* If this          */
+     '|    specs ~-~ 1',                         /* Replace this     */
+     '| if:',                                    /* Conn 2 iff       */
+     '| join *',                                 /* Make 1 record    */
+     '| change xFF x40',                         /* Replace this     */
+     '| var clean'                               /* Store as         */
+If node=shortnode Then local=1
+                  Else local=0
+If myid Then cmdparms='ERASE 'fn ft' A , 'node' ,,FILE, 'myfn' WORK 'wfm
+        Else cmdparms='VMLINK 'uid cuu' (NON W NOT I ERASE 'fn ft' .fm,'node',,FILE,'myfn' WORK 'wfm
+If local Then Address CMS 'ERASE 'fn ft' A'
+         Else Do
+         Address CMS 'RMCMD CMS 'cmdparms
+         If rc<>0 Then Call Exit '128 Can not execute RMCMD'
+         End
+'CLOCATE :1'
+'COVERLAY 'clean
+':'oldpos
+Return
+ 
+ 
+RunDMGet:
+/*---------------------------------------------------------------+
+| Get the file from the 1st node and receive it                  |
++---------------------------------------------------------------*/
+Call Preface
+'PIPE (NAME DISKMGR.EXEC:192 END ?)',
+     'var curline',                              /* Take this        */
+     '| f: fanout',                              /* Duplicate record */
+     '| specs ~/FN/~ 1',                         /* Prepare for      */
+             'w-2;-2 n',                         /* ...varload       */
+             '~;/FT/~ nw',                       /* .                */
+             'w-1;-1 n',                         /* .                */
+     '| split at ;',                             /* Split here       */
+     '| fi: faninany',                           /* Take in others   */
+     '| varload',                                /* Hand 2 rexx      */
+     '? f:',                                     /* Conn 2 fanout    */
+     '| specs 76;100',                           /* Keep this        */
+     '| var nodes',                              /* Store as         */
+     '| specs ~/NODE/~ 1 w1.1 n',                /* Prep 4 varload   */
+     '| fi:'                                     /* Conn 2 faninany  */
+Call Send_Receive_File
+'CLOCATE :1'
+'COVERLAY Received_file_from_'node
+'CLOCATE :75'
+'COVERLAY 'nodes
+':'oldpos
+Return
+ 
+ 
+Send_Receive_File:
+/*---------------------------------------------------------------+
+| Get the file sent to myself and receive it                     |
++---------------------------------------------------------------*/
+If myid Then cmdparms='SENDFILE 'fn ft' A TO 'receiver' AT 'curnode','node',,QUIET'
+        Else cmdparms='VMLINK 'uid cuu' (NON NOT I SENDF 'fn ft' .fm TO 'receiver' AT 'curnode','node',,FILE'
+Address CMS 'RMCMD CMS 'cmdparms
+If rc<>0 Then Call Exit '128 Can not execute RMCMD'
+'PIPE (NAME DISKMGR.EXEC:224 END ?)',
+     'var nodes',                                /* Take these       */
+     '| append var shortnode',                   /* Add this         */
+     '| split',                                  /* Split into recs  */
+     '| sort',                                   /* Sort them        */
+     '| join * ~_~',                             /* Join them        */
+     '| specs ~*_~ 1 1;* n',                     /* Add this         */
+     '| var nodes'                               /* Store as         */
+'PIPE (NAME DISKMGR.EXEC:232 END ?)',
+   'CP QUERY RDR * ALL',                         /* Ask cp           */
+   '| pick w-2;-2 == ~'fn'~ and',                /* Select this      */
+          'w-1;-1 == ~'ft'~',                    /* ...and this      */
+   '| sort w8.2 d',                              /* Sort on date/time*/
+   '| take first 1',                             /* Take latest      */
+   '| specs ~RECEIVE~ 1',                        /* Compose cmds     */
+           'w2.1 nw',                            /* .                */
+           '~(NOLOG REPLACE OLDDATE~ nw',        /* .                */
+   '| cms'                                       /* Hand 2 cms       */
+Return
+ 
+ 
+Preface:
+/*---------------------------------------------------------------+
+| Preliminary xedit settings/extracts                            |
++---------------------------------------------------------------*/
+'PIPE (NAME DISKMGR.EXEC:249 END ?)',
+    'rexxvars 1 toload',                         /* Get from caller  */
+    '| varload'                                  /* Use them here    */
+'EXTRACT /LINE/CURSOR'
+oldpos=line.1
+':'cursor.3
+'EXTRACT /CURLINE'
+curline=curline.3
+Return
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| The EXEC part of the code                                      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+'PIPE (NAME DISKMGR.EXEC:267 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode',                     /* Hand 2 rexx      */
+   '?',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Call Exit '28 Can not run: RMCMD EXEC is missing'
+myid=0
+If uid='' Then uid='.DIR'
+If cuu='' Then cuu='VMUSERS:'userid()'.'
+If (uid='.DIR' & cuu='VMUSERS:'Userid()'.') |,
+   (uid=Userid() & Right(cuu,4,0)='0191') Then myid=1
+loadlist='DISKMGR'
+/*---------------------------------------------------------------+
+| Check if it is dir or disk and check its existence             |
++---------------------------------------------------------------*/
+If uid<>'.DIR' Then Do
+                    'PIPE (NAME DISKMGR.EXEC:288 END ?)',
+                        'cp QUERY MDISK USER 'uid cuu' DIR',   /* Ask CP           */
+                        '| locate ~HCPQMD053E~', /* Look for this    */
+                        '| count lines',         /* How many         */
+                        '| var disknok'          /* Store as boolean */
+                     If disknok Then Exit 28     /* .                */
+                     End
+                Else Do
+                     'PIPE (NAME DISKMGR.EXEC:296 END ?)',
+                        'cms QUERY DIRATTR 'cuu, /* Ask CMS          */
+                        '| locate ~DMSJQD1184E~', /* Look for this    */
+                        '| count lines',         /* How many         */
+                        '| var dirnok'           /* Store as boolean */
+                     If dirnok Then Exit 28      /* .                */
+                     End
+/*---------------------------------------------------------------+
+| Send the commands to the nodes                                 |
++---------------------------------------------------------------*/
+Address CMS 'RMCMD CMS VMLINK 'uid cuu' (NON NOT I LISTFILE * * .fm (NOH ISO,,,FILE,'myfn' ALLNODES 'wfm
+If rc<>0 Then Call Exit '128 Can not execute RMCMD'
+/*---------------------------------------------------------------+
+| Now process the data                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME DISKMGR.EXEC:311 END ?)',
+    '< 'myfn' ALLNODES 'wfm,                     /* Read this file   */
+    '| pick 1.1 \== ~ ~ and 1.1 \== ~*~',        /* Remove these     */
+    '| nlocate anycase ~RMCMD CMS~',             /* ...and these     */
+    '| nlocate anycase ~Execution~',             /* ...and these     */
+    '| specs w1.3 1.20 w5;* nw',                 /* Reshuffle        */
+    '| sort w2.2',                               /* Sort on fn ft    */
+    '| specs w2;* 1 w1.1 nw',                    /* Move to last pos */
+    '| fo: fanout',                              /* Dupl. records    */
+    '| specs ~B~ 1 1;* nw x40 n',                /* Add label        */
+    '| fi1: faninany',                           /* Take in other rec*/
+    '| sort w3;-2 w1.1 A',                       /* Sort on these    */
+    '| specs w2;* 1 x40 n',                      /* Add a space      */
+    '| buffer',                                  /* Prevent stall    */
+    '| join keylen 73',                          /* Join them        */
+    '| p: pick w9.1 \== ~7~',                    /* Move these away  */
+    '| sort w1.6 w7.2 d',                        /* Sort on date dec */
+    '| specs 1;* 1 w1.2 101',
+    '| specs a: w1.2 .',                         /* Remove some text */
+               'w3;* 19',                        /* .                */
+               'break a',                        /* .                */
+               'id a 1',                         /* .                */
+    '| if: if pick 1.1 \== x40',                 /* If this          */
+    '|     specs ~;-;~ 1 1;* n',                 /* ...add this      */
+    '| if:',                                     /* Conn 2 if        */
+    '| split at ;',                              /* Split here       */
+    '| change 1.1 ~-~ ~',                        /* Replace these    */
+    '| buffer',                                  /* Prevent stall    */
+    '| fi2: faninany',                           /* Take in others   */
+    '| drop first 1',                            /* Remove this rec  */
+    '| > 'myfn' UNIQUE 'wfm,                   /* Store as         */
+    '? fo:',                                     /* Conn 2 fanout    */
+    '| specs 1.73 1',                            /* Keep this        */
+    '| sort',                                    /* Sort records     */
+    '| unique count',                            /* Add count        */
+    '| specs ~A~ 1 11;* nw 1.10 strip nw x40 n', /* Move count to end*/
+    '| fi1:',                                    /* Conn 2 faninany  */
+    '? p:',                                      /* Conn 2 pick      */
+    '| sort w1.6',                               /* Sort on fn ft    */
+    '| > 'myfn' MULTI 'wfm                       /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DISKMGR.EXEC:353 END ?)',
+   'cms EXECMAP',
+   '| locate ~DISKM~',
+   '| count lines',
+   '| var xeditld'
+If \xeditld Then Do
+                'PIPE (NAME DISKMGR.EXEC:359 END ?)',
+                     'var loadlist',             /* Take this        */
+                     '| split at ;',             /* Split here       */
+                     '| specs ~EXECLOAD 'myfn myft' *~ 1 w1.1 nw ~XEDIT~ nw',   /* Compose cmds     */
+                     '| cms'                     /* Issue them       */
+                End
+           Else Call Exit
+/*---------------------------------------------------------------+
+| Show the output                                                |
++---------------------------------------------------------------*/
+Queue 'XEDIT 'myfn' MULTI 'wfm' (PROFILE DISKMGR  WI 500'
+Address CMS 'XEDIT 'myfn' UNIQUE   'wfm' (PROFILE DISKMGR  WI 500'
+/*---------------------------------------------------------------+
+| Erase the work file                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME DISKMGR.EXEC:374 END ?)',
+     'var loadlist',                             /* Take this        */
+     '| split at ;',                             /* Split here       */
+     '| specs ~EXECDROP~ 1 w1.1 nw ~XEDIT~ nw',  /* Compose cmds     */
+     '| cms'                                     /* Hand 2 rexx      */
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

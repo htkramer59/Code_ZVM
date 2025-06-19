@@ -1,0 +1,47 @@
+/*---------------------------------------------------------------+
+| Function : Get the guest configs                               |
+|                                                                |
+| File     : HOBGCONF EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBGCONF .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220120 14:57:44                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBGCONF.EXEC:31 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+Call Collect_Info
+exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If test Then output='| cons'
+        Else output='| > HOBVM350 CLIENT A'
+'PIPE (NAME HOBGCONF.EXEC:44 END ?)',
+    'fcx UCONF',                                 /* Ask perfkit      */
+    '| frtarget pick anycase w1.1 == ~USERID~',  /* Read from here   */
+    '| drop first 1',                            /* Skip this        */
+    '| specs w1 1.8 w8 nw.6 right w12 nw',       /* Reduce o this    */
+    '| sort w1.1',                               /* Sort on id       */
+    '| preface literal [guests config]',         /* Add header       */
+    output                                       /* show/write       */
+Return

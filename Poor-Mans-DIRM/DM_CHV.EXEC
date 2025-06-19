@@ -1,0 +1,81 @@
+/*---------------------------------------------------------------+
+| Function : Change the virtual address of a MDISK               |
+|                                                                |
+| File     : DM_CHV   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_CKMDK EXEC   check minidisk                      |
+|            DM_INDEX EXEC   locate user id                      |
+|                                                                |
+| Called   : DM_CHV   <uid1> <cuu1> <uid2> <cuu2>                |
+|          : CHV      <uid1> <cuu1> <uid2> <cuu2> MOVElinks      |
+|                                                 KEEPlinks      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 14:16:26                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu1 cuu2 option .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Do some checks                                                 |
++---------------------------------------------------------------*/
+dev1=DM_CKMDK(uid cuu1)
+dev2=DM_CKMDK(uid cuu2)
+If \dev1 Then Call Exit '122'
+If dev2  Then Call Exit '222'
+If Substr(option,1,4)='' |,
+   Substr(option,1,4)='MOVE' Then AdjLink='| change anycase ~LINK 'uid cuu1'~ ~LINK 'uid cuu2'~'
+                             Else Adjlink=''
+/*---------------------------------------------------------------+
+| Find the MDISK within the userid and prepare the change        |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_CHV.EXEC:48 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick w2.1 == ~MDISK~ and',                 /* Find             */
+         '(w3.1 == ~'cuu1'~ or',                 /* .these           */
+          'w3.1 == ~'Strip(cuu1,L,0)'~ or',      /* .                */
+          'w3.1 == ~'Right(cuu1,4,0)'~)',        /* .                */
+   '| var chcuu1',                               /* Hand 2 rexx      */
+   '| change ~'cuu1'~ ~'cuu2'~',                 /* Replace this     */
+   '| var chcuu2'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Change the virtual address                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CHV.EXEC:60 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'chcuu1'~ ~'chcuu2'~',             /* Replace these    */
+   adjlink,
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+piprc=rc
+/*---------------------------------------------------------------+
+| If rc is zero put new directory online                         |
++---------------------------------------------------------------*/
+If piprc=0 Then Do
+                Address CMS 'DM_ONLIN'
+                If rc<>0 Then Call Exit rc
+                End
+                Else Call Exit '128'
+ 
+ 
+Exit:
+Parse Arg exrc
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

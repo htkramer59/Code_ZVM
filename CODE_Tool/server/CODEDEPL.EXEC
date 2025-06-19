@@ -1,0 +1,122 @@
+/*---------------------------------------------------------------+
+| Function : Write the DEPLOY output for distribution            |
+|                                                                |
+| File     : CODEDEPL EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CODE     DEPLOYMT   file with definitions           |
+|                                                                |
+| Called   : CODEDEPL .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220422 13:49:07                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . dfn dft proj fromid fromnode tonodes
+Parse Source . . myfn myft .
+'PIPE (NAME CODEDEPL.EXEC:21 END ?)',
+   'cp QUERY USERID',                            /* Ask cp           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   '< CODE DEPLOYMT *',                          /* Read this        */
+   '| strip',                                    /* Remove spaces    */
+   '| pick 1.1 \== ~*~ and w1.1 \== ~~',         /* Ignore these     */
+   '| join * x40',                               /* Make 1 record    */
+   '| split anycase before string ~:NICK.~',     /* Split here       */
+   '| pick anycase substr fs . w1.1 of f2.1 == ~'proj'~',   /* Select these     */
+   '| spec w2;*',                                /* Keep this        */
+   '| split anycase before string ~:CODE.~',     /* Split here       */
+   '| change anycase ~:CODE.~~',                 /* Replace these    */
+   '| change anycase ~:PRODUCT.~~',              /* .                */
+   '| change anycase ~:SHORTNODE.~~',            /* .                */
+   '| l: lookup anycase w-1;-1 w1.1 details',    /* Compare          */
+   '| xlate upper',                              /* Make uppercase   */
+   '| loc: locate w1.2 ~*~',                     /* Select wildcards */
+   '| sort w-1;-1',                              /* Keep this        */
+   '| stem wildc.',                              /* Hand 2 rexx      */
+   '?',                                          /* 3rd pipe         */
+   'var tonodes',                                /* Take these       */
+   '| split',                                    /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| stem node.',                               /* Store as         */
+   '| l:',                                       /* Conn 2 lookup    */
+   '? loc:',                                     /* Conn 2 locate    */
+   '| sort w-1;-1',                              /* Keep this        */
+   '| stem regular.'                             /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK OUT (ONLY(CODE) NOTYPE WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+deplcode=''
+reply=0
+Do n=1 To node.0
+/*---------------------------------------------------------------+
+| If it is a wildcard                                            |
++---------------------------------------------------------------*/
+  If wildc.0<>0 Then Call Proc_Wildcards
+/*---------------------------------------------------------------+
+| Check if this is a non-wildcard                                |
++---------------------------------------------------------------*/
+  If regular.0<>0 Then Call Proc_Regular
+  If deplcode<>'' Then Call WriteDeployFile
+End n
+Address CMS 'VMLINK OUT <DET (ONLY(CODE) NOTYPE WRITE'
+Exit reply
+ 
+ 
+Proc_Regular:
+/*---------------------------------------------------------------+
+| Process all regular files                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME CODEDEPL.EXEC:78 END ?)',
+   'stem regular.',                              /* Take these       */
+   '| pick w1.1 == ~'dfn'~ and',                 /* Select these     */
+          'w2.1 == ~'dft'~ and',                 /* .                */
+          'w-1;-1 == ~'node.n'~',                /* .                */
+   '| var work',                                 /* Store as         */
+   '| count lines',                              /* How many         */
+   '| var regfnd'                                /* Hand 2 rexx      */
+If regfnd Then deplcode=work proj fromid fromnode
+Return
+ 
+ 
+Proc_Wildcards:
+/*---------------------------------------------------------------+
+| Process the wildcards                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CODEDEPL.EXEC:94 END ?)',
+    'stem wildc.',                               /* Take these       */
+    '| pick w-1;-1 == ~'node.n'~',               /* Select node      */
+    '| stem filt.'                               /* Store as         */
+Do f=1 To filt.0
+  'PIPE (NAME CODEDEPL.EXEC:99 END ?)',
+      'literal 'dfn dft,                         /* Take this        */
+      '| wildcard anycase w1.2 ~'Subword(filt.f,1,2)'~',   /* Find...          */
+      '| count lines',                           /* How many         */
+      '| var wldfnd'                             /* Store as         */
+   If wldfnd Then Do
+         deplcode=dfn dft Subword(filt.f,3,2) proj fromid fromnode
+         Leave f
+         End
+End f
+Return
+ 
+ 
+WriteDeployFile:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CODEDEPL.EXEC:116 END ?)',
+   'var deplcode',                               /* Take this        */
+   '| > 'dfn' DEPL'node.n wfm                    /* Write 2 file     */
+If rc=0 Then reply=1
+        Else reply=0
+Return
+ 

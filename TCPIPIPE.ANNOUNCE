@@ -1,0 +1,116 @@
+(c) Copyright International Business Machines Corporation 1997.
+All rights reserved.
+ 
+TCPIPIPE PACKAGE
+ 
+TCPIPIPE is a set of device drivers for TCP/IP application protocols which
+can be used in CMS Pipelines like any other device driver
+ 
+The initial (0.99) beta release concentrates on FTP and also provides
+versatile Socks support. This is beta code and future versions may not be
+compatible with this release although naturally, changes will only be
+made for a reason. Documentation is provided in the prologue to each REXX
+driver and is better than you might expect!
+ 
+TCPIPIPE PACKAGE is on VMTOOLS
+ 
+Pre-requisites:
+ 
+TCPIPIPE was tested with CMS Pipelines 1.1.10 x0011.  The x0007 level is
+needed for the RXSOCKET support.
+ 
+FTP REXX
+ 
+  FTP REXX has two modes of operation.
+ 
+  1. If the secondary input stream is not connected then it acts somewhat
+     like DISKFAST. Its operation can be specified by passing <, > or >>
+     as the first argument or can be defaulted according to its position
+     in the pipeline. The next operation is an FTP:// URL describing the
+     remote file the driver uses. When reading, this URL may describe a
+     directory in which case FTP produces the directory listing.
+ 
+     FTP will request passwords as needed from the user.
+ 
+  2. If the secondary input is connected it is used to provide FTP
+     subcommands to the driver. Responses may be obtained from the
+     secondary output. In this case, FTP will open a connection as
+     described by the URL and then issue commands as dictated by the
+     records on the primary.
+ 
+     Note that a later release of TCPIPIPE PACKAGE will include a
+     linemode FTP command which can replace standard FTP client provided
+     on VM giving advantages of Socks support and Pipelines-grade
+     codepage support as well as other facilities omitted from the
+     product code such as record structure and restart capability.
+ 
+  FTP REXX is optimised for use with VM and MVS servers and will attempt
+  EBCDIC type and RECORD structure or BLOCK mode in preference to the FTP
+  defaults of ASCII type, FILE structure and STREAM mode as appropriate.
+  Any or all of these may be specifies explicitly as options after the
+  URL.
+ 
+  FTP REXX uses versatile Socks v4 support if enabled to get
+  through firewalls.  See SOCKSCFG for details of how to enable the
+  support.  FTP REXX does not use the socksified TCPCLIEN REXX for various
+  reasons but uses SOCKSCFG to build its Socks requests directly.
+ 
+  FTP REXX may be instructed to use an FTP proxy ("tollbooth" style) where
+  the client connects to the proxy and issues a SITE command to specify
+  the target server.  HTTP-style proxies are not (yet) supported.  Note
+  that this is not the older use of the term "proxy" in FTP to be a
+  second server when operating in server-server transfer mode.
+ 
+ 
+TCPCLIEN REXX
+ 
+  This is TCPCLIENT with versatile Socks v4 support. The socks code is
+  derived John Hartmann's SOCKS REXX with the versatility provided by
+  SOCKSCFG. It can be used exactly as TCPCLIENT.
+ 
+TCPLISTE REXX (not distributed)
+ 
+  Any one need a TCPLISTEN which does a Socks bind()?  It wouldn't take
+  long to write but I'd need access to a VM system outside of IBM with
+  internet access to test it or I'd have to hack FTP to use it to test it
+  I'll do it if anyone wants me to.
+ 
+SOCSKCFG
+ 
+  This filter converts an hostname or IP address to the hostname or IP
+  address of a Socks server to use to reach it, or a blank record if the
+  host is reachable directly.
+ 
+  In order to use SOCKSCFG, some user tailoring is necessary.
+ 
+  1. You will need a suitable SOCKS CONFIG file. This can be taken from
+     an UNIX socks.conf file or similar
+ 
+  2. Socks support must be enabled by setting the variable SOCKS_FLAG to
+     ON in GLOBALV group SOCKS
+ 
+  3. The TCPIP DATA file should contain the IP address of a name server
+     which can resolve external names as the first NSINTERADDR entry.
+     This IP address is often the same as the address of the socks
+     server. Most VM systems behind firewalls will use a name server
+     limited to internal names. The system-wide TCPIP DATA is normally on
+     TCPMAINT's 592 disk. You may need to copy this to your A-disk and
+     modify it.
+ 
+History section
+ 
+0.99i 97-05-30   No unsolicited RCs from PASV or PORT
+0.99h 97-05-29   buglet fixes
+0.99g 97-05-19   Check for Pipelines 1.1.10x07 in FTP REXX
+                 Add Copyright notices prior to external distribution
+0.99f 97-05-08   Improve port usage in Passive mode to match RFC
+0.99e 97-05-08   Improve listen()/accept() handling for bad connections
+                 Add ANYDATAPORT option for badly behaved daemons
+0.99d 97-03-25   Add more FTP REXX options
+                 Fix blocking subroutine logic
+                 Further fixes to EoF handling
+0.99c 97-03-10   Improved EoF handling.  Tolerant mode is now set when
+                 the secondary output is connected, not just defined.
+0.99b 97-03-10   LIST and NLST by name broken
+0.99a 97-03-07   Fix to option parsing
+0.99  97-03-07   Initial beta version

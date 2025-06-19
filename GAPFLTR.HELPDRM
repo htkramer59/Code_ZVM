@@ -1,0 +1,62 @@
+In the "xxxx GAPFILE" screen you can select free space for a new MDISK
+ 
+Place and Size selection - PF11 and PF2
+==========================================
+DRM will place you in the GAPFILE on the first gap of sufficient size
+- with PF11 you select the place indicated with the cursor
+ 
+If the gap is a bit larger than what you initially requested on the MDISK
+card, you could be generous and give the whole gap to that MDISK:
+- with PF2 you select the whole gap
+ 
+DRM will not forbid you to select a gap smaller than what you asked for
+on the MDISK record.  Just use PF7 to page back in the GAPFILE and
+select a smaller gap.
+ 
+ 
+Dynamic Filtering - PF9
+=========================
+In today's environment, the number of disks can be large.
+ 
+By default, DIRMAP (what DRM uses to create the MDISKMAP and GAPFILE) will
+include all volumes in the MDISKMAP and GAPFILE it creates.
+You can however make control files for DIRMAP to limit the volumes reported;
+DIRMAP options control whether or nor DIRMAP uses these control files.
+The tag :dirmapOpts. in the DRM NAMES defines which options DRM will pass to
+DIRMAP.  An example
+ :dirmapOpts.EXCLUDE INCLUDE
+Control files:
+   EXCLUDE VOLSERS  tells DIRMAP what to include in the MDISKMAP
+   INCLUDE VOLSERS  tells DIRMAP what to exclude in the MDISKMAP
+   GAPFILE VOLSERS  tells DIRMAP what to include in the GAPFILE
+   (issue HELP DIRMAP to learn more)
+ 
+Using these files can thus limit what you will see in the GAPFILE and MDISKMAP
+files presented by DRM.  But, it is rather static.
+ 
+We want extra selection possibilites at runtime.  For example you could have
+disks that are PPRC copied and others that are not.
+ 
+You could oubviously copy the wanted volumes in GAPFILE VOLSERs and start DRM.
+But that is not practical if you have multiple disk categories, and, when
+changing the control files more or less often, you will forget what is in the
+control files at a given time.
+ 
+Therefore DRM added extra, more dynamic, filtering possibilities.  This is
+explained in the RELATED section (PF11)
+  Filtering - Dynamic GAP & MDISKMAP filtering details
+ 
+.cs 7 on
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER or PF1
+ 
+ 
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM DYNFLTR (ALL
+DRM DRM     (ALL        DRM      ›&- Command reference. Xedit a DIRECT file using DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips, README

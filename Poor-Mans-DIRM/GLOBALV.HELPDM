@@ -1,0 +1,30 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Set or display the show switch                      |
+|                                                                |
+| File     : DM_GLBV  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_GLBV  <on/off/show>                              |
+|                              TEST   switch on/of test          |
+|                              TRACE   "  "        trace         |
+|                              SHOW    "  "        show          |
+|                              SET    specify setting 4 trace    |
+|                     <empty>  Returns all values                |
+|                                                                |
+|             SET can be SET TRACECTL with any of the value      |
+|             REXX trace control values                          |
+|             SET can be SET TRACETARGET to identify an EXEC     |
+|             where the trace is to be started                   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240621 17:01:07                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

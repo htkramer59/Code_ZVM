@@ -1,0 +1,127 @@
+* PIPE Pipe problem
+* 3 char returncode/msg number
+* 5;*  message/info
+028 Invalid command:
+038 Passwords do not match
+045 Userid is loggend on/disconnected
+048 Userid uid does not exist
+055 Problem finding MDISK in DIRECTORY
+056 Problem removing MDISK in DIRECTORY
+058 No user id requested
+065 No actions specified on OPTION command
+066 Invalid entries in OPTION command
+068 Invalid cuu entered:
+078 Virtual devices already exists:
+088 No DASD found with label:
+098 Problem VMLINK to SOURCEDIR
+ 
+100 Invalid CPU id entered/no CPU found
+101 No account code entered
+102 Problem applying new account code
+ 
+111 Input id is missing
+ 
+122 Input MDISK does not exist
+128 Problem writing USER DIRECT
+129 Problem REPLACING INDEX
+ 
+130 No CPU statement found
+131 CPU statement already present can not ADD
+132 Can not modify specified CPU statement
+ 
+138 Password too short, min. 3 chars
+ 
+199 No gap found for minidisk
+ 
+200 No MDISK found for which to change mode/passwords
+201 No ACIGROUP entered
+203 Problem finding ACIGROUP or present, issue DELETE first
+202 ACIGROUP presente, issue DELETE first
+220 Invalid mode entered
+ 
+211 Output id is missing
+222 Target MDISK is already present
+228 Do not understand:
+238 Password too long, max. 8 chars
+250 Unknow action
+251 Userid already in LOGONBY
+252 Requested userid not present in LOGONBY
+253 Requested userid not present in XAUTOLOG
+260 Source id does not exist
+261 Source mdisk does not exist
+262 MDISK found with same virtual address
+263 LINK mode is invalid
+264 VMLINK failed in DM_FORMT
+265 No free ACCESS mode/CUU Address
+266 CP LINK faile in DM_FORMT
+ 
+299 Can not find the source directory
+ 
+300 Problem finding minidisk details (linkmode & passwords)
+301 Problem linking F00F
+302 Problem linking (source) mdisk for copying to F00F
+303 Problem linking (target) mdisk to copy to
+304 No free filemode for copy operation
+305 Format of target disk failed
+306 Copying during CMD failed
+311 Input cuu is missing
+328 Minidisk does not exist
+ 
+350 No need to change MACHINE statement
+351 Invalide machine type specified
+ 
+411 Output cuu is missing
+428 Unable to LINK userid minidisk in WRITE mode
+438 A character appears more than 3 times in your password
+ 
+500 Input file not present or read only
+505 No CLASSes given as input
+520 Invalid CP CLASS(es) specified
+521 Can not DELETE CP CLASS G
+538 Password can not be equal to user id
+ 
+540 No source user id entered
+541 No source mdisk entered
+542 No target user id present
+543 No target mdisk entered
+544 No location entered
+545 MDISK can not be CLONEd onto itself
+546 Source/Target userid for CLONE does not exist
+547 Source MDISK for CLONE does not exist
+548 Source MDISK can not be CLONEd onto existing target
+549 Target USERid and MDISK do exist can not continue
+550 Non-zero rc from PIPEDDR
+ 
+558 Invalid input for DATEFORMAT
+ 
+628 Problem obtaining directory copy
+638 Problem putting USER DIRECT online
+648 Input directory file not present on A-disk
+ 
+651 Can not change id to an existing one
+652 Can not change id of a SUBCONFIG
+ 
+660 Invalid/non-existent SEGMENT specified
+ 
+ 
+700 STORAGE is higher than MAXStorage
+701 MAXStorage is lower than storage
+703 Invalid SI Unit specified
+ 
+ 
+738 Syntax error in USER DIRECT
+ 
+750 Priority NOT numeric
+751 Priority out of range 1-64
+ 
+760 No CRYPTO statement found
+ 
+780 Input file not found
+ 
+800 This userid does not have a console stmt where we can add SECUSER
+810 Invalid input for IOPRIORITY
+811 Low value for IOPRIORITY not within valid range 0-255
+812 High value for IOPRIORITY not within valid range 0-255
+ 
+988 Userid already exists
+999 Unknown state/unknown error

@@ -1,0 +1,61 @@
+/*  EXAMPLE PROFILE FOR COL                                   */
+/*                                                            */
+/*  This is an example of the OPTIONAL profile for COL        */
+/*  This profile is supported for CMS release 4 and greater.  */
+/*  Options are 'ON' or 'OFF'                                 */
+ 
+    SYMBOL         = '?'     /* The COL COMMAND LINE symbol   */
+    BLANK_CHAR     = ' '     /* The blank character symbol    */
+    PREFIXSYMBOL   = '<<->>' /* The prefix marker             */
+    UNDO_OPTION    = 'ON'    /* Activate the undo option      */
+    TARGET         = '1'     /* default target (depth) which  */
+                             /*  could be changed to "*"      */
+    AUTO_EXIT      = 'OFF'   /* Exit COL when no screen       */
+                             /* changes have been made and    */
+                             /* ENTER is pressed              */
+    TAB_SPACE      = 2       /* Column spacing for ATAB, the  */
+                             /* auto tab command              */
+    DIGITS         = 12      /* REXX numeric digits setting   */
+                             /* significant digits for ++ cmd */
+    SENTENCE_SPACE = 2       /* spacing after sentences for   */
+                             /*  text flow commands w, < and >*/
+    AUTO_INSERT    = 'OFF'   /* Automatically insert a line   */
+                             /*  to place ++++ sum into IF no */
+                             /*  spot exitst                  */
+    MATH_EMSG      = 'ON'    /* math error messages           */
+ 
+    DECIMAL      = 'PERIOD'/* decimal indicator for ++ cmd.   */
+/*   The three options for decimal are:                       */
+/*      PERIOD     for 1,234,567.89 (The Default)             */
+/*      COMMA      for 1.234.567,89                           */
+/*      FRENCH     for 1 234 567,89 or 1 234 567.89           */
+ 
+/*  Colors */
+    INFOCOLOR      = 'RED'   /* "Help" text                   */
+    PFCOLOR        = 'WHITE' /* PF key text                   */
+ 
+/*  SET COLOR MSGLINE RED */ /* Note that COL uses XEDIT MSG  */
+                             /* for messages and the current  */
+                             /* line for the COL command line */
+                             /* Set  XEDIT's                  */
+                             /* COLOR MSGLINE                 */
+                             /* COLOR CURLINE                 */
+                             /* to control these colors       */
+ 
+/* Optional specification to relocate the position of the     */
+/*  mini help information area from the default location.     */
+/*  Set INFOLOC to OFF to remove all COL messages             */
+/*  You may also specify OFF whenever you desire to           */
+/*  set up your own reserved lines.                           */
+ 
+/*  Example:                                                  */
+ 
+/*   INFOLOC        = 'OFF'      */
+ 
+/* The following are XEDIT options which you may want to use  */
+/*  while in COL.  Remove the comment delimiters and add      */
+/*  XEDIT options which you may desire.                       */
+ 
+/*  SET SCALE OFF     */    /* option to turn off the scale   */
+/*  SET NULLS ON      */    /* option for nulls on            */
+/*  SET FULLREAD ON   */    /* option for fullread on         */

@@ -1,0 +1,258 @@
+/*---------------------------------------------------------------+
+| Function : Produce zVM memory overview                         |
+|                                                                |
+| File     : HOBMEM   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBMEM   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220117 16:52:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBMEM.EXEC:27 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+ 
+Parse Value page With yellow red .
+If \test Then Call Init_Open_Socket
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status           /*  Send the result in status to bb */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOBMEM.EXEC:39 END ?)',
+                 'var status',
+                 '| split at x15',
+                 '| strip',
+                 '| cons'
+              End
+Exit
+ 
+ 
+Collect_Info:
+Numeric Digits 64
+/*---------------------------------------------------------------+
+| Collect the paging info                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBMEM.EXEC:53 END ?)',
+   'cp QUERY ALLOC PAGE',                        /* Ask cp           */
+   '| inside ~------~ ~       ~',                /* Take all within  */
+   '| specs a: w4.1 .',                          /* Calculate        */
+           'b: w3.1 .',                          /* ...no of         */
+           'set #0:=a-b',                        /* ....blocks       */
+           'print #0 1',                         /* .                */
+           'w6.1 nw',                            /* .                */
+   '| siconv w2.1 k2b 10.0',                     /* Convert 2 bytes  */
+   '| siconv w2.1 m2b 10.0',                     /* .                */
+   '| specs printonly eof',                      /* Summ the         */
+           'c: w1.1 .',                          /* ...blocks        */
+           'd: w2.1 .',                          /* .                */
+           'set (#1+=c;#2+=d)',                  /* .                */
+           'eof',                                /* .                */
+           'print #1 1',                         /* .                */
+           'print #2 nw',                        /* .                */
+   '| specs e: w1.1 .',                          /* Convert to       */
+           'f: w2.1 .',                          /* .      1K        */
+           'set (#3:=e*4;#4:=f*4)',              /* .                */
+           'print #3 1',                         /* .                */
+           'print #4 nw',                        /* .                */
+   '| specs w1.2 1',                             /* Calculate        */
+           'g: w1.1 .',                          /* ...percentage    */
+           'h: w2.1 .',                          /* .                */
+           'set #5:=(h/g)*100',                  /* .                */
+           'print #5 pict --9.99 nw',            /* .                */
+   '| specs i: w1.1 .',                          /* .                */
+           'j: w2.1 .',                          /* Rework to GB     */
+           'set (#6:=i/1024/1024;#7:=j/1024/1024)',   /* .                */
+           'print #6 pict zzzz9.99 1',           /* .                */
+           'print #7 pict zzzz9.99 nw',          /* .                */
+           'w3.1 nw',                            /* .                */
+   '| f: fanout',                                /* Dupl records     */
+   '| round w1.2',                               /* Round up/down    */
+   '| specs ~Paging:~ 1' ,                       /* Rework           */
+           'w3.1 nw',                            /* .                */
+           '~pages/sec;Used paging:~ nw',        /* .                */
+           'w2.1 nw',                            /* .                */
+           '~GB;Available page space:~ nw',      /* .                */
+           'w1.1 nw',                            /* .                */
+           '~GB~ nw',                            /* .                */
+   '| var allocinfo',                            /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2.1',                               /* Keep this        */
+   '| var usedpaging'                            /* Store as         */
+/*---------------------------------------------------------------+
+| Get users memory usage                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBMEM.EXEC:102 END ?)',
+   'fcx UCONF',                                  /* Ask perfkit      */
+   '| frtarget pick anycase w1.1 == ~Userid~',   /* Select from here */
+   '| drop first 1',                             /* Ignore 1st one   */
+   '| specs w1.1 1 w8.1 nw',                     /* Keep this        */
+   '| siconv w2.1 K2B 12',                       /* Convert to       */
+   '| siconv w2.1 M2B 12',                       /* ...bytes         */
+   '| siconv w2.1 G2B 12',                       /* .                */
+   '| siconv w2.1 T2B 12',                       /* .                */
+   '| specs printonly eof',                      /* Summ the bytes   */
+           'a: w2.1 .',                          /* .                */
+           'set #0+=a',                          /* .                */
+           'eof',                                /* .                */
+           'print #0 pict zzzzzzzzzz9 nw',       /* .                */
+   '| siconv w1.1 B2G 5.2',                      /* Convert to GB    */
+   '| var userssize',                            /* Store as         */
+   '| round w1.1',                               /* Round up/down    */
+   '| specs ~; ;Total size users:~ 1 w1.1 nw ~GB~ nw',   /* Add text         */
+   '| var userinfo'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Get memory info                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBMEM.EXEC:124 END ?)',
+   'fcx STORAGE',                                /* Ask perfkit      */
+   '| strip',                                    /* Remove space     */
+   '| pick anycase w1.2 == ~Total available~ or',   /* Select these     */
+                  'w1.1 == ~Standby~',           /* .                */
+   '| specs 1.36',                               /* Keep this        */
+   '| change ~KB~K~',                            /* Replace these    */
+   '| change ~MB~M~',                            /* .                */
+   '| change ~GB~~',                             /* .                */
+   '| change ~TB~T~',                            /* .                */
+   '| specs w-1;-1 1',                           /* Keep this        */
+   '| change x7D ~~',                            /* Replace this     */
+   '| siconv w1.1 K2G 8.2',                      /* Convert 2 GB     */
+   '| siconv w1.1 M2G 8.2',                      /* .                */
+   '| siconv w1.1 T2G 8.2',                      /* .                */
+   '| join * x40',                               /* Male 1 record    */
+   '| f: fanout',                                /* Duplicate        */
+   '| round w1.2',                               /* Round up/down    */
+   '| specs ~: ;Memory:~ 1',                     /* Add text         */
+           'w1.1 nw',                            /* .                */
+           '~GB ;Standby:~ nw',                  /* .                */
+           'w2.1 nw',                            /* .                */
+           '~GB~ nw',                            /* .                */
+   '| var meminfo',                              /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.1',                               /* Keep this        */
+   '| var actmem'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Get VDISK info                                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBMEM.EXEC:154 END ?)',
+   'fcx VDISKS',                                 /* Ask perfkit      */
+   '| frtarget pick anycase w1.1 == ~>System<~', /* Take from here   */
+   '| drop first 1',                             /* Ignore this one  */
+   '| specs printonly eof',                      /* Summ items       */
+           'a: w3.1 .',                          /* .                */
+           'set #0+=a',                          /* .                */
+           'eof',                                /* .                */
+           'print #0 pict zzzzzzzz9 1',          /* .                */
+   '| specs b: w1.1 .',                          /* Rework 2 GB      */
+           'set #1:=(b/2)/1024/1024',            /* .                */
+           'print #1 pict zzzz9.99 1',           /* .                */
+   '| var vdisksize',                            /* Store            */
+   '| round w1.1',                               /* Round up/down    */
+   '| specs ~; ;VDisks in use:~ 1 w1.1 nw ~GB~ nw',   /* Add text         */
+   '| var vdiskinfo'                             /* Store as         */
+/*---------------------------------------------------------------+
+| Calculate virtual to real memory ratio (over commit)           |
++---------------------------------------------------------------*/
+vr_ratio='; ;Virtual to Real memory: 'Format(((usedpaging+vdisksize+userssize)/actmem)*100,3,2)'%'
+/*---------------------------------------------------------------+
+| Compose the status variable                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBMEM.EXEC:177 END ?)',
+   'var allocinfo',                              /* Take these       */
+   '| append var userinfo',                      /* .                */
+   '| append var meminfo',                       /* .                */
+   '| append var vdiskinfo',                     /* .                */
+   '| append var vr_ratio',                      /* .                */
+   '| split at ;',                               /* Split            */
+   '| specs fs : f1 1.22 ~:~ nw',                /* Rework layout    */
+                'substr w1.1 of f2 nw.7 right',  /* .                */
+                'substr w2;* of f2 nw',          /* .                */
+   '| join * x15',                               /* Make 1 record    */
+   '| var status'                                /* Hand 2 rexx      */
+status='status 'machine'.zvm_mem GREEN 'TimeStamp('TZ') cr cr status
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCMEM'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 mm +2 dd +2 .
+   'PIPE (NAME HOBMEM.EXEC:251 END ? END.SKELETON:55)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

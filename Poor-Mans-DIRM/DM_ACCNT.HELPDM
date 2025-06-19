@@ -1,0 +1,24 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change the account code                             |
+|                                                                |
+| File     : DM_ACCNT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_ACCNT <uid> <account>                            |
+|          : ACC      <uid> <account>                            |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240627 10:42:23                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

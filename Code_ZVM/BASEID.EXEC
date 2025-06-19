@@ -1,0 +1,36 @@
+/**/
+Parse Upper Arg id .
+If id='' Then Exit 28
+'PIPE (end ?)',
+   'cp QUERY USERID',
+   '| specs substr -2;-1 of w3.1',
+   '| var shortnode'
+Address CMS 'ENROLL USER 'id' VMUSERS (BLOCKS 20000'
+/*---------------------------------------------------------------+
+| Access dir                                                     |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK .DIR VMUSERS:'id'. (NONAMES WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Copy these files                                               |
++---------------------------------------------------------------*/
+list='PROFILE EXEC;CHECK EXEC;OPCHK EXEC;'Userid()' SYNONYM'
+'PIPE (End ?)',
+    'var list',
+    '| split at ;',
+    '| specs ~COPY~ 1 w1.2 nw ~A = = 'wfm' (OLDD REPL~ nw',
+    '| if: if pick w3.1 == ~SYNONYM~',
+    '|    specs w1.4 1 ~'id'~ nw w-4;-1 nw',
+    '| if:',
+    '| cons',
+    '| cms',
+    '| cons'
+/*---------------------------------------------------------------+
+| Clean...PROFILE EXEC                                           |
++---------------------------------------------------------------*/
+'PIPE (End ?)',
+    '< PROFILE EXEC B',
+    '| nlocate ~SYNCTLS~',
+    '| > PROFILE EXEC B'
+Address CMS 'VMLINK .DIR VMUSERS:'id'. <DET (NONAMES WRITE'

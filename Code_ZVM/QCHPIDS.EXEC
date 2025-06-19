@@ -1,0 +1,235 @@
+/*---------------------------------------------------------------+
+| Function : Show CHPIDS and CHannels                            |
+|                                                                |
+| File     : QCHPIDS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QCHPIDSX EXEC                                       |
+|                                                                |
+| Called   : QCHPIDS  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181212 13:22:41                                   |
+| Changes  : .                                                   |
+|            20220510 H.T.Kramer : Updated to change layout      |
+|                     Details are now in a separate file/session |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what . '(' dryrun .
+Parse Source . how myfn myft .
+Select
+When myfn='QCHPIDS' & myft='EXEC'  Then Call ChpidExec
+When myfn='QCHPIDS' & myft='XEDIT' Then Call ChpidXedit
+Otherwise Nop
+End
+Exit
+ 
+ 
+ChpidExec:
+/*---------------------------------------------------------------+
+| Running the primary exec                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME QCHPIDS.EXEC:35 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',             /* Ask CMS          */
+   '| drop first 1',                      /* Ignore header    */
+   '| count lines',                       /* Count findings   */
+   '| if: if pick 1.1 == ~1~',            /* Check this       */
+   '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */
+   '|     cms',                           /* Issue cmd      */
+   '| if:',                               /* Comm 2 if        */
+   '| var exldd'                          /* Hand 2 rexx      */
+Address CMS 'EXECLOAD 'myfn myft' * QCHPIDS  XEDIT'
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+outfile='CHPID OVERVIEW 'wfm
+Call ChpidFill
+/*---------------------------------------------------------------+
+| Prepping for XEDIT                                             |
++---------------------------------------------------------------*/
+Queue 'SET AUTOSAVE OFF'
+Queue 'SET RESERVED -1 WHITE NON NOH',
+  '1=Hlp 2=Dspc 3=End 4=DETAILS 5=<-> 6=Scr2 7=Bck 8=Fwd 9=Sc1 10=Top 11=Bot 12=Quit'
+Queue 'SET PF4 QCHPIDS'
+Queue 'LRECL 1024'                              /* Set record length*/
+Queue 'RECFM V'                                 /* Recform variable */
+Queue 'VERIFY 1 *'                              /* Verify           */
+Queue ':1'                                      /* Go to 1st record */
+Address CMS 'XEDIT 'outfile' (WIDTH 1024'
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+Address CMS 'ERASE 'outfile
+Address CMS 'EXECDROP QCHPIDS'
+'PIPE (NAME QCHPIDS.EXEC:67 END ?)',
+    'cms LISTFILE FCP* DETAILS 'wfm' (NOH',
+    '| append cms LISTFILE OSA* DETAILS 'wfm' (NOH',
+    '| nfind DMS',
+    '| specs ~ERASE~ 1 w1.3 nw',
+    '| cms'
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+ChpidFill:
+/*---------------------------------------------------------------+
+| Getting all the info                                           |
++---------------------------------------------------------------*/
+out.0=0                                         /* Init array       */
+/*---------------------------------------------------------------+
+| Do the main query....                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME QCHPIDS.EXEC:85 END ?)',
+   'cp QUERY CHPIDS',                           /* Ask this         */
+   '| stem q_out.',                             /* Store here       */
+   '| xlate upper',                             /* Uppercase it     */
+   '| locate ~+~',                              /* Take these       */
+   '| drop last 1',                             /* Remove explan..  */
+   '| stem chpids.',                            /* Store here       */
+   '| specs 1.1',                               /* Keep this        */
+   '| stem prefix.',                            /* Store here       */
+   '?',                                         /* 2nd pipe         */
+   'cp QUERY OSA ALL',                          /* Ask this         */
+   '| append CP QUERY FCP ALL',                 /* .....and this    */
+   '| split at ,',                              /* Split here       */
+   '| strip',                                   /* Remove spaces    */
+   '| zone 1.3  all ~OSA~!~FCP~',               /* Select these     */
+   '| change ~   ~ ~',                          /* Suppress some    */
+   '| change ~  ~ ~',                           /*    spaces        */
+   '| if: if locate ~ATTACHED~',                /* When this        */
+   '|    specs w1.1 1 ~+~ nw w2;* n ~+~ n',     /* Some speciasls   */
+   '| if:',                                     /* Conn 2 if        */
+   '| specs ~CHANGE /~ 1 w2.1 n ~/~ n w2;* n ~/~ n', /* Change        */
+   '| change ~/+~/~ 1',                         /* and this         */
+   '| join * ~!~',                              /* Make 1 record    */
+   '| var ch_osa_fcp'                           /* Store here       */
+ch_osa_fcp='|'Translate(ch_osa_fcp,'|','!')     /* Make it pipe...  */
+/*---------------------------------------------------------------+
+| Loop thru the chpids found                                     |
++---------------------------------------------------------------*/
+Do m=1 To chpids.0
+  'PIPE (NAME QCHPIDS.EXEC:114 END ?)',
+    'literal 'chpids.m,                         /* Take this        */
+    '| specs w2;* 1',                           /* Remove some      */
+    '| split',                                  /* Split into recs  */
+    '| specs recno from 0 1.1 1;* nw',          /* Add recno        */
+    '| locate ~+~',                             /* Keep these       */
+    '| specs ~'prefix.m'~ 1 w1.1 n',            /* Naje CHPID       */
+    '| fo: fanout',                             /* Duplicate recs   */
+    '| specs ~QUERY CHPID~ 1 w1.1 nw ~PCHID~ nw', /* Compose cmds   */
+    '| fi: faninany',                           /* Take in others   */
+    '| cp',                                     /* Hand to CP       */
+    '| stem out. append',                       /* Store here       */
+    '? fo:',                                    /* Conn 2 fanout    */
+    '| specs ~QUERY CHPID~ 1 w1.1 nw ~TYPE~ nw',/* Compose cmds     */
+    '| fi:',                                    /* Conn 2 fanin     */
+    '? fo:',                                    /* Conn 2 fanout    */
+    '| specs ~QUERY CHPID~ 1 w1.1 nw',          /* Compose cmds     */
+    '| fi:'                                     /* Conn 2 fanin     */
+End m
+/*---------------------------------------------------------------+
+| Modify commands and hand to xedit                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QCHPIDS.EXEC:136 END ?)',
+   'stem out. ',                                /* Take these       */
+   '| if1: if locate ~physical~',               /* If we find this  */
+   '|   specs ~;_;~ 1 1;* n',                   /* Add this 2 rec   */
+   '| if1:',                                    /* Conn 2 if        */
+   '| split at ;',                              /* Split here       */
+   '| preface literal **** Details',            /* Add header       */
+   ch_osa_fcp,                                  /* Run change       */
+   '| specs a: w1.2 . w3-* 9 break a id a 1',   /* Remove some txt  */
+   '| specs b: 1.26 . 26-* 26 break b id b 1',  /* Remove some txt  */
+   '| change ~+ +~+~',                          /* Simplify         */
+   '| change ~+ ~+~',                           /* ....             */
+   '| change ~ +~+~',                           /* ....             */
+   '| change ~+~+'Copies(' ',26)'~',            /* Add some spaces  */
+   '| split at +',                              /* Split here       */
+   '| pick w1.1 \== ~~',                        /* Remove empties   */
+   '| if2: if locate ~ATTACHED~',
+   '|    specs ~-->~ 24 26;* nw',
+   '| if2:',
+   '| if3: if locate ~devices~',
+   '| if3:',
+   '| preface stem q_out.',                     /* Add this         */
+   '| preface literal *** CHPIDS',              /* Add header       */
+   '| > 'outfile                                /* Hand 2 xedit     */
+Return
+ 
+ 
+ChpidXedit:
+/*---------------------------------------------------------------+
+| Get Details on an FCP device                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME QCHPIDS.EXEC:167 END ?)',
+    'var wfm 1',
+    '| var wfm'
+'EXTRACT /CURSOR/LINE'                          /* Get curspos & no */
+':'cursor.3                                     /* Go to position   */
+'EXTRACT /CURLINE'                              /* Get content      */
+what=''
+If Wordpos('ATTACHED',curline.3)=0 Then Do
+     'EMSG       >>> Can NOT determine details for this item <<<'
+     End
+     Else Do
+     If Wordpos('OSA',curline.3)<>0 Then Call OSA_Details
+                                    Else Call FCP_Details
+     If line.0>2 Then Do
+          Address CMS 'PIPE (NAME QCHPIDS.EXEC:181 END ?)',
+              'stem line.',
+              '| > 'what||'-'||fndet' DETAILS 'wfm /* Store details    */
+          Queue 'RECFM V'
+          Queue 'LRECL 1024'
+          Queue ':1'
+          'XEDIT 'what||'-'||fndet' DETAILS 'wfm' (WIDTH 1024'
+          End
+          Else 'EMSG          Can not determine 'what' details'
+     End
+Return
+ 
+ 
+OSA_Details:
+/*---------------------------------------------------------------+
+| Get some osa details                                           |
++---------------------------------------------------------------*/
+what='OSA'
+osa_dev=Word(curline.3,6)                       /* Get fcp-dev      */
+fndet=osa_dev
+Address CMS 'PIPE (NAME QCHPIDS.EXEC:201 END ?)',
+   'cp QUERY VSWITCH ALL DETAILS',              /* Ask cp           */
+   '| specs ~;~ 1 1;* nw',                      /* Preserve layout  */
+   '| join *',                                  /* Make 1 record    */
+   '| change ~; VSWITCH~+; VSWITCH~',           /* Change this      */
+   '| split at +',                              /* Split here       */
+   '| locate ~VDEV: 'osa_dev'~',                /* Get this         */
+   '| change ~;~;==>>~',                        /* Add marker       */
+   '| split at ;',                              /* Split into lines */
+   '| specs 1;* 10',                            /* Adjust layout    */
+   '| stem line.'                               /* Store here       */
+Return
+ 
+ 
+FCP_Details:
+/*---------------------------------------------------------------+
+| Get some fcp details                                           |
++---------------------------------------------------------------*/
+what='FCP'
+fcp_dev=Word(curline.3,2)                       /* Get fcp-dev      */
+fndet=fcp_dev
+Address CMS 'PIPE (NAME QCHPIDS.EXEC:222 END ?)',
+   'cp QUERY EDEV ALL',                         /* Ask cp           */
+   '| specs ~QUERY EDEV~ 1 w2.1 nw ~DETAILS~ nw',
+   '| cp',
+   '| specs ~;~ 1 1;* nw',                      /* Preserve layout  */
+   '| join *',                                  /* Make 1 record    */
+   '| change ~; EDEV~+; ; EDEV~',                 /* Change this      */
+   '| split at +',                              /* Split here       */
+   '| locate ~FCP_DEV: 'fcp_dev'~',             /* Get this         */
+   '| change ~;~;=>>>~',                        /* Add marker       */
+   '| split at ;',                              /* Split into lines */
+   '| specs 1;* 10',                            /* Adjust layout    */
+   '| stem line.'                               /* Store here       */
+Return

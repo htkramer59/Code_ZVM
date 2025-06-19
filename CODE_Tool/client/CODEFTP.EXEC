@@ -1,0 +1,118 @@
+/*---------------------------------------------------------------+
+| Function : FTP from the SYNCH output area to the SYNCH input   |
+|            area                                                |
+|                                                                |
+| File     : CODEFTP  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINKIP EXEC                                       |
+|            FTP      MODULE                                     |
+|            VMLINK   NAMES   (for accessing FTP)                |
+|            CODE     NAMES                                      |
+|                                                                |
+| Called   : CODEFTP  fn ft proj nodes                           |
+|                                                                |
+| Comments : Remove FTP bootstrap from tools!!                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220416 12:14:24                                   |
+| Changes  : .                                                   |
+|            20220513 H.T.Kramer : Change so we can use          |
+|                     FTP port no and FTP options (eg SECURE)    |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft proj nodes '(' dryrun .
+Parse Source . . myfn myft .
+ 
+'PIPE (NAME CODEFTP.EXEC:26 END ?)',
+    'rexxvars 1 toload',                         /* Take vars fr calr*/
+    '| varload',                                 /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cms LISTFILE FTP EXEC * (NOH',              /* Check for these  */
+    '| nfind DMSLST',                            /* Ignore these     */
+    '| stem error.'                              /* Store findings   */
+If error.0<>0 Then Do
+     Say 'Invalid FTP code found'
+     'PIPE (NAME CODEFTP.EXEC:35 END ?)',
+         'stem error.',                          /* Show problems    */
+         '| cons'                                /* .                */
+     Exit 99
+     End
+ 
+Say 'Enter password'
+'PIPE (NAME CODEFTP.EXEC:42 END ?)',
+    'cons dark',                                 /* Ask password     */
+    '| var pw',                                  /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cms VMLINK IN (ONLY(CODE) QUERY',           /* Ask cms          */
+    '| join * x40',                              /* Make 1 record    */
+    '| split anycase before string ~:NICK~',     /* Split here       */
+    '| pick anycase w-1;-1 \== ~'node'~',        /* Select this      */
+    '| drop first 1',                            /* Ignore first 1   */
+    '| specs w4;-3 1',                           /* Keep this        */
+    '| xlate upper',                             /* Upper case       */
+    '| var in',                                  /* Hand 2 rexx      */
+    '?',                                         /* 3rd pipe         */
+    'var nodes',                                 /* Take this        */
+    '| split',                                   /* Split            */
+    '| stem node.'                               /* Store in array   */
+'VMFCLEAR'
+If Pos(':',in)<>0 Then in=Word(in,2)
+/*---------------------------------------------------------------+
+| Access the SYNCH output area                                   |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK OUT (ONLY(CODE) NOTYPE .fm'
+If rc=0 Then Parse Pull . . ifm .
+        Else Exit rc
+ 
+Address CMS 'VMLINK TCPIP (NOTYPE'
+Address CMS 'SET CMSTYPE HT'
+/*---------------------------------------------------------------+
+| Prevent overflow of stack                                      |
++---------------------------------------------------------------*/
+'MAKEBUF'
+bufno=rc
+Do n=1 To node.0
+   Call CreateNetRc
+/*---------------------------------------------------------------+
+| Compose the FTP commands                                       |
++---------------------------------------------------------------*/
+   If ft='DEPL*'  Then ftpfn=fn'.DEPL'||node.n
+                  Else ftpfn=fn'.'proj
+   ip=ip.1
+   portno=portno.1
+   ftpoptions=ftpoptions.1
+   cdmcmd='CD 'in                                /* Remote CD        */
+   lcdcmd='LCD 'ifm                              /* Local  CD        */
+   transtype='TYPE I'                            /* Set transfer type*/
+   ftpcmd='PUT 'ftpfn                            /* Compose PUT cmd  */
+/*---------------------------------------------------------------+
+| Stack the composed commands & start ftp                        |
++---------------------------------------------------------------*/
+   Queue transtype
+   Queue cdmcmd
+   Queue ftpcmd
+   Queue 'QUIT'
+   Address CMS 'FTP 'ip portno '(' ftpoptions
+/*---------------------------------------------------------------+
+| Safety...                                                      |
++---------------------------------------------------------------*/
+   Address CMS 'ERASE NETRC DATA A'
+End
+'DESBUF 'bufno
+Address CMS 'SET CMSTYPE RT'
+Address CMS 'VMLINK TCPIP <DET (NOTYPE'
+Address CMS 'VMLINK OUT <DET (ONLY(CODE) NOTYPE'
+Exit
+ 
+ 
+CreateNetRc:
+/*---------------------------------------------------------------+
+| Create the NETRC DATA file for use with FTP                    |
++---------------------------------------------------------------*/
+Address CMS 'VMLINKIP 'node.n
+'PIPE (NAME CODEFTP.EXEC:113 END ?)',
+    'literal machine 'ip.1' login 'Userid()' password 'pw,
+    '| > netrc data a'
+Return

@@ -1,0 +1,68 @@
+/*---------------------------------------------------------------+
+| Function : Copy the contents of the TOOLS filepool stuff       |
+|            to a TOOLS disk, so if the filepool fails we        |
+|            can access our tools                                |
+|                                                                |
+| File     : TOOLS2DS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TOOLS2DS .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210610 10:12:21                                   |
+| Changes  : .                                                   |
+|            20211004 H.T.Kramer : Changed access modes so old   |
+|                     and new don't interfere                    |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . '(' what .
+Parse Source . .  myfn myft .
+Address CMS 'VMLINK TOOLS (QUIET .fm'
+If rc=0 Then Parse Pull . . ifm .
+             Else Call Exit rc 'Tools DIR not accessible'
+Address CMS 'VMLINK TOOLS 400 <* Z-A (NONAMES QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . ofm .
+             Else Call Exit rc 'Tools DISK not accessible'
+If what='RUN' Then cmsout='| cms | cons'
+              Else cmsout=''
+ 
+'PIPE (NAME TOOLS2DS.EXEC:35 END ?)',
+    'cms LISTFILE * * 'ifm' (NOH ISODATE',
+    '| specs w1.2 1.17 w4;* nw w3.1 nw',
+    '| l: lookup 1.72 1.72',
+    '| sort',
+    '| join keylen 72',
+    '| stem ok.',
+    '?',
+    'cms LISTFILE * * 'ofm' (NOH ISODATE',
+    '| specs w1.2 1.17 w4;* nw w3.1 nw',
+    '| l:',
+    '| specs ~COPYFILE~ 1 w1.2 nw.17 ~'ifm' = = 'ofm' (REPLACE OLDDATE~ nw',
+    '| stem copy.',
+    '? l:',
+    '| specs ~ERASE~ 1 w1.2 nw.17 ~'ofm'~ nw',
+    '| stem eras.'
+If eras.0<>0 Then 'PIPE (NAME TOOLS2DS.EXEC:51 END ?) stem eras. | cons 'cmsout
+If copy.0<>0 Then 'PIPE (NAME TOOLS2DS.EXEC:52 END ?) stem copy. | cons 'cmsout
+ 
+ 
+Address CMS 'VMLINK TOOLS (QUIET'
+Address CMS 'VMLINK TOOLS 400 <DET  (NONAMES QUIET WRITE'
+ 
+Exit:
+Parse Arg exrc errmsg
+If \Datatype(exrc,'N') Then exrc=0
+If exrc<>0 Then Say TimeStamp() errmsg
+Exit
+ 
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

@@ -1,0 +1,133 @@
+/*---------------------------------------------------------------+
+| Function : Check the status of recording and mitime            |
+|                                                                |
+| File     : ALLREC   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC     tool                              |
+|            QREC     ALLNODES                                   |
+|            MITI     ALLNODES                                   |
+|            MITI     PREVIOUS                                   |
+|            ALLREC   OVERVIEW                                   |
+|                                                                |
+| Called   : ALLREC   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220301 09:55:25                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Added check of RMCMD EXEC and |
+|                     its output                                 |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+If arg1='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME ALLREC.EXEC:31 END ?)',
+               '< 'myfn myft' *',
+               '| tolabel Parse',
+               '| cons'
+             Exit
+             End
+'PIPE (NAME ALLREC.EXEC:37 END ?)',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Do
+              Say 'Can not run: RMCMD EXEC is missing'
+              Exit 28
+              End
+Address CMS 'VMLINK STATUS (QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+Address CMS 'RMCMD CP QUERY RECORDING , , , FILE , QREC ALLNODES 'wfm
+If rc<>0 Then Do
+              Say 'Can not execute RMCMD'
+              Exit 128
+              End
+Address CMS 'RMCMD CP QUERY MITIME    , , , FILE , MITI ALLNODES 'wfm
+If rc<>0 Then Do
+              Say 'Can not execute RMCMD'
+              Exit 128
+              End
+out.0=0
+'PIPE (NAME ALLREC.EXEC:59 END ?)',
+    '< QREC  ALLNODES 'wfm,                      /* Read this file   */
+    '| drop first 2',                            /* Ignore header    */
+    '| pick w4.1 \== ~RMCMD~',                   /* Ignore these     */
+    '| strip',                                   /* Remove spaces    */
+    '| if1: if pick w2.1 \== ~RECORDING~',       /* Ignore these     */
+    '|      if2: if pick w3.1 == ~OFF~',         /* This is not ok   */
+    '|           specs 1;* 1',                   /* Add warning      */
+                '~<<< Need to switch on recording for~ nw',
+                'w2.1 nw',                       /* .                */
+    '|      if2:',                               /* Conn 2 if        */
+    '|      if3: if pick w4.1 >> ~00000000~',    /* This is not right*/
+    '|           specs 1;* 1',                   /* Add message      */
+                      '~*** N.B. records accumulating~ nw',
+    '|      if3:',                               /* Conn 2 if        */
+    '|      if4: if pick w7.1 \== ~ACTIVE~',     /* This is not ok   */
+    '|           specs 1;* 1',                   /* Add warning      */
+                      '~<<< Required id~ nw',    /* .                */
+                      'w6.1 nw',                 /* .                */
+                      '~not running~ nw',        /* .                */
+    '|      if4:',                               /* Conn 2 if        */
+    '| if1:',                                    /* Conn 2 if        */
+    '| specs ~;_;~ 1 1;* n',                     /* Add this         */
+    '| specs a: w1.1 .',                         /* Break on node    */
+            'w2;* 7',                            /* .                */
+            'break a',                           /* .                */
+            'id a 1',                            /* .                */
+    '| if5: if pick 1.1 \== ~;~',                /* If this          */
+    '|      specs 1;* strip 4',                  /* Rework to this   */
+    '| if5:',                                    /* Conn 2 if        */
+    '| change ~_~ ~',                            /* Replace this     */
+    '| split at ;',                              /* Split here       */
+    '| preface literal RECORDING status:',       /* Add header       */
+    '| stem out. append'                         /* Add 2 stem       */
+'PIPE (NAME ALLREC.EXEC:93 END ?)',
+    '< MITI ALLNODES 'wfm,                       /* Read this        */
+    '| drop first 2',                            /* Ignore header    */
+    '| pick w4.1 \== ~RMCMD~',                   /* Remove these     */
+    '| strip',                                   /* Remove spaces    */
+    '| spec 1;* 1 ~Current~ nw',                 /* Add label        */
+    '| l: lookup w1;-2',                         /* Compare...       */
+    '| hole',                                    /* Ignore equals    */
+    '?',                                         /* 2nd pipe         */
+    '< MITI PREVIOUS 'wfm,                       /* Read this file   */
+    '| drop first 2',                            /* Ignore header    */
+    '| pick w4.1 \== ~RMCMD~',                   /* Ignore these     */
+    '| strip',                                   /* Remove spaces    */
+    '| spec 1;* 1 ~Previous~ nw',                /* Add label        */
+    '| l:',                                      /* Conn 2 lookup    */
+    '| fi: fanin',                               /* Take in other    */
+    '| sort',                                    /* Sort them        */
+    '| specs ~;_;~ 1 1;* n',                     /* Add this         */
+    '| specs a: w1.1 .',                         /* Break on node    */
+            'w2;* 7',                            /* .                */
+            'break a',                           /* .                */
+            'id a 1',                            /* .                */
+    '| if1: if pick 1.1 \== ~;~',                /* If this          */
+    '|      specs 1;* strip 4',                  /* Move layout      */
+    '| if1:',                                    /* Conn 2 if        */
+    '| change ~_~ ~',                            /* Replace this     */
+    '| split at ;',                              /* Split her        */
+    '| preface literal MITIME overview: comparing previous and current status',   /* Add header       */
+    '| preface literal ',                        /* Add empty        */
+    '| stem out. append',                        /* Add 2 stem       */
+    '? l:',                                      /* Conn 2 lookup    */
+    '| fi:'                                      /* Conn 2 fanin     */
+'PIPE (NAME ALLREC.EXEC:125 END ?)',
+    'stem out.',                                 /* Take stem        */
+    '| > 'myfn' OVERVIEW 'wfm                    /* Write report     */
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE MITI PREVIOUS 'wfm
+Address CMS 'RENAME MITI ALLNODES 'wfm' MITI PREVIOUS ='
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET'
+Exit

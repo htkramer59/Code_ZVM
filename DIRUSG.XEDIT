@@ -1,0 +1,127 @@
+/*---------------------------------------------------------------+
+| Function : Add block usage to DIRLIST                          |
+|                                                                |
+| File     : DIRUSG   XEDIT                                      |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DIRUSG   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190719 12:37:05                                   |
+| Changes  : .                                                   |
+|            20250526 H.T.Kramer : Added grand totals and        |
+|                                  replaced subroutine with      |
+|                                  pipe summing.                 |
+|                                                                |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Get all the lines from the dirlist                             |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME DIRUSG.XEDIT:25 END ?)',
+   'xedit ',                                    /* Read all lines   */
+   '| specs substr w1.1 of 10;*',               /* Keep only dirname*/
+   '| strip',                                   /* Remove spaces    */
+   '| stem dir.'                                /* Hand to rexx     */
+/*---------------------------------------------------------------+
+| Get all the length for use in layout and header                |
++---------------------------------------------------------------*/
+dll=''                                          /* Set to zero      */
+Do d=1 To dir.0
+   dll=dll Length(dir.d)                        /* Add length       */
+End d
+/*---------------------------------------------------------------+
+| Determine highest number...                                    |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME DIRUSG.XEDIT:40 END ?)',
+   'var dll',                                   /* Get the numbers  */
+   '| strip',                                   /* Remove spacing   */
+   '| split',                                   /* Split them       */
+   '| specs pad 0  w1.1 1.10 right ',           /* Adjust 4 sorting */
+   '| sort',                                    /* Now sort         */
+   '| take last 1',                             /* Take highest     */
+   '| var ll'                                   /* Store as         */
+If ll<15 Then ll=15
+/*---------------------------------------------------------------+
+| Rework header                                                  |
++---------------------------------------------------------------*/
+'EXTRACT /RESERVED */'                          /* Get all headers  */
+Address CMS 'PIPE (NAME DIRUSG.XEDIT:53 END ?)',
+   'stem reserved. ',                           /* Take these       */
+   '| take first 1',                            /* Keep this        */
+   '| var reserved'                             /* Store 4 rework   */
+reserved=reserved||Copies(' ',ll-15) Right('Data-Blks',12) Right('System-Blks',13) Right('Total-Blks',13),
+                   Right('Total Kb',13)
+':1'                                            /* Go to top        */
+'CLOCATE 'll+10                                 /* .                */
+/*---------------------------------------------------------------+
+| Get all the block counts....                                   |
++---------------------------------------------------------------*/
+nline.0=dir.0
+Do d=1 To dir.0
+   Address CMS 'PIPE (NAME DIRUSG.XEDIT:66 END ?)',
+      'literal QUERY BLOCKS * * 'dir.d,         /* Compose cmd      */
+      '| cms',                                  /* Issue cmd        */
+      '| pick w4.1 == ~BASE~',                  /* Only real files  */
+      '| buffer',                               /* Prevent stall    */
+      '| f: fanout',                            /* Duplicate recs   */
+      '| specs printonly eof',                  /* Sum data blocks  */
+              'a: w-2;-2 .',                    /* .                */
+              'set #0+=a',                      /* .                */
+              'eof',                            /* .                */
+              'print #0 1',                     /* .                */
+      '| var datatot',                          /* Store as         */
+      '? f:',                                   /* Conn 2 fanout    */
+      '| specs printonly eof',                  /* Sum syst blocks  */
+              'b: w-1;-1 .',                    /* .                */
+              'set #1+=b',                      /* .                */
+              'eof',                            /* .                */
+              'print #1 1',                     /* .                */
+      '| var systtot',                          /* Store as         */
+      '| specs w-1;-1',                         /* Keep syst blocks */
+      '| var systtot.'                          /* Store as         */
+   data_syst_tot=datatot+systtot
+   dir_kb=data_syst_tot*4
+/*---------------------------------------------------------------+
+| Add this to the display                                        |
++---------------------------------------------------------------*/
+   nline.d=datatot systtot data_syst_tot dir_kb
+   'COVERLAY 'Right(datatot,11) Right(systtot,13) Right(data_syst_tot,13) Right((dir_kb)*4,13)
+   '+1'                                            /* Up 1 record      */
+End d
+/*---------------------------------------------------------------+
+| Calculate the grand totals                                     |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME DIRUSG.XEDIT:99 END ?)',
+     'stem nline.',                              /* Take these       */
+     '| specs printonly eof',                    /* Sum all columns  */
+             'a: w1.1 .',                        /* .                */
+             'b: w2.1 .',                        /* .                */
+             'c: w3.1 .',                        /* .                */
+             'd: w4.1 .',                        /* .                */
+             'set (#0+=a;#1+=b;#2+=c;#3+=d)',    /* .                */
+             'eof',                              /* .                */
+             '~Grand totals:~ 1.14',             /* .                */
+             'print #0 n.11 right',              /* .                */
+             'print #1 nw.13 right',             /* .                */
+             'print #2 nw.13 right',             /* .                */
+             'print #3 nw.13 right',             /* .                */
+     '| var grandtotals'                         /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Add the grand totals to the disply                             |
++---------------------------------------------------------------*/
+sepline='------------- ----------- ------------- ------------- -------------'
+seploc=dir.0+3
+totloc=dir.0+4
+'SET RESERVED 'seploc' WHITE NON NOH 'Copies(' ',ll-4)sepline
+'SET RESERVED 'totloc' WHITE NON NOH 'Copies(' ',ll-4)grandtotals
+/*---------------------------------------------------------------+
+| Set the new header and go to top                               |
++---------------------------------------------------------------*/
+'SET RESERVED 'reserved
+':1'                                            /* Go to top        */
+Return

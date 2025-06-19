@@ -1,0 +1,28 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Resize a minidisk                                   |
+|                                                                |
+| File     : DM_CMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_CKMDK EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_INDEX EXEC                                       |
+|            DM_CHV   EXEC                                       |
+|            DM_AMD   EXEC                                       |
+|            DM_DMD   EXEC                                       |
+|            VMLINK   EXEC                                       |
+|                                                                |
+| Called   : DM_CMD   <uid> <cuu> <size> <location>              |
+|          : CMD      <uid> <cuu> <size> <location>              |
+|                                                                |
+| Comments : Only works for normal MDISKS                        |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 09:50:21                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

@@ -1,0 +1,526 @@
+(C) Copyright IBM Corporation 1997, 2021
+.cm FTP - Rexx Pipeline stage that implements the FTP protocol.
+.cm From http://www.vm.ibm.com/download/packages/descript.cgi?ftprexx
+ 
+›|FTP REXX Pipeline Stage›%
+ 
+.CS 1 ON
+›|Description›%
+ 
+ "ftp" connects to a remote system using the TCP/IP File Transfer Protocol
+ (FTP).  Data may be copied between the pipeline and the remote system's file
+ system(s).
+ 
+ Examples:
+ 
+   ù  PIPE < test file a | rexx ftp userid@host.domain/test.file
+ 
+   ù  PIPE rexx ftp userid@host.domain/test.file | > test file a
+ 
+   ù  PIPE rexx ftp host.domain | browse
+ 
+›|Attention: ›%CMS Pipelines in z/VM 7.1 with APAR VM66365 and 7.2 or later
+ includes a built in ftp stage.  You must specify "rexx ftp" explicitly to
+ bypass the built-in program.  Enter "HELP PIPE FTP" to learn about the built
+ in ftp stage.
+ 
+›|Note: ›%Even though this code has been available for quite awhile, it has not
+ had extensive testing.  Therefore, this package remains as beta code.  There
+ are no guarantees that it works with all FTP servers or that it properly
+ follows all of the RFCs.  Not all options have been tested and it is likely
+ that some parts may not work with modern networks and ftp servers.
+ 
+›|Type:  Device driver.›%
+ 
+›|Warning: ›%"ftp" behaves differently when it is a first stage and when it is
+ not a first stage.  Existing data can be overlaid when "ftp" is
+ unintentionally run other than as a first stage.  To use "ftp" to read data
+ into the pipeline at a position that is not a first stage, specify "rexx ftp"
+ as the argument of an "append" or "preface" control.  For example, "|append
+ rexx ftp ...|" appends the data produced by "ftp" to the data on the primary
+ input stream.
+ 
+.CS 1 OFF
+.CS 2 ON
+›|Syntax:›%
+ 
+              (1)
+ >>ÄÄREXX FTPÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄ><
+                  |                            <ÄÄÄÄÄÄÄÄÄÄÄÄ¿ |
+                  ÀÄ Ä ÄÄÄÄÄÄ ÄÄÑ ftp-url äÄ ÄÄÄÄÑ option äÄ…ÄÙ
+                    | |   (3)|              |
+                    | äÄ<ÄÄÄÄÑ              |
+                    | äÄ>ÄÄÄÄÑ              |
+                    | äÄ<ÄÄÄÄÑ              |
+                    | äÄ>>ÄÄÄÑ              |
+                    | äÄLISTÄÑ              |
+                    | ÀÄNLSTÄÙ              |
+                    ÀÄÑ host äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+ 
+›|ftp-url:›%
+    ÚÄFTP://Ä¿
+ äÄÄ…ÄÄÄÄÄÄÄÄ…ÄÄÑ open äÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+                          ÀÄ/ÄÄÑ ftp-url-path äÄÙ
+ 
+›|open:›%
+ äÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÑ host äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    ÀÄÑ login äÄÄ@ÄÙ
+ 
+›|host:›%
+      <Ä.ÄÄÄÄ¿     ÚÄ:21ÄÄÄ¿
+ äÄÄ ÄÄÄwordÄ…ÄÄ ÄÄÅÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    ÀÄipaddressÄÙ  ÀÄ:portÄÙ
+ 
+›|login:›%
+    ÚÄANONYMOUS:mailboxÄÄÄÄÄÄÄÄÄÄÄ¿
+ äÄÄ…ÄuseridÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ Ä…ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+              ÀÄ:ÄÄ ÄÄÄÄÄÄÄÄÄÄ ÄÙ
+                   ÀÄpasswordÄÙ
+ 
+›|ftp-url-path:›%
+ äÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄ ÄÄÄÄÄÄ ÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    | <Ä/ÄÄÄ¿    |  ÀÄnameÄÙ  ÀÄ;TYPE=ÄÄ ÄEÄ ÄÙ
+    ÀÄÄÄcwdÄ…ÄÄ/ÄÙ                      äÄAÄÑ
+                                        äÄIÄÑ
+                                        ÀÄDÄÙ
+ 
+›|option:›%
+                                        (2)
+ äÄÄ Ä ÄEBcdicÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    | äÄASciiÄÄÑ                      |
+    | äÄBinaryÄÑ                      |
+    | ÀÄImageÄÄÙ                      |
+    äÄ ÄRECordÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    | ÀÄFILeÄÄÄÙ                      |
+    äÄ ÄBLOckÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    | ÀÄSTReamÄÙ                      |
+    | ÚÄQUIETÄ¿                       |
+    äÄ…ÄNOISYÄ…ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄPASSIVEÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄEPASSIVEÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄANYDATAportÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄPROXYÄÄÑ ftp-url äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄSITEÄÄdstringÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄTIMEOutÄÄnnnÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄUSERidÄÄtcpidÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
+    äÄPASSWORDVarÄÄvariablenameÄÄÄÄÄÄÄÑ
+    |              ÚÄ1047ÄÄ819ÄÄÄÄ¿   |
+    |              |      ÚÄ819Ä¿ |   |
+    | ÚÄCODEPagesÄÄ…ÄnnnÄÄÅÄÄÄÄÄÅÄ…Ä¿ |
+    | |                   ÀÄnnnÄÙ   | |
+    | | <ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿     | |
+    äÄ…ÄÄ ÄE2AtableÄÄdstringÄ …ÄÄÄÄÄ…ÄÑ
+    |    ÀÄA2EtableÄÄdstringÄÙ        |
+    ÀÄ ÄTOLerantÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+      ÀÄINTOLerantÄÙ
+ 
+›|Notes:›%
+ (1)  CMS Pipelines in z/VM 7.1 with APAR VM66365 and 7.2 or later includes a
+      built in ftp stage.  You must specify "rexx ftp" explicitly to bypass
+      the built-in program.
+ 
+ (2)  Uppercase letters denote the shortest acceptable abbreviation.  If a
+      keyword appears entirely in uppercase letters, it cannot be abbreviated.
+ 
+ (3)  These choices may only be specified if the secondary input stream is not
+      connected.
+ 
+.CS 2 OFF
+.CS 3 ON
+›|Operands:›%
+ 
+ Syntax Description:
+ 
+ A token "<", ">", ">>", "NLST" or "LIST" may be specified if the secondary
+ input stream is not connected.  This specifies the action to take on the file
+ or directory specified by the next token.
+ 
+ The next token is either an ftp:  URL (as defined in RFC 1738) or a host name
+ or IP address.  The "ftp://" part of the URL may be omitted unless the
+ remaining part of the URL does not contain a slash.
+ 
+ The following rules apply in detail to this stage:
+ 
+›|When the secondary input is not connected:›%
+ 
+ Only a URL is permitted, not a host.  The "ftp://" part of the URL may be
+ omitted.
+ 
+ If the first token is "<", the stage must be first in the pipeline and the
+ URL must refer to a file.
+ 
+ If the first token is ">" or ">>", the stage must not be first in the
+ pipeline and the URL must refer to a file.
+ 
+ If the first token is "NLST" or "LIST", the stage must be first in the
+ pipeline and the URL must refer to a directory.
+ 
+ A one word URL for the ftp:  scheme (as defined in RFC 1738) is required.
+ The leading string "ftp://" may be omitted from the URL.  The URL may be
+ prefixed by one of the tokens "<", ">" or ">>" provided the secondary input
+ is not connected.  If the secondary stream is connected then the URL must
+ refer to a directory and TYPE= must not be specified.
+ 
+›|When the secondary input is connected:›%
+ 
+ The first token must be omitted.  The next is either a URL or a host.  The
+ ftp:// part of a URL may be omitted only if the remainder of the URL is not
+ valid as a host.  A host specifies the remote host to connect to, a host
+ preceded by ftp:// specifies anonymous login to that host.
+ 
+ If a URL is specified, it must refer to a directory.
+ 
+›|The components of the URL are as follows:›%
+ 
+›|user›%
+     Specify a user ID on the remote system.  The default user ID is
+     "anonymous".
+ 
+›|password›%
+     The password for the user ID.  If the user ID is "anonymous" the password
+     defaults to the virtual machine's SMTP mailbox address (e-mail address).
+     The mailbox address is determined as follows:
+ 
+       1.  If the target system is inside a gateway then if there is a
+           :tcpaddr. tag in the userid NAMES file then this is used; else it
+           is userid()@hostname().domainname()
+       2.  If the target system is outside a socks gateway then if there is a
+           :csaddr. tag in the userid NAMES file it is used; otherwise use
+           rule 1.
+ 
+     In this case, "ftp" will not prompt for a password.  Specify neither the
+     colon nor the password if the user ID is not "anonymous" and a password
+     prompt is required.  The password entered is not displayed.  You may also
+     supply the password in a variable from the calling program using the
+     PASSWORDVAR option.  This prevents the password from appearing in trace
+     output.
+ 
+›|word›%
+     Enter the host name of the remote system followed by the elements of the
+     domain name delimited by dots.
+ 
+›|ipaddress›%
+     The remote system may also be identified by the dotted decimal IP address
+     of one of its network interfaces.
+ 
+›|port›%
+     specify the port number of the FTP server's control stream as a decimal
+     number between 1 and 65535.  The default is 21.
+ 
+›|cwd›%
+     Enter a sequence of path specifications to be used as the arguments to a
+     series of CWD (Change Working Directory) commands.  To specify a path
+     containing multiple directories separated by slashes on a single CWD
+     command, encode each "/" as "%2F".
+ 
+›|name›%
+     The target file or directory.
+ 
+›|E, A, I, D›%
+     The TYPE of the transfer:  EBCDIC, ASCII or IMAGE.  D specifies DIRECTORY
+     and is only valid when "ftp" is writing to the pipeline.  When the type
+     is D, the NLST (Name LiST) command is used instead of the RETR (RETRieve)
+     command.  TYPE=E is not standard in an FTP:// url but is included as a
+     convenient extension.
+ 
+.CS 3 OFF
+.CS 4 ON
+›|Options:›%
+ 
+ The following options modify the behaviour of FTP:
+ 
+›|QUIET›%
+›|NOISY›%
+     Turns off and on the echoing of the FTP commands and responses to the
+     console.
+ 
+›|TOLERANT›%
+›|INTOLERANT›%
+     Specifies whether FTP is to continue after an error is reported by the
+     server.  The default behaviour depends on whether the secondary output is
+     connected when FTP starts:  it is TOLERANT if the stream is connected.
+ 
+›|PROXY›%
+     Specifies an FTP host in URL form (without any path information to serve
+     as a PROXY.  After logging in FTP REXX issues SITE hostname to open a
+     connection to the real host and proceeds as normal.  HTTP: style proxies
+     are not yet supported (because I don't quite know how they work yet.)
+ 
+›|CODEPages›%
+     Specify codepages used for ASCII/EBCDIC translation.  This is used for
+     translating encoded ASCII characters in the URL specification and for
+     converting ASCII type transfers to and from EBCDIC.  The EBCDIC codepage
+     is specified first, and the ASCII codepage second.  CODEPAGE sets both
+     E2ATABLE and A2ETABLE.
+ 
+›|E2Atable›%
+     Specify the EBCDIC-ASCII translation table.
+ 
+›|A2Etable›%
+     Specify the ASCII-EBCDIC translation table.
+ 
+›|PASSWORDVar›%
+     Specify the name of a variable in the host program (probably the one with
+     the PIPE command in it) that contains the password for the ftp user ID
+     that is part of the URL.  If there is no Rexx environment "above" this
+     stage or the specified variable is unset or is empty, then the user is
+     prompted for the password as usual.  If the password was supplied with
+     the URL, this option is ignored.  This helps suppress the password string
+     from trace output.
+ 
+ The following options are supported only when the secondary input stream is
+ not connected.  When the secondary input stream is connected, the equivalent
+ FTP command should be issued via that stream.
+ 
+›|EBcdic›%
+›|AScii›%
+›|Binary›%
+›|IMage›%
+     Specify the initial type for the transfer.  If no type is specified,
+     EBCDIC will be tried, and if this fails the FTP default of ASCII will be
+     used.  If the remote host rejects the requested type, an error is
+     reported.  The type may be changed by the type= parameter of the URL or
+     by a TYPE command passed on the secondary input stream.  IMAGE (or
+     BINARY) will be set when the action is RETR or NLST but will be set back
+     to either EBCDIC or ASCII for the duration of the transfer to comply with
+     RFC 959.  That is, they are effectively ignored.
+ 
+›|RECord›%
+›|FILe›%
+     Specify the initial structure for the transfer.  If no structure is
+     specified, RECORD will be tried, and this fails the FTP default of FILE
+     will be used.  If the remote host rejects the requested structure, an
+     error is reported.
+ 
+›|BLOck›%
+›|STReam›%
+     Specify the initial mode for the transfer.  If no mode is specified,
+     BLOCK will be tried, and if this fails, the FTP default of FILE will be
+     used.  If the remote host rejects the requested structure, an error is
+     reported.
+ 
+›|PASSIVE›%
+     Default to PASV mode instead of PORT mode.
+ 
+›|EPASSIVE›%
+     Default to EPSV mode instead of PORT mode.
+ 
+›|SITE›%
+     Specify a SITE command to be issued to the remote system after the login
+     is complete.  The SITE option is not recognised if the secondary input
+     stream is connected.
+ 
+ Note on TYPE MODE and STRUCTURE defaults.  FTP REXX is optimised for use with
+ a TCP/IP for VM V2R3 server and to a lesser extent a TCP/IP for MVS V3R1
+ server.  If the secondary stream is not connected it will use sensible
+ defaults.
+ 
+   1.  It will attempt to set type EBCDIC by default.
+   2.  If this succeeds it will attempt to set mode BLOCK.
+   3.  If this fails it will attempt to set structure RECORD.
+ 
+ If any TYPE, RECORD or STRUCTURE is explicitly set, this sequence is not
+ followed.  Additionally, in BLOCK mode FTP REXX always closes the data stream
+ at the end of a STOR etc. and accepts EoF on the data stream as EoF on the
+ file at the end of a RETR etc.  TYPE=D requests will be tried in EBCDIC but
+ not BLOCK or RECORD.
+ 
+.CS 4 OFF
+.CS 5 ON
+›|Usage Notes:›%
+ 
+›|Operation:›%
+ 
+ "ftp" operates in one of two modes depending on the number of connected input
+ streams.  When there is a single stream, the URL specifies a file or
+ directory on a remote file system system.  If none of the tokens "<", ">" or
+ ">>", "LIST" "NLST" is given, "ftp" reads from the remote system if it is
+ first in the pipeline (trying first "NLST" then "RETR") or writes using
+ "STOR" if it is not first in the pipeline.  When reading, the choice between
+ "<" and "NLST" can be changed using the type= parameter on the URL.
+ 
+ When the secondary input is connected, ftp connects to the remote host
+ specified, and it it was specified as a URL rather than just a host, logs in.
+ It then executes records read from the secondary input stream as FTP
+ commands.
+ 
+ If the secondary output is connected then FTP replies are written to it.
+ 
+ If the tertiary stream is defined, it contains restart markers for block
+ mode.  Markers to be inserted in outgoing data are provided on the tertiary
+ input and those received are supplied on the tertiary output.  EoF on the
+ tertiary output is ignored.  The markers are not exactly useful yet, and
+ there is the potential problem of a marker being received in the middle of a
+ record when in record mode.  In this case the marker will be output to the
+ tertiary before the partly built record and so will be in the "wrong place."
+ Not sure what to do about this yet.
+ 
+›|Premature termination:›%
+ 
+ If the secondary output is connected when "ftp" is started, it terminates if
+ it discovers that the secondary output is not connected.  Otherwise, it
+ terminates if it receives an unexpected command reply (one which would cause
+ an FTP command to end in the "E" or "S" state according to the FTP command
+ state diagrams given in RFC 959).  "ftp" terminates when it discovers its
+ primary output is not connected when it is about to issue a command which
+ writes data to the pipeline or when it discovers its primary input is not
+ connected when it is about to issue a command which reads data from the
+ pipeline.
+ 
+›|Using the COMMAND stream›%
+ 
+ Any FTP command (as defined by RFC 959) may be entered on the command stream
+ and will be passed on to the server.  There are three commands which have
+ different syntax and behaviour.
+ 
+›|PORT›%
+     specify the keyword PORT only.  FTP will obtain a data port, listen for a
+     connection from the current server's default data port and issue the PORT
+     command to the server.  A subsequent accept() is done when the server
+     connects back.  PORT closes any previously defined data stream.
+ 
+›|PASV›%
+     FTP issues a PASV command to the server, parses the 227 response and
+     connects to the server's data port.  PASV closes any currently defined
+     data stream.  Note that PASV does not change the local data port, just
+     the remote port.  To change both, issue PORT then PASV.
+ 
+›|EPSV›%
+     FTP issues an EPSV command to the server, parses the 229 response and
+     connects to the server's data port.  EPSV closes any currently defined
+     data stream.
+ 
+ To avoid address in use problems, FTP REXX never re-uses sockets at EoF but
+ always changes ports.  In PASSIVE mode, just a PASV command is issued,
+ otherwise just a PORT command is issued.  In EPASSIVE mode, the command is
+ EPSV instead of PASV.  In command mode, it is possible to force FTP to use
+ the same local data port in passive mode by issuing a PASV before each
+ command which uses the data stream.
+ 
+ FTP never listens for incoming connections on its default data port, but
+ always issues either a PORT and/or a PASV or EPSV command before the first
+ transfer unless the command is issued manually.  When using socks, a PORT
+ command must be issued before the first PASV otherwise an EADDRINUSE error
+ will occur because the socket connection between the control (or default
+ data) port and the socks server is already defined.  This is not necessary
+ when not using socks since the socket connections are not to the same
+ destination ports.
+ 
+ The three commands which write data are issued in two parts:  STOR, STOU and
+ APPE are read from the secondary stream as normal but the input record is
+ consumed before the transfer starts.  A second record which should be null
+ although this is not enforced is used to indicate the end of the data on the
+ primary.  This second record is consumed when the data transfer completes.
+ 
+ The three commands which read data (NLST, LIST and RETR) are issued in a
+ single part.  The End of File on the primary output is indicated by the
+ consumption of the command record on the secondary input.
+ 
+ Data obtained from the data stream is written to the primary output after
+ suitable reblocking and translation.  Data obtained from the primary input is
+ written to the data stream after suitable reblocking and translation.
+ 
+ Whenever there is no active data port and a command which requires data is to
+ be issued, FTP implicitly executes either a PORT or a PASV command as needed.
+ PORT commands are used for non-socks connections, PASV for Socks connections.
+ 
+ There are also a number of "user" commands which result in FTP command
+ sequences.
+ 
+›|OPEN›%
+     The argument is the hostname optionally followed by a a port.  FTP opens
+     a control connection.
+ 
+›|LOGIN›%
+     The argument is a user ID.  FTP executes a USER command on receipt of a
+     3xx reply; if the user ID is "anonymous" then FTP will issue a PASS
+     command giving the user's email e-mail address.  For all other user IDs,
+     if the virtual machine is not disconnected, FTP will prompt for the
+     password and send a PASS command to the server.  LOGIN does not handle
+     account information.  If LOGIN receives a 3xx reply from PASS, the next
+     command on the secondary will have to be ACCT to complete the login
+     sequence.
+ 
+›|RENAME›%
+     The argument is two delimited strings giving the old and new names.  FTP
+     executes the RNFR-RNTO sequence.  The RNTO is only issued if the RNFR
+     completes normally (ie.  with a 3xx response.)
+ 
+›|CODEPAGES›%
+     Change Codepages:  arguments are the same as for the CODEPAGE options.
+     Specify CHCP without arguments to reset the codepages to the defaults
+     (1047 & 819).  The codepages apply to new connections and not existing
+     ones, i.e. you cannot change the codepages for an existing control
+     connection.
+ 
+›|PROXY›%
+     Change the PROXY information.  Argument is a URL as for PROXY option.
+     Specify PROXY with no argument to disable the use of the PROXY.  Changes
+     to the PROXY information have no effect until the next OPEN.
+ 
+ A null command is ignored.  Null records on the command line can be used to
+ identify EoF for each file on the primary input stream
+ 
+›|Additional Usage Notes:›%
+ 
+   1.  Arbitrary characters may be encoded in the URL by using the RFC 1738
+       rules encoding rules.  Specify %xx where xx is the hexadecimal
+       representation of the ASCII character.  Do not encode the significant
+       special characters of the url such as ":" or "@".
+ 
+   2.  FTP only supports a single control connection.  That is, it cannot be
+       used to initiate a PASV mode connection between two servers.
+ 
+.CS 5 OFF
+.CS 6 ON
+›|Errors:›%
+ 
+ -- Not implemented --
+ The three commands which are allowed to execute asynchronously during a data
+ transfer (ABOR, STAT, QUIT) are defined as immediate commands and may be
+ executed by the user during a file transfer by entering the immediate command
+ at the console.  Asynchronous commands are sent *without* the Telnet SYNCH
+ signal
+ -- Not implemented --
+ 
+.CS 6 OFF
+.CS 7 ON
+›|See also:›%
+ 
+ Please send any comments or problems to the current author:
+ bjhayden@us.ibm.com
+ 
+ History of FTP REXX:
+ Original Author:
+ Steve Hayes (TSGSH at GFORD1 / tsgsh@vnet.ibm.com)
+ IBM Global Services, Network Services, EMEA SNA I&S
+ Version: 0.99  SJH 1997-03-07 Beta version
+          0.99a SJH 1997-03-10 error parsing arguments
+          0.99b SJH 1997-03-10 NLST & LIST by name broken
+          0.99c SJH 1997-03-13 Improved EoF handling
+          0.99d SJH 1997-03-25 Various improvements
+          0.99e SJH 1997-05-08 Improve Listen()/Accept() process
+          0.99f SJH 1997-05-08 Use current data port for PASV mode
+          0.99g SJH 1997-05-19 Check Pipeline level
+          0.99h SJH 1997-05-29 Buglet fixes
+          0.99i SJH 1997-05-30 No unsolicited RCs from PASV or PORT
+ Additional updates by:
+ Bruce Hayden (bjhayden@us.ibm.com)
+ IBM Washington Systems Center
+ 
+ Versions:
+ 
+   ù 0.99.1 - Fix parsing bugs and typos.  Change ";TYPE=B" to ";TYPE=I".
+   ù 0.99.2 - With PASSIVE option, don't send PORT command unless using proxy.
+   ù 0.99.3 - Fix deblocking of record structure (from mailing list.)
+   ù 0.99.4 - Implement extended passive (EPSV).
+   ù 0.99.5 - Avoid message when TCPIP DATA not available.
+   ù 0.99.6 - Option to supply password via variable.
+   ù 0.99.7 - Allow 14 digit byte counts (about 90 TB) in messages.
+   ù 0.99.8 - Remove the documentation comments that duplicated the help file
+     and the document.
+   ù 0.99.9 - Encoded ASCII characters in the url did not work.
+ 
+ 
+ PIPE MENU               Help for CMS Pipelines
+.CS 7 OFF

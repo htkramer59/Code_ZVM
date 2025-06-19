@@ -1,0 +1,27 @@
+/*---------------------------------------------------------------+
+| Function : Reload control files                                |
+|                                                                |
+| File     : DM_RLD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_RLD   .                                          |
+|          : RELOAD   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250107 14:47:45                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Read the NAMES file and find the command                       |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_RLD.EXEC:23 END ?)',
+    '< DM NAMES *',
+    '| locate anycase ~:sourcefile.~',
+    '| specs fs . substr w1.2 of f2 1',
+    '| var dirfnft'

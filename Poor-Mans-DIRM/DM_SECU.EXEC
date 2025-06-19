@@ -1,0 +1,129 @@
+/*---------------------------------------------------------------+
+| Function : Change, Delete or Add secuser 2 console stmt        |
+|                                                                |
+| File     : DM_SECU  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_SECU  <uid> <newsecuser> <observer>              |
+|          : SECU     <uid> <newsecuser> <observer>              |
+|                           QRY                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid newsec obsyn .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Get some settings                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get the userid and other directory stmts                       |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Find a console stmt                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_SECU.EXEC:43 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~CONSOLE~',           /* Find this        */
+   '| var cursec',                               /* Hand 2 rexx      */
+   '| pick w6.1 \== ~~',                         /* Select this      */
+   '| count lines',                              /* How many         */
+   '| var secuser'                               /* Store as boolean */
+/* If \secuser Then Call Exit 800 */
+/*---------------------------------------------------------------+
+| Take action                                                    |
++---------------------------------------------------------------*/
+Select
+When newsec='QRY' Then Call ShowSecuser
+When newsec='DEL' Then Call DelSecuser
+When \secuser     Then Call AddConsole
+Otherwise Call Add_Repl_Secuser
+End
+/*---------------------------------------------------------------+
+| Apply changes to the directory                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_SECU.EXEC:63 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Apply changes    */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write to file    */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online the USER DIRECT                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowSecuser:
+/*---------------------------------------------------------------+
+| Display the secuser stmt                                       |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft' Current SECUSER for 'uid' is:'
+cursec=Subword(cursec,2)
+Say Copies(' ',25)cursec
+Call Exit
+Return
+ 
+ 
+DelSecuser:
+/*---------------------------------------------------------------+
+| Delete the secuser stmt                                        |
++---------------------------------------------------------------*/
+newsec=Subword(cursec,1,5)
+chgstmt='| change anycase ~'cursec'~ ~'newsec'~'
+Return
+ 
+ 
+Add_Repl_Secuser:
+/*---------------------------------------------------------------+
+| Add or replace the secuser stmt                                |
++---------------------------------------------------------------*/
+newsec=Subword(cursec,1,5) newsec obsyn
+chgstmt='| change anycase ~'cursec'~ ~'newsec'~'
+Return
+ 
+ 
+AddConsole:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+newsec='CONSOLE 009 3215 T 'newsec obsyn
+'PIPE (NAME DM_SECU.EXEC:119 END ?)',
+    'stem uid.',
+    '| pick anycase w2.1 == ~LINK~',
+    '| take first 1',
+    '| var location',
+    '| specs  ~00000   'Strip(newsec)';~ 1 1;* n',
+    '| var newloc'
+chgstmt='| change anycase ~'location'~ ~'newloc'~ | split at ;'
+Say location
+Say newloc
+Return

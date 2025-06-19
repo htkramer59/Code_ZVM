@@ -1,0 +1,607 @@
+/*---------------------------------------------------------------+
+| Function : Create an overview for a selection of filepools     |
+|                                                                |
+| File     : ALLFPS   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC      Used                             |
+|            <myfn>   OVERVIEW  Output                           |
+|            <myfn>   ALLNODES  Input                            |
+|                                                                |
+| Called   : ALLFPS   <switch> <fps>                             |
+|                                                                |
+|            <switch> must be DATA for the remote end            |
+|            <fps>    a list of filepools separated by - signs   |
+|                     otherwise it interferes with RMCMD         |
+|                     Defaults to: VMUSERS VMPSFS VMSYSU VMSYS   |
+|                                                                |
+| Comments : Uses RMCMD                                          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210721 15:02:59                                   |
+| Changes  : .                                                   |
+|            20230131 H.T.Kramer : Condensed the summaries       |
+|            20230117 H.T.Kramer : Small change to make sure     |
+|                     the separate files are created correctly   |
+|            20221201 H.T.Kramer : Updated so we have several    |
+|                     files to view which is easier              |
+|            20220926 H.T.Kramer : Added clean up in case of     |
+|                     RMCMD failure/timeout                      |
+|            20220628 H.T.Kramer : Check for RMCMD EXEC and      |
+|                     output is now built in                     |
+|            20220506 H.T.Kramer : Implemented QUIET option      |
+|            20220301 H.T.Kramer : Added VMLINK to store data    |
+|                     somewhere else                             |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg switch fps '(' dryrun .
+Parse Source . . myfn myft .
+fps=Strip(fps)
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+'PIPE (NAME ALLFPS.EXEC:44 END ?)',
+    'cms LISTFILE RMCMD EXEC * (NOH',            /* Check if this    */
+    '| count lines',                             /* .is              */
+    '| var rmc'                                  /* ...available     */
+If rmc=0 Then Do
+              Say 'Can not run: RMCMD EXEC is missing'
+              Exit 28
+              End
+Select
+When switch=''     Then Call Start_Code
+When switch='DATA' Then Call Get_Data
+When switch='?'    Then Do
+                     'PIPE (NAME ALLFPS.EXEC:56 END ?)',
+                        '< 'myfn myft' *',       /* Read myself      */
+                        '| tolabel Parse',       /* Up to here       */
+                        '| cons'                 /* Show             */
+                      Exit
+                      End
+Otherwise Do
+          Say 'Do not understand 'switch
+          Exit
+          End
+End
+Exit
+ 
+ 
+Start_Code:
+/*---------------------------------------------------------------+
+| List of filepools to report on                                 |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+If fps='' Then fps='VMUSERS-VMPSFS-VMSYSU-VMSYS'
+Call Get_Info
+/*---------------------------------------------------------------+
+| Get the data from the nodes...                                 |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+Address CMS 'RMCMD ALLFPS DATA 'fps' , , ,FILE, 'myfn' ALLNODES 'wfm
+If rc<>0 Then Do
+              Say 'Can not execute RMCMD'
+              'PIPE (NAME ALLFPS.EXEC:86 END ?)',
+                   'cp QUERY RDR * ALL',            /* What do we have  */
+                   '| pick w10.1 == ~'myfn'~ or',   /* Select these     */
+                          'w10.1 == ~RMCMD~',       /* .                */
+                   '| specs ~CP PUR * RDR~ 1 w2.1 nw',   /* Compose cmds     */
+                   '| cp'                           /* Hand 2 cp        */
+              Exit 128
+              End
+/*---------------------------------------------------------------+
+| Read the file and split the var                                |
++---------------------------------------------------------------*/
+out.0=0
+'PIPE (NAME ALLFPS.EXEC:98 END ?)',
+   '< 'myfn' ALLNODES 'wfm,                      /* Read this file   */
+   '| pick 1.1 \== ~~ and',                      /* Ignore these     */
+          '1.1 \== ~ ~ and',                     /* .                */
+          '1.1 \== ~*~',                         /* .                */
+   '| nlocate anycase ~RMCMD~',                  /* ..and these      */
+   '| nlocate anycase ~start-up~',               /* .                */
+   '| nlocate ~***~',                            /* .                */
+   '| if: if pick substr 1.4  of w2.1 == ~VMPS~',   /* If we find this  */
+   '|     specs w1.1 1 ~VMPSFS~ nw w3;* nw',     /* we replace it    */
+   '| if:',                                      /* Conn 2 if        */
+   '| sort w2.1',                                /* Sort on filepool */
+   '| stem info.',                               /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'var fps',                                    /* Take this        */
+   '| split at -',                               /* Split            */
+   '| strip',                                    /* Remove spaces    */
+   '| stem fp.'                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Loop thru the filepools                                        |
++---------------------------------------------------------------*/
+Do f=1 To fp.0
+/*---------------------------------------------------------------+
+| If no VMPSFS do these settings                                 |
++---------------------------------------------------------------*/
+     If fp.f='VMPSFS' Then Do
+     fphdr='VMPSFS/VMPS*'
+     End
+     Else Do
+     fphdr=fp.f
+     End
+/*---------------------------------------------------------------+
+| Select the filepool(s)                                         |
++---------------------------------------------------------------*/
+  fplen=Length(fp.f)+1
+  'PIPE (NAME ALLFPS.EXEC:133 END ?)',
+     'stem info.',                               /* Take these       */
+     '| pick 4.'fplen' == ~'fp.f' ~',            /* Select filepool(s)*/
+     '| strip',                                  /* Remove spaces    */
+     '| join * xFF',                             /* Make 1 record    */
+     '| split before string ~ QUERY ~',          /* Split here       */
+     '| split after string ~ ENDQUERY ~',        /* ..and here       */
+     '| stem work.'                              /* Hand 2 rexx      */
+   Call Get_Enrolled_Users
+   Call Get_Enroll_No_Id
+   Call Get_Enrolled_Admin
+   Call Get_Limits
+   Call Get_StorGrp_Info
+/*---------------------------------------------------------------+
+| Add a separator                                                |
++---------------------------------------------------------------*/
+   'PIPE (NAME ALLFPS.EXEC:149 END ?)',
+        'literal  ',                             /* Add this         */
+        '| append literal 'Copies('=',80),       /* and this         */
+        '| append literal  ',                    /* and this         */
+        '| stem out. append'                     /* Add 2 stem       */
+   Drop work.                                    /* Drop m           */
+End f
+/*---------------------------------------------------------------+
+| If we have entries in the stem we write to the file            |
++---------------------------------------------------------------*/
+lim=70
+If out.0<>0 Then Do
+  'PIPE (NAME ALLFPS.EXEC:161 END ?)',
+      'stem out.',                               /* Take this        */
+      '| pick anycase w1.1 == ~Statistics~ or',  /* Select these     */
+                     'w3.1 == ~2/Data~',         /* .                */
+      '| change ~%~ %~',                         /* Move this        */
+      '| if0: if pick w1.1 == ~Statistics~',     /* Add markers      */
+      '|      specs w1.3 1',                     /* .if              */
+      '| if0:',                                  /* ..over           */
+      '| if1: if pick w4.1 > ~'lim'~',           /* ...the           */
+      '|      specs w1.5 1 ~*~ n w6;* nw',       /* ....limit        */
+      '| if1:',                                  /* .                */
+      '| if2: if pick w6.1 > ~'lim'~',           /* .                */
+      '|      specs w1.7 1 ~*~ n w8;* nw',       /* .                */
+      '| if2:',                                  /* .                */
+      '| if3: if pick w8.1 > ~'lim'~',           /* .                */
+      '|      specs w1.9 1 ~*~ n w10;* nw',      /* .                */
+      '| if3:',                                  /* .                */
+      '| if4: if pick w10.1 > ~'lim'~',          /* .                */
+      '|      specs w1.11 1 ~*~ n w12;* nw',     /* .                */
+      '| if4:',                                  /* .                */
+      '| if5: if pick w12.1 > ~'lim'~',          /* .                */
+      '|      specs w1.13 1 ~*~ n w14;* nw',     /* .                */
+      '| if5:',                                  /* .                */
+      '| if6: if pick w14.1 > ~'lim'~',          /* .                */
+      '|      specs w1.15 1 ~*~ n w16;* nw',     /* .                */
+      '| if6:',                                  /* .                */
+      '| if7: if pick w18.1 > ~'lim'~',          /* .                */
+      '|      specs w1.17 1 ~*~ n w18;* nw',     /* .                */
+      '| if7:',                                  /* .                */
+      '| change anycase ~Stat~; ;Stat~',         /* Add extra lines  */
+      '| change ~ %~%~',                         /* Move perc sign   */
+      '| if8: if pick w1.1 == ~Storage~',        /* Adjust layout    */
+      '|      specs w1.3 1.30',                  /* .                */
+                   'w4.1 nw.4 right',            /* .                */
+                   'w5.1 nw.4 right',            /* .                */
+                   'w6.1 nw.4 right',            /* .                */
+                   'w7.1 nw.4 right',            /* .                */
+                   'w8.1 nw.4 right',            /* .                */
+                   'w9.1 nw.4 right',            /* .                */
+                  'w10.1 nw.4 right',            /* .                */
+      '| if8:',                                  /* Conn 2 if        */
+      '| preface literal 'Copies(' ',31)||,      /* Add hdr          */
+               'A1   A2   B1   B2   O1   P1   P2',   /* .                */
+      '| split at ;',                            /* Add extra lines  */
+      '| preface literal Warning when over 'lim'% items marked with *',
+      '| > 'myfn' SUMMARY 'wfm                   /* Write 2 file     */
+/*---------------------------------------------------------------+
+| Write individual files per filepool                            |
++---------------------------------------------------------------*/
+  Do f=1 To fp.0
+    If fp.f='VMPSFS' Then extra='/'
+                     else extra=' '
+    'PIPE (NAME ALLFPS.EXEC:213 END ?)',
+        'stem out.',                             /* Take these       */
+        '| between ~Enrolled USER  on 'fp.f||extra'~ ~================~',   /* Select this      */
+        '| > 'myfn fp.f wfm                      /* Write to file    */
+  End f
+/*---------------------------------------------------------------+
+| Now display the files                                          |
++---------------------------------------------------------------*/
+  max=fp.0
+  Do z=fp.0-1 to 1 by -1
+    Queue 'XEDIT 'myfn fp.z wfm
+  End z
+  Queue 'XEDIT 'myfn' SUMMARY 'wfm
+  Address CMS 'XEDIT 'myfn fp.max wfm
+/*   Address CMS 'ERASE 'myfn' ALLNODES 'wfm */
+  End
+  Else Say 'No output to display'
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+Get_StorGrp_Info:
+/*---------------------------------------------------------------+
+| Work on the storage groups & log data                          |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLFPS.EXEC:238 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| locate anycase ~QUERY FILEPOOL~',          /* Select these     */
+   '| split before string ~QUERY FILEPOOL~',     /* Cut here         */
+   '| split after string ~ENDQUERY~',            /* .....and here    */
+   '| l1: locate ~STORGRP~',                     /* Separate these   */
+   '| split at xFF',                             /* Split here       */
+   '| pick w3.1 == ~1~ or',                      /* Select these     */
+          'w3.1 == ~2~',                         /* .                */
+   '| specs w3.1 1',                             /* Adjust           */
+           ' w1.1 nw',                           /* .                */
+           ' fs - substr w1.1 of f2 nw.4 right', /* .                */
+   '| fi: faninany',                             /* Take in others   */
+   '| sort w1.1',                                /* Sort them        */
+   '| join keylen 1',                            /* Gather same      */
+   '| if1: if pick w2.1 \== ~A1~',               /* Add              */
+   '|      insert ~ A1 ....~ after w1',          /* ...missing       */
+   '| if1:',                                     /* .....lpars       */
+   '| if2: if pick w4.1 \== ~A2~',               /* .                */
+   '|      insert ~ A2 ....~ after w3',          /* .                */
+   '| if2:',                                     /* .                */
+   '| if3: if pick w6.1 \== ~B1~',               /* .                */
+   '|      insert ~ B1 ....~ after w5',          /* .                */
+   '| if3:',                                     /* .                */
+   '| if4: if pick w8.1 \== ~B2~',               /* .                */
+   '|      insert ~ B2 ....~ after w7',          /* .                */
+   '| if4:',                                     /* .                */
+   '| if5: if pick w10.1 \== ~O1~',              /* .                */
+   '|      insert ~ O1 ....~ after w9',          /* .                */
+   '| if5:',                                     /* .                */
+   '| if6: if pick w12.1 \== ~P1~',              /* .                */
+   '|      insert ~ P1 ....~ after w11',         /* .                */
+   '| if6:',                                     /* .                */
+   '| if7: if pick w14.1 \== ~P2~',              /* .                */
+   '|      insert ~ P2 ....~ after w13',         /* .                */
+   '| if7:',                                     /* .                */
+   '| change 1.1 ~L~Log space used:        ~',   /* Adjust layout    */
+   '| change 1.1 ~1~Storage group 1/catalog~',   /* .                */
+   '| change 1.1 ~2~Storage group 2/data   ~',   /* .                */
+   '| specs w1.3 1.30',                          /* Adjust layout    */
+           'w5.1 nw.3 right',                    /* .                */
+           'w7.1 nw.3 right',                    /* .                */
+           'w9.1 nw.3 right',                    /* .                */
+           'w11.1 nw.3 right',                   /* .                */
+           'w13.1 nw.3 right',                   /* .                */
+           'w15.1 nw.3 right',                   /* .                */
+           'w17.1 nw.3 right',                   /* .                */
+   '| preface literal Statistics for 'Substr(fphdr,1,15),  /* Add hdr          */
+          'A1  A2  B1  B2  O1  P1  P2',          /* .                */
+   '| append literal  ',                         /* Add space        */
+   '| stem out. append',                         /* Add to stem      */
+   '? l1:',                                      /* Conn 2 locate    */
+   '| locate ~ LOG~',                            /* Select these     */
+   '| split at xFF',                             /* Split here       */
+   '| locate anycase ~SPACE USED~',              /* Select these     */
+   '| specs ~L~ 1',                              /* Adjust layout    */
+           'w1.1 nw',                            /* .                */
+           'w3.1 nw.4 right',                    /* .                */
+   '| fi:'                                       /* Conn 2 faninany  */
+Return
+ 
+ 
+Get_Enrolled_Users:
+/*---------------------------------------------------------------+
+| Get all the users for the filepool                             |
++---------------------------------------------------------------*/
+Call Extract_User_Admin 'USER'
+Return
+ 
+ 
+Get_Enrolled_Admin:
+/*---------------------------------------------------------------+
+| Get all the admins for the filepool                            |
++---------------------------------------------------------------*/
+Call Extract_User_Admin 'ADMIN'
+Return
+ 
+ 
+Extract_User_Admin:
+/*---------------------------------------------------------------+
+| Extract users and admins when requested                        |
++---------------------------------------------------------------*/
+Parse Upper Arg type .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If type='USER'  Then typehdr='enrolled users'
+If type='ADMIN' Then typehdr='administrators'
+enrolled_no.0=0
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLFPS.EXEC:330 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| locate ~QUERY ENROLL 'type'~',             /* Find these       */
+   '| split at xFF',                             /* Split here       */
+   '| pick 1.1 \== ~ ~ and',                     /* Ignore these     */
+          'w3.1 \== ~~ and',                     /* .                */
+          'w3.1 \== ~ENDQUERY~',                 /* .                */
+   '| n1: nlocate anycase ~ENROLLED-NO~',        /* Separate these   */
+   '| change anycase ~number of 'typehdr' =~.~', /* Replace thise    */
+   '| specs w3.1 1.8 w1.1 nw w4.1 nw x404040 n', /* Adjust records   */
+   '| if: if pick 1.1 == ~.~',                   /* If it is this    */
+   '|    strip',                                 /* Remove spaces    */
+   '| if:',                                      /* Conn 2 if        */
+   '| sort w1.1',                                /* Sort on id       */
+   '| join keylen 8',                            /* Join on ids      */
+   '| change ~.     ~Count:~',                   /* Replace this     */
+   '| n2: nlocate anycas ~COUNT:~',              /* Separate this    */
+   '| if1: if pick w2.1 \== ~A1~',               /* If these are     */
+   '|    insert ~ .. ~ after w1',                /* ..missing        */
+   '| if1:',                                     /* ....we           */
+   '| if2: if pick w3.1 \== ~A2~',               /* ......add        */
+   '|    insert ~ .. ~ after w2',                /* ........them     */
+   '| if2:',                                     /* .                */
+   '| if3: if pick w4.1 \== ~B1~',               /* .                */
+   '|    insert ~ .. ~ after w3',                /* .                */
+   '| if3:',                                     /* .                */
+   '| if4: if pick w5.1 \== ~B2~',               /* .                */
+   '|    insert ~ ..~ after w4',                 /* .                */
+   '| if4:',                                     /* .                */
+   '| if5: if pick w6.1 \== ~O1~',               /* .                */
+   '|    insert ~ .. ~ after w5',                /* .                */
+   '| if5:',                                     /* .                */
+   '| if6: if pick w7.1 \== ~P1~',               /* .                */
+   '|    insert ~ .. ~ after w6',                /* .                */
+   '| if6:',                                     /* .                */
+   '| if7: if pick w8.1 \== ~P2~',               /* .                */
+   '|    insert ~ .. ~ after w7',                /* .                */
+   '| if7:',                                     /* .                */
+   '| specs w1.1 1.8',                           /* Smarten layout   */
+           'w2.1 nw.5',                          /* .                */
+           'w3.1 nw.5',                          /* .                */
+           'w4.1 nw.5',                          /* .                */
+           'w5.1 nw.5',                          /* .                */
+           'w6.1 nw.5',                          /* .                */
+           'w7.1 nw.5',                          /* .                */
+           'w8.1 nw.5',                          /* .                */
+   '| fi: faninany',                             /* Take in others   */
+   '| preface literal Enrolled 'type'  on 'fphdr,   /* Add a hdr        */
+   '| append literal  ',                         /* Add an empty line*/
+   '| stem out. append',                         /* Add to stem      */
+   '? n1:',                                      /* Conn 2 nlocate   */
+   '| change xFF ~ ~',                           /* Change 2 spaces  */
+   '| stem enrolled_no.',                        /* Store as         */
+   '? n2:',                                      /* Conn 2 nlocate   */
+   '| if11: if pick w2.1 \== ~A1~',              /* Smarten the      */
+   '|     insert ~ A1 ..~ after w1.1',           /* ..output and     */
+   '| if11:',                                    /* ...add missing   */
+   '| if12: if pick w4.1 \== ~A2~',              /* .....lpars       */
+   '|     insert ~ A2 ..~ after w3.1',           /* .                */
+   '| if12:',                                    /* .                */
+   '| if13: if pick w6.1 \== ~B1~',              /* .                */
+   '|     insert ~ B1 ..~ after w5.1',           /* .                */
+   '| if13:',                                    /* .                */
+   '| if14: if pick w8.1 \== ~B2~',              /* .                */
+   '|     insert ~ B2 ..~ after w7.1',           /* .                */
+   '| if14:',                                    /* .                */
+   '| if15: if pick w10.1 \== ~O1~',             /* .                */
+   '|     insert ~ O1 ..~ after w9.1',           /* .                */
+   '| if15:',                                    /* .                */
+   '| if16: if pick w12.1 \== ~P1~',             /* .                */
+   '|     insert ~ P1 ..~ after w11.1',          /* .                */
+   '| if16:',                                    /* .                */
+   '| if17: if pick w14.1 \== ~P2~',             /* .                */
+   '|     insert ~ P2 ..~ after w13.1',          /* .                */
+   '| if17:',                                    /* .                */
+   '| specs w1.1 1.8',                           /* .                */
+   '        w2.1 nw.2',                          /* .                */
+   '        w3.1 nw.2 right',                    /* .                */
+   '        w4.1 nw.2',                          /* .                */
+   '        w5.1 nw.2 right',                    /* .                */
+   '        w6.1 nw.2',                          /* .                */
+   '        w7.1 nw.2 right',                    /* .                */
+   '        w8.1 nw.2',                          /* .                */
+   '        w9.1 nw.2 right',                    /* .                */
+   '        w10.1 nw.2',                         /* .                */
+   '        w11.1 nw.2 right',                   /* .                */
+   '        w12.1 nw.2',                         /* .                */
+   '        w13.1 nw.2 right',                   /* .                */
+   '        w14.1 nw.2',                         /* .                */
+   '        w15.1 nw.2 right',                   /* .                */
+   '        w16.1 nw.2',                         /* .                */
+   '        w17.1 nw.2 right',                   /* .                */
+   '| fi:'                                       /* Conn 2 faninany  */
+Return
+ 
+ 
+Get_Enroll_No_Id:
+/*---------------------------------------------------------------+
+| Show the items were we are enrolled and no id in CP directory  |
++---------------------------------------------------------------*/
+If enrolled_no.0<>0 Then Do
+     'PIPE (NAME ALLFPS.EXEC:431 END ?)',
+        'stem enrolled_no.',                     /* Take these       */
+        '| specs w1.1 1 w4;* nw',                /* Reduce items     */
+        '| preface literal Ids enrolled on 'fphdr' without entry in CP Directory',   /* Add hdr          */
+        '| append literal  ',                    /* Add empty line   */
+        '| stem out. append'                     /* Add to stem      */
+     Drop enrolled_no.                           /* Prevent duplicats*/
+     End
+Return
+ 
+ 
+Get_Limits:
+/*---------------------------------------------------------------+
+| Get the limits for the users                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLFPS.EXEC:446 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| locate anycase ~LIMITS~',                  /* Select these     */
+   '| split at xFF',                             /* Split            */
+   '| pick anycase w3.1 \== ~~ and',             /* Ignore these     */
+                  'w1.1 \== ~QUERY~ and',        /* .                */
+                  'w3.1 \== ~userid~ and',       /* .                */
+                  'w3.1 \== ~ENDQUERY~',         /* .                */
+   '| specs w3.1 1.8',                           /* Smarten          */
+           'w1.1 nw fs - substr f2 of w6.1 nw',  /* ...layout        */
+           'w7.1 nw.4 right',                    /* .                */
+           'w5.1 nw.9 right',                    /* .                */
+           'x40 n',                              /* .                */
+   '| change ~%~~',                              /* Remove thse      */
+   '| sort w1.1',                                /* Sort on name     */
+   '| if: if pick w3.1 >= w4.1',                 /* Add warning      */
+   '|     specs w1.4 1 ~!~ n w5.1 nw.8 right x40 n',   /* ...when reaching limit */
+   '| if:',                                      /* Conn 2 if        */
+   '| join keylen 8',                            /* Join on name     */
+   '| if1: if pick w2.1 \== ~A1~',               /* Add              */
+   '|     insert ~ A1 .. .. . ~ after w1.1',     /* ...missing       */
+   '| if1:',                                     /* .....lpars       */
+   '| if2: if pick w6.1 \== ~A2~',               /* .                */
+   '|     insert ~ A2 .. .. . ~ after w5.1',     /* .                */
+   '| if2:',                                     /* .                */
+   '| if3: if pick w10.1 \== ~B1~',              /* .                */
+   '|     insert ~ B1 .. .. . ~ after w9.1',     /* .                */
+   '| if3:',                                     /* .                */
+   '| if4: if pick w14.1 \== ~B2~',              /* .                */
+   '|     insert ~ B2 .. .. . ~ after w13.1',    /* .                */
+   '| if4:',                                     /* .                */
+   '| if5: if pick w18.1 \== ~O1~',              /* .                */
+   '|     insert ~ O1 .. .. . ~ after w17.1',    /* .                */
+   '| if5:',                                     /* .                */
+   '| if6: if pick w22.1 \== ~P1~',              /* .                */
+   '|     insert ~ P1 .. .. . ~ after w21.1',    /* .                */
+   '| if6:',                                     /* .                */
+   '| if7: if pick w26.1 \== ~P2~',              /* .                */
+   '|     insert ~ P2 .. .. . ~ after w25.1',    /* .                */
+   '| if7:',                                     /* .                */
+   '| specs w1.1 1.8',                           /* Smarten layout   */
+           'w2.1  nw.2 w3.1  nw.2 w4.1  nw.2 w5.1  nw.8 right',   /* .                */
+           'w6.1  nw.2 w7.1  nw.2 w8.1  nw.2 w9.1  nw.8 right',   /* .                */
+           'w10.1 nw.2 w11.1 nw.2 w12.1 nw.2 w13.1 nw.8 right',   /* .                */
+           'w14.1 nw.2 w15.1 nw.2 w16.1 nw.2 w17.1 nw.8 right',   /* .                */
+           'w18.1 nw.2 w19.1 nw.2 w20.1 nw.2 w21.1 nw.8 right',   /* .                */
+           'w22.1 nw.2 w23.1 nw.2 w24.1 nw.2 w25.1 nw.8 right',   /* .                */
+           'w26.1 nw.2 w27.1 nw.2 w28.1 nw.2 w29.1 nw.8 right',   /* .                */
+   '| preface literal Note: fields with ! need attention',   /* Add note         */
+   '| preface literal Usage, threshold & blocks on 'fphdr,   /* Add hdr          */
+   '| append literal  ',                         /* Add empty line   */
+   '| stem out. append'                          /* Add 2 stem       */
+Return
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+ 
+Get_Data:
+/*---------------------------------------------------------------+
+| Some settings                                                  |
++---------------------------------------------------------------*/
+cmds='ENROLL ADMIN;ENROLL USER;LIMITS ALL;FILEPOOL STORGRP;FILEPOOL CATALOG;FILEPOOL LOG'
+Call Get_Info
+If novmpsfs Then change='| change ~VMPSFS~VMPS'shortnode'~'
+            Else change=''
+/*---------------------------------------------------------------+
+| Split the fps var and check for VMPSFS                         |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLFPS.EXEC:516 END ?)',
+   'var fps',                                    /* Take this        */
+   '| split at -',                               /* Split            */
+   '| strip',                                    /* Remove spaces    */
+   change,                                       /* Change 1 id...   */
+   '| stem fp.',                                 /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'var cmds',                                   /* Take this        */
+   '| split at ;',                               /* Split            */
+   '| strip',                                    /* Remove spaces    */
+   '| specs ~QUERY~ 1 1;* nw',                   /* Complete cmd     */
+   '| stem cmd.'                                 /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Init the output setm and run the commands                      |
++---------------------------------------------------------------*/
+out.0=0
+Do f=1 To fp.0
+   Call RunCmds
+End f
+/*---------------------------------------------------------------+
+| If we have the stem we write the output...                     |
++---------------------------------------------------------------*/
+If out.0<>0 Then Do
+   'PIPE (NAME ALLFPS.EXEC:539 END ?)',
+      'stem out.',                               /* Take these       */
+      '| preface literal *** 'TimeStamp(),       /* Add timestamp    */
+      '| cons'                                   /* Show             */
+    End
+Exit
+ 
+ 
+RunCmds:
+/*---------------------------------------------------------------+
+| Here we run the commands found in the var cmd                  |
++---------------------------------------------------------------*/
+Do c=1 To cmd.0
+  usersw=Wordpos('USER',cmd.c)                   /* Find this        */
+  If usersw<>0 Then extra='| stem extra.'        /* If so ..         */
+               Else extra=''                     /* else leave empty */
+  'PIPE (NAME ALLFPS.EXEC:555 END ?)',
+     'cms 'cmd.c fp.f,                           /* Ask cms          */
+     extra,                                      /* ....             */
+     '| specs ~'fp.f'~ 1 1;* nw',                /* Add filepool     */
+     '| preface literal 'fp.f cmd.c,             /* Add cmd          */
+     '| append literal 'fp.f' ENDQUERY',         /* Add end maker    */
+     '| stem out. append'                        /* Append 2 stem    */
+  If usersw<>0 Then Call CheckIds                /* We need to...    */
+End c
+Return
+ 
+ 
+Get_Info:
+/*---------------------------------------------------------------+
+| Get some info                                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLFPS.EXEC:571 END ?)',
+   'CP QUERY USERID',                            /* Ask from CP      */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce 2 this    */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY RESOURCE VMPSFS',                   /* Ask for this     */
+   '| pick 1.3 == ~HCP~',                        /* Select these     */
+   '| count lines',                              /* How many         */
+   '| var novmpsfs'                              /* Store as boolean */
+Return
+ 
+ 
+CheckIds:
+/*---------------------------------------------------------------+
+| Check if the enrolled id do exist (security !!! )              |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLFPS.EXEC:589 END ?)',
+   'stem extra.',                                /* Take these       */
+   '| drop first 2',                             /* Remove header    */
+   '| f: fanout',                                /* Duplic records   */
+   '| specs w1.1 1.8 x40 n',                     /* Add space        */
+   '| j: juxtapose',                             /* Join them        */
+   '| pick w2.1 == ~HCPQMD053E~',                /* Find these       */
+   '| specs w1.1',                               /* Keep name        */
+   '| join * x40',                               /* Make 1 record    */
+   '| specs ~'fp.f' Enrolled-NO-CP-ID~ 1',       /* Add marker       */
+           '1;* nw',                             /* .                */
+   '| stem out. append',                         /* Add to stem      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY MDISK USER~ 1',               /* Compose cmds     */
+           'w1.1 nw',                            /* .                */
+           '~0 DIR LOC~ nw',                     /* .                */
+   '| cp',                                       /* Issue cmds       */
+   '| j:'                                        /* Conn 2 juxtapose */
+Return

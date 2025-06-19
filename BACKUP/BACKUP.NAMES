@@ -1,0 +1,273 @@
+* Note: lines beginning with * are comments
+*
+* The Userid disk and files we need to create backup files for
+:nick.DIRM1DF      :product.DIRMAINT 1DF
+          :files.EXTENT CONTROL;AUTHFOR CONTROL
+          :title.Dirmaint files
+:nick.DIRM191      :product.DIRMAINT 191
+          :files.DVHXRA EXEC;CONFIG DVHXRA
+          :title.Dirmaint exits
+:nick.PMAINTCF0    :product.PMAINT   CF0
+          :files.* *
+          :title.PMAINT CF0
+:nick.PMAINT550    :product.PMAINT   550
+          :files.* *
+          :title.CP Utilities
+:nick.MAINTCF1     :product.MAINT    CF1
+          :files.* *
+          :title.CP Nuclei, logo, etc.
+:nick.MAINT551     :product.MAINT    551
+          :files.* *
+          :title.CP Utilities
+:nick.TCPIP198     :product.TCPIP    198
+          :files.* *
+          :title.Various TCPIP control files
+:nick.TCPIP592     :product.TCPIP    592
+          :files.TCPIP DATA
+          :title.TCPIP DATA...main config
+:nick.TCPMNT191    :product.TCPMAINT 191
+          :files.* *
+          :title.RSCS config...
+:nick.AUTOLOG1     :product.AUTOLOG1 191
+          :files.* *
+          :title.Autolog1
+:nick.VMUTIL       :product.VMUTIL   191
+          :files.* *
+          :title.Vmutil scheduling
+*
+:nick.GSKDB        :product..DIR /../VMBFS:VMSYS:GSKSSLDB/ /
+          :title.SSL key database files
+*
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LB1
+          :outfile.VSMWORK1 DIRB1
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LB2
+          :outfile.VSMWORK1 DIRB2
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LO1
+          :outfile.VSMWORK1 DIRO1
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LA1
+          :outfile.VSMWORK1 DIRA1
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LA2
+          :outfile.VSMWORK1 DIRA2
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LP1
+          :outfile.VSMWORK1 DIRP1
+:nick.VSMWORK1     :product..DIR VMSYS:VSMWORK1.
+          :files.* NAMELIST;* AUTHLIST
+          :title.SMAPI settings <shortnode>
+          :node.R1LP2
+          :outfile.VSMWORK1 DIRP2
+*
+:nick.XYMONVM      :product..DIR VMPSB1:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LB1
+          :outfile.XYMONVM DIRB1
+:nick.XYMONVM      :product..DIR VMPSB2:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LB2
+          :outfile.XYMONVM DIRB2
+:nick.XYMONVM      :product..DIR VMPSO1:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LO1
+          :outfile.XYMONVM DIRO1
+:nick.XYMONVM      :product..DIR VMPSA1:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LA1
+          :outfile.XYMONVM DIRA1
+:nick.XYMONVM      :product..DIR VMPSA2:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LA2
+          :outfile.XYMONVM DIRA2
+:nick.XYMONVM      :product..DIR VMPSP1:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LP1
+          :outfile.XYMONVM DIRP1
+:nick.XYMONVM      :product..DIR VMPSP2:XYMONVM.
+          :files.* *
+          :title.XYMONVM code <shortnode>
+          :node.R1LP2
+          :outfile.XYMONVM DIRP2
+*
+:nick.TOOLS        :product..DIR VMPSB1:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. B1
+          :node.R1LB1
+          :outfile.TOOLS DIRB1
+:nick.TOOLS        :product..DIR VMPSB2:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. B2
+          :node.R1LB2
+          :outfile.TOOLS DIRB2
+:nick.TOOLS        :product..DIR VMPSO1:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. O1
+          :node.R1LO1
+          :outfile.TOOLS DIRO1
+:nick.TOOLS        :product..DIR VMPSA1:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. A1
+          :node.R1LA1
+          :outfile.TOOLS DIRA1
+:nick.TOOLS        :product..DIR VMPSA2:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. A2
+          :node.R1LA2
+          :outfile.TOOLS DIRA2
+:nick.TOOLS        :product..DIR VMPSP1:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. P1
+          :node.R1LP1
+          :outfile.TOOLS DIRP1
+:nick.TOOLS        :product..DIR VMPSP2:TOOLS.
+          :files.* *
+          :title.Tooling, VMARC, PIPEDDR, etc. P2
+          :node.R1LP2
+          :outfile.TOOLS DIRP2
+*
+* Cloud Connector mdisks
+:nick.CC_B1_100 :product.CLDCONB1 100
+          :noncms.1
+          :node.R1LB1
+          :title.Cloud Connector B1 100
+*:nick.CC_B1_101 :product.CLDCONB1 101
+*          :noncms.1  :node.R1LB1
+*          :title.Cloud Connector B1 101
+*:nick.CC_B1_200  :product.CLDCONB1 200
+*          :noncms.1 :node.R1LB1
+*          :title.Cloud Connector B1 200
+*
+:nick.CC_B2_100 :product.CLDCONB2 100
+          :noncms.1
+          :node.R1LB2
+          :title.Cloud Connector B2 100
+:nick.CC_B2_101 :product.CLDCONB2 101
+          :noncms.1
+          :node.R1LB2
+          :title.Cloud Connector B2 101
+*:nick.CC_B2_200  :product.CLDCONB2 200
+*          :noncms.1
+*          :node.R1LB2
+*          :title.Cloud Connector B2 200
+*
+:nick.CC_O1_100 :product.CLDCONO1 100
+          :noncms.1
+          :node.R1LO1
+          :title.Cloud Connector O1 100
+:nick.CC_O1_101 :product.CLDCONO1 101
+          :noncms.1
+          :node.R1LO1
+          :title.Cloud Connector O1 101
+*:nick.CC_O1_200  :product.CLDCONO1 200
+*          :noncms.1
+*          :node.R1LO1
+*          :title.Cloud Connector O1 200
+*
+:nick.CC_A1_100 :product.CLDCONA1 100
+          :noncms.1
+          :node.R1LA1
+          :title.Cloud Connector A1 100
+:nick.CC_A1_101 :product.CLDCONA1 101
+          :noncms.1
+          :node.R1LA1
+          :title.Cloud Connector A1 101
+*:nick.CC_A1_200  :product.CLDCONA1 200
+*  :noncms.1
+*  :node.R1LA1
+*  :title.Cloud Connector A1 200
+*
+:nick.CC_A2_100 :product.CLDCONA2 100
+         :noncms.1
+         :node.R1LA2
+         :title.Cloud Connector A2 100
+:nick.CC_A2_101 :product.CLDCONA2 101
+         :noncms.1
+         :node.R1LA2
+         :title.Cloud Connector A2 101
+*:nick.CC_A2_200  :product.CLDCONA2 200
+*  :noncms.1
+*  :node.R1LA2
+*  :title.Cloud Connector A2 200
+*
+:nick.CC_P1_100 :product.CLDCONP1 100
+         :noncms.1
+         :node.R1LP1
+         :title.Cloud Connector P1 100
+:nick.CC_P1_101 :product.CLDCONP1 101
+         :noncms.1
+         :node.R1LP1
+         :title.Cloud Connector P1 101
+*:nick.CC_P1_200  :product.CLDCONP1 200
+*  :noncms.1
+*  :node.R1LP1
+*  :title.Cloud Connector P1 200
+*
+:nick.CC_P2_100 :product.CLDCONP2 100
+         :noncms.1
+         :node.R1LP2
+         :title.Cloud Connector P2 100
+:nick.CC_P2_101 :product.CLDCONP2 101
+         :noncms.1
+         :node.R1LP2
+         :title.Cloud Connector P2 101
+*:nick.CC_P2_200  :product.CLDCONP2 200
+*  :noncms.1
+*  :node.R1LP2
+*  :title.Cloud Connector P2 200
+*
+:nick.SUSE11100 :product.SUSE11   100
+         :noncms.1
+         :node.R1LB1
+         :title.SUSE 11
+*
+* Which segments are on the backup, will ignore restricted segments
+*:nick.SEGMENTS    :list.CMSVMLIB;CMSPIPES;....             :title.My segment selection
+:nick.SEGMENTS     :list.ALL
+         :title.All segments
+ 
+*
+* Which DASD do we put in the backup, which are full packs overlays in :id.$BACKUP$
+*:nick.DASD
+*        :id.$BACKUP$ :list.200;201;202
+*        :title.All relevant DASD
+*:nick.DASD
+*        :id.$BACKUP$ :list.ALL
+*        :title.All relevant DASD
+*
+* Other files we need on the backup (the executor needs to have access to these
+:nick.OTHER
+          :files.PIPEDDR EXEC;VMARC MODULE;TRACK* *
+          :title.Other relevant files
+ 
+:nick.CATALOG :product.HERMAN 192 :catalogname.BACKUP CATALOG :digest.SHA512 :title.Backup Catalog
+ 
+*
+* Where to store the backup files...
+*:nick.STORAGE      :product..dir VMPS<shortnode>:HERMAN.STORAGE.   :node.R1L<shortnode> :title.Backup Storage <shortnode>
+:nick.STORAGE      :product.$BACKUP$ 8
+         :title.Backup Storage
+ 
+*
+* No of generations of the files we need to keep, max 99
+:nick.GENERATIONS :no.5

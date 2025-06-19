@@ -1,0 +1,51 @@
+/**/
+/* ptksvm='PERFSVM' */
+/* 'PIPE vmc 'ptksvm' print vnic (tofile vnic listing a close | hole' */
+Parse Source . . myfn myft .
+Address CMS 'VMLINK .DIR VMSYS:PERFSVM. (NONAMES .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (end ?)',
+     'cp QUERY USERID',
+     '| specs w3.1',
+     '| var node',
+     '| specs -2;-1',
+     '| var shortnode'
+'PIPE (End ?)',
+     '< VNIC LISTING 'wfm,
+     '| pick w2.1 == ~SYSTEM~',
+     '| specs w3.1 1.8  w4.1 nw.8 pad 0 w10.1 nw.8 right  w14.1 nw.10 right',
+     '| sort w1.1 a w3.1 d',
+     '| specs',
+     '   select second',
+     '   a: w1.1  1.8 w2.1 nw.8',
+     '   b: w3.1  nw',
+     '   c: w4.1  nw',
+     '      set (#0+=b;#1+=c)',
+     '   break a',
+     '      write ~Subtotal~ 1',
+     '      print #0 picture zzzzzzzz9 18',
+     '      print #1 picture zzzzzz9.9 29',
+     '      set (#0:=0;#1:=0)',
+     '| if: if pick w1.1 == ~Subtotal~',
+     '|    specs 1;* 1 ~; ;~ nw',
+     '| if:',
+     '| split at ;',
+     '| f: fanout',
+     '| fi: faninany',
+     '| preface literal 'Date('S') Time() node,
+     '| > 'myfn' COUNT'shortnode' A',
+     '? f:',
+     '| buffer',
+     '| pick w1.1 == ~Subtotal~',
+     '| specs',
+     '     printonly eof',
+     '     d: w2.1 .',
+     '     e: w3.1 .',
+     '     set (#2+=d;#3+=e)',
+     '     eof',
+     '     write ~Total~ 1',
+     '     print #2 picture zzzzzzzzzz9 16',
+     '     print #3 picture zzzzzzz9.9 nw',
+     '| fi:'
+Address CMS 'VMLINK .DIR VMSYS:PERFSVM. <DET (NONAMES'

@@ -1,0 +1,476 @@
+/*---------------------------------------------------------------+
+| Function : Check memory and paging items                       |
+|                                                                |
+| File     : QSDIRM   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSDIRM   REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSDIRM   <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSDIRM   REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+work.0=0                                         /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSDIRM.EXEC:39 END ? .EXEC:39)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose header and get some variables                          |
++---------------------------------------------------------------*/
+'PIPE (NAME QSDIRM.EXEC:50 END ?)',
+   'literal 'TimeStamp(),                        /* Compose header   */
+   '| append var dirmaint_header 1',             /* .                */
+   '| join * x40',                               /* .                */
+   '| var dirmaint_header',                      /* .                */
+   '?',                                          /* Get some vars    */
+   'var vmlinkquiet 1',                          /* .                */
+   '| var vmlinkquiet',                          /* .                */
+   '?',                                          /* .                */
+   'var racfvm 1',                               /* .                */
+   '| var racfvm'                                /* .                */
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| Do all DIRM  AINT checking here                                  |
++---------------------------------------------------------------*/
+Call Collect_Dirm_Info
+Call Check_Dirm_Admins
+Call Check_Extent_Control
+Call Check_Workunits
+Call Check_CP_Classes
+If \racfvm Then Do
+     Call Check_Logon_Pws
+     Call Check_Mdisk_Pws
+     End
+Call Check_Options
+Call Check_Volid_Xlink
+/*---------------------------------------------------------------+
+| Hand output to caller                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME QSDIRM.EXEC:79 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var dirmaint_header',             /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Hand 2 caller    */
+Exit
+ 
+ 
+Collect_Dirm_Info:
+/*---------------------------------------------------------------+
+| Collect DIrmaint info                                          |
++---------------------------------------------------------------*/
+Say TimeStamp()' Collecting DIRMAINT info'
+Address CMS 'VMLINK DIRM1DF ('vmlinkquiet' ONLY(QSCAN) .fm'
+If rc<>0 Then Call Exit rc 'Problem linking DIRMAINT 1DF'
+         Else Parse Upper Pull . . wfm .
+'PIPE (NAME QSDIRM.EXEC:96 END ?)',
+    'cms LISTFILE * CLUSTER 'wfm' (NOHEADER',    /* Select these     */
+    '| getfiles',                                /* Read them        */
+    '| specs 1.72 1',                            /* Remove aft col 72*/
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~',                        /* Ignore these     */
+    '| stem dir.',                               /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cms LISTFILE * VCONTROL 'wfm' (NOHEADER',   /* Select these     */
+    '| f: fanout',                               /* Duplicate recs   */
+    '| specs w1.1 1.10',                         /* Keep this        */
+    '| j: juxtapose',                            /* Join them        */
+    '| stem diskmap.',                           /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| getfiles',                                /* Read them        */
+    '| j:',                                      /* Conn 2 juxtapose */
+    '?',                                         /* 3rd pipe         */
+    '< EXTENT CONTROL 'wfm,                      /* Read this        */
+    '| inside anycase /:REGIONS./ /:END./',      /* Find these parts */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~ and 1.1 \== ~~',         /* Remove these     */
+    '| stem extcont.',                           /* Store as         */
+    '?',                                         /* 4th pipe         */
+    '< AUTHFOR CONTROL 'wfm,                     /* Read this        */
+    '| specs w2.1',                              /* Select these     */
+    '| sort unique',                             /* Remove duplicats */
+    '| stem dirmadmin.'                          /* Store as         */
+Address CMS 'VMLINK DIRM1DF <DET ('vmlinkquiet' ONLY(QSCAN)'
+Return
+ 
+ 
+Check_CP_Classes:
+/*---------------------------------------------------------------+
+| Checking CP classes other than G (general users)               |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking CP classes set'
+'PIPE (NAME QSDIRM.EXEC:132 END ?)',
+    '| stem dir.',                               /* Take these       */
+    '| pick anycase w1.1 == ~USER~ or',          /* Select these     */
+           'w1.1 == ~IDENTITY~',                 /* .                */
+    '| specs w2;* 1',                            /* Keep this        */
+    '| pick w3.1 \== ~~',                        /* Keep 3rd wrd fild*/
+    '| siconv w3.1 g2m 6 m w4.1 g2m 6 m',        /* Convert to mb    */
+    '| specs w1.1 1.8',                          /* Adjust layout    */
+            'w2.1 nw.8',                         /* .                */
+            'w3.1 nw.5 right',                   /* .                */
+            'w4.1 nw.5 right ',                  /* .                */
+            'w5.1 nw',                           /* .                */
+    '| stem user.',                              /* .                */
+    '| change w5.1 ~G~~',                        /* Store as         */
+    '| pick w5.1 \== ~~',                        /* Remove class G   */
+    '| specs w1.1 1',                            /* Rework           */
+            'w-1;-1 nw',                         /* .                */
+    '| f: fanout',                               /* Dupl. records    */
+    '| specs w1.1 1.9',                          /* Add spaces       */
+    '| j: juxtapose',                            /* Join output      */
+    '| specs w2.1 1',                            /* Rework           */
+            'w1.1 nw',                           /* .                */
+    '| sort',                                    /* Sort them        */
+    '| join keylen 1',                           /* Join per class   */
+    '| specs 1.1 1',                             /* Rework           */
+            '~;~ nw ',                           /* .                */
+            'w2;* nw',                           /* .                */
+    '| stem cpclass.',                           /* Store as         */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs w2.1 1',                            /* Adjust           */
+    '| deblock 1',                               /* Split into 1 byte*/
+    '| j:'                                       /* Conn 2 juxtapose */
+/*---------------------------------------------------------------+
+| Now gather them per CP class                                   |
++---------------------------------------------------------------*/
+temp.0=0
+Do c=1 To cpclass.0
+   work=cpclass.c
+   'PIPE (NAME QSDIRM.EXEC:170 END ?)',
+      'var work',                                /* Take these       */
+      '| split at ;',                            /* Split here       */
+      '| t: take first 1',                       /* Take 1           */
+      '| specs w1.1 1 ~:~ n',
+      '| fi: faninany',                          /* Take in otheres  */
+      '| append literal ',                       /* Add space        */
+      '| stem temp. append',                     /* Store as         */
+      '? t:',                                    /* Conn 2 take      */
+      '| split',                                 /* Split at space   */
+      '| specs w1.1 1.10',                       /* Adjust name      */
+      '| join 5',                                /* 1 record/5 names */
+      '| fi:'                                    /* Conn 2 faninany  */
+End c
+Call Add2Output 'temp.,CP Class usage other than G'
+Drop work temp.
+Return
+ 
+ 
+Check_Volid_Xlink:
+/*---------------------------------------------------------------+
+| Check label and xlink areas                                    |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking VOLUME label/XLINK protection'
+'PIPE (NAME QSDIRM.EXEC:194 END ?)',
+     'stem diskmap.',                            /* Take these       */
+     '| pick anycase w1.1 \== ~$$$$$$~ and',     /* Ignore these     */
+                    'w1.1 \== ~$$LNX1~',         /* .                */
+     '| pick anycase substr 1.4 of w2.1 == ~ARCH~ or', /* We need          */
+                    'substr 1.5 of w2.1 == ~ENTRY~',   /* .... these       */
+     '| join keylen 6',                          /* Join on label    */
+     '| stem dasd.',                             /* Store as         */
+     '?',                                        /* 2nd pipe         */
+     'var labxlink 1',                           /* Take this        */
+     '| split before string ~:~',                /* Split here       */
+     '| xlate upper',                            /* Uppercase        */
+     '| n: nlocate ~LXVALUES~',                  /* Take out this    */
+     '| specs fs . f2;*',                        /* Keep this        */
+     '| split',                                  /* Split            */
+     '| specs ~w3.1 \== /~ 1 w1.1 n ~/~ n',      /* Prep 4 varload   */
+     '| join * ~ and ~ ',                        /* join them        */
+     '| specs x4F 1 ~PICK~ nw 1;* nw',           /* Compose pipe     */
+     '| var ignore',                             /* Store as         */
+     '? n:',                                     /* Conn 2 nlocate   */
+     '| specs fs . f2',                          /* Keep this        */
+     '| split at ;',                             /* Split here       */
+     '| specs ~/~ 1 w1.1 n ~/~ n w2.1 n',        /* Prep 4 varload   */
+     '| varload'                                 /* Hand 2 rexx      */
+ 
+output.0=0
+Do d=1 To dasd.0
+     Parse Value dasd.d With label 'ARCH= 'arch work
+     Select
+     When arch='FBA' Then lblarea=fba-1
+     When arch='CKD' Then lblarea=ckd-1
+     Otherwise Call Exit '99 Architecture is neither FBA or CKD'
+     End
+     'PIPE (NAME QSDIRM.EXEC:227 END ?)',
+          'var work',                            /* Take these       */
+          '| strip',                             /* Remove spaces    */
+          '| split before string ~ENTRY= ~',     /* Split here       */
+          '| strip',                             /* Remove spaces    */
+          '| specs w2;* 1',                      /* Keep this        */
+          ignore,                                /* Do prev.cmp pipe */
+          '| if: if pick w1.1 >= ~0~ and',       /* If we find       */
+                        'w1.1 < ~'lblarea'~ or', /* ....this         */
+                        'w2.1 < ~'lblarea'~',    /* .                */
+          '|     specs ~'label'~ 1  w1;* nw ~Warning~ n',   /* We add a warning */
+          '| if:',                               /* Conn 2 if        */
+          '|     specs ~~ 1',                    /* Otherwise empty  */
+          '| if:',                               /* Conn 2 if        */
+          '| pick 1.1 \== ~~',                   /* Select filled one*/
+          '| specs w1.1 1.6',                    /* Rework layout    */
+                  'w2.1 nw.8 right',             /* .                */
+                  'w3.1 nw.8 right',             /* .                */
+                  'w4.1 nw.8 w5.1',              /* .                */
+                  'nw.4 w6.1 nw',                /* .                */
+          '| stem output. append'                /* Add 2 stem       */
+End d
+If output.0<>0 Then Call Add2Output 'output.,Overlay of LABEL/XLINK area'
+Return
+ 
+ 
+Check_Logon_Pws:
+/*---------------------------------------------------------------+
+| Check the logon pws against RPWLIST DATA & some others         |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking Logon passwords'
+Address CMS 'VMLINK RPWLIST ('vmlinkquiet' ONLY(QSCAN) .fm'
+If rc<>0 Then Call Exit rc 'Problem linking RPWLIST'
+         Else Parse Pull . . wfm .
+Parse Value rpw_list With . '.'rpw_list
+'PIPE (NAME QSDIRM.EXEC:262 END ?)',
+    'stem user.',                                /* Take this        */
+    '| specs w1.1 1.8',                          /* Adjust           */
+            'w2.1 nw.8',                         /* .                */
+    '| pick anycase w2.1 \== ~NOLOG~    and',    /* Skip these       */
+                   'w2.1 \== ~AUTOONLY~ and',    /* .                */
+                   'w2.1 \== ~LBYONLY~',         /* .                */
+    '| l: lookup anycase w2.1 w1.1 details',     /* Compare          */
+    '| specs w1.1 1.10',                         /* Rework           */
+    '| join 5',                                  /* Make recs of 5   */
+    '| stem temp.',                              /* Store as         */
+    '?',                                         /* 2 nd pipe        */
+    '< RPWLIST DATA 'wfm,                        /* Read this file   */
+    '| specs w1.1',                              /* Keep this        */
+    '| append var rpw_list 1',                   /* Add these        */
+    '| split',                                   /* Split at space   */
+    '| stem rpw_list.',                          /* Store as         */
+    '| l:'                                       /* Conn 2 lookup    */
+Address CMS 'VMLINK RPWLIST <DET ('vmlinkquiet' ONLY(QSCAN)'
+If temp.0<>0 Then Call Add2Output 'temp.,IDs with restricted logon passwords'
+Drop temp.0
+Return
+ 
+ 
+Check_Mdisk_Pws:
+/*---------------------------------------------------------------+
+| Check the mdisk pws against RPWLIST DATA & some others         |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking Minidisk passwords'
+'PIPE (NAME QSDIRM.EXEC:291 END ?)',
+  'stem dir.',                                   /* Take these       */
+  '| pick anycase w1.1 == ~USER~ or',            /* Select these     */
+                 'w1.1 == ~IDENTITY~ or',        /* .                */
+                 'w1.1 == ~MDISK~',              /* .                */
+  '| change ~IDENTITY~USER~',                    /* Replace this     */
+  '| if1: if pick anycase w1.1 == ~USER~',       /* Change thse      */
+  '|    specs w1.2 1',                           /* .  to            */
+  '| if1:',                                      /* Conn 2 if        */
+  '| if2: if pick anycase w1.1 == ~MDISK~',      /* .  and thse      */
+  '|    specs w1.2 1',                           /* .     to         */
+             'w8;* nw',                          /* .                */
+  '| if2:',                                      /* Conn 2 if        */
+  '| join * ~;~',                                /* Make 1 record    */
+  '| split anycase before string ~USER~',        /* Split here       */
+  '| locate anycase ~MDISK~',                    /* Keep these       */
+  '| f: fanout',                                 /* Duplicate records*/
+  '| specs fs ; f1 1.15',                        /* Adjust           */
+  '| j: juxtapose',                              /* Join them again  */
+  '| pick w5.1 \== ~~',                          /* If this is empty */
+  '| l: lookup w5;* w1.1 details',               /* Compare          */
+  '| stem invmdpw.',                             /* Store as         */
+  '?',                                           /* 2nd pipe         */
+  'stem rpw_list.',                              /* Take these       */
+  '| l:',                                        /* Conn 2 lookup    */
+  '? f:',                                        /* Conn 2 fanout    */
+  '| specs fs ; f2;*',                           /* Reduce data      */
+  '| split at ;',                                /* Split here       */
+  '| j:'                                         /* Conn 2 juxtapose */
+If invmdpw.0<>0 Then Call Add2Output 'invmdpw.,Trivial MDISK passwords:'
+Drop invmdpw.
+Return
+ 
+ 
+Check_Options:
+/*---------------------------------------------------------------+
+| Check the directory options                                    |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking CP Directory OPTION statements'
+'PIPE (NAME QSDIRM.EXEC:330 END ?)',
+  'stem dir.',                                   /* Take these       */
+  '| pick anycase w1.1 == ~USER~ or',            /* Select these     */
+                 'w1.1 == ~IDENTITY~ or',        /* .                */
+                 'w1.1 == ~OPTION~',             /* .                */
+  '| change ~IDENTITY~USER~',                    /* Replace this     */
+  '| join * ~;~',                                /* Make 1 recprd    */
+  '| split before string ~USER~',                /* Split here       */
+  '| pick anycase w1.1 == ~USER~',               /* Only keep these  */
+  '| locate anycase ~OPTION~',                   /* Find this        */
+  '| specs fs ; w2.1 1',                         /* Rework           */
+               'f2;* nw',                        /* .                */
+  '| change ~OPTION~~',                          /* Replaces this    */
+  '| change ~;~~',                               /* Remove this      */
+  '| change ~MAXCONN ~MAXCONN_~',                /* Change this      */
+  '| f: fanout',                                 /* Dupl. records    */
+  '| specs w1.1 1.10',                           /* Adjust           */
+  '| j: juxtapose',                              /* Join them        */
+  '| specs w2.1 1.20',                           /* Rework layout    */
+          'w1.1 nw',                             /* .                */
+  '| sort',                                      /* Sort them        */
+  '| join keylen 20',                            /* Join these       */
+  '| stem diropt.',                              /* Store as         */
+  '? f:',                                        /* Conn 2 fanout    */
+  '| specs w2;*',                                /* Keep this        */
+  '| split',                                     /* Split them       */
+  '| j:'                                         /* Conn 2 juxtapose */
+temp.0=0
+Do d=1 To diropt.0
+  work=diropt.d
+  'PIPE (NAME QSDIRM.EXEC:360 END ?)',
+      'var work',                                /* Take these       */
+      '| f: fanout',                             /* Dupl. records    */
+      '| specs w1.1 1 ~:~ n',                    /* Rework           */
+      '| specs w1.1 1.15',                       /* more of it       */
+      '| fi: faninany',                          /* Take in others   */
+      '| append literal ',                       /* Add empty record */
+      '| stem temp. append',                     /* Store as         */
+      '? f:',                                    /* Conn 2 fanout    */
+      '| specs w2;*',                            /* Rework           */
+      '| split',                                 /* Split at spaces  */
+      '| specs w1.1 1.10',                       /* Re-do layout     */
+      '| join 5',                                /* Put 2 in 1 record*/
+      '| fi:'                                    /* Conn 2 faninany  */
+End
+Call Add2Output 'temp.,CP Directory options:'
+Drop work temp.
+Return
+ 
+ 
+Check_Workunits:
+/*---------------------------------------------------------------+
+| Check for FAILED or ACTIVE workunits                           |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking DIRMAINT workunits'
+'PIPE (NAME QSDIRM.EXEC:385 END ?)',
+    'cms LISTFILE * * 'wfm' (ISODATE',           /* Look 4 these     */
+    '| p: pick anycase w2.1 == ~WUCFFAIL~',      /* Are these fnd    */
+    '| stem wucffail.',                          /* Store as         */
+    '? p:',                                      /* Conn 2 pick      */
+    '| pick anycase w2.1 == ~WORKUNIT~',         /* Are these fnd    */
+    '| stem workunit.'                           /* Store as         */
+If wucffail.0<>0 Then Call Add2Output 'wucffail.,Failed WORKUNITs found'
+If workunit.0<>0 Then Call Add2Output 'workunit.,Active WORKUNITs found'
+Return
+ 
+ 
+Check_Extent_Control:
+/*---------------------------------------------------------------+
+| Check the extent control file                                  |
++---------------------------------------------------------------*/
+dupentries.0=0
+missingdasd.0=0
+faultyentries.0=0
+Say TimeStamp()' Checking DIRMAINT EXTENT CONTROL'
+'PIPE (NAME QSDIRM.EXEC:405 END ?)',
+    'stem extcont.',                             /* Take these       */
+    '| s: sort unique w2.1',                     /* Remove dups      */
+    '| l: lookup w2.1 w5.1',                     /* Compare          */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY DASD',                             /* Ask cp           */
+    '| l:',                                      /* Conn  2 lookup   */
+    '| stem faultyentries.',                     /* Store as         */
+    '? l:',                                      /* Conn 2 lookup    */
+    '| stem missingdasd.',                       /* Store as         */
+    '? s:',                                      /* Conn 2 sort      */
+    '| stem dupentries.'                         /* Store as         */
+If dupentries.0<>0    Then Call Add2Output 'dupentries.,Duplicate VOLUME entries in EXTENT CONTROL'
+If missingdasd.0<>0   Then Call Add2Output 'missingdasd.,VOLUME(s) missing in EXTENT CONTROL'
+If faultyentries.0<>0 Then Call Add2Output 'faultyentries.,VOLUME(s) in EXTENT CONTROL not on system'
+Drop dupentries. missingdasd. faultyentries.
+Return
+ 
+ 
+Check_Dirm_Admins:
+/*---------------------------------------------------------------+
+| Check if admins are still present in the CP directory          |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking DIRMAINT admins'
+Call Check_Userids 'dirmadmin. novalid.'
+If novalid.0<>0 Then Call Add2Output 'novalid.,ADMIN(s) for DIRMAINT no longer on system'
+Drop novalid.
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Add 2 stem                                                     |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSDIRM.EXEC:446 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| preface literal ',                       /* Add header       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+Check_Userids:
+/*---------------------------------------------------------------+
+| Check if user ids do  exist                                    |
++---------------------------------------------------------------*/
+Parse Upper Arg in_stem out_stem
+'PIPE (NAME QSDIRM.EXEC:462 END ?)',
+    'stem 'in_stem,                              /* Take these       */
+    '| f: fanout',                               /* Dupl. records    */
+    '| specs w1.1 1.10',                         /* Rework           */
+    '| j: juxtapose',                            /* Join them        */
+    '| pick anycase w2.1 \== ~HCPQMD040E~',      /* Remove these     */
+    '| specs w1.1',                              /* Keep this        */
+    '| stem 'out_stem,                           /* Store as         */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~QUERY MDISK USER~ 1',              /* Compose cmds     */
+             'w1.1 nw ',                         /* .                */
+             '~0 DIR~ nw',                       /* .                */
+    '| cp',                                      /* Hand 2 cp        */
+    '| j:'                                       /* Conn 2 juxtapose */
+Return

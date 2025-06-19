@@ -1,0 +1,1171 @@
+/*--------------------------------------------------------------------+
+| Function : Do many things from the PREFIX area and command line.    |
+|                                                                     |
+| File     : MANY     XEDIT                                           |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : By setting SYNONYMS in PROFILE XEDIT                     |
+|            for the following prefix items:                          |
+|            BOX COM DCM HD MC TAG PN PIPE SPVER IF DO SAV FIL NUL    |
+|            PBOX T TS B N CEN LEF RIG UPP LOW ANC UL OL TBL PCM TR Z |
+|            SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT   |
+|            CKLDD VSPEC                                              |
+|                                                                     |
+|            for the following cmdline items:                         |
+|            HD MC PIPNM NODE START RXHLP RXEXT RXTS                  |
+|                                                                     |
+|            Example of SET commands needed:                          |
+|            "SET PREFIX SYNONYM BOX  MANY"                           |
+|            "SET SYNONYM MC   MANY"                                  |
+|                                                                     |
+| Comments : You need to adapt the AUTHOR details....                 |
+|            in MANY PROFILE                                          |
+|                                                                     |
+| Author   : H.T.Kramer, DYN 7 West,  +31 20 513 3857                 |
+| Created  : 19951215 14:45:44                                        |
+| Changes  : .                                                        |
+|            20230310 H.T.Kramer : If exec is empty and we use hd     |
+|                                  1st line disappeared. Now fixed    |
+|            20230220 H.T.Kramer : Fixed problem on VSPEC             |
+|            20220509 H.T.Kramer : Fixed PIPNM so it can deal with    |
+|                                  underscores in the filename        |
+|            20211007 H.T.Kramer : Fixed PCM* and made PCM skip lines |
+|                                  which already have comments.       |
+|            20210419 H.T.Kramer : Added a few new functions          |
+|            20200605 H.T.Kramer : Rework of PIPNAM which now can     |
+|                                  cope with ' and " and pipecmd      |
+|                                  Added PN pipe names for a single   |
+|                                  line.                              |
+|            20191112 H.T.Kramer : Minor changes                      |
+|            20191108 H.T.Kramer : Update for FMTP (Format Pipe)      |
+|            20190802 H.T.Kramer : Optimised, remove some dupl. code  |
+|            20180226 H.T.Kramer : Added FMTP                         |
+|            20130124 H.T.Kramer : Add PCM which add a piece of       |
+|                                  comment at the end of the line.    |
+|                                  Useful with PIPEs.                 |
+|            20120824 H.T.Kramer : Added PBOX, to add a BOX within a  |
+|                     PIPE without disturbing its working...          |
+|            20120316 H.T.Kramer : Added PIPE...                      |
+|            20120202 H.T.Kramer : Added CHANGELOG update facility.   |
+|                                  Modified Trace switching.          |
+|                                                                     |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg . . line times .
+Parse Source . '*' cmd .
+If times = '' Then times = '1'
+where=''
+/*---------------------------------------------------------------+
+| Author details...                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MANY.XEDIT:64 END ?)',
+    'literal MANY PROFILE',                      /* Take this        */
+    '| state',                                   /* Check if exists  */
+    '| sort unique w1.2',                        /* Remove duplicate */
+    '| count lines',                             /* How many         */
+    '| var profile_exists'                       /* Store as boolean */
+If profile_exists Then Do
+Address CMS 'PIPE (NAME MANY.XEDIT:71 END ?)',
+     '< MANY PROFILE *',                         /* Read the file    */
+     '| pick 1.1 \== ~~ and 1.1 \== ~*~',        /* Ignore comm&empty*/
+     '| strip',                                  /* Remove spaces    */
+     '| change ~:~/~ 1',                         /* Prep 4 varload   */
+     '| change ~.~/~ 1',                         /* .                */
+     '| xlate fs / f2 upper',                    /* Uppercase field 1*/
+     '| varload'                                 /* Hand 2 rexx      */
+     End
+     Else Do
+        author='????'
+        location='????'
+        company='????'
+        phone='????'
+        maxcomlen=63
+     End
+/*---------------------------------------------------------------+
+| ...end of Author details                                       |
++---------------------------------------------------------------*/
+column = '1'
+'SET PF2 ONLY RESET'
+Call Colors
+'EXTRACT /CURLINE/CURSOR/NULLS/FNAME/FTYPE/LINEND/CTLCHAR/RESERVED *'
+Address CMS 'PIPE (NAME MANY.XEDIT:94 END ?)',
+    'stem ctlchar.',                             /* Take these       */
+    '| take last 1',                             /* Remove rest      */
+    '| split at x40',                            /* Split here       */
+    '| take first 1',                            /* Take 1           */
+    '| specs ~SET CTLCHAR~ 1 w1.1 nw ~ESCAPE~ nw',   /* Compose cmd      */
+    '| var escape'                               /* Store as         */
+topline='/*'Copies('-',maxcomlen)'+'
+midline='+'Copies('-',maxcomlen+1)'+'
+botline='+'Copies('-',maxcomlen)'*/'
+dotline='| .'copies(' ',maxcomlen-1)'|'
+empline='|'copies(' ',maxcomlen+1)'|'
+defendchar='?'                /* Default pipe end char */
+/*---------------------------------------------------------------+
+| Which function....                                             |
++---------------------------------------------------------------*/
+Select
+  When cmd = 'BOX'    Then Call Make_Box
+  When cmd = 'PBOX'   Then Call Make_Pbox
+  When cmd = 'IF'     Then Call Make_If
+  When cmd = 'DO'     Then Call Make_Do
+  When cmd = 'SEL'    Then Call Make_Select
+  When cmd = 'SUB'    Then Call Make_SubRoutine
+  When cmd = 'HD'     Then Call Make_Heading
+  When cmd = 'MC'     Then Call Add_Changelog
+  When cmd = 'COM'    Then Call Make_Com
+  When cmd = 'DCM'    Then Call Make_Dcm
+  When cmd = 'PCM'    Then Call Make_Pipe_Comm
+  When cmd = 'CEN'    Then Call Adjust_Layout 'center'
+  When cmd = 'LEF'    Then Call Adjust_Layout 'left'
+  When cmd = 'RIG'    Then Call Adjust_Layout 'right'
+  When cmd = 'TR'     Then Call Make_Trace
+  When cmd = 'N'      Then Call Make_Date
+  When cmd = 'UPP'    Then Call Switch_Case 'upper'
+  When cmd = 'LOW'    Then Call Switch_Case 'lower'
+  When cmd = 'TS'     Then Call Make_TimeStamp
+  When cmd = 'RXTS'   Then Call Make_TimeStamp_Rexx
+  When cmd = 'RXHLP'  Then Call Make_Help_Code
+  When cmd = 'RXEXT'  Then Call Make_Exit_Code
+  When cmd = 'TAG'    Then Call Make_Tag
+  When cmd = 'PIPE'   Then Call Make_Pipe
+  When cmd = 'PIPNM'  Then Call Make_Pipe_Names
+  When cmd = 'SPVER'  Then Call Specs_Vertical
+  When cmd = 'PN'     Then Call Make_PN
+  When cmd = 'CONS'   Then Call Make_Cons
+  When cmd = 'FMTP'   Then Call Make_FMTP
+  When cmd = 'Z'      Then Call Go_To_End
+  When cmd = 'NUL'    Then Call Switch_Nulls
+  When cmd = 'SOC'    Then Call HTML_Anchor_SoC
+  When cmd = 'PTF'    Then Call HTML_Anchor_PTF
+  When cmd = 'ANC'    Then Call HTML_Anchor
+  When cmd = 'OL'     Then Call HTML_List 'ol'
+  When cmd = 'UL'     Then Call HTML_List 'ul'
+  When cmd = 'TBL'    Then Call HTML_Table
+  When cmd = 'T'      Then Queue 'TOP'
+  When cmd = 'B'      Then Queue 'BOT'
+  When cmd = 'SAV'    Then Queue 'SAVE'
+  When cmd = 'FIL'    Then Queue 'FILE'
+  When cmd = 'NODE'   Then Call Make_Node
+  When cmd = 'START'  Then Call Make_Start
+  When cmd = 'CKLDD'  Then Call Check_Loaded
+  When cmd = 'VSPEC'  Then Call VSpec
+  Otherwise Nop
+End
+If cursor.1 = '0' Then cursor.1 = '1'
+If line = ''      Then line = cursor.1
+If where=''       Then where='SCREEN'
+Queue escape
+Queue 'CURSOR 'where line column
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Only 1 place to exit                                           |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+Make_Help_Code:
+/*---------------------------------------------------------------+
+| Add rexx help bit to code                                      |
++---------------------------------------------------------------*/
+'EXTRACT /CURLINE/CURSOR'
+':1'
+'LOCATE /Parse/'
+'+1'
+"INPUT Parse Source . . myfn myft ."
+"INPUT If arg1='?' Then Do"
+"INPUT             'VMFCLEAR'"
+"INPUT 'PIPE (NAME MANY.XEDIT:182 END ?)',"
+"INPUT                '< 'myfn myft' *',            /* Read myself */"
+"INPUT                '| tolabel Parse',            /* Up to here  */"
+"INPUT                '| cons'                      /* Show        */"
+"INPUT              Call Exit"
+"INPUT              End"
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Make_Node:
+/*---------------------------------------------------------------+
+| Add a node set...                                              |
++---------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+"INPUT  "
+"INPUT 'PIPE (NAME MANY.XEDIT:201 END ?)',"
+"INPUT    'CP QUERY USERID',                     /* Ask CP           */"
+"INPUT    '| specs w3.1',                        /* Keep this        */"
+"INPUT    '| var node',                          /* Store as         */"
+"INPUT    '| specs -2;-1',                       /* Reduce to this   */"
+"INPUT    '| var shortnode'                      /* Hand 2 rexx      */"
+"INPUT  "
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Check_Loaded:
+/*---------------------------------------------------------------+
+| Check if code is execloaded...                                 |
++---------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+"INPUT  "
+"INPUT 'PIPE (NAME MANY.XEDIT:221 END ?)',"
+"INPUT    'cms EXECMAP 'myfn' REXX',             /* Ask CMS          */"
+"INPUT    '| drop first 1',                      /* Ignore header    */"
+"INPUT    '| count lines',                       /* Count findings   */"
+"INPUT    '| if: if pick 1.1 == ~1~',            /* Check this       */"
+"INPUT    '|     specs ~EXECDROP 'myfn' REXX~ 1', /* Compose cmd    */"
+"INPUT    '|     cms',                           /* Issue cmd      */"
+"INPUT    '| if:',                               /* Comm 2 if        */"
+"INPUT    '| var exldd'                          /* Hand 2 rexx      */"
+"INPUT Address CMS 'EXECLOAD 'myfn myft' * = REXX'"
+"INPUT  "
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Make_Start:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+':1'
+'INPUT /* Default start comment */'
+"INPUT Parse Upper Arg arg1 arg2 . '(' dryrun ."
+'INPUT Parse Source . . myfn myft .'
+'INPUT  '
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Make_TimeStamp_Rexx:
+/*---------------------------------------------------------------+
+| Add TimeStamp subroutine                                       |
++---------------------------------------------------------------*/
+'EXTRACT /CURLINE/CURSOR'
+'BOTTOM'
+'INPUT  '
+'INPUT TimeStamp:'
+"INPUT Return Date('S') Time() myfn"
+'INPUT  '
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Make_Exit_Code:
+/*---------------------------------------------------------------+
+| Insert the bit of Exit code                                    |
++---------------------------------------------------------------*/
+'EXTRACT /CURLINE/CURSOR'
+':'line
+"INPUT  "
+"INPUT Exit:"
+"INPUT /*---------------------------------------------------------------+"
+"INPUT | General Exit routine                                           |"
+"INPUT +---------------------------------------------------------------*/"
+"INPUT Parse Arg exrc errmsg"
+"INPUT If Datatype(exrc,'NUM') Then Say errmsg exrc"
+"INPUT                         Else exrc=0"
+"INPUT Exit exrc"
+"INPUT  "
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Make_SubRoutine:
+/*---------------------------------------------------------------+
+| Insert a skeleton for a subroutine...                          |
++---------------------------------------------------------------*/
+times=2
+':'line
+'EXTRACT /CURLINE/CURSOR'
+'LINEND OFF'
+'INPUT  '
+'INPUT <SubRoutine>:'
+'INPUT 'topline
+Do i = '1' To times
+  'INPUT 'dotline
+End i
+'INPUT 'botline
+'INPUT Parse Upper Arg <subroutineargs>'
+'INPUT .'
+'INPUT .'
+'INPUT Return <returnvalue>'
+'INPUT  '
+line    = cursor.5+2
+column  = '7'
+':'line
+Return
+ 
+ 
+Colors:
+/*---------------------------------------------------------------+
+| Setting the colors...                                          |
++---------------------------------------------------------------*/
+'SET CTLCHAR ] ESCAPE'
+'SET CTLCHAR $ OFF'
+'SET CTLCHAR % NOPROTECT GREEN NON HIGH PS0'
+Return
+ 
+ 
+HTML_Anchor_SoC:
+/*---------------------------------------------------------------+
+| Create a HTML anchor                                           |
++---------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+'LINEND OFF'
+Parse Value curline.3 With A 'SoC' B ';' C
+D=Subword(C,3)
+C=Strip(Subword(C,1,2))
+I= A||'SoC'||B||';<a href="'Word(C,1)'.memo">'||C||'</a>'||D
+I=Translate(I,'_',' ')
+'OVERLAY 'I
+line   = cursor.5
+column = '1'
+'LINEND 'linend.1 linend.2
+Return
+ 
+ 
+ 
+HTML_Anchor:
+/*--------------------------------------------------------------------+
+| Create a HTML anchor                                                |
++--------------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+'LINEND OFF'
+If cursor.4 < 0 Then cursor.4 = 1
+A = Substr(Curline.3,1,cursor.4)
+B = Substr(Curline.3,cursor.4)
+I=A||'<a href="'||'anchordocument'||'">'anchortext'</a>'||B
+I=Translate(I,'_',' ')
+'OVERLAY 'I
+line   = cursor.5
+column = '1'
+'LINEND 'linend.1 linend.2
+Return
+ 
+ 
+HTML_List:
+/*--------------------------------------------------------------------+
+| Create HTML Ordered or Unordered LIST                               |
++--------------------------------------------------------------------*/
+Parse Arg lt .
+':'line
+'EXTRACT /CURLINE/CURSOR'
+'INPUT <'lt'>'
+Do i = 1 To times
+  'INPUT    <li> itemtext'||i
+End i
+'INPUT </'lt'>'
+line   = cursor.5
+column = '1'
+':'line
+Return
+ 
+ 
+HTML_Table:
+/*--------------------------------------------------------------------+
+| Create HTML Table                                                   |
++--------------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+'INPUT <table border="1">'
+'INPUT    <tr>'
+'INPUT      <th>'
+'INPUT          header1'
+'INPUT      </th>'
+'INPUT      <th>'
+'INPUT          header2'
+'INPUT      </th>'
+'INPUT    </tr>'
+'INPUT    <tr>'
+'INPUT      <td>'
+'INPUT         content1'
+'INPUT      </td>'
+'INPUT      <td>'
+'INPUT         content2'
+'INPUT      </td>'
+'INPUT    </tr>'
+'INPUT </table>'
+line   = cursor.5
+column = '1'
+':'line
+Return
+ 
+ 
+Switch_Case:
+/*--------------------------------------------------------------------+
+| Change line to Upper case                                           |
++--------------------------------------------------------------------*/
+Parse Arg whichcase .
+':'line
+Do i = '1' To times
+  whichcase' 1'
+  '+1'
+End i
+line   = cursor.5
+column = '1'
+Return
+ 
+ 
+Make_Date:
+/*--------------------------------------------------------------------+
+| Insert the date                                                     |
++--------------------------------------------------------------------*/
+':'line
+'INPUT 'Date('S')
+line   = cursor.5+1
+column = '16'
+Return
+ 
+ 
+Adjust_Layout:
+/*--------------------------------------------------------------------+
+| Move the text to the center, right or left (of 72 characters)       |
++--------------------------------------------------------------------*/
+Parse Arg which .
+':'line
+'EXTRACT /CURLINE/CURSOR'
+Address CMS 'PIPE (NAME MANY.XEDIT:449 END ?)',
+    'var CURLINE.3',
+    '| specs pad _ 1;* 1.72 'which,
+    '| var newline'
+'OVERLAY 'newline
+line   = cursor.5
+column = '1'
+Return
+ 
+ 
+Make_Tag:
+/*--------------------------------------------------------------------+
+| Create my own marker                                                |
++--------------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+'CAPPEND    /** 'Date('S') Time()' HTK **/'
+line   = cursor.5
+column = '1'
+Return
+ 
+ 
+Make_PN:
+/*---------------------------------------------------------------+
+| Add name and endchar for 1 line                                |
++---------------------------------------------------------------*/
+':'line
+'EXTRACT /FNAME/FTYPE/CURLINE/CURSOR'
+fn=Strip(fname.1);ft=Strip(ftype.1)
+newname=fn'.'ft':'line
+Parse Value curline.3 With part1 '(' globopt ')' part2
+globopt=Translate(globopt)
+If Wordpos('END',globopt)=0  Then globopt=globopt' END 'defendchar
+If Wordpos('NAME',globopt)=0 Then globopt=globopt' NAME 'newname
+                             Else Do
+                             Parse Value globopt With parta 'NAME' . partb
+                             globopt=Strip(parta)' NAME 'newname partb
+                             End
+newname=part1'('globopt')'||Strip(part2)
+newname=Translate(newname,'_',' ')
+'OVERLAY 'newname
+line   = cursor.5
+column = '1'
+Return
+ 
+ 
+Make_Pipe_Names:
+/*---------------------------------------------------------------+
+| Add/replace the NAME on all PIPEs and also add ENDCHAR         |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Some settings and extracting stuff..                           |
++---------------------------------------------------------------*/
+':1';'EXTRACT /FNAME/FTYPE/AUTOSAVE/CURSOR'
+autosavecount=autosave.1;fn=Strip(fname.1);ft=Strip(ftype.1)
+/*---------------------------------------------------------------+
+| Deal with underscores in the filename                          |
++---------------------------------------------------------------*/
+'PIPE (NAME MANY.XEDIT:507 END ?)',
+    'var fn',
+    '| change ~_~ xFF',
+    '| var fn'
+'SET AUTOSAVE OFF';'SET MSGMODE OFF'
+/*---------------------------------------------------------------+
+| Get all PIPE statements...                                     |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MANY.XEDIT:515 END ?)',
+   'xedit',                                     /* Read this file   */
+   '| specs pad 0 recno 1.5 right 1;* nw',      /* Add lineno       */
+   '| casei all /"PIPE / !',                    /* Select these     */
+   '            /"CALLPIPE / !',                /* .                */
+   '            /"ADDPIPE / !',                 /* .                */
+   '            /PIPECMD" / !',                 /* .                */
+   "            /'PIPE / !",                    /* .                */
+   "            /'CALLPIPE / !",                /* .                */
+   "            /'ADDPIPE / !",                 /* .                */
+   "            /PIPECMD' /",                   /* .                */
+   '| nlocate ~/*~',                            /* Ignore comments  */
+   '| l: locate ~(~',                           /* Select this      */
+   '| stem globop.',                            /* Store as         */
+   '? l:',                                      /* Conn 2 locate    */
+   '| stem noglobop.'                           /* Store as         */
+/*---------------------------------------------------------------+
+| Process PIPE statements with global options                    |
++---------------------------------------------------------------*/
+Do g=1 To globop.0
+   work=Substr(globop.g,7)
+   lineno=Strip(Substr(globop.g,1,5),'L','0')
+   Address CMS 'PIPE (NAME MANY.XEDIT:537 END \)',
+      'var work',                               /* Take this        */
+      '| f: fanout',                            /* Dupl record      */
+      '| split',                                /* Split into words */
+      '| specs recno 1.1 1;* nw',               /* Add record no    */
+      '| l1: locate caseany ~PIPE~',            /* Find this        */
+      '| specs w1.1',                           /* Keep number      */
+      '| var piploc',                           /* Store as         */
+      '\ f:',                                   /* Conn 2 fanout    */
+      '| split before string ~(~',              /* Split here       */
+      '| split after  string ~)~',              /* ....and here     */
+      '| pick 1.1 == ~(~',                      /* Select this      */
+      '| specs 2;-2',                           /* Remove brackets  */
+      '| xlate upper',                          /* Uppercase        */
+      '| strip',                                /* Remove spaces    */
+      '| split before string /NAME/',           /* Split here       */
+      '| split before string /END/',            /* and here         */
+      '| specs w1.2 1 ~;~ nw w3;* nw',          /* Add semicolon    */
+      '| split at ;',                           /* And split        */
+      '| strip',                                /* Remove spaces    */
+      '| p: pick w1.1 == ~END~ or',             /* Select these     */
+      '          w1.1 == ~NAME~',               /* .                */
+      '| pick w1.1 == ~END~',                   /* Keep this one    */
+      '| specs w2.1',                           /* Keep defined char*/
+      '| append literal ',                      /* Add a space      */
+      '| join *',                               /* ....to make      */
+      '| strip',                                /* ......sure       */
+      '| var endchar',                          /* this is filled   */
+      '\ p:',                                   /* Conn2 pick       */
+      '| append literal  ',                     /* Add a space      */
+      '| join * x40',                           /* ....to make      */
+      '| strip',                                /* ......sure       */
+      '| var otheropts',                        /* This is filled   */
+      '\ f:',                                   /* Conn 2 fanout    */
+      '| change ~ ~_~',                         /* Replace spaces   */
+      '| deblock 1',                            /* Split into chars */
+      '| specs pad 0 recno 1.2 right w1.1 nw',  /* Add number       */
+      '| nlocate w2.1 ~_~',                     /* Remove these     */
+      '| take first 1',                         /* Take first       */
+      '| specs w1.1',                           /* ...non blank...  */
+      '| var offs'
+   part1=Subword(work,1,piploc-1)
+   part2=Word(work,piploc)
+   part3=Subword(work,piploc+1)
+   Parse Value part3 With . '(' . ')' part3
+   pipname='NAME 'fn'.'ft':'lineno
+   If endchar='' Then pipend='END 'defendchar
+                 Else pipend='END 'endchar
+   If offs>1 Then offs=Copies(' ',offs-1)
+             Else offs=''
+   If part1<>'' Then globop.g=Right(lineno,5,0) offs||part1 part2 '('Strip(pipname pipend otheropts)')'part3
+                Else globop.g=Right(lineno,5,0) offs||part1||part2 '('Strip(pipname pipend otheropts)')'part3
+End g
+/*---------------------------------------------------------------+
+| Process PIPE statements without global options                 |
++---------------------------------------------------------------*/
+Do n=1 To noglobop.0
+   work=noglobop.n
+     Address CMS 'PIPE (NAME MANY.XEDIT:595 END \)',
+      'var work',                               /* Take this        */
+      '| split',                                /* Split...         */
+      '| specs recno 1.1 1;* nw',               /* Add recno        */
+      '| locate caseany ~PIPE~',                /* Find this        */
+      '| specs w1.1',                           /* Keep number      */
+      '| var piploc'                            /* Store as         */
+   part1=Subword(noglobop.n,1,piploc-1)
+   part2=Word(noglobop.n,piploc)
+   part3=Subword(noglobop.n,piploc+1)
+   lineno=Strip(Word(noglobop.n,1),'L','0')
+   noglobop.n=part1 part2' (NAME 'fn'.'ft':'lineno' END 'defendchar')' part3
+End n
+/*---------------------------------------------------------------+
+| Combine the new PIPE statements                                |
++---------------------------------------------------------------*/
+':1'                                            /* Go to top        */
+Address CMS 'PIPE (NAME MANY.XEDIT:612 END ?)',
+     'stem noglobop.',                          /* Take these       */
+     '| append stem globop.',                   /* and these        */
+     '| sort w1.1',                             /* Sort on lineno   */
+     '| specs ~:~ 1 w1.1 n ~#OVERLAY~ n 7;* nw', /* Compose cmd      */
+     '| change 16;* ~ ~_~',                     /* Replace spaces   */
+     '| specs 1;* 1 ~_________~ n',             /* Overlay the end  */
+     '| stem new.'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Overlay the PIPE statements with new ones...                   |
++---------------------------------------------------------------*/
+Do n=1 To new.0
+   Address XEDIT new.n
+End
+/*---------------------------------------------------------------+
+| Reset items and go back to the top                             |
++---------------------------------------------------------------*/
+':1';"CHANGE /x'FF'/_/*";':1';'SET AUTOSAVE 'autosavecount;'SET MSGMODE ON'
+'EMSG Pipe statements changed: : 'new.0
+line=2
+column=7
+Return
+ 
+ 
+Make_Pipe:
+/*--------------------------------------------------------------------+
+| Create a PIPE statement...                                          |
++--------------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR/FNAME/FTYPE'
+newname=Strip(fname.1)||.||Strip(ftype.1)||':'||cursor.3+1
+Select
+When ftype.1='EXEC' Then
+         "INPUT 'PIPE (NAME MANY.XEDIT:645 END ?)',"
+When ftype.1='REXX' Then
+         "INPUT 'CALLPIPE (NAME MANY.XEDIT:647 END ?)',"
+When ftype.1='XEDIT' Then
+         "INPUT Address CMS 'PIPE (NAME MANY.XEDIT:649 END ?)',"
+Otherwise NOP
+End
+"INPUT     '.     ',"
+"INPUT     '|     ',"
+"INPUT     '|     ',"
+"INPUT     '|     ',"
+"INPUT     '| cons' "
+line   = cursor.5+2
+column = '12'
+'PIPNM'
+drop newname
+Return
+ 
+ 
+Make_Cons:
+/*--------------------------------------------------------------------+
+| Create a Cons statement...                                          |
++--------------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+"INPUT    '| cons'"
+line   = cursor.5+1
+column = '18'
+Return
+ 
+ 
+Make_FMTP:
+/*---------------------------------------------------------------+
+| Format a 1-line PIPE over various lines                        |
++---------------------------------------------------------------*/
+"EXTRACT /CURSOR/LINE"
+curpos=line.1
+wline=cursor.3
+":"wline
+"EXTRACT /CURLINE"
+label=Strip(fname.1)':'Strip(ftype.1)':'wline
+Address CMS "PIPE (NAME MANY.XEDIT:686 END @ STAGESEP })",
+     "literal "curline.3,                       /* Take content of line */
+     "} specs w2;* 1",                          /* Remove 1st word */
+     "} split before string x4F",               /* Split here */
+     "} strip",                                 /* Remove spaces */
+     "} strip ~'~",                             /* Remove quotes */
+     "} if: if pick 1.2 \== x4F40",             /* If we find this  */
+     "}    change x4F x4F40",                   /* change it to this*/
+     "} if:",                                   /* Conn 2 if        */
+     "} change x4F4040 x4F40",                  /* Change this      */
+     "} specs ~'~ 5 1;* n ~',~ n",              /* Add quotes and indent */
+     "} preface literal 'PIPE (NAME MANY.XEDIT:472 END ?)',", /* Add this */
+     "} d: drop last 1",                        /* Remove last line */
+     "} fi: faninany",                          /* Take last line back */
+     "} stem in.",                              /* Insert in xedit */
+     "@ d:",                                    /* Connect 2 drop */
+     "} specs 1;-2 1",                          /* Remove comma from end */
+     "} fi:"                                    /* Connect fanin */
+"ADD "in.0-1                       /* Add extra lines */
+":"wline
+'PIPE (NAME MANY.XEDIT:481 END ?) stem in. | xedit'            /* Insert the lines */
+":"curpos
+line=cursor.1
+Return
+ 
+ 
+Switch_Nulls:
+/*--------------------------------------------------------------------+
+| Switch the nulls setting (flip/flop)                                |
++--------------------------------------------------------------------*/
+If nulls.1 = 'ON'  Then switch = 'OFF'
+If nulls.1 = 'OFF' Then switch = 'ON'
+'MSG Nulls set 'switch
+'SET NULLS 'switch
+Return
+ 
+ 
+Make_Heading:
+/*--------------------------------------------------------------------+
+| Create a standard header for a Rexx exec                            |
++--------------------------------------------------------------------*/
+':1'
+'EXTRACT /CURLINE'
+'INPUT 'topline
+'INPUT | Function : 'Substr('.',1,maxcomlen-11)'|'
+'INPUT 'empline
+'INPUT | File     : 'Substr(fname.1 ftype.1,1,maxcomlen-11)'|'
+'INPUT 'midline
+'INPUT | Version  : 'Substr('1.1.0',1,maxcomlen-11)'|'
+'INPUT 'empline
+'INPUT | Files    : 'Substr('.',1,maxcomlen-11)'|'
+'INPUT 'empline
+'INPUT | Called   : 'Substr(fname.1' .',1,maxcomlen-11)'|'
+'INPUT 'empline
+'INPUT | Comments : 'Substr('.',1,maxcomlen-11)'|'
+'INPUT 'empline
+'INPUT | Author   : 'Substr(author', 'location', 'phone,1,maxcomlen-11)'|'
+'INPUT | Created  : 'Substr(Date('S') Time(),1,maxcomlen-11)'|'
+'INPUT | Changes  : 'Substr('.',1,maxcomlen-11)'|'
+'INPUT 'empline
+'INPUT 'botline
+If line ='' | line = '0' Then line   = '2'
+':1'
+If curline.3<>'' Then 'DELETE 1'
+where='CMDLINE'
+line = '1'
+column = ''
+ 
+Return
+ 
+ 
+Add_Changelog:
+/*--------------------------------------------------------------------+
+| Update the Change log                                               |
++--------------------------------------------------------------------*/
+':0'
+'LOCATE /| Changes  :/'
+'EXTRACT /CURLINE'
+If curline.1<>'' Then line=curline.1+1
+column=Length(Date('S'))+Length(author)+24
+'INPUT 'empline
+'OVERLAY |'Copies(' ',12)Date('S') author' : .'
+'INPUT 'empline
+'INPUT 'empline
+'-3'
+Return
+ 
+ 
+Make_Trace:
+/*--------------------------------------------------------------------+
+| Start/Stop trace                                                    |
++--------------------------------------------------------------------*/
+':'line
+If times = ''| times = 1 Then opt = '"I"'
+                         Else opt = '"'||times||'"'
+'EXTRACT /CURLINE/CURSOR'
+If Word(curline.3,1) = 'Trace' Then Do
+  If Word(curline.3,2)<>'"O"' Then opt='"O"'
+  'DELETE 1'
+  '-1'
+  'INPUT Trace 'opt
+  End
+  Else 'INPUT Trace 'opt
+line   = cursor.5
+column = '1'
+Return
+ 
+ 
+Make_Select:
+/*--------------------------------------------------------------------+
+| Insert Rexx select statement                                        |
++--------------------------------------------------------------------*/
+':'line
+If times = '1' Then Times = '2'
+'INPUT Select'
+Do i = '1' To times
+  'INPUT   When ccccccc = dddddddd'
+  'INPUT     Then eeeeeee = ffffffff'
+End i
+'INPUT   Otherwise eeeeeee = ffffffff'
+'INPUT End'
+line    = cursor.5+2
+column  = '10'
+Return
+ 
+ 
+Make_If:
+/*--------------------------------------------------------------------+
+| Insert Rexx if statement                                            |
++--------------------------------------------------------------------*/
+':'line
+'INPUT If <aaaaaaaa> = <bbbbbbbb>'
+'INPUT   Then ccccccc = dddddddd'
+'INPUT   Else eeeeeee = ffffffff'
+':'line+3' SET PENDING BLOCK %---%'
+':'line+2' SET PENDING BLOCK %---%'
+':'line+1' SET PENDING BLOCK %---%'
+line    = cursor.5+1
+column  = '10'
+Return
+ 
+ 
+Make_Do:
+':'line
+'INPUT Do i = 1 To xxx'
+'INPUT   .'
+'INPUT   .'
+'INPUT End i'
+line    = cursor.5+2
+column  = '9'
+Return
+ 
+ 
+Make_Box:
+/*--------------------------------------------------------------------+
+| Create a comment box                                                |
++--------------------------------------------------------------------*/
+':'line
+Address CMS 'PIPE (NAME MANY.XEDIT:845 END ?)',
+    'var dotline',                              /* Take this        */
+    '| dup 'times-1,                            /* Duplicate...     */
+    '| preface var topline',                    /* Add top          */
+    '| append var botline',                     /* Add bottom       */
+    '| specs ~INPUT~ 1 1;* nw',                 /* Add xedit cmd    */
+    '| subcom xedit'                            /* Hand 2 xedit     */
+line    = cursor.5+2
+column  = '9'
+Return
+ 
+ 
+Make_PBox:
+/*--------------------------------------------------------------------+
+| Insert a BOX in a PIPE......                                        |
++--------------------------------------------------------------------*/
+Call Make_Box
+line    = cursor.5-2
+'CAPPEND ,'
+line    = cursor.5+2
+column  = '9'
+Return
+ 
+ 
+Make_Com:
+/*--------------------------------------------------------------------+
+| Change line to comment                                              |
++--------------------------------------------------------------------*/
+Do i = '1' To Times
+  ':'line
+  'CLOCATE :1'
+  'CINSERT /* '
+  'CAPPEND  */'
+  line = line+1
+End i
+line   = cursor.5
+column = cursor.6
+Return
+ 
+ 
+Make_Pipe_Comm:
+/*---------------------------------------------------------------+
+| Append a comment at the end of the line...                     |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR'
+lineno=cursor.3
+/*---------------------------------------------------------------+
+| Find the end of the PIPE statement and comment to there        |
++---------------------------------------------------------------*/
+If times='*' Then Do
+      ':'line
+      oldpos=line
+      'EXTRACT /CURLINE'
+      quot=Substr(Strip(curline.3),1,1)
+      If quot="'" Then "LOCATE /' /"
+                  Else 'LOCATE /" /'
+       'EXTRACT /CURSOR/CURLINE/LINE'
+       Times=line.1-oldpos+1
+       line=oldpos
+     End
+/*---------------------------------------------------------------+
+| Do the changes                                                 |
++---------------------------------------------------------------*/
+Do i = '1' To Times
+  ':'line
+  'EXTRACT /CURLINE'
+/*---------------------------------------------------------------+
+| Check if there is already a comment at the end                 |
++---------------------------------------------------------------*/
+  strcom=Wordpos(' /* ',curline.3)
+  endcom=Wordpos(' */ ',curline.3)
+  If strcom=0 & endcom=0 Then do
+            linelen=Length(curline.3)
+            If linelen>maxcomlen-15 Then Do
+                                         curset=linelen+2
+                                         column=curset+10
+                                         End
+                                    Else Do
+                                         curset=maxcomlen-15
+                                         column=maxcomlen-5
+                                         End
+            'CLOCATE :'curset+1
+            'CREPLACE  /* .'Copies(' ',15)' */'
+            End
+  line=line+1
+End
+line=cursor.5
+/* column=cursor.6 */
+column=1
+Return
+ 
+ 
+Make_Dcm:
+/*--------------------------------------------------------------------+
+| Remove comment statements from line                                 |
++--------------------------------------------------------------------*/
+Do i = '1' To Times
+  ':'line
+  'CLOCATE :1'
+  'CDELETE 3'
+  'CLOCATE :1'
+  'CLOCATE ~ */~'
+  'CDELETE 3'
+  line = line+1
+End i
+line   = cursor.5
+column = cursor.6
+Return
+ 
+ 
+Go_To_End:
+/*--------------------------------------------------------------------+
+| Go to end of line                                                   |
++--------------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+line   = cursor.5
+column = Length(curline.3)+7
+Return
+ 
+ 
+Make_TimeStamp:
+/*--------------------------------------------------------------------+
+| Insert a timestamp                                                  |
++--------------------------------------------------------------------*/
+':'line
+'INPUT Updated: 'Date(S) Time() author
+line   = cursor.5
+column = cursor.6
+Return
+ 
+ 
+VSpec:
+/*---------------------------------------------------------------+
+| Some settings 2 verticalise the specs                          |
++---------------------------------------------------------------*/
+conversion='STRIP B2C D2C F2C I2C P2C V2C X2C C2B C2D C2F',
+           'C2I C2P C2V C2X D2X D2B X2D X2B X2F X2V X2P X2I X2T X2U',
+           'B2D B2X B2F B2V B2P B2I B2T B2U  F2X F2B V2X V2B T2X T2B U2X U2B'
+delimiters='/:;|\}{[]!@#$%5&*()_-+='
+hival='FF'x
+/*---------------------------------------------------------------+
+| Get some details and go to the line                            |
++---------------------------------------------------------------*/
+':'line
+'EXTRACT /CURLINE/CURSOR'
+oldpos=cursor.3                                  /* Where 2 go..     */
+content=curline.3                                /* Take content     */
+Call Prep_Conversions
+Call Change_Details
+Call Extract_Details
+Call Split_Into_Words 'modcontent'
+Call Check_Delims
+Call Check_Singles
+Call Prepare_for_Change
+/*---------------------------------------------------------------+
+| Remove the line we need to change and input the changes        |
++---------------------------------------------------------------*/
+'DELETE 1'                                       /* Remove original  */
+'-1'                                             /* Shift 1 up       */
+Do c=1 To cmd.0
+   cmd.c                                         /* Insert new lines */
+End c
+line    = cursor.5
+column  = '7'
+':'line
+'CHANGE /'||x2c(quote||'6B'||quote||'6B')||'/'||x2c(quote||'6B')||'/ * 1'
+':'line
+Return
+ 
+ 
+Change_Details:
+/*---------------------------------------------------------------+
+| Change some known details                                      |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MANY.XEDIT:1020 END ?)',
+    'var content',                               /* Take this        */
+    '| space 1',                                 /* Compress spacing */
+    '| change ~ ~'hival'~ 1',                    /* Replace this     */
+    conversion,                                  /* Change these     */
+    '| change anycase ~ PAD ~ PAD_~',            /* .and the         */
+    '| change anycase ~ FIELDSEP ~ FIELDSEP_~',  /* ...following     */
+    '| change anycase ~ WORDSEP ~ WORDSEP_~',    /* .                */
+    '| change anycase ~ SUBSTRING ~ SUBSTRING_~', /* .                */
+    '| change anycase ~ SUBSTR ~ SUBSTR_~',      /* .                */
+    '| change anycase ~ FIELD ~ FIELD_~',        /* .                */
+    '| change anycase ~ WORD ~ WORD_~',          /* .                */
+    '| change anycase ~ FS ~ FS_~',              /* .                */
+    '| change anycase ~ WS ~ WS_~',              /* .                */
+    '| change anycase ~ F ~ F_~',                /* .                */
+    '| change anycase ~ W ~ W_~',                /* .                */
+    '| change anycase ~ OF ~_OF_~',              /* .                */
+    '| change anycase ~ NEXTWORD~_NEXTWORD~',    /* .                */
+    '| change anycase ~ NWORD~_NWORD~',          /* .                */
+    '| change anycase ~ NEXTW~_NEXTW~',          /* .                */
+    '| change anycase ~ NEXT~_NEXT~',            /* .                */
+    '| change anycase ~ NW.~_NW.~',              /* .                */
+    '| change anycase ~ NW~_NW~',                /* .                */
+    '| change anycase ~ N.~_N.~',                /* .                */
+    '| change anycase ~ N~_N~',                  /* .                */
+    '| change anycase ~ LEFT~_LEFT~',            /* .                */
+    '| change anycase ~ RIGHT~_RIGHT~',          /* .                */
+    '| change anycase ~ CENTER~_CENTER~',        /* .                */
+    '| var modcontent'                           /* Hand 2 rexx      */
+Return
+ 
+ 
+Prep_Conversions:
+/*---------------------------------------------------------------+
+| Work on the conversions                                        |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MANY.XEDIT:1056 END ?)',
+    'var conversion',                            /* Take these       */
+    '| split',                                   /* Split into recs  */
+    '| specs',                                   /* Compose          */
+            'x4F 1',                             /* .change          */
+            '~CHANGE ANYCASE~ NW',               /* ..for later use  */
+            'xA140 NW',                          /* .                */
+            'w1.1 N',                            /* .                */
+            'x40A140A16D N',                     /* .                */
+            'w1.1 N',                            /* .                */
+            'x6DA1 N',                           /* .                */
+    '| join * x40',                              /* Make 1 record    */
+    '| var conversion'                           /* Hand 2 rexx      */
+Return
+ 
+ 
+Prepare_for_Change:
+/*---------------------------------------------------------------+
+| Preparing for the changes in the file                          |
++---------------------------------------------------------------*/
+modcontent=Word(modcontent,1) specdef
+Address CMS 'PIPE (NAME MANY.XEDIT:1077 END ? STAGESEP !)',
+       'literal 'modcontent,                     /* Take this        */
+       '! split',                                /* Split into words */
+       '! strip',                                /* Remove spaces    */
+       '! if: if pick -1;-1 \== x'quote,         /* No quote at end  */
+       '!    specs 1;* 1 x'quote' n ~,~ n',      /* Append quote&comma*/
+       '! if:',                                  /* Conn 2 if        */
+       '!    specs 1;* 1 ~,~ n',                 /* Append a comma   */
+       '! if:',                                  /* Conn 2 if        */
+       '! t: take first 1',                      /* Take this        */
+       '!    specs 1;* 'spacing,                 /* Adjust position  */
+       '! fi: fanin',                            /* Take in others   */
+       '! change ~'hival'~ ~',                   /* Change these     */
+       '! change ~_~ ~',                         /* .and these       */
+       '! specs ~INPUT~ 1 1;* nw',               /* Add input cmd    */
+       '! stem cmd.',                            /* Hand 2 rexx      */
+       '? t:',                                   /* Conn 2 take      */
+       '! strip',                                /* Remove spaces    */
+       '! specs ~'x2c(quote)'~ 'offset' 1;* n ', /* Add quote&posit  */
+       '! fi:'                                   /* Conn 2 fanin     */
+Return
+ 
+ 
+Check_Singles:
+/*---------------------------------------------------------------+
+| Check all the single words left, those who miss underscore(_)  |
++---------------------------------------------------------------*/
+Call Split_Into_Words 'specdef'
+Do s=1 To specdet.0
+   If Pos('_',specdet.s)=0 Then Do
+           nxt=s+1
+           cmd='| change anycase 'hival||,
+                  specdet.s||' '||,
+                  specdet.nxt||hival||,
+                  specdet.s||'_'||,
+                  specdet.nxt||hival
+           Call Change_SpecDef
+           s=nxt+1
+           End
+End s
+Return
+ 
+ 
+Check_Delims:
+/*---------------------------------------------------------------+
+| Check for delimited strings & prepare a change                 |
++---------------------------------------------------------------*/
+Do s=1 To specdet.0
+   strdlm=Substr(specdet.s,1,1)                  /* Take 1st char    */
+   enddlm=Substr(Reverse(specdet.s),1,1)         /* Take last char   */
+   If strdlm=enddlm &,                           /* Compare & check  */
+      Pos(strdlm,delimiters)<>0 &,
+      Pos(enddlm,delimiters)<>0 Then Do
+              cmd='| change anycase 'hival||,
+              specdet.s||' '||hival||,
+              specdet.s||'_'||hival
+              Call Change_SpecDef
+              End
+End s
+Return
+ 
+ 
+Change_SpecDef:
+/*---------------------------------------------------------------+
+| Change the content of the specdef variable                     |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MANY.XEDIT:1143 END ?)',
+    'var specdef',                               /* Take thss        */
+    cmd,                                         /* Issue change     */
+    '| var specdef'                              /* Hand 2 rexx      */
+Return
+ 
+ 
+Split_Into_Words:
+/*---------------------------------------------------------------+
+| Split the variable into words                                  |
++---------------------------------------------------------------*/
+Parse Upper Arg varname .
+Address CMS 'PIPE (NAME MANY.XEDIT:1155 END ?)',
+   'var 'varname,                                /* Take this        */
+   '| split',                                    /* Split into words */
+   '| stem specdet.'                             /* Hand 2 rexx      */
+Return
+ 
+ 
+Extract_Details:
+/*---------------------------------------------------------------+
+| Extract some details we need 4 processing                      |
++---------------------------------------------------------------*/
+quote=c2x(Substr(Strip(content),1,1))                    /* Find quote char  */
+spacing=Pos(x2c(quote),content)                          /* Where starts txt */
+stagesep=c2x(Substr(Strip(content),2,1))                 /* Get Stagesep     */
+specdet=Translate(Subword(content,2,1))                  /* Keep spec/specs  */
+offset=Pos(specdet,Translate(content))+Length(specdet)   /* Determine offset */
+specdef=Subword(modcontent,2)                            /* Work with this   */
+Return

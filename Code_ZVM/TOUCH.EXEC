@@ -1,0 +1,117 @@
+/*---------------------------------------------------------------+
+| Function : Change a files timestamp                            |
+|                                                                |
+| File     : TOUCH    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TOUCH    <fn> <ft> <fm> <yyyy-mm-dd> <hh:mm:ss>     |
+|                                                                |
+| Comments : If yyyy-mm-dd is entered as 'NOW' then current date |
+|                   and time are used                            |
+|            If hh:mm:dd is entered as 'NOW' then current        |
+|                   time is used                                 |
+|            If in yyyy-mm-dd any of the fields is filled with   |
+|                   = the current value from the file is used    |
+|            If in hh:mm:ss   any of the fields is filled with   |
+|                   = the current value from the file is used    |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180625 12:01:21                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm newyyyy '-' newmo '-' newdd newhh ':' newmm ':' newss .
+Parse Source . . myfn .
+Parse Source . . myfn myft .
+if fn='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME MANY.XEDIT:172 END ?)',
+                           '< 'myfn myft' *',
+                           '| tolabel Parse',
+                           '| cons'
+                           Exit
+          End
+If fn='' Then Exit 28
+If ft='' Then Exit 28
+If fm='' Then Exit 28
+'VMFCLEAR'
+/*---------------------------------------------------------------+
+| Check newdate                                                  |
++---------------------------------------------------------------*/
+Select
+When newyyyy <> ''   Then Parse Value Get_File_Info('VAR') With . . . ,
+                                         fileyyyy'-'filemo'-'filedd ,
+                                         filehh':' filemm':'filess .
+When newyyyy = 'NOW' Then Do
+              'PIPE (end ?)',
+                  'literal ',
+                  '| timestamp 20',
+                  '| dateconv rexx_date_s isodate',
+                  '| var workdate'
+              Parse Value workdate With newyyyy '-' newmo '-' newdd .
+              Parse Value Time()   With newhh   ':' newmm ':' newss .
+              End
+Otherwise Exit 38
+End
+/*---------------------------------------------------------------+
+| If any equal signs found....                                   |
++---------------------------------------------------------------*/
+If newyyyy= '=' Then newyyyy=fileyyyy
+If newmo  = '=' Then newmo  =filemo
+If newdd  = '=' Then newdd  =filedd
+/*---------------------------------------------------------------+
+| Check newtime                                                  |
++---------------------------------------------------------------*/
+Select
+When newhh = '' Then Exit 38
+When newhh = 'NOW' Then Parse Value Time() With newhh ':' newmm ':' newss .
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| If any equal signs found....                                   |
++---------------------------------------------------------------*/
+If newhh = '=' Then newhh=filehh
+If newmm = '=' Then newmm=filemm
+If newss = '=' Then newss=filess
+/*---------------------------------------------------------------+
+| Display info...                                                |
++---------------------------------------------------------------*/
+Call Get_File_Info 'CONS'
+/*---------------------------------------------------------------+
+| Actual change                                                  |
++---------------------------------------------------------------*/
+Address CMS 'DMSPLU 'fn ft fm newmo'/'newdd'/'newyyyy newhh':'newmm':'newss
+/*---------------------------------------------------------------+
+| Display changes                                                |
++---------------------------------------------------------------*/
+If rc=0 Then Call Get_File_Info 'CONS'
+Exit
+ 
+ 
+Get_File_Info:
+/*---------------------------------------------------------------+
+| Get some file details                                          |
++---------------------------------------------------------------*/
+Parse Arg what .
+work=''
+/*---------------------------------------------------------------+
+| How are we going to present the outcome                        |
++---------------------------------------------------------------*/
+Select
+When what='CONS' Then out='| 'what
+When what='VAR'  Then out='| 'what' work'
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Get the file details and return them                           |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'literal 'fn ft fm,                         /* Take this       */
+    '| statew isodate',                         /* Check date      */
+    '| specs w1.3 1 w8.2 nw',                   /* Keep this       */
+    out                                         /* ...depends....  */
+If rc<>0 Then Exit rc
+Return work

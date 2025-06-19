@@ -1,0 +1,166 @@
+/*---------------------------------------------------------------+
+| Function : Show the LPAR CPU usage (using all cores            |
+|                                                     )          |
+| File     : ALLCPU   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RSCS     EXEC                                       |
+|                                                                |
+| Called   : ALLCPU   <lpar short name>     defaults to ALL      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210203 17:04:29                                   |
+| Changes  : .                                                   |
+|            20220922 H.T.Kramer : Updated for RSCS condensed    |
+|                           output                               |
+|            20220506 H.T.Kramer : Implemented QUIET option      |
+|            20220301 H.T.Kramer : To write files we now use     |
+|                           VMLINK                               |
+|            20220204 H.T.Kramer : Add check for RSCS REXX       |
+|            20211018 H.T.Kramer : Moved output to file and then |
+|                           XEDIT that file                      |
+|            20210927 H.T.Kramer : Rewrite                       |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what . '(' dryrun .
+Parse Source . . myfn myft .
+Numeric Digits 64
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+'VMFCLEAR'
+If what='' Then what='ALL'
+If what='?' Then Do
+          'PIPE (NAME ALLCPU.EXEC:34 END ?)',
+             '< 'myfn myft' *',                  /* Read myself      */
+             '| tolabel Parse',                  /* Up to here       */
+             '| cons'                            /* ...and show      */
+          Exit
+          End
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Ask all nodes                                                  |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+'PIPE (NAME ALLCPU.EXEC:47 END ?)',
+     'cms EXECMAP RSCS REXX',                    /* Ask cms          */
+     '| drop first 1',                           /* Ignore header    */
+     '| pick w1.1 == ~RSCS~ and w2.1 == ~REXX~', /* Check            */
+     '| count lines',                            /* Count findings   */
+     '| var exldd'                               /* Store as         */
+If exldd Then Address CMS 'EXECDROP RSCS REXX'
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'        /* So we use as PIPE*/
+'PIPE (NAME ALLCPU.EXEC:55 END ?)',
+   'rscs QUERY SYSTEM',                          /* Ask RSCS         */
+   '| drop first 2',                             /* Drop header      */
+   '| drop last 1',                              /* Drop trailes     */
+   '| specs w2.1 1 w3.1 nw',                     /* Keep this        */
+   '| l: locate anycase ~CONNECT~',              /* Select these     */
+   '| specs w1.1',                               /* Reduce 2 this    */
+   '| fi: faninany',                             /* Take in others   */
+   '| stem node.',                               /* Store as         */
+   '? l:',                                       /* Conn 2 locate    */
+   '| specs w1.1',                               /* Keep this        */
+   '| join * x40',                               /* Make 1 record    */
+   '| specs ~LINK(s) not operating:~ 1 1;* nw',  /* Compose line     */
+   '| cons',                                     /* Show             */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1 1',                             /* Keep this        */
+   '| fi:'                                       /* Conn 2 faninany  */
+out.0=0
+Do n=1 To node.0
+'PIPE (NAME ALLCPU.EXEC:75 END ?)',
+   'rscs 'node.n' CP INDICATE',                  /* Ask RSCS to get..*/
+   '| n: nlocate ~DMTCMX304E~',                  /* Remove these     */
+   '| specs w1.1 1 w2;* nw',
+   '| locate ~PROC~',                            /* Select these     */
+   '| if: if pick w2.1 == ~PROC~',               /* If this          */
+   '|     specs w1.5 1 ~;~ n w1.1 nw w6;* nw',   /* Prep 4 split     */
+   '| if:',                                      /* Conn 2 if        */
+   '| split at ;',                               /* Split m          */
+   '| strip',                                    /* Remove spaces    */
+   '| l: locate ~AVGPROC~',                      /* Select these     */
+   '| specs w-1;-1 1',                           /* Keep this        */
+   '| var noifls',                               /* Store as         */
+   '? l:',                                       /* Conn 2 locate    */
+   '| specs fs - w1.1 1.8 substr w1.1 of f2 nw',   /* Rework records   */
+   '| join keylen 8',                            /* Join on node     */
+   '| spec w2;*',                                /* Keep this        */
+   '| change ~%~~',                              /* Remove this      */
+   '| var percperifl',                           /* Store as         */
+   '| split',                                    /* Split them       */
+   '| specs printonly eof',                      /* Calcul total     */
+   '        a: w1.1 .',                          /* .                */
+   '        set #0+=a',                          /* .                */
+   '        eof',                                /* .                */
+   '        print #0 1',                         /* .                */
+   '| var totperc'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Calculate average...                                           |
++---------------------------------------------------------------*/
+avgperc=Right(Strip(Format((totperc/(noifls*100)*100),3,2)),6,'0')
+'PIPE (NAME ALLCPU.EXEC:104 END ?)',
+   'rscs 'node.n' CP QUERY PROC',                /* Ask rscs         */
+   '| specs w2.1 1.8 w5;* nw',
+   '| pick anycase w2.1 \== ~RETURN~ and',
+                  'w3.1 \== ~CODE~',
+   '| change w1.1 ~:~~',
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs w1.1 1.8 w4.1 nw',                   /* Keep this        */
+   '| sort count',                               /* Count them       */
+   '| specs 11.8 1.8',                           /* Rework layout    */
+           'pad space',                          /* .                */
+           '1.10 strip nw.2 right',              /* .                */
+           '20;* nw',                            /* .                */
+   '| join keylen 8',                            /* Join on node     */
+   '| specs w2.1 1.3 right',                     /* Keep this        */
+           'w3.1 nw',                            /* and rework..     */
+           'w4.1 nw.3 right',                    /* .                */
+           'w5.1 nw',                            /* .                */
+           'w6.1 nw.3 right',                    /* .                */
+           'w7.1 nw',                            /* .                */
+           'w8.1 nw.3 right',                    /* .                */
+           'w9.1 nw',                            /* .                */
+   '| var proc',                                 /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| pick w4.1 \== ~STANDBY~',
+   '| count lines',                              /* Count them       */
+   '| var cores'                                 /* Store as         */
+out=node.n avgperc noifls cores Strip(totperc) percperifl ';' proc
+'PIPE (NAME ALLCPU.EXEC:128 END ?)',
+   'var out',                                    /* Take this        */
+   '| stem out. append'                          /* Add 2 stem       */
+End n
+If \exldd Then Address CMS 'EXECDROP RSCS REXX'
+/*---------------------------------------------------------------+
+| Final display                                                  |
++---------------------------------------------------------------*/
+hdr='........ CPU%   IFLs  Cores TotPerc Percentages/IFL',
+    Copies(' ',36)'#IFLs and their status'
+'PIPE (NAME ALLCPU.EXEC:138 END ?)',
+    'stem out.',                                 /* Take these       */
+    '| specs w1.1 1.8',                          /* Refine layout    */
+            'w2.1 nw.6 right',                   /* .                */
+            'w3.1 nw.4 right',                   /* .                */
+            'w4.1 nw.6 right',                   /* .                */
+            'w5.1 nw.7 right',                   /* .                */
+            'fs ;',                              /* .                */
+            'substr w6;* of f1 nw.50',           /* .                */
+            'f2 nw',                             /* .                */
+    '| sort w2.1 d',                             /* Sort on CPU %    */
+    '| preface var hdr',                         /* Add hdr          */
+    '| preface literal 'TimeStamp(),
+    '| > 'myfn' OVERVIEW 'wfm                    /* Show             */
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

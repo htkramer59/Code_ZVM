@@ -1,0 +1,66 @@
+/**/
+Parse Upper Arg id quin '(' test .
+If id='' Then Exit 28
+If quin='' Then quin='RDR PRT'
+If test='' Then test=1
+           Else test=0
+Do q=1 To Words(quin)
+qu=Word(quin,q)
+Say 'Processing 'qu
+'PIPE (end ?)',
+     'CP Q 'qu id' ALL',
+     '| drop first 1',
+     '| pick w-2;-2 \== ~OPEN-~',
+     '| n: nlocate ~DIRMAINT~',
+     '| p: pick w1.1 == ~'id'~ and w4.1 == ~CON~',
+     '| stem conp.',
+     '? n:',
+     '| stem remo.',
+     '? p:',
+     '| stem rest.'
+ 
+If remo.0<>0 Then Do
+      Say 'Possible remove:'
+      'PIPE stem remo.',
+         '| cons'
+      what='Remove'
+      If \test Then Queue 'Y'
+      If YesNo() Then Do
+      'PIPE stem remo.',
+          '| specs ~PURGE 'id qu'~ 1 w2.1 nw',
+          '| cons',
+          '| cp',
+          '| cons'
+      End
+    Say
+    End
+If conp.0<>0 Then Do
+      Say 'Possible conpark:'
+      'PIPE stem conp.',
+         '| cons'
+      what='Move 2 conpark'
+      If \test Then Queue 'Y'
+      If YesNo() Then Do
+      'PIPE stem conp.',
+          '| specs ~TRANSFER 'id qu'~ 1 w2.1 nw ~CONPARK RDR~ nw',
+          '| cons',
+          '| cp',
+          '| cons'
+      End
+    Say
+    End
+If rest.0<>0 Then Do
+      Say 'Unidentified:'
+      'PIPE stem rest.',
+         '| cons'
+      End
+End q
+Exit
+ 
+YesNo:
+Say
+Say  what 'YES/NO'
+Parse Upper Pull yesno .
+If Abbrev(yesno,'Y',1) Then rrc=1
+                       Else rrc=0
+Return rrc

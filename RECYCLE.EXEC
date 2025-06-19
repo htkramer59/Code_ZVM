@@ -1,0 +1,95 @@
+/*---------------------------------------------------------------+
+| Function : FORCE and XAUTOLOG a user id                        |
+|                                                                |
+| File     : RECYCLE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : TRACKVxx MODULE                                     |
+|                                                                |
+| Called   : RECYCLE  <user id> '(' <show>                       |
+|                                                                |
+|            <show>   Can only be CONS and will start TRACK(Vxx) |
+|                     with the CONS parameter                    |
+|                                                                |
+| Comments : Requires CP CLASS A for FORCE & XAUTOLOG            |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180529 06:57:46                                   |
+| Changes  : .                                                   |
+|            20230313 H.T.Kramer : Update so we can use it       |
+|                          without console/disconnected          |
+|            20220308 H.T.Kramer : Select the TRACKVxx MODULE    |
+|                          for the CP LEVEL                      |
+|            20201214 H.T.Kramer : Put a default for show in     |
+|                          LASTING GLOBALV:                      |
+|                          globalv select recycle setlp show cons|
+|            20200702 H.T.Kramer : Do a XAUTOLOG,,               |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg userid wait  '(' show .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Check the input                                                |
++---------------------------------------------------------------*/
+If userid='' Then Call Exit 28 'No input'
+If userid='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME RECYCLE.EXEC:40 END ?)',
+              '< 'myfn myft' *',
+              '| tolabel Parse',
+              '| cons'
+          Call Exit
+          End
+If wait='' Then wait='IMMED'
+If show='' Then show=Value('SHOW',,'LASTING 'myfn)
+/*---------------------------------------------------------------+
+| Starting the action                                            |
++---------------------------------------------------------------*/
+Address COMMAND 'CP FORCE 'userid wait
+If rc<>0 & rc<>45 Then Call Exit rc 'Nonzero rc from FORCE'
+Address COMMAND 'CP SLEEP 1 SEC'
+Address COMMAND 'CP XAUTOLOG 'userid
+/*---------------------------------------------------------------+
+| Do we track the user id or not                                 |
++---------------------------------------------------------------*/
+If show='CONS' Then Do
+/*---------------------------------------------------------------+
+| Check if we have access to the tracking stuff...               |
++---------------------------------------------------------------*/
+          'PIPE (NAME RECYCLE.EXEC:62 END ?)',
+              'cp QUERY CPLEVEL',                /* Which level      */
+              '| take first 1',                  /* Keep this        */
+              '| specs ~TRACKV~ 1',              /* Compose          */
+                      'w3.1 n',                  /* ...module        */
+                      ' substr 1.1 of w5.1 n',   /* ......name       */
+              '| var trackmodule',               /* Hand 2 rexx      */
+              '?',                               /* 2nd pipe         */
+              'cp QUERY USER 'Userid(),          /* Check this       */
+              '| space 0',                       /* Remove spacing   */
+              '| pick fs - f2 == ~DSC~',         /* Select this      */
+              '| count lines',                   /* Count findings   */
+              '| var disco'                      /* Hand 2 rexx      */
+          'PIPE (NAME RECYCLE.EXEC:75 END ?)',
+              'literal 'trackmodule' MODULE',    /* Give this        */
+              '| state',                         /* Check if existes */
+              '| count lines',                   /* Count findings   */
+              '| var trackmod'                   /* Hand 2 rexx      */
+          If trackmod & \disco Then Do
+                    Address COMMAND 'CP SLEEP 1 SEC'
+                    Address CMS trackmodule userid' CONS'
+                   End
+                   Else Call Exit rc 'TRACK MODULE not found'
+          End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General purpose exit                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc emsg
+If \Datatype(exrc,'NUM') Then exrc=0
+If exrc<>'0' Then Say emsg
+Exit exrc

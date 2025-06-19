@@ -1,0 +1,64 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+    Y(n)      Column include.  Enter Y (as in Yes) above each column
+ or YYYYYY    which you desire to INCLUDE when using XEDIT prefix or
+ or Y*        subcommand. Text in other columns are not altered.  Y* will
+              include columns up to and including the ending zone.
+ 
+    ^(n)      Column exclude.  Enter ^ (as in NOT) above each column
+ or ^^^^^^    which you desire to EXCLUDE when using XEDIT prefix or
+ or ^*        subcommand.  Columns which are excluded are not altered. ^*
+              will exclude columns up to and including the ending zone.
+ 
+              The Y ^ commands are mutually exclusive since they are the
+              inverse of each other.  See the Reset COL PREFIX command
+              RESET to reset the command line.
+ 
+              EXAMPLE:  ????????????????????????YYYYYYYYYYYYYYYYYYYYYYYYY?
+                  =====    1    a    v          Joe      1234
+                  m====    2    b    w          Gary     4321
+                  =====    3    c    x          Jim      5432
+                  f====    4    d    y          Tom      5555
+                  =====    5    e    z          Bill     4679
+              yields:
+                  =====    1    a    v          Joe      1234
+                  =====    2    b    w          Jim      5432
+                  =====    3    c    x          Tom      5555
+                  =====    4    d    y          Gary     4321
+                  =====    5    e    z          Bill     4679
+ 
+              EXAMPLE:  ????????????????????????YYYYYYYYYYYYYYYYYYYYYYYYY?
+                  =====    1    a    v          Joe      1234
+                  =====    2    b    w          Gary     4321
+                  =====    3    c    x          Jim      5432
+                  =====    4    d    y          Tom      5555
+                  =====    5    e    z          Bill     4679
+                  ====> PUT * fn ft fm
+ 
+              Will put the data in the column marked with "Y"s into
+              the file fn ft fm.
+.cs 7 on
+                     COLumn Edit Column Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL COLMCMD5 (ALL       Y,^    Exclude columns from XEDIT PREFIX commands
+COL COLMCMDS (ALL       +      Add or sum numbers in a column
+COL COLMCMD2 (ALL       N      Place sequence numbers in a column
+COL COLMCMD3 (ALL       E      Emulate (copy forward) data down a column
+COL COLMCMD3 (ALL       _      Blank duplicate or redundant data ("de-emulate")
+COL COLMCMD3 (ALL       !      Insert blank separator lines when data changes
+COL COLMCMD4 (ALL       S,G    Sort data within a column
+COL COLMCMD6 (ALL       \      Reverse the command or swap column end for end
+COL MATHCMDS (BRIEF     math   Mathematical operations between columns
+COL MATHCMDS (BRIEF     logic  Logic operations between columns
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

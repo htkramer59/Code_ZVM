@@ -1,0 +1,208 @@
+/*---------------------------------------------------------------+
+| Function : Show LPAR CPU utilisation                           |
+|                                                                |
+| File     : HOB-LPAR EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : TOPTEN   EXEC   needs to be execloaded as rexx      |
+|            FCX      EXEC   idem                                |
+|                                                                |
+| Called   : HOB-LPAR .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220114 17:11:05                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOB-LPAR.EXEC:28 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+Parse Value lpar With yellow red .
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status           /*  Send the result in status to bb */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOB-LPAR.EXEC:39 END ?)',
+                 'var status',                   /* Take this        */
+                 '| split at x15',               /* Split            */
+                 '| strip',                      /* Remove spaces    */
+                 '| cons'                        /* Show             */
+               End
+Exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Set totalcpu and ask the node id                               |
++---------------------------------------------------------------*/
+totalcpu  = 0
+'PIPE (NAME HOB-LPAR.EXEC:53 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Do some queries and return result                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOB-LPAR.EXEC:62 END ?)',
+   'cp QUERY MULTITHREAD',                       /* Ask cp           */
+   '| take first 1',                             /* Keep 1st line    */
+   '| fi1: fanin',                               /* Take this        */
+   '| fi2: fanin',                               /* and this         */
+   '| join * x15',                               /* Make 1 record    */
+   '| var status',                               /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'fcx LSHARACT',                               /* Ask perfkit      */
+   '| pick w2.1 == ~'node'~',                    /* Select this      */
+   '| specs w6.1',                               /* Keep this        */
+   '| var entitlement',                          /* Store as         */
+   '| specs ~Entitlement ==>~ 1',                /* Compose a line   */
+           'w1.1 nw',                            /* .                */
+           'x154014 nw',                         /* .                */
+   '| fi1:',                                     /* Conn 2 fanin     */
+   '?',                                          /* 3rd pipe         */
+   'fcx LPAR',                                   /* Ask perfkit      */
+   '| inside anycase / Partition/ / General LPAR/',   /* Keep this        */
+   '| specs 2-10 1 56-60 nw',                    /* Keep these cols  */
+   '| join * x40',                               /* Make 1 record    */
+   '| split before string ~R1~',                 /* Split here       */
+   '| pick w1.1 == ~'node'~',                    /* Select node      */
+   '| f: fanout',                                /* Duplicate record */
+   '| specs w1.1 1 ~_~ n',                       /* Keep this        */
+   '| j: juxtapose',                             /* Join with values */
+   '| fi2:',                                     /* Conn 2 fanin     */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2;*',                               /* Keep this        */
+   '| split',                                    /* Split them       */
+   '| specs recno 1.1',                          /* Add record no    */
+           'b: w1.1 .',                          /* .and             */
+           'print b pict zz9.99 nw',             /* ...adjust number */
+   '| j:',                                       /* Conn 2 juxtapose */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2;*',                               /* Keep this        */
+   '| split',                                    /* Split them       */
+   '| specs printonly eof',                      /* Summ these values*/
+           'a: w1.1 .',                          /* .                */
+           'set #0+=a',                          /* .                */
+           'eof',                                /* .                */
+           'print #0 pict zz9.99 nw',            /* .                */
+   '| var totalcpu',                             /* Store as         */
+   '| specs ~Total: ~ 1 w1.1 nw.6 right',        /* Compose record   */
+   '| fi2:'                                      /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Check the value and do settings                                |
++---------------------------------------------------------------*/
+avg=(totalcpu/entitlement)*100
+Select
+  When avg > red Then Do
+    color='red'
+    msg = 'General Processor LPAR entitlement exceeds threshold:' red '%'
+    End
+  When avg > yellow Then Do
+    color='yellow'
+    msg = 'General Processor LPAR entitlement exceeds threshold:' yellow '%'
+    End
+  Otherwise Do
+    color='green'
+    msg = 'General Processor LPAR entitlement within thresholds'
+    End
+End
+If avg > yellow Then Call TopTen
+                Else topten=''
+status='status' machine||'.lpar' color TimeStamp('TZ') msg cr cr status cr cr topten
+Return
+ 
+ 
+TopTen:
+/*---------------------------------------------------------------+
+| Get the topten users for this system                           |
++---------------------------------------------------------------*/
+'PIPE (NAME HOB-LPAR.EXEC:135 END ?)',
+   'topten',                                     /* Ask perfkit      */
+   '| preface literal Top ten users on 'node':', /* Add header       */
+   '| join * x15',                               /* Join lines       */
+   '| var topten'                                /* Store as         */
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCLPAR'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOB-LPAR.EXEC:201 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

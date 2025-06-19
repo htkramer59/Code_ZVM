@@ -1,0 +1,163 @@
+* This NAMES file is built from a template in $DRMNAM$ EXEC
+* >>> extra tags & comment lines must be added in $DRMNAM$ EXEC too.
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+* ******* definitions for the main part of DRM ****************** *
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+:nick.DRM
+* --- :DirFile. ------ Indicate here the default directory fn, ft ( fm )
+*               Default: if no DIRMAINT: USER DIRECT
+*                        if DIRMAINT:    USER BACKUP
+*               (DIRMAINT is assumed if file ACCESS DATADVH * exists)
+*               (>>>When DRMGUI is used, this tag is ignored    <<<)
+*               (>>> the $DRMGETD EXEC constructs the "dirfile" <<<)
+*               (>>> using ":DirmCode." and ":DirPlace." tags   <<<)
+* :DirFile.VMUSERS DIRECT
+ 
+* --- :OutFm. -------- Output files disk
+*               In case you don't want DRM's and DIRMAP's output files
+*               on your A-disk code a filemode, or "=" to use the same
+*               fmode as the directory source (if it is R/W)
+* :OutFm.D
+* :OutFm.=
+ 
+* --- :DirMapOpts. --- Indicate here any DIRMAP option wanted
+*                 Issue DIRMAP ? to find all options DIRMAP knows.
+*                 We recommend EXCLUDE, so when you have an file named
+*                 EXCLUDE VOLSERS, DIRMAP ignores the listed volumes
+*                 If you have special 3390 sizes, specify FULLPACK too
+*                 and create a FULLPACK DEFINES file (cfr DIRMAP HELPCMS)
+  :dirmapOpts.EXCLUDE INCLUDE
+ 
+* --- :DirectCm. ----- What is the module to write the dorectory
+*                In cause you do use non-default DIRECT modules, indicate
+*                the name here, for execs, code :DirectCm.EXEC execname
+*                Default: DIRECTXA on VM/XA and VM/ESA systems, else
+*                DIRECT.  Note: a DRM option can override this.
+* :directcm.EXEC DIRECTXA
+ 
+* --- :DirectOpts. --- Any options for the DIRECT command ?
+*                When migrating from VM/SP to VM/ESA, MIXED NOMIXMSG can
+*                be very useful.
+* :directopts.MIXED NOMIXMSG
+ 
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+* ******* definitions for the DRMAC part of DRM ***************** *
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+:nick.DRMAC
+*--- :DirSource. ------ Where is the CP directory source located ?
+*                Format:  :DIRSOURCE.userid cuu ReadPw MultPw
+*                Default: if no DIRMAINT:
+*                          - <  zVM 6.2:  MAINT 2C2 READ MULTIPLE
+*                          - >= zVM 6.2:  PMAINT 2C2 READ MULTIPLE
+*                         if DIRMAINT R5: DIRMAINT 1DB RDIRM MDIRM
+*                (DIRMAINT is assumed if file ACCESS DATADVH * exists)
+*                (and if product xVMDIRxx is enabled; eg. 6VMDIR20   )
+*               (>>>When DRMGUI is used, this tag is ignored    <<<)
+*               (>>> the $DRMGETD EXEC constructs the "dirfile" <<<)
+*               (>>> using ":DirmCode." and ":DirPlace." tags   <<<)
+* :DirSource.MAINT 191 RMAINT MMAINT
+ 
+*--- :DirObject. ------ Where is the CP object directory located ?
+*                Format:  :DIROBJECT.vdev userid cuu MultPw
+*                Default: 123  MAINT 123 MSYSRES
+* :DirObject.123 FULLPACK 2034 MPFULLPK
+ 
+*--- :DirectXA_loc.---- Where is the DIRECTXA command located ? (zVM 6.2)
+*                Format:  :DIREXTXALOC.userid cuu readPw
+*                Default: PMAINT 551 ALL
+* :DirectXA_loc.PMAINT 551 READ
+ 
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+* ******* definitions for the FREEMAP part of DRM *************** *
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+:nick.FREEMAP
+*----------- execute Q LINKS cuu when querying who owns an mdisk (PF9)
+*              Set to 1 to do it   ** but set to 1 only if you can LINK
+*              ** but set to 1 only if you can LINK without passwords
+*              ** (eg you have OPTION LNKNOPAS or RACF privileges)
+*              (Still ignored by DIRMGUI, it always links)
+  :QLINKS.1
+ 
+*----------- Do we show userid & CUU for big minidisks ? ------------
+*              (Still ignored by DIRMGUI, always shows owner if possible)
+  :ShowMdisk.1
+ 
+*----------- DRM uses characters to represent a cylinder:
+*            Default:
+*            -disks of LOGGED ON users is shown with uppercase chars
+*            -disks of LOGGED OFF users is shown with lowercase chars
+*            -stuff that is "hard to move" is shown with specials chars
+*            An alternative: varying low/upp-case ; high alphabet= LOGON
+*                       :CHARSlogon.SsTtUuVvWxXwYyZz
+*                       :CHARSlogoff.AaBbCcDdEeFgGgHhIiJjKkLl
+  :CHARSlogoff.zabcdefghijklmnopqrstuvxwy
+  :CHARSlogon.ZABCDEFGHIJKLMNOPQRSTUVXWY
+  :CHARShard.%$:/;
+*
+* DRMGUI marks an Mdisk to move with a special character; similar, GAPs
+* to move an Mdisk to are marked as well.
+* Here you can define a system wide default.  The end-user's preference
+* will be stored in his LASTING GLOBALV file.
+* On OS/2 any char can be used, so we select something nice below X40
+* on MSW the choice seems more limited.
+* You code a character, or a hex value
+*
+  :DfltMapCharMSW.@
+  :DfltGapCharMSW..
+  :DfltMapCharOS2.37
+  :DfltGapCharOS2.06
+*
+*----------- Users that are hard to move
+  :NOMOVEusers.$ALLOC$ $DIRECT$ $PAGE$ $SPOOL$ $SYSCKP$ $SYSWRM$ $TDISK$ DIRMAINT
+*----------- Mdisks hard to move
+  :NOMOVEmdisks.MAINT 190 MAINT 19E MAINT 0CF1 MAINT 0CF2
+*
+* Is DFSMS installed ? and if "1" where is it's code? who is SMSMASTR ?
+  :HaveDFSMS.1
+  :SMScode.DFSMS 1B5
+  :SMSmaster.SMSMASTR
+*
+* About DIRMAINT: what is its userid and,
+*    can it move OS formatted Mdisks ?
+*    can it move CMS RESERVED Mdisks ?
+  :DirmSrv.DIRMAINT
+  :DirmOS.0
+  :DirmRsvd.0
+*
+* When DIRMAINT is used, where do we find DVHILZBM REXX ?
+*                        where is USER DIRECT found ?
+* :DirmCode.DIRMAINT 191
+  :DirPlace.DIRMAINT 1DF
+******/
+* Set TAILOROK to 1, avoids prompting end-user for settings
+  :TailorOK.1
+*
+* With DYNFILTER the DRM end-user can request DRM to hide volumes in
+* the GAPFILE so that they are no longer candidates to get MDISKs
+* allocated on them.  For example: you could make disk groups
+*  - Volumes that are PPRC copied or not
+*  - Volumes you want to contain z/VM SYSTEM stuff, or end-users, etc
+* Such a :NICK.word :TYPE.DYNFILTER defines a group of disks:
+*  -Tag :INFO. is a text to display to the end-user (optional)
+*  -Tags :VOLSxxx. contain a list of volsers.  As tag data cannot grow
+*   longer than 255 chars, you can use as many :VOLSxxx. tags as you like
+*   You can write "fn.ft.fm" instead of a volid to include a CMS file.
+ 
+:nick.VMSYS :type.DYNFILTER :Info.Disks reserved for z/VM System Software
+ :VOLS1.540RES 540W01 540W02
+ :VOLS2.540W03 Geen.disks
+ 
+:nick.VMBRSSYS :type.DYNFILTER :Info.BCRS disks for z/VM System Software
+ :VOLS1.ZV54RS ZV54SP ZV54W1 ZV54W2 ZV54PG
+:nick.VMBRS :type.DYNFILTER :Info.BCRS disks for BCRS stuff
+ :VOLS2.VMBCRS VMBCR2 VMBCRM VMBCR3 VMBCRN
+ 
+:Nick.VMSYS6 :type.DynFilter :Info.Systems disks z/VM 6.2
+ :vols1.M01P01 M01RES M01S01
+ :vols1.M01W01 VMCOM1 VMCOM2
+ :vols1.620RL1 620RL2
+ 
+ 
+:nick.PPRC :type.DYNFILTER :Info.Disks with PPRC copy active
+ :VOLS1.PPRCVOLS.VOLSERS
+ 

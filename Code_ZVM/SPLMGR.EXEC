@@ -1,0 +1,929 @@
+/*---------------------------------------------------------------+
+| Function : manage the spool area's of several systems          |
+|                                                                |
+| File     : SPLMGR   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SPLMGR   NAMES   control file                       |
+|            SPLMGR   <fn>    various output files               |
+|            RSCS     EXEC    tool to talk to RSCS               |
+|            SICONV   REXX    converion pipe stage               |
+|            SFLIST   MODULE  spool file peek tool               |
+|                                                                |
+| Called   : SPLMGR   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220720 12:52:06                                   |
+| Changes  : .                                                   |
+|            20221104 H.T.Kramer : Made it so the queues are     |
+|                     displayed in the order they were defined   |
+|            20221028 H.T.Kramer : Fixed problem with CP PURGE   |
+|            20220920 H.T.Kramer : Adapted so we can remove      |
+|                     dist codes like DVHDAILY, etc.             |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what . '(' options
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Where are we running                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME SPLMGR.EXEC:33 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| What to do next                                                |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC'  Then Call ExecCode
+When myft='REXX'  Then Call PipeCode
+When myft='XEDIT' Then Do
+            Select
+            When what=myfn    Then Call XeditCode
+            When what='PEEK'  Then Call PeekCode
+            When what='PURGE' Then Call PurgeCode
+            When what='MOVE2' Then Call Move2Code
+            Otherwise Nop
+            End
+          End
+Otherwise Call Exit '28 Do not understand 'myft
+End
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+ExecCode:
+/*---------------------------------------------------------------+
+| Preparing                                                      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+Call ReadNames
+/*---------------------------------------------------------------+
+| Exec loading stuff we need, if there is something to load      |
++---------------------------------------------------------------*/
+If loadlist<>'' Then Do
+                'PIPE (NAME SPLMGR.EXEC:79 END ?)',
+                   'var loadlist',               /* Take this        */
+                   '| split at ;',               /* Split here       */
+                   '| specs ~EXECLOAD~ 1 1;* nw', /* Compose cmds     */
+                   '| cms'                       /* Hand 2 cms       */
+                End
+/*---------------------------------------------------------------+
+| Determine if we are using RSCS or SSI                          |
++---------------------------------------------------------------*/
+If type='RSCS' Then rscs=1
+               Else rscs=0
+Select
+When type='RSCS' &,
+     nodes='*' Then Call GetLpars
+When type='SSI' &,
+     nodes='*' Then Call GetLpars
+Otherwise Nop
+End
+'PIPE (NAME SPLMGR.EXEC:97 END ?)',
+   'var nodes',                                  /* Take these       */
+   '| split',                                    /* Split here       */
+   '| stem lpar.',                               /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cms q DISPLAY',                              /* Ask cms          */
+   '| specs w3.1 1',                             /* Keep this        */
+   '| var maxlen'                                /* Hand 2 rexx      */
+If rscs Then Do
+             part1='~RSCS~ 1'
+             part2=''
+             End
+        Else Do
+             part1='~CP AT~ 1'
+             part2='~CMD~ nw'
+             End
+/*---------------------------------------------------------------+
+| Determine what to do according to the input file               |
++---------------------------------------------------------------*/
+list=''
+Call Collect_Alloc_Info
+If clean |,
+   console |,
+   files |,
+   spool then Call Collect_Spool_Info
+If clean   Then Call CleanFiles
+If console Then Call Move2Collector
+If q_alloc Then Call CreateAlcOvrv
+If files   Then Call CreateCntOvrv
+If spool   Then Call CreateSplOvrv
+If dump    Then Call CreateDmpOvrv
+If nss     Then Call CreateNssOvrv
+If list<>'' Then Do
+        'PIPE (NAME SPLMGR.EXEC:130 END ?)',
+            'var list',                          /* Take this        */
+            '| split at ;',                      /* Split here       */
+            '| sort w1.1 d',                     /* Sort on nr       */
+            '| specs w2;*',                      /* Keep this        */
+            '| t: take first 1',                 /* Take only 1      */
+            '| var firstfile',                   /* Hand 2 rexx      */
+            '? t:',                              /* Conn 2 take      */
+            '| specs ~XEDIT~ 1 w1;* nw',         /* Compose cmds     */
+            '| stack'                            /* Stack them       */
+         Address CMS 'XEDIT 'firstfile
+         End
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME SPLMGR.EXEC:145 END ?)',
+   'var loadlist',                               /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| specs ~EXECDROP~ 1 w1.1 nw w5.1 nw',       /* Compose cmd      */
+   '| cms'                                       /* Hand 2 rexx      */
+If wfn<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+Collect_Spool_Info:
+/*---------------------------------------------------------------+
+| Collect all the spool file info                                |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Collecting SPOOL FILE info (long!)'
+rdr.0=0
+prt.0=0
+pun.0=0
+Do q=1 To que.0
+  If info Then Say TimeStamp()' *** Collecting info for 'que.q
+  stemname=que.q||'.'
+  Do l=1 To lpar.0
+     If rscs Then cmd='RSCS 'lpar.l' CP QUERY 'que.q' ALL ISO DIST',
+                      '| specs ~'Substr(lpar.l,1,8) que.q'~ 1 w2;* nw'
+             Else cmd='CP AT 'lpar.l' CMD CP QUERY 'que.q' ALL ISO DIST',
+                      '| specs ~'Substr(lpar.l,1,8) que.q'~ 1 1;* nw'
+     'PIPE (NAME SPLMGR.EXEC:170 END ?)',
+        cmd,                                     /* Issue cmds       */
+        '| pick anycase w3.1 \== ~OWNERID~ and', /* Filter out these */
+                       'w3.1 \== ~RETURN~ and',  /* .                */
+                       'w3.1 \== ~NO~',          /* .                */
+        '| stem 'stemname' append'               /* Add 2 stem       */
+  End l
+End q
+/*---------------------------------------------------------------+
+| Remove queues without entries                                  |
++---------------------------------------------------------------*/
+If rdr.0=0 Then 'PIPE (NAME SPLMGR.EXEC:181 END ?) stem que.|buffer|nlocate ~RDR~|stem que.'
+If prt.0=0 Then 'PIPE (NAME SPLMGR.EXEC:182 END ?) stem que.|buffer|nlocate ~PRT~|stem que.'
+If pun.0=0 Then 'PIPE (NAME SPLMGR.EXEC:183 END ?) stem que.|buffer|nlocate ~PUN~|stem que.'
+Return
+ 
+ 
+Move2Collector:
+/*---------------------------------------------------------------+
+| Move console files to console file collector                   |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Starting console collecting section'
+move.0=0
+Do q=1 To que.0
+   stemname=que.q||'.'
+   'PIPE (NAME SPLMGR.EXEC:195 END ?)',
+     'stem 'stemname,                            /* Take this        */
+     '| buffer',                                 /* Prevent loop     */
+     '| p: pick w6.1 == ~CON~ and',              /* Select these and */
+               'w10.1 \== ~OPEN-~',              /* ignore these     */
+     '| stem move. append',                      /* Add 2 stem       */
+     '? p:',                                     /* Conn 2 pick      */
+     '| stem 'stemname                           /* Add leftovers    */
+End q
+If move.0<>0 Then Do
+           If info Then Say TimeStamp() 'Moving files to collector: 'collector
+          'PIPE (NAME SPLMGR.EXEC:206 END ?)',
+            'stem move.',                        /* Take these       */
+            '| buffer',                          /* Prevent loop     */
+            '| specs w1.1 1',                    /* Compose transfer */
+                    '~CP TRANSFER~ nw',          /* ...cmds          */
+                    'w3.1 nw',                   /* .                */
+                    'w2.1 nw',                   /* .                */
+                    'w4.1 nw',                   /* .                */
+                    '~TO 'collector' RDR~ nw',   /* .                */
+            '| stem move.'                       /* Hand 2 rexx      */
+          Call IssueCmds 'move.'
+          End
+Return
+ 
+ 
+CleanFiles:
+/*---------------------------------------------------------------+
+| Remove files indicated in clean_files                          |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Starting cleaning section'
+clean.0=0
+clnwld.0=0
+clncmd.0=0
+'PIPE (NAME SPLMGR.EXEC:229 END ?)',
+  'var clean_fnft',                              /* Take this        */
+  '| split at ;',                                /* Split here       */
+  '| strip',                                     /* Remove spaces    */
+  '| n: nlocate ~*~',                            /* Move wildcards   */
+  '| cons',
+  '| stem cleanf.',                              /* Hand 2 rexx      */
+  '? n:',                                        /* Conn 2 nlocate   */
+  '| specs ~WILDCARD w12.2 /~ 1 w1.2 n ~/~ n',   /* Compose wildcards*/
+  '| stem clnfwld.',                             /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'var clean_dist',                              /* Same as the      */
+  '| split at ;',                                /* .above for       */
+  '| strip',                                     /* .dist codes      */
+  '| n2: nlocate ~*~',                           /* .                */
+  '| stem cleand.',                              /* .                */
+  '? n2:',                                       /* .                */
+  '| specs ~WILDCARD 14.1 /~ 1 w1.1 n ~/~ n',    /* .                */
+  '| stem clndwld.'                              /* .                */
+If cleanf.0<>0 | clnfwld.0<>0 Then Call SelectFiles 'cleanf. clnfwld. 12.2 1.2'
+If cleand.0<>0 | clndwld.0<>0 Then Call SelectFiles 'cleand. clndwld. 14.1 1.1'
+Return
+ 
+ 
+SelectFiles:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Upper Arg stem1 stem2 spc1 spc2 .
+Select
+When stem1='CLEANF.' Then imsg=' The following filename/filetypes will be removed:'
+When stem1='CLEAND.' Then imsg=' The following distribution codes will be removed:'
+Otherwise Call Exit '111 Do not understand 'stem1 stem2
+End
+'PIPE (NAME SPLMGR.EXEC:263 END ?)',
+    'stem 'stem1,                                /* Move stem        */
+    '| buffer',
+    '| stem clean.',                             /* .to the next     */
+    '?',                                         /* .                */
+    'stem 'stem2,                                /* See above        */
+    '| buffer',
+    '| stem clnwld.'                             /* .                */
+If clean.0<>0 Then Do
+     If info Then Do
+          Say TimeStamp() imsg
+          'PIPE (NAME SPLMGR.EXEC:274 END ?)',
+               'stem clean.',                    /* Take these       */
+               '| specs 1;* 35',                 /* Move them        */
+               '| append literal ',              /* Add empty line   */
+               '| cons'                          /* Show them        */
+          End
+     Do q=1 To que.0
+        stemname=que.q||'.'
+        'PIPE (NAME SPLMGR.EXEC:282 END ?)',
+           'stem 'stemname,                      /* Take this stem   */
+           '| buffer',                           /* Prevent loop     */
+           '| space',                            /* Reduce spacing   */
+           '| p: pick w10.1 \== ~OPEN-~',        /* Ignore these     */
+           '| l: lookup w'spc1' w'spc2' details',   /* Compare          */
+           '| specs w1.1 1.8',                   /* Rework outcome   */
+                   'w3.1 nw.8',                  /* .                */
+                   'w2.1 nw.3',                  /* .                */
+                   'w4.1 nw.4',                  /* .                */
+           '| sort',                             /* Sort them        */
+           '| join keylen 21',                   /* Join these       */
+           '| stem clncmd. append',              /* Add to stem      */
+           '?',                                  /* 2nd pipe         */
+           'stem clean.',                        /* Take these       */
+           '| l:',                               /* Conn 2 lookup    */
+           '| fi: fanin',                        /* Take in others   */
+           '| stem 'stemname,                    /* Hand 2 rexx      */
+           '? p:',                               /* Conn 2 pick      */
+           '| buffer',                           /* Prevent loop/stal*/
+           '| fi:'                               /* Conn 2 fanin     */
+     End q
+     End
+If clnwld.0<>0 Then Do
+     new.0=0
+     If info Then Do
+          Say TimeStamp()' Files matching the following wildcards will be removed:'
+          'PIPE (NAME SPLMGR.EXEC:309 END ?)',
+             'stem clnwld.',                          /* Take these       */
+             '| specs fs / f2 35',                    /* Keep this        */
+             '| append literal ',                     /* Add empty line   */
+             '| cons'                                 /* Show them        */
+          End
+     Do q=1 To que.0
+        stemname=que.q||'.'
+        Do c=1 To clnwld.0
+           'PIPE (NAME SPLMGR.EXEC:318 END ?)',
+              'stem 'stemname,                   /* Take these       */
+              '| buffer',                        /* Prevent loop     */
+              '| p: pick w10.1 \== ~OPEN-~',     /* Ignore these     */
+              '| w: 'clnwld.c,                   /* Issue wildcards  */
+              '| stem new. append',              /* Add 2 stem       */
+              '? w:',                            /* Conn 2 wildcard  */
+              '| fi: fanin',                     /* Take in others   */
+              '| stem 'stemname,                 /* Hand 2 rexx      */
+              '? p:',                            /* Conn 2 pick      */
+              '| buffer',                        /* Prevent loop/stal*/
+              '| fi:'                            /* Conn 2 fanin     */
+        End c
+     End q
+     'PIPE (NAME SPLMGR.EXEC:332 END ?)',
+        'stem new.',                             /* Take these       */
+        '| specs w1.1 1.8',                      /* Rework           */
+                'w3.1 nw.8',                     /* .                */
+                'w2.1 nw.3',                     /* .                */
+                'w4.1 nw.4',                     /* .                */
+        '| join keylen 21',                      /* Join the same    */
+        '| stem clncmd. append'                  /* Add 2 stem       */
+     End
+If clndcmd.0<>0 Then Do
+          'PIPE (NAME SPLMGR.EXEC:342 END ?)',
+             'stem clncmd.',                     /* Take these       */
+             '| buffer',                         /* Prevent loop     */
+             '| sort 1.21',                      /* Sort             */
+             '| join keylen 21',                 /* Join same        */
+             '| specs w1.1 1',                   /* Compose cmds     */
+                     '~CP PURGE~ nw',            /* .                */
+                     'w2;* nw',                  /* .                */
+             '| stem clncmd.'                    /* Hand 2 rexx      */
+          Call IssueCmds 'clncmd.'
+          End
+Return
+ 
+ 
+IssueCmds:
+/*---------------------------------------------------------------+
+| Generic code to issue commands at the nodes                    |
++---------------------------------------------------------------*/
+Parse Arg stemname .
+'PIPE (NAME SPLMGR.EXEC:361 END ?)',
+  'stem 'stemname,                               /* Take stem        */
+  '| specs 'part1' w1.1 nw 'part2' w2;* nw',     /* Add some stuff   */
+  '| stem cmd.'                                  /* Hand 2 rexx      */
+Do c=1 To cmd.0
+   If test Then Say '>>>' cmd.c
+           Else Do
+           Address CMS cmd.c
+           End
+End
+Drop cmd. clncmd.
+clncmd.0=0
+Return
+ 
+ 
+Collect_Alloc_Info:
+/*---------------------------------------------------------------+
+| Collect allocation info on spool                               |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Collecting SPOOL ALLOC info'
+Call Collect_Info 'CP QUERY ALLOC SPOOL'
+'PIPE (NAME SPLMGR.EXEC:382 END ?)',
+    'stem work.',                                /* Take these       */
+    '| stem alloc.',                             /* Hand 2 rexx      */
+    '| pick w2.1 == ~USABLE~',                   /* Select this      */
+    '| specs w1.1 1.8 w3.1 nw',                  /* Adjust           */
+    '| siconv w2.1 k2b 12.0',                    /* Convert 2 baseno */
+    '| siconv w2.1 m2b 12.0',                    /* .                */
+    '| specs ~CHANGE w-1;-1 /~ 1',               /* Compose change   */
+             'w1.1 n',                           /* .stmts           */
+             '~/~ n',                            /* .                */
+             'w2.1 n',                           /* .                */
+             '~/~ n',                            /* .                */
+    '| join * x4F',                              /* Make 1 record    */
+    '| specs x4F 1 1;* nw',                      /* Add vert. bar    */
+    '| var alcchn'                               /* HAnd 2 rexx      */
+Return
+ 
+ 
+CreateAlcOvrv:
+/*---------------------------------------------------------------+
+| Create the spool allocation overview                           |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Create a SPOOL ALLOC overview'
+'PIPE (NAME SPLMGR.EXEC:405 END ?)',
+    'stem alloc.',                               /* Take these       */
+    '| specs a: w1.1 .',                         /* Remove some      */
+            '9;* 9',                             /* .dupl. text      */
+            'break a',                           /* .                */
+            'print a 1.8',                       /* .                */
+    '| if: if pick 1.1 \== ~ ~',
+    '|     specs ~;'Copies('-',8)';~ 1 1;* n',
+    '| split at ;',
+    '| if:',
+    '| drop first 1',
+    '| > 'myfn' ALLOC 'wfm                       /* Write 2 file     */
+list=list';10 'myfn' ALLOC 'wfm
+Return
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Issue commands to collect info                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline
+work.0=0
+'PIPE (NAME SPLMGR.EXEC:427 END ?)',
+   'stem lpar.',                                 /* Take this        */
+   '| fo: fanout',
+   '| specs 'part1,                              /* Adjust layout    */
+            'w1.1 nw',                           /* .                */
+             part2,                              /* .                */
+            '~'cmdline'~ nw',                    /* .                */
+   '| stem cmd.',                                /* Hand 2 rexx      */
+   '? fo:',
+   '| count maxline',
+   '| var speclen'
+specstr=speclen+1
+Do c=1 To cmd.0
+   'PIPE (NAME SPLMGR.EXEC:440 END ?)',
+      cmd.c,                                     /* Take cmd         */
+      '| specs w1.1 1.8 'specstr';* nw',
+      '| stem work. append'                      /* Add 2 stem       */
+End c
+Return
+ 
+ 
+CreateCntOvrv:
+/*---------------------------------------------------------------+
+| Creating a filecount per LPAR overview                         |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Showing filecount per user/LPAR'
+'PIPE (NAME SPLMGR.EXEC:453 END ?)',
+    'stem lpar.',                                /* Take these       */
+    '| sort',                                    /* Sort             */
+    '| preface literal Userid',                  /* Add to header    */
+    '| specs w1.1 1.8',                          /* Rework           */
+    '| join * x40',                              /* MAke 1 record    */
+    '| var hdr'                                  /* HAnd 2 rexx      */
+Do q=1 To que.0
+   If q=1 Then out='>'
+          Else out='>>'
+   If q=1 Then pref='| preface literal 'que.q
+          Else pref='| preface literal 'que.q'| preface literal  '
+   stemname=que.q||'.'
+   'PIPE (NAME SPLMGR.EXEC:466 END ?)',
+       'stem 'stemname,                          /* Take this        */
+       '| specs w1.1 1.8 w3.1 nw.8',             /* Adjust layout    */
+       '| sort count w1.2',                      /* Add count        */
+       '| specs 11;* 1',                         /* Adjust layout    */
+               'pad 0 1.10 strip nw.4 right',    /* .                */
+               '~;~ n',                          /* .                */
+       '| sort w1.1 w-1;-1 d',                   /* Sort on count    */
+       '| specs w2.1 1.8 w1.1 nw.8 w3.1 nw',     /* Adjust layout    */
+       '| sort w1.2',                            /* Sort on id/count */
+       '| join keylen 8',                        /* Join on id       */
+       '| if1: if pick w2.1 \== ~R1LA1~',        /* Add empty columns*/
+       '|      specs w1.1 1.8',                  /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w2;* nw',                   /* .                */
+       '| if1:',                                 /* .                */
+       '| if2: if pick w4.1 \== ~R1LA2~',        /* .                */
+       '|      specs w1.3 1',                    /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w4;* nw',                   /* .                */
+       '| if2:',                                 /* .                */
+       '| if3: if pick w6.1 \== ~R1LB1~',        /* .                */
+       '|      specs w1.5 1',                    /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w6;* nw',                   /* .                */
+       '| if3:',                                 /* .                */
+       '| if4: if pick w8.1 \== ~R1LB2~',        /* .                */
+       '|      specs w1.7 1',                    /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w8;* nw',                   /* .                */
+       '| if4:',                                 /* .                */
+       '| if5: if pick w10.1 \== ~R1LO1~',       /* .                */
+       '|      specs w1.9 1',                    /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w10;* nw',                  /* .                */
+       '| if5:',                                 /* .                */
+       '| if6: if pick w12.1 \== ~R1LP1~',       /* .                */
+       '|      specs w1.11 1',                   /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w12;* nw',                  /* .                */
+       '| if6:',                                 /* .                */
+       '| if7: if pick w14.1 \== ~R1LP2~',       /* .                */
+       '|      specs w1.13 1',                   /* .                */
+                    '~........ ....;~ nw',       /* .                */
+                    'w14;* nw',                  /* .                */
+       '| if7:',                                 /* .                */
+       '| change ~;~~',                          /* Remove semicolons*/
+       '| specs w1.1 1.8',                       /* Adapt layout     */
+               'w3.1 nw.8',                      /* .                */
+               'w5.1 nw.8',                      /* .                */
+               'w7.1 nw.8',                      /* .                */
+               'w9.1 nw.8',                      /* .                */
+               'w11.1 nw.8',                     /* .                */
+               'w13.1 nw.8',                     /* .                */
+               'w15.1 nw.8',                     /* .                */
+       '| preface var hdr',                      /* Add header       */
+       pref,                                     /* Prefix           */
+       '| 'out myfn' FILECNT 'wfm                /* Write 2 file     */
+End q
+list=list';20 'myfn' FILECNT 'wfm
+Return
+ 
+ 
+CreateSplOvrv:
+/*---------------------------------------------------------------+
+| Showing all spool files...                                     |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Creating spool overview(s)'
+clshdr='LPAR     Que Owner    Spid C Typ Records  Cls Hold Date       Time     Fname     Ftype    Dist       Blocks    Perc.'
+opnhdr='LPAR     Que Owner    Spid C Typ Records  Cls Hold State Device        Fname     Ftype    Dist       Blocks    Perc.'
+Do q=1 To que.0
+   stemname=que.q||'.'
+   'PIPE (NAME SPLMGR.EXEC:538 END ?)',
+       'stem 'stemname,                          /* Take these       */
+       '| specs 1;* 1 w6.1 100',                 /* Adjust layout    */
+       '| change w-1;-1 ~RDR~080~',              /* Replace these    */
+       '| change w-1;-1 ~PUN~080~',              /* .                */
+       '| change w-1;-1 ~PRT~133~',              /* .                */
+       '| change w-1;-1 ~CON~132~',              /* .                */
+       '| change w-1;-1 ~DMP~001~',              /* .                */
+       '| change w-1;-1 ~SYS~001~',              /* .                */
+       '| specs a: w7.1 .',                      /* Convert 2 pages  */
+               'b: w-1;-1 .',                    /* .                */
+               'w1;-2 1.100',                    /* .                */
+               'set #0:=((a*b)/4096)+1',         /* .                */
+               'print #0 pict 999999999 nw',     /* .                */
+       '| specs 1;* 1 w1.1 nw',                  /* Adjust           */
+       alcchn,                                   /* Add alloc info   */
+       '| specs w1;-2 1',                        /* Calculate perc.  */
+               'a: w-2;-2 .',                    /* .                */
+               'b: w-1;-1 .',                    /* .                */
+               'set #0:=(a/b)*100',              /* .                */
+               'print #0 pict --9.99999 nw',     /* .                */
+       '| p: pick w10.1 == ~OPEN-~',             /* Select these     */
+       '| sort w1.1 w-1;-1 d',                   /* Sort on perc     */
+       '| specs a: w1.1 .',                      /* Remove dupl. text*/
+               'w2;* 10',                        /* .                */
+               'break a',                        /* .                */
+               'print a 1.8',                    /* .                */
+       '| if1: if pick 1.1 \== ~ ~',             /* Add header       */
+       '|     specs ~; ;'opnhdr';~ 1 1;* n',     /* .                */
+       '| if1:',                                 /* Conn 2 if        */
+       '| preface literal Open 'que.q' files:',  /* Add one more hdr */
+       '| split at ;',                           /* Split here       */
+       '| stem open.',                           /* Hand 2 rexx      */
+       '? p:',                                   /* Conn 2 pick      */
+       '| sort w1.1 w-1;-1 d',                   /* Sort on size     */
+       '| specs a: w1.1 .',                      /* Remove dupl. test*/
+               'w2;* 10',                        /* .                */
+               'break a',                        /* .                */
+               'print a 1',                      /* .                */
+       '| if2: if pick 1.1 \== ~ ~',             /* Add header       */
+       '|     specs ~; ;'clshdr';~ 1 1;* n',     /* .                */
+       '| if2:',                                 /* Conn 2 if        */
+       '| preface literal Closed 'que.q' files:', /* Add another hdr  */
+       '| split at ;',                           /* Split here       */
+       '| stem clsd.'                            /* Hand 2 rexx      */
+'PIPE (NAME SPLMGR.EXEC:583 END ?)',
+   'stem clsd.',                                 /* Take these       */
+   '| append literal ',                          /* Add empty line   */
+   '| append stem open.',                        /* Add these        */
+   '| specs 1;* 1.160',                          /* Adjust length    */
+   '| > 'myfn que.q wfm                          /* Write 2 file     */
+list=list';3'q myfn que.q wfm' (PROFILE 'myfn
+End q
+Return
+ 
+ 
+CreateDmpOvrv:
+/*---------------------------------------------------------------+
+| Create the overview of dump space                              |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Creating overview of DUMP space'
+hdr='LPAR     CUU   Pages        Totals Perc.'
+Call Collect_Info 'CP QUERY DUMP'
+'PIPE (NAME SPLMGR.EXEC:601 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| nlocate anycase ~DASD DUMP SPACE~',        /* Remove these     */
+   '| nlocate ~RDEV~',                           /* .                */
+   '| nlocate ~----~',                           /* .                */
+   '| if1: if pick anycase w4.2 == ~DUMP UNIT~', /* If this          */
+   '|      specs w1.1 1.8 w3.1 nw w9.1 nw',       /* Adjust record    */
+   '| if1:',                                     /* Conn 2 if        */
+   '|      specs w1;* 1',                        /* Adjust the record*/
+   '| if1:',                                     /* Conn 2 if        */
+   '| specs select second',                      /* Summ sizes       */
+           'a: w1.1  1.8',                       /* .                */
+           'b: w2.1  9.4',                       /* .                */
+           'c: w3.1  15.8 right',                /* .                */
+           'set #0+=c',                          /* .                */
+           'break a',                            /* And add break    */
+           'write',                              /* .                */
+           'print a 1',                          /* .                */
+           'print #0 picture zzzzzzzz9 25',      /* .                */
+           'set #0:=0',                          /* .                */
+   '| specs 1;* 1 w1.1 nw',                      /* Adjust record    */
+   alcchn,                                       /* Add alloc info   */
+   '| specs w1;-2 1',                            /* Calculate usage  */
+           'a: w-2;-2 .',                        /* .                */
+           'b: w-1;-1 .',                        /* .                */
+           'set #0:=(a/b)*100',                  /* .                */
+           'print #0 pict --9.99999 35',         /* .                */
+   '| specs a: w1.1 .',                          /* Remove dupl. text*/
+           '9;* 10',                             /* .                */
+           'break a',                            /* .                */
+           'print a 1.8',                        /* .                */
+   '| if2: if pick 1.1 \== ~ ~',                 /* If not empty     */
+   '|      specs ~; ;~ 1 1;* n',                 /* We add empty line*/
+   '|      split at ;',                          /* .                */
+   '|      drop first 1',                        /* .                */
+   '| if2:',                                     /* Conn 2 if        */
+   '| preface var hdr',                          /* Add header       */
+   '| > 'myfn' DUMP 'wfm                         /* Write 2 file     */
+list=list';40 'myfn' DUMP 'wfm
+Return
+ 
+ 
+CreateNssOvrv:
+/*---------------------------------------------------------------+
+| Create an overview of all the NSSes available                  |
++---------------------------------------------------------------*/
+If info Then Say TimeStamp()' Creating overview of NSSes'
+Call Collect_Info 'CP QUERY NSS ALL MAP'
+'PIPE (NAME SPLMGR.EXEC:649 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| n: nlocate anycase ~BEGPAG~',              /* Move these away  */
+   '| specs 1;* 1 44.12 95',                     /* Adjust layout    */
+   '| specs 1;90 1.90',                          /* Copy/adjust      */
+           'pad 0 w-2;-2 nw.6 right',            /* .some data       */
+           'w-1;-1 nw.6 right',                  /* .                */
+   '| specs 1.90 1.90',                          /* Convert 2 decimal*/
+           'w-2;-2 x2d nw',                      /* .                */
+           'w-1;-1 x2d nw',                      /* Calculate        */
+   '| specs 1.90 1.90',                          /* .                */
+           'a: w-1;-1 .',                        /* .                */
+           'b: w-2;-2 .',                        /* .                */
+           'set #0:=(a-b)+1',                    /* .                */
+           'print #0 nw',                        /* .                */
+   '| spec select second',                       /* Summ and add     */
+          'a: w1.1  1.8',                        /* .breaks          */
+          'b: 9.90   9.90',                      /* .                */
+          'c: w-1;-1  91.8 right',               /* .                */
+          'set #0+=c',                           /* .                */
+          'break a',                             /* .                */
+          'write',                               /* .                */
+          'print a 1.8',                         /* .                */
+          'print #0 picture zzzzzzzz9 105',      /* .                */
+          'set #0:=0',                           /* .                */
+   '| specs 1;* 1 w1.1 nw',                      /* Move this 2 end  */
+   alcchn,                                       /* Add alloc info   */
+   '| specs w1;-2 1',                            /* Calc perc.       */
+           'a: w-2;-2 .',                        /* .                */
+           'b: w-1;-1 .',                        /* .                */
+           'set #0:=(a/b)*100',                  /* .                */
+           'print #0 pict --9.99999999 115',     /* .                */
+   '| specs a: w1.1 .',                          /* Remove dupl. text*/
+           '10;* 10',                            /* .                */
+           'break a',                            /* .                */
+           'print a 1.8',                        /* .                */
+   '| if: if pick 1.1 \== ~ ~',                  /* If not empty     */
+   '|     specs ~; ;~ 1 1;* n',                  /* .add empty line  */
+   '|     split at ;',                           /* .                */
+   '|     drop first 1',                         /* .                */
+   '| if:',                                      /* Conn 2 if        */
+   '| buffer',                                   /* Prevent loop     */
+   '| fi: faninany',                             /* Take in others   */
+   '| > 'myfn' NSS 'wfm,                         /* Write 2 file     */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| take first 1',                             /* Take this one    */
+   '| specs w2;* 12 ~Pages~ nw',                 /* Add some text    */
+                   '~Totals~ 100',               /* .                */
+                   '~Perc.~ 115',                /* .                */
+   '| fi:'                                       /* Conn 2 faninany  */
+list=list';50 'myfn' NSS 'wfm
+Return
+ 
+ 
+GetLpars:
+/*---------------------------------------------------------------+
+| Get the LPAR names                                             |
++---------------------------------------------------------------*/
+If rscs Then Do
+     'PIPE (NAME SPLMGR.EXEC:708 END ?)',
+        'rscs 'node' QUERY SYSTEM',               /* Ask rscs         */
+        '| pick anycase w3.1 == ~CONNECT~',      /* Take only these  */
+        '| specs w2.1 1',                        /* Keep names       */
+        '| append var node',                     /* Add myself       */
+        '| sort',                                /* Sort on name     */
+        '| join * x40',                          /* Make 1 record    */
+        '| strip',                               /* Remove spaces    */
+        '| var nodes'                            /* Hand 2 rexx      */
+     End
+     Else Do
+     'PIPE (NAME SPLMGR.EXEC:719 END ?)',
+        'cp QUERY SSI',                          /* Ask CP           */
+        '| pick anycase w3.1 == ~JOINED~',       /* Take only these  */
+        '| specs w2.1',                          /* Keep names       */
+        '| append var node',                     /* Remove before flight  */
+        '| sort',                                /* Sort on name     */
+        '| join * x40',                          /* Make 1 record    */
+        '| strip',                               /* Remove spaces    */
+        '| var nodes'                            /* Hand 2 rex       */
+     End
+Return
+ 
+ 
+ 
+XeditCode:
+/*---------------------------------------------------------------+
+| Run this code when we are called as PROFILE/MACRO              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SPLMGR.EXEC:737 END ?)',
+    'rexxvars 1 toload',                         /* Take from caller */
+    '| varload'                                  /* Load them        */
+ctlchars='% ESCAPE;',
+         'Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;',
+         'W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;',
+         'B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;',
+         'G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;',
+         'R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;',
+         '$ OFF'
+settings='LINEND ON #;NONDISP ?;HEX ON;CMDLINE TOP;',
+         'CURLINE ON 4;MSGLINE ON 3 1 OVERLAY;',
+         'PREFIX NULLS LEFT;COLOR PREFIX BLUE;COLOR FILEAR YELLOW;',
+         'VERIFY 1 *;ZONE 1 *;REMOTE ON;NULLS ON;STAY ON;',
+         'SPILL WORD;SCALE ON 3;TEXT ON;NUMBER ON;AUTOSAVE OFF;CASE MIXED IGNORE'
+'EXTRACT /FTYPE'
+If Wordpos(ftype.1,'RDR PRT PUN')<>0 Then Do
+     pfkey='HELP 'myfn'; ;ONLY QQUIT; ;MACRO 'myfn' MOVE2; ;BACKWARD;FORWARD;MACRO 'myfn' PURGE; ;MACRO 'myfn' PEEK;ONLY QQUIT'
+     pfline='Help; ;Quit; ;Move2; ;Backward;Forward; ;Purge; ;Peek;Quit'
+     End
+     Else Do
+     pfkey='HELP; ;ONLY QQUIT; ; ; ;BACKWARD;FORWARD; ; ; ;ONLY QQUIT'
+     pfline='Help; ;Quit; ; ; ;Backward;Forward; ; ; ; ;Quit'
+     End
+Address CMS 'PIPE (NAME SPLMGR.EXEC:761 END ?)',
+    'var settings',                              /* Take these       */
+    '| split at ;',                              /* Split here       */
+    '| strip',                                   /* Remove spaces    */
+    '| specs ~SET~ 1 1;* nw',                    /* Compose cmds     */
+    '| fi: faninany',                            /* Take in others   */
+    '| subcom xedit',                            /* Hand 2 xedit     */
+    '?',                                         /* 2nd pipe         */
+    'var pfkey',                                 /* Take this        */
+    '| dup 1',                                   /* Make 1 copy      */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET PF~ 1 recno strip n.2 1;* nw', /* Compose cmds     */
+    '| fi:',                                     /* Conn 2 finanany  */
+    '?',                                         /* 3rd pipe         */
+    'var ctlchars',                              /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET CTLCHAR~ 1 1;* nw',            /* Compose cmds     */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '?',                                         /* 4th pipe         */
+    'var pfline',                                /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs recno strip 1.2 ~=%G~ n 1;* n',     /* Add numbers      */
+    '| join * ~%W~',                             /* Make 1 record    */
+    '| specs ~%W~ 6 1;* n',                      /* Add this 2 record*/
+    '| var pfline'                               /* Hand 2 rexx      */
+'SET RESERVED -1 NON NOH 'pfline
+Return
+ 
+ 
+PeekCode:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call GetDetails
+If wnode<>node Then 'EMSG      Can not peek files on other nodes: 'wnode' from: 'node
+               Else Do
+               Address CMS 'SFLIST 'ownid spid
+               'CAPPEND  ** 'Time()' file peeked'
+               End
+':'curpos
+Return
+ 
+ 
+PurgeCode:
+/*---------------------------------------------------------------+
+| Purge a select file                                            |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SPLMGR.EXEC:808 END ?)',
+        'rexxvars 1 toload',                     /* We need these    */
+        '| varload'                              /* .values          */
+Call GetDetails
+Select
+When spid='....'  Then 'EMSG       File already purged'
+When stat='OPEN-' Then 'EMSG       Can not purge open files'
+Otherwise Do
+          clncmd.0=1
+          clncmd.1=wnode 'CP PURGE 'ownid que spid
+          'ZONE 23 26'
+          'MSGMODE OFF'
+          'CHANGE /'spid'/..../ 1 1 1'
+          'MSGMODE ON'
+          'ZONE 1 *'
+          'CAPPEND  ** 'Time()' file purged'
+          Call IssueCmds' clncmd.'
+          End
+End
+':'curpos
+Return
+ 
+ 
+Move2Code:
+/*---------------------------------------------------------------+
+| Move selected file to the collector                            |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SPLMGR.EXEC:835 END ?)',
+        'var part1 1',                           /* We need these    */
+        '| var part1',                           /* .values          */
+        '?',                                     /* .                */
+        'var part2 1',                           /* .                */
+        '| var part2',                           /* .                */
+        '?',                                     /* .                */
+        'var info 1',                            /* .                */
+        '| var info',                            /* .                */
+        '?',                                     /* .                */
+        'var collector 1',                       /* .                */
+        '| var collector',                       /* .                */
+        '?',
+        'var test 1',
+        '| var test'
+Call GetDetails
+Select
+When spid='....'  Then 'EMSG     File already moved to 'collector
+When stat='OPEN-' Then 'EMSG     Can not move open files to 'collector
+When type<>'CON'  Then 'EMSG     This is not a console file'
+Otherwise Do
+         'ZONE 23 26'
+         'MSGMODE OFF'
+         'CHANGE /'spid'/..../ 1 1 1'
+         'MSGMODE ON'
+         'ZONE 1 *'
+         'CAPPEND  ** 'Time()' File moved'
+         movecmd.0=1
+         movecmd.1=wnode' CP TRANSFER 'ownid que spid' TO 'collector' RDR'
+         Call IssueCmds 'movecmd.'
+         End
+End
+':'curpos
+Return
+ 
+ 
+GetDetails:
+/*---------------------------------------------------------------+
+| Extract details from the file                                  |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE/FTYPE'
+curpos=line.1
+':'cursor.3
+'EXTRACT /CURLINE'
+wnode=Strip(Substr(curline.3,1,8))
+que=ftype.1
+ownid=Substr(curline.3,14,8)
+spid=Substr(curline.3,23,4)
+type=Substr(curline.3,30,3)
+stat=Substr(curline.3,52,5)
+If wnode='' Then Do
+                 'ZONE 1 8'
+                 'LOCATE -^/        /'
+                 'EXTRACT /CURLINE'
+                 wnode=Strip(Substr(curline.3,1,8))
+                 ':'cursor.3
+                 End
+Return
+ 
+ 
+PipeCode:
+/*---------------------------------------------------------------+
+| Run this code when we are called as PIPE stage                 |
++---------------------------------------------------------------*/
+Say TimeStamp()' Not implemented as a PIPE stage'
+Return
+ 
+ 
+ReadNames:
+/*---------------------------------------------------------------+
+| Read the control file                                          |
++---------------------------------------------------------------*/
+Say TimeStamp()' Reading control file'
+'PIPE (NAME SPLMGR.EXEC:908 END ?)',
+   '< 'myfn' NAMES *',                           /* Read this file   */
+   '| pick 1.1 \== ~*~ and',                     /* Ignore these     */
+          '1.1 \== ~ ~',                         /* .                */
+   '| join * x40',                               /* Make 1 record    */
+   '| split before string ~:~',                  /* Split here       */
+   '| xlate upper',                              /* Uppercase all    */
+   '| change fs . f2 ~YES~1~',                   /* Replace this     */
+   '| change fs . f2 ~NO~0~',                    /* ...and this      */
+   '| change ~:~/~ 1',                           /* Prep 4 varload   */
+   '| change ~.~/~ 1',                           /* .                */
+   '| strip',                                    /* Remove spaces    */
+   '| varload'                                   /* Hand 2 rexx      */
+'PIPE (NAME SPLMGR.EXEC:921 END ?)',
+   'var queues',                                 /* Take this        */
+   '| split',                                    /* Split            */
+   '| stem que.'                                 /* Hand 2 rexx      */
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

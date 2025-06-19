@@ -1,0 +1,91 @@
+ 
+         Finding User Definitions with Certain Options
+    --------------------------------------------------------
+ 
+ Without extra tools it is a bit hard to find for example all users that
+ include a given PROFILE, or that have a LINK MAINTEST, or that got
+ OPTION LNKNOPAS, or, ...
+ 
+ You can get some help from XEDIT's ALL command, but that's not perfect yet. In
+ the remainder, we'll concentrate on an example: find who links MAINT 490.
+ 
+ As a start, you can issue ALL /MAINT 490/, but, when ALL has done its job, you
+ only see the records that contain "MAINT 490" and you still don't know what
+ user defintion(s) include the selected records.
+  The XEDIT display could look like:
+     +-----------------------------------------+
+     | ------ 120 lines not displayed ------   |
+     | LINK MAINT 490 190 RR                   |
+     | ------ 12 lines not displayed ------    |
+     | LINK MAINT 490 190 RR                   |
+     | ------ 400 lines not displayed ------   |
+     | LINK MAINT 490 190 RR                   |
+     +-----------------------------------------+
+ 
+ DRM comes to your help again: after you entered the "ALL /xxxx" command, press
+ PF17, and DRM will make the corresponding USER or PROFILE cards visible too:
+ (pressing PF17 again shows again the selection created by ALL)
+     +-----------------------------------------+
+     | ------ 110 lines not displayed ------   |
+     | USER TESTCMS PW 32M 200M G              |
+     | ------ 9 lines not displayed ------     |
+     | LINK MAINT 490 190 RR                   |
+     | ------ 10 lines not displayed ------    |
+     | USER KRIS PW 48M 1200M ABCDEG           |
+     | ------ 1 lines not displayed ------     |
+     | LINK MAINT 490 190 RR                   |
+     | ------ 380 lines not displayed ------   |
+     | USER GUY PW 3M 20M G                    |
+     | ------ 19 lines not displayed ------    |
+     | LINK MAINT 490 190 RR                   |
+     +-----------------------------------------+
+ 
+ Maybe now you see enough to get an answer to the question "who uses MAINT 490"
+ but there is more: place the cursor on a USER or LINK card and press PF5.  DRM
+ will present that user's complete definition; press PF5 again to return to the
+ previous view.
+ 
+ To see all lines again, simply issue "ALL"
+ 
+ Note: DRM users in a hurry can do it all at once:
+        Write the target you'd use for ALL in the CMD area and press PF17
+       Instead of generating errormessages, DRM allows you also to use
+       PF17 & PF5 when you didn't use "ALL /string" before.
+        - PF5 will result in displaying all the records belonging to the
+          USER where the cursor stands.
+        - PF17 will show you all USER & PROFILE cards
+       For those who know how the ALL macro and the S and X prefix commands
+       work: DRM via PF5 & PF17 has tried to know what you are looking at (the
+       complete file or selected lines) by EXTRACTing /DISPLAY/ and using
+       selection numbers 0, 1, 2 ,3 and 4.
+       -ALL assigns selnb 1 to selected lines
+       -PF5/17 assigns selnb 2 to added lines and issues SET DISPLAY 1 2
+       When ALL was not executed before:
+       -PF5 assigns selnb 3 to selected lines and issues SET DISPLAY 3 3
+       -PF17 assigns selnb 4 to selected lines and issues SET DISPLAY 4 4
+ 
+       DRM is designed to work correctly with ALL and S and X, but if you'd use
+       other commands using SELECT and DISPLAY, DRM could take wrong
+       conclusions: you will not loose your file, but lines could be displayed
+       where you'd expect them to be excluded.  In that case: issue "ALL"
+       (so all selection numbers are reset to 0) and use /xxx/ and press PF17
+ 
+ 
+**** For DRM information refer to the "RELATED" section (press PF11) ***
+.cs 7 on
+(c) Copyright International Business Machines Corporation 1985, 2012.
+    All Rights Reserved.
+ 
+For other DRM information:
+   place the cursor under the topic of your choice and press ENTER
+ 
+ 
+CMS DRM     (ALL        Overview ›&- An overview of DRM
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips
+.cs 7 off

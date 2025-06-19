@@ -1,0 +1,144 @@
+/*---------------------------------------------------------------+
+| Function : Ask RSCS things and catch the response              |
+|                                                                |
+| File     : RSCS     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : RSCS     <node> <rscs command>                      |
+|                     <node> is optional, if available in        |
+|                            VMLINK NAMES                        |
+|                            Can be 'ALL', all nodes will be     |
+|                            collected from VMLINK NAMES         |
+|                     <rscs command> any valid rscs command      |
+|                            See HELP RSCS                       |
+|                                                                |
+| Comments : Issue: EXECLOAD RSCS EXEC * = REXX                  |
+|            That makes the code available as PIPE stage         |
+|                                                                |
+| Sample   : VMLINK NAMES                                        |
+|      :nick.C2       :ip.11.54.4.16 :lpar.XXXC2 :status.active  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200603 09:21:45                                   |
+| Changes  : .                                                   |
+|            20210201 H.T.Kramer : Adapted to strip output of    |
+|                       the CP commands issued at other nodes.   |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| The wait in seconds, increase if output is missed              |
++---------------------------------------------------------------*/
+delay=1
+If cmdline='?' Then Do
+/*---------------------------------------------------------------+
+| Show some help                                                 |
++---------------------------------------------------------------*/
+                    'VMFCLEAR'
+                    'PIPE (NAME RSCS.EXEC:43 END ?)',
+                        '< 'myfn myft' *',      /* Read my self     */
+                        '| tolabel Parse',      /* Up to here       */
+                        '| cons'                /* and display      */
+                    Exit
+                    End
+/*---------------------------------------------------------------+
+| How are we called...                                           |
++---------------------------------------------------------------*/
+Select
+When myft='REXX' Then Do
+            pipecmd='CALLPIPE'
+            output='*:'
+            End
+When myft='EXEC' Then Do
+            pipecmd='PIPE'
+            output='cons'
+            End
+Otherwise Exit 29
+End
+/*---------------------------------------------------------------+
+| Prepping for other nodes...                                    |
++---------------------------------------------------------------*/
+pipecmd' (NAME RSCS.EXEC:66 END ?)',
+    '< VMLINK NAMES *',                         /* Read this        */
+    '| locate anycase ~LPAR~',                  /* Find these       */
+    '| split before string ~:~',                /* Split here       */
+    '| pick anycase fs . f1 == ~:NICK~ or',     /* Select these     */
+    '                    f1 == ~:LPAR~',        /* ...and these     */
+    '| specs fs . f2',                          /* Keep this        */
+    '| join 1 x40',                             /* Join pairs       */
+    '| sort w1.1',
+    '| stem node.',                             /* Store as         */
+    '?',                                        /* 2nd pipe         */
+    'cp QUERY USERID',                          /* Ask cp           */
+    '| specs w3.1',                             /* Keep this        */
+    '| var currnode',                           /* Save as          */
+    '?',                                        /* 3rd pipe         */
+    'cp QUERY SET',                             /* Ask cp           */
+    '| split at ,',                             /* Split into recs  */
+    '| strip',                                  /* Remove spaces    */
+    '| pick w1.1 == ~MSG~',                     /* Select this      */
+    '| specs w2.1',                             /* Keep this        */
+    '| var cpmsgset'                            /* Store as         */
+/*---------------------------------------------------------------+
+| Check out what was entered                                     |
++---------------------------------------------------------------*/
+If Wordpos('ALL',cmdline)=1 Then Do
+                            pipecmd' (NAME RSCS.EXEC:91 END ?)',
+                                'stem node.',   /* Take these       */
+                                '| buffer',     /* Prevent loop     */
+                                '| specs w2.1', /* Keep this        */
+                                '| stem node.'  /* Store as         */
+                            cmdline=Subword(cmdline,2)
+                            End
+                            Else Call Check_Nodes
+/*---------------------------------------------------------------+
+| Here we start issuing the commands                             |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET MSG IUCV'
+If Subword(cmdline,1,1)='CP' Then filter='| nlocate anycase ~RETURN CODE~',
+                                         '| specs substr -3;-2 of w2.1 1 28;* nw'
+                           Else filter=''
+Do n=1 To node.0
+  nodepref='CMD 'node.n
+  pipecmd' (NAME RSCS.EXEC:108 END ?)',
+      'literal +'delay,                         /* Set this         */
+      '| delay',                                /* Wait here        */
+      '| g: gate',                              /* Wait for input   */
+      '?',                                      /* 2nd pipe         */
+      'starmsg CP SMSG RSCS 'nodepref cmdline,  /* Ask rscs         */
+      '| g:',                                   /* Conn 2 gate      */
+      '| specs 17;* 1',                         /* Adjust output    */
+      '| if: if pick anycase w1.1 \== ~FROM~',
+      '|    specs ~From 'currnode':~ 1 1;* nw',
+      '| if:',
+      filter,
+      '| 'output                                /* Show/hand over   */
+End n
+Address COMMAND 'CP SET MSG 'cpmsgset
+Exit
+ 
+ 
+Check_Nodes:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME RSCS.EXEC:130 END ?)',
+    'stem node.',                               /* Take these       */
+    '| buffer',                                 /* Prevent loop     */
+    '| l: lookup w1.1 w1.1 details',            /* Compare          */
+    '| specs w2.1',                             /* Keep this        */
+    '| stem node.',                             /* Store them       */
+    '?',                                        /* 2nd pipe         */
+    'var cmdline',                              /* Take this        */
+    '| l:'                                      /* Conn 2 lookup    */
+If node.0=0 Then Do
+                 node.0=1
+                 node.1=currnode
+                 End
+            Else cmdline=Subword(cmdline,2)
+Return

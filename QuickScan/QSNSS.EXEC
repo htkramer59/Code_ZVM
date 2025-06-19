@@ -1,0 +1,112 @@
+/*---------------------------------------------------------------+
+| Function : Check NSS usage                                     |
+|                                                                |
+| File     : QSNSS    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSNSS    REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSNSS    <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSNSS    REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+work.0=0                                         /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSNSS.EXEC:39 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNSS.EXEC:50 END ?)',
+    'literal 'TimeStamp(),                       /* Add ts           */
+    '| append var nss_header 1',                 /* Add header       */
+    '| join * x40',                              /* Make 1 record    */
+    '| var nss_header'                           /* Hand 2 rexx      */
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+work.0=0
+skeleton.0=0
+pending.0=0
+'PIPE (NAME QSNSS.EXEC:62 END ?)',
+    'cp QUERY NSS ALL',                          /* Ask cp           */
+    '| stem nss.',                               /* Store as         */
+    '| p: pick w3.1 == ~S~',                     /* Select these     */
+    '| stem skeleton.',                          /* Hand 2 rexx      */
+    '? p:',                                      /* Conn 2 pick      */
+    '| pick w3.1 == ~P~',                        /* Select these     */
+    '| stem pending.'                            /* Hand 2 rexx      */
+Call Add2Output 'nss.,NSS/DCSS found in spool:'
+If skeleton.0<>0 Then Do
+                 recomm='Recommendation: Skeleton segments need to be filled or purged:'
+                 Call Add2Output 'skeleton.,Skeleton segments found'
+                 Call Add2Output 'recomm'
+                 End
+If pending.0<>0 Then Do
+                'PIPE (NAME QSNSS.EXEC:77 END ?)',
+                   'stem pending.',
+                   '| specs ~QUERY NSS USERS~ 1 w8.1 nw',
+                   '| cp',
+                   '| stem info.'
+                Call Add2Output 'info.,Purge pending segments'
+                recomm='Recommendation: Restart the servers/ids to connect to the latest version of the NSS/DCSS:'
+                Call Add2Output 'recomm'
+                End
+ 
+'PIPE (NAME QSNSS.EXEC:87 END ?)',
+   'stem work.',                                 /* Take this        */
+   '| preface var nss_header',                   /* Add header       */
+   '| preface literal  ',                        /* Add 2 empties    */
+   '| preface literal  ',                        /* .                */
+   output                                        /* Hand back        */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSNSS.EXEC:107 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| preface literal ',                       /* Add header       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

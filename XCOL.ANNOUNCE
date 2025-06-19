@@ -1,0 +1,77 @@
+XEDIT Macro for Column Editing
+ 
+COL allows you to edit columns in the same way that you edit lines when
+using Xedit's prefix commands.  COL will present a command line across
+the screen containing ?'s.  Enter COL commands into this area, just as
+you enter XEDIT prefix commands in the prefix area.
+ 
+ EXAMPLE: to delete columns, enter d's above the column.
+ 
+ ===== ????????????ddddddddddd??????????????????????????????????????????
+ 
+ o   Basic Column Operations
+     -   Delete
+     -   Add blanks
+     -   Move
+     -   Copy
+ o   Column Operations unique to COL
+     -   Insert text
+     -   Overlay text
+     -   Convert to Upper or Lower case
+     -   Copy text forward or backward within a column
+     -   Blank redundant text within a column in a forward or
+         backward direction.
+     -   Insert blank separator lines when data in a column
+         changes
+     -   Place sequence numbers in a column
+         --  Any sequence number
+             o   Any starting number
+             o   Any increment value
+             o   Any repeat factor
+         --  Alpha
+         --  Hex
+     -   Sum a column of numbers
+         --  Total
+         --  Subtotals
+         --  Line totals
+         --  Cumulative line totals
+ o   Sorting
+     -   Column Sorts
+ o   Text Alignment
+     -   Line up text
+     -   Word flow within a column
+     -   Left, Center, Right and Both Justification
+     -   Automatically place text in columns for editing such
+         as found in  Script  tabular  data  when  using  the
+         ".ti".  or BookMasters :lines tag.
+     -   Compress column data into Script tabular data
+     -   Remove trailing blanks
+ o   Convenience commands
+     -   Undo the last COL operation
+     -   Identify the location of columns
+     -   Set Tabs
+     -   Set Verify setting
+     -   Set Truncation column
+     -   Set zones
+ o   Advanced Functions
+     -   Exclude  specific columns from Xedit prefix commands
+         and subcommands
+     -   Apply Xedit prefix commands to lines  with  specific
+         text within a column
+     -   Apply  Xedit subcommands to lines with specific text
+         within a column
+     -   Offsetting the Xedit prefix command  for  the  above
+         operation
+     -   A  repeat  factor  for placing sequence numbers in a
+         column
+     -   Applying Xedit prefix commands to  lines  with  spe-
+         cific text within the Xedit Zone setting
+     -   Blocking or grouping so that only blocks of text are
+         displayed.
+     -   Transpose columns and lines
+ o   REXX interface
+     -   Apply REXX expressions to columns
+ 
+ COL  is  fully  compatible  with XEDIT commands and supports
+ Xedit's exclude functions as provided with Xedit "X"  prefix
+ command and the ALL command.  Any width file may be edited.

@@ -1,0 +1,6 @@
+* Below is the list of SLES version we are searching through
+:nick.SLES   :list.SLES11 SLES12 SLES15
+* Below are the disks containing parm files etc. per user
+:nick.SLES11 :product.SLES C11 :title.SLES 11 Control files
+:nick.SLES12 :product.SLES C12 :title.SLES 12 Control files
+:nick.SLES15 :product.SLES C15 :title.SLES 15 Control files

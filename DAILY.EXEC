@@ -1,0 +1,34 @@
+/**/
+/*---------------------------------------------------------------+
+| Commands we need to run on all                                 |
++---------------------------------------------------------------*/
+cmdlist='TRACK XYMONVM;TRACK VMUTIL;TRACK CONPARK'
+/*---------------------------------------------------------------+
+| Commands we need only on this node                             |
++---------------------------------------------------------------*/
+cmdlist.a1='CP LOGOFF'
+cmdlist.a2='CP LOGOFF'
+cmdlist.p2='CP LOGOFF'
+cmdlist.p1='CP LOGOFF'
+cmdlist.o1='CP LOGOFF'
+cmdlist.b1='ALLCHECK'
+cmdlist.b2='CP LOGOFF'
+/*---------------------------------------------------------------+
+| Find the node/shortnode for this LPAR                          |
++---------------------------------------------------------------*/
+'PIPE (NAME MANY.XEDIT:191 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'var cmdlist',                               /* Take the generic */
+   '| append var cmdlist.'shortnode,            /* Take the specific*/
+   '| split at ;',                              /* Split here       */
+   '| cons',                                    /* Show them        */
+   '| cms',                                     /* Issue them       */
+   '| cons'                                     /* Show the results */

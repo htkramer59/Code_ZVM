@@ -1,0 +1,28 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Server code for Poor Man's Dirmaint                 |
+|                                                                |
+| File     : DMSERVER EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DMSERVER TIMES                                      |
+|            WAKEUP   MODULE                                     |
+|            DM       EXEC                                       |
+|            DM       COMMANDS                                   |
+|            DM       NAMES                                      |
+|            DM       ADMINS                                     |
+|                                                                |
+| Called   : DMSERVER <input> ( <starter>                        |
+|                             ( RUN to start                     |
+|                                                                |
+| Comments : Need access to SOURCE DIRECTORY, DIRECTXA MODULE,   |
+|                MAINT 123 (CP DIRECTORY space)                  |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240716 17:34:28                                   |
+| Changes  : .                                                   |
+|            20250528 H.T.Kramer : Change the DM NAMES content   |
+|                                                                |
++---------------------------------------------------------------*/

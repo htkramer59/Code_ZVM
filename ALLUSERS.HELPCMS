@@ -1,0 +1,47 @@
+.cm                                                                             
+                                                                                
+  ALLUSERS EXEC                                                                 
+                                                                                
+  Display all users we can find on the RSCS nodes we have access to             
+                                                                                
+                                                                                
+  Invocation:                                                                   
+                                                                                
+  ALLUSERS <what> ( <options>                                                   
+                                                                                
+                                                                                
+           <what> can be empty or contain a search argument,                    
+                  may be a string or a wildcard.                                
+                                                                                
+           <options> can be empty                                               
+                            QUIET                                               
+                            CMS  <outfn> <outft> <outfm>                        
+                            HTML <outfn> <outft> <outfm>                        
+                            XML  <outfn> <outft> <outfm>                        
+                            JSON <outfn> <outft> <outfm>                        
+                                                                                
+  When the options contain the string QUIET all                                 
+  messages will be suppressed.                                                  
+  When the options contains one of the following strings:                       
+  * CMS   : A file will be created and opened with XEDIT                        
+  * HTML  : A HTML file will be created                                         
+  * XML   : A XML  file will be created                                         
+  * JSON  : A JSON file will be created                                         
+                                                                                
+  When no <outfn> or <outft> specified these will default to                    
+  * CMS   : ALLUSERS WORK                                                       
+  * HTML  : ALLUSERS HTML                                                       
+  * XML   : MULTI XML and SINGLE XML                                            
+  * JSON  : ALLUSERS JSON                                                       
+                                                                                
+  <outfm> will default to A or what is defined in your VMLINK NAMES file        
+  with the :nick.status                                                         
+                                                                                
+  Files used:                                                                   
+  RSCS     EXEC    :  Execloaded as RSCS REXX and used in PIPE,                 
+                      a PIPE stage to talk to RSCS                              
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                

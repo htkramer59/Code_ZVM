@@ -1,0 +1,36 @@
+.cm
+|SHOWME EXEC%
+ 
+    This is an EXEC to show the contents of a user directory entry.
+    The user id is displayed in a XEDIT session and allows the
+    user to check various things.
+ 
+    When the cursor is put on one of the following items and PF11 is pressed
+    a certain action is executed.
+ 
+.cm
+  |USER%     - The user id is XAUTOLOGged
+  |IDENTITY% - The user id is XAUTOLOGged
+  |SUBCONFIG%- The content of the SUBCONFIG is displayed
+  |INCLUDE%  - The content of the included PROFILE is displayed
+  |IPL%      - If the IPL statement contains a FILEPOOL entry the
+  |   %        the filespace for the user is displayed
+  |MDISK%    - The content of the MINIDISK is displayed
+  |LINK%     - The MINIDISK that is LINKed is displayed
+ 
+.cm
+|Notes:%
+  |1)%The EXEC depends on the working of DIRMAINT
+  |  %or a MONOLITHIC USER DIRECT
+  |  %For MONOLITHIC issue GLOBALV SELECT SHOWME SETLP DIRTYPE MONOLITHIC
+  |  %For DIRMAINT   issue GLOBALV SELECT SHOWME SETLP DIRTYPE DIRMAINT
+  |2)%This requires CP CLASS B for ATTACH/DETACH to the SYSTEM
+  |  %              CP CLASS A for DEFINE MDISK and OPTION DEVMAINT
+  |  %              in the CP Directory
+  |3)%For FILEPOOL actions the invoking id needs FILEPOOL authorisation
+  |  %i.e. being PERMITTED to the item or ADMIN authority
+  |4)%Parts of this EXEC are EXECLOADED (put into storage/memory)
+  |5)%MDISK and LINKs are also displayed when checking
+  |  %SUBCONFIG/INCLUDE statements
+  |6)%When you EXECLOAD this EXEC with filetype REXX you can use it
+  |  %as a PIPE stage

@@ -1,0 +1,125 @@
+/*---------------------------------------------------------------+
+| Function : Make an overview of servers that are running,       |
+|            the output will be used by STRTUSRS on AUTOLOG1.    |
+|                                                                |
+| File     : SRVSTAT  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SRVSTAT LIST  output file                           |
+|                                                                |
+| Called   : SRVSTAT  <prefixes> ; <suffixes> ; <wait>           |
+|          : <prefixes> are the wildcars we are searching for.   |
+|            separated by spaces                                 |
+|          : <suffixes> are the last character and a description |
+|            of the servers, separated by a semicolon (;).       |
+|          : <wait>  wait for no of seconds                      |
+|                                                                |
+| Defaults : <prefixes>                                          |
+|            SLD* SLB*                                           |
+|          : <suffixes>                                          |
+|            P Production ; A Acceptance ; O Development ;       |
+|            T test ; B Maintenance                              |
+|          : <wait>                                              |
+|            2 seconds                                           |
+|                                                                |
+| Comments : The servers found will be started in the order      |
+|            defined by <suffixes>                               |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190805 11:56:44                                   |
+| Changes  : .                                                   |
+|            20190809 H.T.Kramer : Added comments                |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+x=Time('R')
+Parse Source . . myfn myft .
+Parse Upper Arg prefixes ';' suffixes ';' wait
+Say Date('S') Time() myfn 'Started'
+list.0=0                                        /* Initialise stem  */
+/*---------------------------------------------------------------+
+| Default prefixes to use                                        |
++---------------------------------------------------------------*/
+If prefixes='?' Then Do
+                     'VMFCLEAR'
+                     'PIPE (NAME SRVSTAT.EXEC:54 END ?)',
+                          '< 'myfn myft' *',    /* Read this file   */
+                          '| tolabel Parse',    /* to here          */
+                          '| cons'              /* show...          */
+                     Exit
+                     End
+If prefixes=''  Then prefixes='SLD* SLB*'
+If suffixes=''  Then suffixes='P Production ; A Acceptance ;O Development ;',
+                              'T Test ; B Maintenance'
+If wait=''      Then wait=10
+/*---------------------------------------------------------------+
+| Expand the some items...                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME SRVSTAT.EXEC:67 END ?)',
+    'var prefixes',                             /* Take this        */
+    '| split',                                  /* Split into recs  */
+    '| strip',                                  /* Remove spaces    */
+    '| specs x4F 1',                            /* Compose          */
+            '~wildcard anycase w1.1 /~ nw',     /* ....wildcard     */
+            'w1.1 n ',                          /* .....stages      */
+            '~/~ n',                            /* 4 later use      */
+    '| stem select.',                           /* Hand 2 rexx      */
+    '?',                                        /* 2nd pipe         */
+    'var suffixes',                             /* Take this        */
+    '| split at ~;~',                           /* Split here       */
+    '| specs w1.1 1',                           /* Compose          */
+            '~'Date('S')'_'Time()'_'myfn'_~ nw',  /* ...separators    */
+            'w2.1 n ',                          /* .                */
+            '~_servers~ n',                     /* .                */
+    '| specs x4F 1',                            /* Compose          */
+            '~CHANGE 1.1 /~ nw',                /* ....change       */
+            'w1.1 n',                           /* .....stages      */
+            '~/ /*_~ n',                        /* .                */
+            'w2;* n',                           /* .                */
+            '~/ 1~ n',                          /* 4 later use      */
+    '| join * x40',                             /* Make 1 record    */
+    '| var replace',                            /* Hand 2 rexx      */
+    '?',                                        /* 3rd pipe         */
+    'CP QUERY NAMES',                           /* Ask cp           */
+    '| split at ~,~',                           /* Split here       */
+    '| strip',                                  /* Remove spaces    */
+    '| specs w1.1',                             /* Keep this        */
+    '| stem names.'                             /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Filter out the various names...                                |
++---------------------------------------------------------------*/
+Do s=1 To select.0
+  'PIPE (NAME SRVSTAT.EXEC:87 END ?)',          /* .                */
+     'stem names.',                             /* Take these       */
+     select.s,                                  /* ...use wildcard  */
+     '| stem list. append'                      /* ....add to stem  */
+End s
+If list.0<>0 Then Do
+/*---------------------------------------------------------------+
+| Rework the findings to an output file                          |
++---------------------------------------------------------------*/
+  'PIPE (NAME SRVSTAT.EXEC:92 END ?)',
+      'stem list.',                               /* Take these       */
+      '| sort -1;-1',                             /* Sort on environm */
+      '| specs ~:id.~ 1 w1.1 n',                  /* Add tag          */
+      '| join 4 ~;~',                             /* Make recs of 5   */
+      '| if1: if pick fs ; f5 \== ~~',            /* If 5th is filled */
+      '|      specs 1;* 1 ~:wait.'wait'~ nw',     /* add this 2 rec   */
+      '| if1:',                                   /* Conn 2 if        */
+      '| split at ~;~',                           /* Split here       */
+      '| specs substr -1;-1 of w1.1 1 w1;* nw',   /* Add envir @ front*/
+      '| join keylen 1',                          /* Make 1 rec per   */
+      replace,                                    /* Do changes       */
+      '| if2: if pick 1.1 \== ~*~',               /* If envir is...   */
+      '|   specs ~* 'Date('S') Time() myfn 'Other servers~ 1 w2;* nw',  /* Add this         */
+      '| if2:',                                   /* Conn 2 if        */
+      '| change ~_~ ~',                           /* Replace this..   */
+      '| split anycase before string ~:ID.~',     /* Split here       */
+      '| > 'myfn' LIST A'                         /* Write to file    */
+  Say Date('S') Time() myfn 'file 'myfn' LIST created'
+  End
+  Else Say Date('S') Time() myfn 'No file created'
+Say Date('S') Time() myfn 'Ending, duration: 'Time('E')
+Exit

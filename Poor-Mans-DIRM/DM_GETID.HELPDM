@@ -1,0 +1,22 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Get the details for a user id                       |
+|                                                                |
+| File     : DM_GETID EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|                                                                |
+| Called   : DM_GETID .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 10:35:45                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

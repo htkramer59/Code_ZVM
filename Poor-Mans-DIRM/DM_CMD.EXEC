@@ -1,0 +1,118 @@
+/*---------------------------------------------------------------+
+| Function : Resize a minidisk                                   |
+|                                                                |
+| File     : DM_CMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_CKMDK EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_INDEX EXEC                                       |
+|            DM_CHV   EXEC                                       |
+|            DM_AMD   EXEC                                       |
+|            DM_DMD   EXEC                                       |
+|            VMLINK   EXEC                                       |
+|                                                                |
+| Called   : DM_CMD   <uid> <cuu> <size> <location>              |
+|          : CMD      <uid> <cuu> <size> <location>              |
+|                                                                |
+| Comments : Only works for normal MDISKS                        |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 09:50:21                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu size location .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check if the id is logged on/disconnected                      |
++---------------------------------------------------------------*/
+If \DM_CKMDK(uid cuu) Then Exit '78'
+'PIPE (NAME DM_CMD.EXEC:43 END ?)',
+  'cp QUERY USER 'uid,                           /* Ask cp           */
+  '| pick w1.1 == ~HCPCQU045E~',                 /* Look for this    */
+  '| count lines',                               /* How many         */
+  '| var idok'                                   /* Store as boolean */
+If \idok Then Call Exit '045'
+/*---------------------------------------------------------------+
+| Find the MDISK details like linkmode and passwords             |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_CMD.EXEC:53 END ?)',
+   'stem uid.',                                           /* Take these       */
+   '| pick anycase w2.1 == ~MDISK~ and',                  /* .correct         */
+                 '(w3.1 == ~'cuu'~ or',                   /* ..mdisk          */
+                  'w3.1 == ~'Strip(cuu,'L','0')'~ or',    /* ....stmt         */
+                  'w3.1 == ~'Right(cuu,4,'0')'~)',        /* .                */
+   '| specs w8;*',                                        /* Only keep this   */
+   '| var mdiskdetails'                                   /* Hand 2 rexx      */
+If rc<>0 Then Call Exit '300'
+/*---------------------------------------------------------------+
+| Define the new mdisk                                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_AMD 'uid' F00F' size location mdiskdetails
+If rc<>0 Then Call Exit rc
+/*---------------------------------------------------------------+
+| Copy the old mdisk to the new one                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid cuu' (NONAMES NOTYPE MODE0 .fm .la'
+If rc=0 Then Parse Pull . . ifm . ilbl .
+        Else Call Exit '302'
+Address COMMAND 'CP LINK 'uid' F00F FFF1 M'
+If rc<>0 Then Call Exit '303'
+/*---------------------------------------------------------------+
+| Get a filemode                                                 |
++---------------------------------------------------------------*/
+Address CMS 'GETFMADR'
+If rc=0 Then Parse Upper Pull . ofm
+        Else Call Exit '304'
+/*---------------------------------------------------------------+
+| Format the target disk                                         |
++---------------------------------------------------------------*/
+Queue '1'
+Queue ilbl
+Address CMS 'FORMAT FFF1 'ofm' (BLK 4K'
+If rc<>0 Then Call Exit '305'
+/*---------------------------------------------------------------+
+| Copy the content                                               |
++---------------------------------------------------------------*/
+Address CMS 'COPYFILE * * 'ifm' = = 'ofm' (REPL OLDD'
+If rc<>0 Then Call Exit '306'
+/*---------------------------------------------------------------+
+| Loose the disks                                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid cuu' <DET (NONAME NOTYPE'
+Address CMS 'VMLINK 'uid 'F00F <DET (NONAME NOTYPE WRITE'
+/*---------------------------------------------------------------+
+| Rename the old one to 0FF0 and the new one to original         |
++---------------------------------------------------------------*/
+Address CMS 'DM_CHV 'uid cuu '0FF0'
+If rc<>0 Then Call Exit rc
+Address CMS 'DM_CHV 'uid 'F00F' cuu
+If rc<>0 Then Call Exit rc
+/*---------------------------------------------------------------+
+| Remove the old disk                                            |
++---------------------------------------------------------------*/
+Address CMS 'DM_DMD 'uid '0FF0'
+If rc<>0 Then Call Exit rc
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

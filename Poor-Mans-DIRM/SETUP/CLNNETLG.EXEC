@@ -1,0 +1,41 @@
+/*---------------------------------------------------------------+
+| Function : Clean USERS NETLOG file after 90 days               |
+|                                                                |
+| File     : CLNNETLG EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : CLNNETLG <days> ( <dryrun>                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220523 15:51:04                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg days . '(' dryrun .
+Parse Source . . myfn myft .
+If days='' Then days=90
+If dryrun='' Then cmsout='| cons'
+             Else cmsout='| > 'Userid()' NETLOG A'
+cutoff=Date('B',Date('S'),'S')-days
+cutoff=Date('S',cutoff,'B')
+remove.0=0
+'PIPE (NAME CLNNETLG.EXEC:27 END ?)',
+   '< 'Userid()' NETLOG A',                      /* Read this        */
+   '| specs w11.1 1 w1;* nw',                    /* Copy date        */
+   '| change w1.1 ~-~~',                         /* Shorten date     */
+   '| p: pick w1.1 > ~'cutoff'~',                /* Select older ones*/
+   '| specs w2;* 1',                             /* Remove short date*/
+   cmsout,                                       /* Show or wrtie    */
+   '? p:',                                       /* Conn 2 pick      */
+   '| stem remove.'
+ 
+If remove.0<>0 Then 'PIPE (NAME CLNNETLG.EXEC:37 END ?)',
+   'stem remove.',
+   '| preface literal 'myfn' Removing entries older than 'cutoff,   /* Add hdr          */
+   '| cons'                                      /* Show             */
+Exit

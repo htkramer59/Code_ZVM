@@ -1,0 +1,159 @@
+/*---------------------------------------------------------------+
+| Function : Filter messages from the log file stored in CONPARK |
+|                                                                |
+| File     : CNPCHECK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CNPCHECK NAMES    Control file                      |
+|            CNPCHECK ERRORS   File with remaining messages      |
+|            CNPCHECK REMOVED  File with removed lines           |
+|                                                                |
+| Called   : CNPCHECK .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200416 10:28:34                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+'PIPE (NAME CNPCHECK.EXEC:20 END ?)',
+    'cp QUERY USERID',                          /* Ask cp           */
+    '| specs w3.1',
+    '| var node',
+    '| specs -2;-1',                            /* Keep this        */
+    '| var shortnode'                           /* Store as         */
+'PIPE (NAME CNPCHECK.EXEC:24 END ?)',
+    '< 'myfn' NAMES *',                         /* Read file        */
+    '| pick 1.1 \== ~*~ and 1.1 \== ~ ~',       /* Skip this        */
+    '| t: totarget pick anycase 1.8 == ~:FILTER.~',     /* Take to here     */
+    '| change anycase ~<SHORTNODE>~'shortnode'~',  /* Change this      */
+    '| change ~:~/~ 1',                         /* Replace these    */
+    '| change ~.~/~ 1',                         /* ......and these  */
+    '| xlate fs / f2 upper',                    /* Prep 4 varload   */
+    '| varload',                                /* Hand 2 rex       */
+    '? t:',                                     /* Conn 2 totarget  */
+    '| join * x40',                             /* Make 1 record    */
+    '| specs fs . f2;*',                        /* Keep this        */
+    '| split at ,',                             /* Split here       */
+    '| strip',                                  /* Remove spaces    */
+    '| specs ~/~ 1 1;* n ~/~ n',                /* Add delimiters   */
+    '| change ~&~/&/~',                         /* Replace this     */
+    '| join * ~!~',                             /* Make 1 record    */
+    '| var filter'                              /* Store as         */
+/* Say filter */
+/*---------------------------------------------------------------+
+| Get info from CONPARK ....                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME CNPCHECK.EXEC:45 END ?)',
+   'cms LISTDIR 'fp,                            /* Ask filepool     */
+   '| drop first 2',                            /* Remove header    */
+   '| specs w2.1 1',                            /* Keep this        */
+   '| specs fs . f-1;-1 1.8  1;* nw.35',        /* Add name         */
+   '| stem content.'                            /* Store as         */
+/*---------------------------------------------------------------+
+| Loop thru the list if ids wanted                               |
++---------------------------------------------------------------*/
+check.0=0
+Do w=1 To Words(ids)
+  wild.w=Word(ids,w)
+  'PIPE (NAME CNPCHECK.EXEC:54 END ?)',
+     '| stem content.',                         /* Take these       */
+     '| wildcard w1.1 /'wild.w'/',              /* Select this      */
+     '| f: fanout',                             /* Dupl. recs       */
+     '| j: juxtapose',                          /* Add rest         */
+     '| specs w1.2',                            /* Keep this        */
+     '| stem check. append',                    /* Add 2 stem       */
+     '? f:',                                    /* Conn 2 fanout    */
+     '| specs ~QUERY MDISK USER~ 1',            /* Compose cmd      */
+             'w1.1 nw',                         /* .                */
+             '~0 DIR~ nw',                      /* .                */
+     '| cp',                                    /* Ask CP           */
+     '| p: pick w1.1 \== ~HCPQMD053E~',         /* Remove these     */
+     '| j:',                                    /* Conn 2 juxtapose */
+     '? p:',                                    /* Conn 2 pick      */
+     '| stem nonexist.'                         /* Store as         */
+End w
+Drop content.
+/*---------------------------------------------------------------+
+| Get the content of the files...                                |
++---------------------------------------------------------------*/
+work.0=0
+Do c=1 To check.0
+   dir=Word(check.c,2)
+   Address CMS 'VMLINK .DIR 'dir' (NONAMES QUIET .fm'
+   If rc=0 Then Parse Pull . . wfm .
+           Else Do
+           Say 'Problem checking 'check.c
+           Iterate
+           End
+   'PIPE (NAME CNPCHECK.EXEC:82 END ?)',
+       'cms LISTFILE * * 'wfm' (NOHEADER ISODATE',  /* List what is ther*/
+       '| pick w5.1 == ~'lrecl'~ and w6.1 >> ~'minrecs'~',  /* Only unpacked    */
+       '| specs ~'check.c'~ 1.35 1;* nw',       /* Adjust layout    */
+       '| sort w3.2 d',                         /* Sort             */
+       '| f: fanout',                           /* Dupl recs        */
+       '| specs w1.1 1.8 w3.2 nw.17 x40 n',     /* Adjust layout    */
+       '| j: juxtapose',                        /* Join records     */
+       '| stem work. append',                   /* Store as         */
+       '? f:',                                  /* Conn 2 fanout    */
+       '| specs w3.3',                          /* Keep this        */
+       '| getfiles',                            /* Get file content */
+       '| j:'                                   /* Conn 2 juxtapose */
+   Address CMS 'VMLINK .DIR 'dir' <DET (NONAMES QUIET'
+End c
+Drop check.
+/*---------------------------------------------------------------+
+| Filter out what messages are OK and keep the rest              |
++---------------------------------------------------------------*/
+'PIPE (NAME CNPCHECK.EXEC:101 END ?)',
+    'stem work.',                               /* Take these       */
+    '| n: not all 'filter,                      /* Remove these     */
+    '| specs a: w1.3 .',                        /* Add breaks       */
+           '    w4;* 27',                       /* .                */
+           ' break a ',                         /* .                */
+           ' id a 1',                           /* .                */
+    '| change 1.8 ~ ~_~',                       /* Replace these    */
+    '| pick 1.30 \== ~~',                       /* If this is empty */
+    '| pick 27;* \== ~~',                       /* ..and this       */
+    '| if: if pick 1.8 \== ~________~',         /* Specific 4 these */
+    '|    specs xFF40FF 1 1;* n write ',        /* Add extra line   */
+    '| if:',                                    /* Conn 2 if        */
+    '| split at string xFF',                    /* Split here       */
+    '| change 1.8 ~_~ ~',                       /* Revert these     */
+    '| drop first 1',                           /* Remove 1st empty */
+    '| stem content.',                          /* Store as         */
+    '| specs 1.8',                              /* Keep this        */
+    '| sort',                                   /* Remove dups      */
+    '| pick 1.1 \== ~ ~',                       /* Keep filled recs */
+    '| unique count 1.8 last',                  /* Count them       */
+    '| specs 11;* 1.8 1.10 nw x40 n',           /* Rework layout    */
+    '| t: take first 1',                        /* Take this        */
+    '| specs ~Servers&files found~ 1 w1.1 nw',  /* Add this         */
+    '| append literal ',                        /* Add empty        */
+    '| fi: faninany',                           /* Take in others   */
+    '| stem summary.',                          /* Store as         */
+    '? t:',                                     /* Conn 2 take      */
+    '| snake 4',                                /* Make 4 columns   */
+    '| preface literal Server and no of files:', /* Add this         */
+    '| fi:',                                    /* Conn 2 faninany  */
+    '? n:',                                     /* Conn 2 not       */
+    '| specs a: w1.3 .',                        /* Make a break     */
+           '    w4;* 27',                       /* .                */
+           ' break a',                          /* .                */
+           ' id a 1',                           /* .                */
+    '| > 'myfn' removed a'                      /* Store as         */
+/*---------------------------------------------------------------+
+| Write the final report                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME CNPCHECK.EXEC:122 END ?)',
+    'stem summary.',                             /* Take these       */
+    '| preface literal Servers with error messages',  /* Add header       */
+    '| preface literal Created: 'Date('S') Time() node,    /* Add timestamp    */
+    '| append literal ',                        /* Add empty line   */
+    '| append literal Server   Date     HH(UTC) Lines from log',  /* Add header       */
+    '| append stem content.',                   /* Add previous cont*/
+    '| > 'myfn' errors a'                       /* Write 2 file     */
+Exit

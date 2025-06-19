@@ -1,0 +1,603 @@
+/*---------------------------------------------------------------+
+| Function : Display all users found on all the accessible       |
+|            RSCS nodes and create various outputs on request.   |
+|                                                                |
+| File     : ALLUSERS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.2.0                                               |
+|                                                                |
+| Files    : ALLUSERS HELPCMS   help screen                      |
+|            ALLUSERS WORK      for CMS  output                  |
+|            ALLUSERS HTML      for HTML output                  |
+|            MULTI    XML       for XML  output                  |
+|            SINGLE   XML       for XML  output                  |
+|            MULTI    JSON      for JSON output                  |
+|            SINGLE   JSON      for JSON output                  |
+|            RSCS     EXEC      pipe stage                       |
+|                                                                |
+| Called   : ALLUSERS <what> ( <options>                         |
+|            See HELP ALLUSERS                                   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220913 16:34:14                                   |
+| Changes  : .                                                   |
+|            20220923 H.T.Kramer : Adapted for condensed RSCS    |
+|                                  output                        |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' options
+Parse Source . . myfn myft .
+'PIPE (NAME ALLUSERS.EXEC:32 END ?)',
+   'CP QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce to this   */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY TIMEZONE',                          /* Ask cp           */
+   '| locate anycase ~ACTIVE~',                  /* Select this      */
+   '| specs w1.1',                               /* Keep this        */
+   '| var timezone',                             /* Hand 2 rexx      */
+   '?',                                          /* 3rd pipe         */
+   'cms QUERY DISPLAY',                          /* What?            */
+   '| specs w3.1',                               /* Keep this        */
+   '| var linelen'                               /* Hand 2 rexx      */
+If \Datatype(linelen,'NUM') Then linelen=160
+If what='?' Then Do
+                 Address CMS 'HELP 'myfn
+                 Exit
+                 End
+/*---------------------------------------------------------------+
+| Now we start the process                                       |
++---------------------------------------------------------------*/
+Call ProcessOptions
+Call CheckPreReq
+Call CheckLoaded
+If \xldd Then Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+         Else Do
+             Call Exit '28 Can not run RSCS code not present'
+             End
+Call GetNodes
+Call CollectInfo
+If \xldd Then Address CMS 'EXECDROP RSCS REXX'
+/*---------------------------------------------------------------+
+| Here we execute the desired action                             |
++---------------------------------------------------------------*/
+Select
+When action=''     Then Call CreateCms
+When action='CMS'  Then Call CreateCms
+When action='HTML' Then Call CreateHtml
+When action='XML'  Then Call CreateXml
+When action='JSON' Then Call CreateJson
+Otherwise Call Exit '99 Can not handle 'action
+End
+Exit:
+/*---------------------------------------------------------------+
+| Single point of exiting the code                               |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg
+                        Else exrc=0
+Exit exrc
+ 
+ 
+CheckLoaded:
+/*---------------------------------------------------------------+
+| Check if the prereq is loaded in storage                       |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:90 END ?)',
+   'cms EXECMAP RSCS REXX',                      /* Ask cms          */
+   '| drop first 1',                             /* Remove hdr       */
+   '| count lines',                              /* How many         */
+   '| var xldd'                                  /* Hand 2 rexx      */
+Return
+ 
+ 
+CheckPreReq:
+/*---------------------------------------------------------------+
+| Check if we can find the prereq                                |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:102 END ?)',
+  'cms LISTFILE RSCS EXEC * (NOH',               /* Ask cms          */
+  '| count lines',                               /* How many         */
+  '| var fnd'                                    /* Hand 2 rexx      */
+If fnd>=1 Then Nop
+          Else Call Exit '29 Pre-requisite RSCS EXEC not found'
+Return
+ 
+ 
+ProcessOptions:
+/*---------------------------------------------------------------+
+| Here we split the options...                                   |
++---------------------------------------------------------------*/
+If Wordpos('QUIET',options)<>0 Then Do
+                   quiet=1
+                   Parse Value options With part1 'QUIET' part2
+                   options=part1 part2
+                   End
+                   Else quiet=0
+Select
+When Wordpos('CMS',options)<>0 Then Do
+                               action='CMS'
+                               Parse Value options With . 'CMS' outfn outft outfm
+                               If outfn='' Then outfn=myfn
+                               If outft='' Then outft='WORK'
+                               End
+When Wordpos('HTML',options)<>0 Then Do
+                               action='HTML'
+                               Parse Value options With . 'HTML' outfn outft outfm
+                               If outfn='' Then outfn=myfn
+                               If outft='' Then outft='HTML'
+                               End
+When Wordpos('XML',options)<>0 Then Do
+                               action='XML'
+                               Parse Value options With . 'XML' outfn outft outfm
+                               If outfn='' Then outfn=myfn
+                               If outft='' Then outft='XML'
+                               End
+When Wordpos('JSON',options)<>0 Then Do
+                               action='JSON'
+                               Parse Value options With . 'JSON' outfn outft outfm
+                               If outfn='' Then outfn=myfn
+                               If outft='' Then outft='JSON'
+                               End
+Otherwise Do
+          action='CMS'
+          If outfn='' | outfn='OUTFN' Then outfn=myfn
+          If outft='' | outft='OUTFT' Then outft='WORK'
+          If outfm='' | outfm='OUTFM' Then outfm=wfm
+          End
+End
+Return
+ 
+ 
+GetNodes:
+/*---------------------------------------------------------------+
+| Get all the nodes we can access via RSCS                       |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Collecting RSCS Nodes'
+node.0=0
+'PIPE (NAME ALLUSERS.EXEC:162 END ?)',
+   'rscs QUERY SYSTEM',                          /* Ask rscs         */
+   '| drop first 2',                             /* Ignore these     */
+   '| drop last 1',                              /* and these        */
+   '| specs w2.2',                               /* Keep this        */
+   '| p: pick anycase w2.1 == ~CONNECT~',        /* Select these     */
+   '| specs w1.1',                               /* Keep node names  */
+   '| append var node',                          /* Add current node */
+   '| sort',                                     /* Sort them        */
+   '| stem node.',                               /* Store as         */
+   '? p:',                                       /* Conn. 2 pick     */
+   '| specs w2.1',                               /* Keep this        */
+   '| append literal ',                          /* Append space     */
+   '| join * x40',                               /* Make 1 record    */
+   '| var inactive'                              /* Store as         */
+If inactive<>'' Then Say TimeStamp()' Inactive nodes: 'inactive
+If node.0=0 Then Call Exit '128 No active nodes found'
+Return
+ 
+ 
+CollectInfo:
+/*---------------------------------------------------------------+
+| Collect and process the info we gathered from the nodes        |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Getting all NAMES from all nodes'
+notes='; ;Notes:;'||,
+     '1) A (I) in the column of the LPAR indicates the user is DISConnected at the LPAR;'||,
+     '2) A (*) in the column of the LPAR indicates the user is LOGged on at the LPAR;'||,
+     '3) A (0) in the column of the LPAR/Node means the id is not running at that LPAR/Node; ;'
+shdr1=Center(' Singles (joined on first 6 chars)',linelen)
+shdr2=Copies(Substr('Userid   Node',1,18),node.0)
+search=''
+output.0=0
+Do n=1 To node.0
+  'PIPE (NAME ALLUSERS.EXEC:196 END ?)',
+      'rscs 'node.n' CP QUERY NAMES',            /* Ask rscs info    */
+      '| specs w1.1 1.8 w2;* nw',                /* Keep this        */
+      '| change w1.1 ~:~ ~',                     /* Remove these     */
+      '| pick anycase w2.1 \== ~VSM~ and',       /* Ignore these     */
+                     'w-1;-1 \== ~TCPIP~',       /* .lines           */
+      '| pick anycase w2.1 \== ~RETURN~ and',    /* .                */
+                     'w3.1 \== ~CODE~',          /* .                */
+      '| strip ~,~',                             /* .                */
+      '| if1: if locate ~,~',                    /* If this is true  */
+      '| specs fs , f1 1',                       /* We add the       */
+              '~,~ nw',                          /* ...lpar id       */
+              'w1.1 nw.8',                       /* ....to each      */
+              'f2 strip nw',                     /* .....field       */
+              '~,~ nw',                          /* .                */
+              'w1.1 nw.8',                       /* .                */
+              'f3 strip nw',                     /* .                */
+              '~,~ nw ',                         /* .                */
+              'w1.1 nw.8',                       /* .                */
+              'f4 strip nw',                     /* .                */
+      '| if1:',                                  /* Conn 2 if        */
+      '| split at ,',                            /* Split            */
+      '| strip',                                 /* Remove spaces    */
+      '| pick w2.1 \== ~~',                      /* Remove empties   */
+      '| pick w3.1 \== ~SSI~',                   /* Remove these     */
+      '| change ~- DSC~ ~',                      /* Remove this      */
+      '| specs w2.1 1.8 w1.1 nw w3.1 nw',        /* Adjust record    */
+      '| if2: if pick w3.1 \== ~~',              /* If this not empty*/
+      '|    specs w1.2 1 ~*~ n',                 /* ...add a star    */
+      '| if2:',                                  /* Conn 2 if        */
+      '|    specs w1.2 1 ~_~ n',                 /* ...else underscre*/
+      '| if2:',                                  /* Conn 2 if        */
+      '| sort 1.8',                              /* Sort on id       */
+      search,                                    /* Do a search....  */
+      '| stem output. append'                    /* Store as         */
+End n
+/*---------------------------------------------------------------+
+| Here process all the output and filter it...                   |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:235 END ?)',
+    'stem output.',                              /* Take these       */
+    '| f: fanout',                               /* Dupl. records    */
+    '| buffer',                                  /* Prevent loop     */
+    '| fi: fanin',                               /* Take in...       */
+    '| sort w1.2',                               /* Sort on name/node*/
+    '| join keylen 8',                           /* Join on name     */
+    '| p: pick w-1;-1 > ~1~',                    /* Select multis    */
+    '| buffer',                                  /* Prevent loop     */
+    '| stem multi.',                             /* Hand 2 rexx      */
+    '| specs w2;-2',                             /* Keep this        */
+    '| split',                                   /* Splt them        */
+    '| specs 1;-2 1',                            /* Remove excess    */
+    '| sort unique',                             /* Remove duplicates*/
+    '| specs w1.1',                              /* Keep this        */
+    '| stem node.',                              /* Hand 2 rexx      */
+    '| join * x40',                              /* Make 1 record    */
+    '| specs ~Userid~ 1.8 1;* nw',               /* Prep as hdr      */
+    '| var hdr',                                 /* Store as         */
+    '? f:',                                      /* Conn. 2 fanout   */
+    '| sort count w1.1',                         /* Count them       */
+    '| specs 11;* 1.8 1.10 strip nw',            /* Reshuffle records*/
+    '| fi:',                                     /* Conn 2 fanin     */
+    '? p:',                                      /* Conn 2 pick      */
+    '| specs 1.6 1 w1.1 nw.8 w2.1 nw.8',         /* Rework for join  */
+    '| sort w1.1',                               /* Sort them        */
+    '| join keylen 6',                           /* Join on 1st 6char*/
+    '| specs 8;* 1',                             /* Keep this        */
+    '| change ~_~ ~',                            /* Replace this     */
+    '| change ~ 1~ ~',                           /* Remove these     */
+    '| stem single.'                             /* Hand 2 rexx      */
+'PIPE (NAME ALLUSERS.EXEC:266 END ?)',
+   'stem multi.',                                /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| p: pick w2;-2 \== ~'hdr'~',                /* Make selection   */
+   '| stem low.',                                /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| stem multi.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Here we create the change of colors/columns                    |
++---------------------------------------------------------------*/
+change=''
+specs=''
+Do n=1 To node.0
+   pos=n+1
+   len=Length(node.n)
+   'PIPE (NAME ALLUSERS.EXEC:281 END ?)',
+      'stem low.',                               /* Take these       */
+      '| buffer',                                /* Prevent loop     */
+      '| if: if pick substr 1.'len' of w'pos'.1 \== ~'node.n'~',   /* Selection        */
+      '|    specs w1.'pos-1' 1 ~'node.n||'.~ nw W'pos';* nw',      /* Rework           */
+      '| if:',                                   /* Conn 2 if        */
+      '| stem low.'                              /* Hand 2 rexx      */
+   change=change'| change w'pos'.1 ~'node.n'~~'
+   specs=specs' w'pos'.1 nw.'len' right'
+End n
+/*---------------------------------------------------------------+
+| Combining 2 stems and chane them a bit                         |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:294 END ?)',
+   'stem multi.',                                /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| append stem low.',                         /* Add these        */
+   '| sort w1.1',                                /* Sort on id       */
+   change,                                       /* Replace some item*/
+   '| specs w1.1 1.8 'specs' w-1;-1 nw.3 right', /* Adjust           */
+   '| specs 1;* 1 x40 n',                        /* Add a space      */
+   '| stem multi.'                               /* Hand 2 rexx      */
+Return
+ 
+ 
+CreateCMS:
+/*---------------------------------------------------------------+
+| Here we create a flat file and show it using XEDIT             |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Preparing output file for Xedit session'
+Address CMS 'VMLINK STATUS (QUIET .fm'
+If rc=0 Then Parse Pull . . outfm .
+        Else outfm='A'
+'PIPE (NAME ALLUSERS.EXEC:314 END ?)',
+   'stem multi.',                                /* Take these       */
+   '| specs 1;* 1 x404040 n',                    /* Adjust           */
+   '| snake 2',                                  /* Make 2 columns   */
+   '| append var notes',                         /* Add various      */
+   '| append literal ',                          /* .itmes           */
+   '| append var shdr1',                         /* .                */
+   '| append var shdr2',                         /* .                */
+   '| append stem single.',                      /* .                */
+   '| split at ;',                               /* Split here       */
+   '| specs 1;* 2',                              /* Move 1 column rgt*/
+   '| change ~_~I~',                             /* Increase         */
+   '| change ~.~0~',                             /* ...visibility    */
+   '| > 'outfn outft outfm                       /* Write 2 file     */
+/*---------------------------------------------------------------+
+| Prepping the XEDIT session                                     |
++---------------------------------------------------------------*/
+hdr='%W'hdr' Cnt    'hdr' Cnt'
+top='%W'outfn outft outfm||Right('%R'node'%B'Date('S') Time()'%W'timezone,linelen-26)
+pfkeyline='Help;_;Quit;Sp/Jn;<->;Scr2;Back;Forw;_;Top;Bot;Quit'
+'PIPE (NAME ALLUSERS.EXEC:334 END ?)',
+   'var pfkeyline',
+   '| split at ;',
+   '| strip',
+   '| specs ~%W~ 1 recno strip n ~=%G~ n 1;* n',
+   '| join *',
+   '| specs 1;* 1.160 centre',
+   '| var pfkeyline'
+Queue 'PREF OFF'
+Queue ':1'
+Queue 'SET CTLCHAR % ESCAPE'
+Queue 'SET CTLCHAR W PROTECT   WHITE HIGH'
+Queue 'SET CTLCHAR G PROTECT   GREEN HIGH'
+Queue 'SET CTLCHAR B PROTECT   BLUE  HIGH'
+Queue 'SET CTLCHAR R PROTECT   RED   HIGH'
+Queue 'SET RESERVED 1 NON NOH 'top
+Queue 'SET RESERVED 3 NON NOH 'hdr
+Queue 'SET RESERVED -1 NON NOH 'pfkeyline
+Queue 'SCALE OFF'
+Queue 'SET PF1 HELP 'myfn
+Queue 'SET PF3 QQUIT'
+Address CMS 'XEDIT 'outfn outft outfm
+If outfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET'
+Return
+ 
+ 
+CreateHtml:
+/*---------------------------------------------------------------+
+| Here we create the HTML output                                 |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Preparing HTML file'
+If outft='' | outft='WORK' Then outft='HTML'
+front='<html><head><font face="arial"><title>ALLUSERS Gemeente Den Haag</title></head><body bgcolor="cornsilk">',
+      '<h1>'Date('S') Time()' ALLUSERS Gemeente Den Haag</h1>'
+back='<hr><font size=-2><center>Last update: 'Date('S') Time() myfn myft'</center><hr></body></html>'
+shdr1='<h2>'shdr1'</h2>'
+scolors='white;lightgrey;yellow;aqua;lightgreen;lightblue;lightcoral;green;red;purple'
+/*---------------------------------------------------------------+
+| Setting up the colors...                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:374 END ?)',
+  'stem node.',                                  /* Take these       */
+  '| specs pad 0 recno 1.2 right 1;* nw',        /* Add number       */
+  '| fi: fanin',                                 /* Take in colors   */
+  '| sort 1.2',                                  /* Sort on nr       */
+  '| join keylen 2',                             /* JOin on nr       */
+  '| pick w3.1 \== ~~',                          /* Remove these     */
+  '| specs ~CHANGE /<td>~ 1',                    /* Compose change   */
+          'w2.1 n',                              /* .                */
+          '~/<td bgcolor=~ n',                   /* .                */
+          'w3.1 n',                              /* .                */
+          '~>~ n',                               /* .                */
+          'w2.1 n',                              /* .                */
+          '~/~ n',                               /* .                */
+  '| join * x4F',                                /* Make 1 record    */
+  '| specs x4F 1 1;* n',                         /* Add vert. bar    */
+  '| var saddcolor',                             /* Hand 2 rexx      */
+  '| change ~<td>~<th>~',                        /* Replace these    */
+  '| var maddcolor',                             /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'var scolors',                                 /* Take this        */
+  '| split at ;',                                /* Split them       */
+  '| specs pad 0 recno 1.2 right 1;* nw',        /* Add number       */
+  '| fi:'                                        /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Prepare the headers                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:401 END ?)',
+  'var hdr',                                     /* Take this        */
+  '| specs 1;* 1 ~CNT~ nw',                      /* Add this         */
+  '| space 1',                                   /* Suppress spaces  */
+  '| change ~ ~</th><th>~',                      /* Replace          */
+  maddcolor,                                     /* Add colors       */
+  '| specs ~<tr><th>~ 1 1;* n ~</th></tr>~ n',   /* Complete hdr     */
+  '| dup 1',                                     /* Dupl. once       */
+  '| join *',                                    /* Make 1 record    */
+  '| change ~</tr><tr>~<th>&nbsp;</th>~',        /* Replace this     */
+  '| var hdr',                                   /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'var shdr2',                                   /* Take this        */
+  '| space 1',                                   /* Suppress spaces  */
+  '| change ~ ~</th><th>~',                      /* Replace this     */
+  '| specs  ~<tr><th>~ 1 1;* n ~</th></tr>~ n',  /* Completer hdr    */
+  '| var shdr2',                                 /* Hand 2 rexx      */
+  '?',                                           /* 3rd pipe         */
+  'literal <br><xmp>',                           /* Start with this  */
+  '| append var notes',                          /* Add this         */
+  '| split at ;',                                /* Split here       */
+  '| append literal </xmp><br>',                 /* Add this         */
+  '| stem middle.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Prepare the tables                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:427 END ?)',
+  'stem multi.',                                 /* Take these       */
+  '| space 1',                                   /* Suppress spaces  */
+  '| change ~ ~</td><td><center>~',              /* Replace this     */
+  '| specs ~<tr><td>~ 1 1;* n ~</td></tr>~ n',   /* Complete rows    */
+  '| snake 2',                                   /* Make 2 columns   */
+  '| change ~</tr><tr>~<td>&nbsp;</td>~',        /* Add empty column */
+  '| change ~<td><center>_~<td bgcolor="orange"><center>I~',      /* Coloring         */
+  '| change ~<td><center>*~<td bgcolor="lightblue"><center>*~',   /* various          */
+  '| change ~<td><center>.~<td bgcolor="white"><center>0~',       /* items            */
+  '| preface var hdr',                           /* Add hdr          */
+  '| preface literal <table style="border:solid";>',          /* Add table        */
+  '| append literal </table>',                   /* ...items         */
+  '| stem table1.',                              /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'stem single.',                                /* Take these       */
+  '| space 1',                                   /* Suppress spaces  */
+  '| change ~ ~</td><td>~',                      /* Replace these    */
+  '| specs  ~<tr><td>~ 1 1;* n ~</td></tr>~ n',  /* Complete rows    */
+  saddcolor,                                     /* Coloring         */
+  '| preface var shdr2',                         /* Add hdr          */
+  '| preface literal <table style="border:solid";>',          /* Add table        */
+  '| append literal </table>',                   /* .items           */
+  '| preface var shdr1',                         /* Add hdr          */
+  '| stem table2.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Write the output...                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:455 END ?)',
+  'stem table1.',                                /* Take these       */
+  '| append stem middle.',                       /* .and these       */
+  '| append stem table2.',                       /* ...and more      */
+  '| preface var front',                         /* Add html hdr     */
+  '| append var back',                           /* Add html footer  */
+  '| > 'outfn outft outfm                        /* Write 2 file     */
+Return
+ 
+ 
+CreateXml:
+/*---------------------------------------------------------------+
+| This where we create 2 xml files                               |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Preparing XML output files'
+hdr='<?xml version="1.0" encoding="utf-8"?>'
+mhdr='<multi  name="multiple users" xml:lang="eng">'
+mftr='</multi>'
+shdr='<single name="multiple users" xml:lang="eng">'
+sftr='</single>'
+If outft='' | outft='WORK' Then outft='XML'
+/*---------------------------------------------------------------+
+| Take the multi user records and write 2 a file                 |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:479 END ?)',
+  'stem multi.',                                 /* Take these       */
+  '| space 1',                                   /* Compress spaces  */
+  '| specs ~<id>~ 1',                            /* xml-ify the      */
+          'w1.1 n',                              /* .records         */
+          '~<status>~ n',                        /* .                */
+          'w2;-2 n',                             /* .                */
+          '~</status><count>~ n',                /* .                */
+          'w-1;-1 n',                            /* .                */
+          '~</count></id>~ n',                   /* .                */
+  '| change ~ ~</status><status>~',              /* Replace these    */
+  '| preface var mhdr',                          /* Add table header */
+  '| append  var mftr',                          /* ...and footer    */
+  '| preface var hdr',                           /* Add xml header   */
+  '| > MULTI 'outft outfm                        /* Send 2 file      */
+/*---------------------------------------------------------------+
+| Here we take the single users and write 2 a file               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLUSERS.EXEC:497 END ?)',
+  'stem single.',                                /* Take these       */
+  '| space 1',                                   /* Compress spaces  */
+  '| specs ~<set><id>~ 1',                       /* XML-ify the      */
+          'w1.1 n',                              /* ...records       */
+          '~<node>~ n',                          /* .                */
+          'w2;-1 n',                             /* .                */
+          '~</node></id></set>~ n',              /* .                */
+  '| change ~ ~</node></id><id>~ 1',             /* This looks silly */
+  '| change ~ ~<node>~ 1',                       /* .but it          */
+  '| change ~ ~</node></id><id>~ 1',             /* ...serves        */
+  '| change ~ ~<node>~ 1',                       /* .....a purpose   */
+  '| change ~ ~</node></id><id>~ 1',             /* .                */
+  '| change ~ ~<node>~ 1',                       /* .                */
+  '| change ~ ~</node></id><id>~ 1',             /* .                */
+  '| change ~ ~<node>~ 1',                       /* .                */
+  '| change ~ ~</node></id><id>~ 1',             /* .                */
+  '| change ~ ~<node>~ 1',                       /* .                */
+  '| change ~ ~</node></id><id>~ 1',             /* .                */
+  '| change ~ ~<node>~ 1',                       /* .                */
+  '| preface var shdr',                          /* Add table header */
+  '| append  var sftr',                          /* .and footer      */
+  '| preface var hdr',                           /* Add xml header   */
+  '| > SINGLE 'outft outfm                       /* Send 2 file      */
+Return
+ 
+ 
+CreateJson:
+/*---------------------------------------------------------------+
+| Here we create 2 JSON files                                    |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Preparing JSON output'
+hdr='{"multi":['
+ftr=']}'
+'PIPE (NAME ALLUSERS.EXEC:531 END ?)',
+   'stem multi.',                                /* Take these       */
+   '| space 1',                                  /* Compress spaces  */
+   '| specs ~{ "id" :"~ 1',                      /* Rework           */
+           'w1.1 n',                             /* .                */
+           '~", "status":"~  n',                 /* .                */
+           'w2;-2 n',                            /* .                */
+           '~","count":"~ n',                    /* .                */
+           'w-1;-1 n',                           /* .                */
+           '~"},~  n',                           /* .                */
+   '| change w3;*  ~_~_", "status":"~',          /* Replace this     */
+   '| change w3;*  ~.~.", "status":"~',          /* .                */
+   '| change w3;*  ~*~*", "status":"~',          /* .                */
+   '| change ~ _~_~',                            /* Adjust           */
+   '| change ~ .~.~',                            /* .                */
+   '| change ~ *~*~',                            /* .                */
+   '| change ~status"~status1"~ 1',              /* Looks silly but  */
+   '| change ~status"~status2"~ 1',              /* .it              */
+   '| change ~status"~status3"~ 1',              /* ...serves a      */
+   '| change ~status"~status4"~ 1',              /* .....purpose     */
+   '| change ~status"~status5"~ 1',              /* .                */
+   '| change ~status"~status6"~ 1',              /* .                */
+   '| change ~status"~status7"~ 1',              /* .                */
+   '| change ~ "status":"",~~',                  /* Replace this     */
+   '| d: drop last 1',                           /* Take all but 1   */
+   '| buffer',                                   /* Prevent loop     */
+   '| fi: fanin',                                /* Take in that one */
+   '| preface var hdr',                          /* Add header       */
+   '| append  var ftr',                          /* ..and footer     */
+   '| > MULTI 'outft outfm,                      /* Write 2 file     */
+   '? d:',                                       /* Conn 2 drop      */
+   '| strip trailing ~,~',                       /* Remove last ,    */
+   '| fi:'                                       /* Conn 2 fanin     */
+hdr='{"single":['
+ftr=']}'
+'PIPE (NAME ALLUSERS.EXEC:566 END ?)',
+   'stem single.',                               /* Take these       */
+   '| space 1',                                  /* Compress spaces  */
+   '| change ~ ~" "~',                           /* Replace this     */
+   '| specs ~"id1":"~ 1 1;* n ~"~ n',            /* ..and this       */
+   '| change ~ ~,"node1":~ 1',                   /* Look silly but   */
+   '| change ~ ~,"id2":~ 1',                     /* .serves a        */
+   '| change ~ ~,"node2":~ 1',                   /* ..purpose        */
+   '| change ~ ~,"id3":~ 1',                     /* .                */
+   '| change ~ ~,"node3":~ 1',                   /* .                */
+   '| change ~ ~,"id4":~ 1',                     /* .                */
+   '| change ~ ~,"node4":~ 1',                   /* .                */
+   '| change ~ ~,"id5":~ 1',                     /* .                */
+   '| change ~ ~,"node5":~ 1',                   /* .                */
+   '| change ~ ~,"id6":~ 1',                     /* .                */
+   '| change ~ ~,"node6":~ 1',                   /* .                */
+   '| change ~ ~,"id7":~ 1',                     /* .                */
+   '| change ~ ~,"node7":~ 1',                   /* .                */
+   '| change ~,~, ~',                            /* Adjust           */
+   '| specs ~{"set": "~ 1',                      /* Complete records */
+           'pad 0 recno n.3 right',              /* .                */
+           '~", ~ n',                            /* .                */
+           '1;* n',                              /* .                */
+           '~},~ n',                             /* .                */
+   '| d: drop last 1',                           /* Take all but one */
+   '| buffer',                                   /* Prevent loop     */
+   '| fi: fanin',                                /* Take in that one */
+   '| preface var hdr',                          /* Add header       */
+   '| append  var ftr',                          /* Add footer       */
+   '| > SINGLE 'outft outfm,                     /* Write 2 file     */
+   '? d:',                                       /* Conn 2 drop      */
+   '| strip trailing ~,~',                       /* Remove last ,    */
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

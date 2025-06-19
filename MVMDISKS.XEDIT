@@ -1,0 +1,1111 @@
+/* This macro can help when moving a lot of MDISKs to a new pack.
+   It works best when called from under "DRM".
+   For each MDISK on a given VOLUME (or multiple VOLUMES):
+     -It places a flag before the original MDISK statement
+     -It duplicates the MDISK statement, assigning a new virtual address:
+         -> if possible:  'newvaddr' = X'1000' + 'oldvaddr'
+         -> else:         'newvaddr' = any free address above X'1000'
+     -It places a LINE in COPMDSK2 LIST to call COPYDDR
+     -It prepares the DRM "GET" or "GETD" command to help find a place
+  You can call it a second time after the copy is done, to remove the
+  old MDISK statements, and change the new 'vaddr' to the original
+  'vaddr' by specifying the CLEANUP parameter.
+  A special use allows to "clone" a system onto other disks.
+ +---------------------------------------------------------------------+
+ | Format 1| MVMDISKS old-volume-label <old-vol-lab2 ...> <( options>  |
+ | Format 2| MVMDISKS <INCfile|EXCfile>  fn ft fm>  <( options>        |
+ |         |   Options:                                                |
+ |         | <AUtoalloc|VAutoalloc> <NODRM> <NOAppend>                 |
+ |         |      <new-dasd-type>   <PCT n> <BLKSZ nK>                 |
+ +---------+-----------------------------------------------------------+
+ | format 3  MVMDISKS CLEANUP|ONLY  parameters                         |
+ |    Checklvl parms:    Check|Fullcheck|Mincheck|Nocheck <ASK>        |
+ |    Other    parms:    <LINK  RR|MR|W|M>    <DEFRACF> <DELRACF>      |
+ +---------------------------------------------------------------------+
+(c) Copyright International Business Machines Corporation 1987, 2003.
+    All Rights Reserved.
+ Parameters:
+  Format 1:  Useful when you want to make some disks empty
+             As parameters you specify the volsers of these disks
+  Format 2:  When having a more complex request, you can make an INCLUDE
+             or EXCLUDE file in which you specify the requests.
+             Both files have records formatted as:
+               MDISK userid cuu      to ex/include an Mdisk of a user
+               USER userid           to ex/include a complete user
+               DISK volser           to ex/include mdisks on a volser
+  Format 3: Used to do cleanup and or check moved minidisk
+            >>> see below for parameter explanation <<<
+ 
+++++++++ usage notes & options for MDISK ALLOCATION part. ++++++++
+ 
+  Option  AUTOALLOC:
+     If you have to move a lot of MDISKs, use the option "AUTO", then
+    MVMDISKS will use the DRM command "GETD". This way, DRM will not
+    prompt you to press PF11 to select space (without the AUTO option
+    you can choose where you place MDISKs, but you have to press PF11
+    once for each MDISK).
+     But: for this AUTO-allocation to work, DRM must have a "good"
+    GAPFILE (DRM creates its GAPFILE using DIRMAP).
+    A "good" GAPFILE describes only the volids you want to use for the
+    new MDISKs.  Therefore MVMDISKS will prompt you to make/update a
+    GAPFILE VOLSERS, in that file you place the volid's where you want to
+    allocate the MDISKs on.
+    >> Note: to make DIRMAP work find free space on the volumes you list,
+    >>       there must be at least one mdisk on those volumes already.
+    >>       Best is to create a FULLPACK volume, as this way DIRMAP will
+    >>       find the size of you pack (e.g. 3390 mdl 3 has 3339 cyls)
+    >>       Do use "MDISK xxx 3390 0 nnnn" and not "0 END"
+    (see DRM HELPCMS arround line 90, or see "IPF SYSTEM REFERENCE").
+  Option  VAUTOALLOC:
+     almost same as AUTOALLOC, but MVMDISKS will "respect" the volser
+    where a MDISK will be placed (uses DRM command "GETV"
+    (MVMDIKS will prompt you to know the corresponding volsers e.g. it
+     could ask on which volser you want to allocate MDISKs that cuurently
+     reside on VMSRES).
+ Option  NODRM:
+     Don't give warning msg if DRM isn't active (I use this for test)
+ Option  NOAPPEND:
+     To not APPEND the disks to be copied to COPMDSK2 LIST,
+     (i.e COPMDSK2 LIST will be erased by MVMDISKS)
+     By default, the disks to copy are appended to file COPMDSK2 EXEC.
+ Option  PCT n:
+     To make MVMDISKS calculate the REAL MDISK requirements:
+    MVMDISKS will LINK to all MDISKs to move, perform a Q DISK
+    to find space occupied, add 'n' % extra and see how many blocks
+    or cylinders are needed, and generate a new MDISK with that size.
+    (to be able to work correctly, we must be able to LINK to the users
+    MDISKs, (at least READ-link password is required) else we use the
+    existing MDISK size.
+ Option  "new-dasd-type":
+    If the old DASD-type differs from the new DASD-type, you have to
+    specify the "new-dasd-type" option.
+    "new-dasd-type" can be any dasd-type known to $DASD$ CONSTS file.
+    The file $DASD$ CONSTS will be used to calculate the new MDISK-size
+ 
+OLD  Option  BLKSZ nK:
+OLD    -In case you use the "PCT" option or the "NEW_dasd_type" option, you
+OLD     can ask MVMDISKS to use a special CMS Blocksize of 'n'K
+OLD     (Type HELP CMS FORMAT to learn something on CMS Mdisk BLOCKSIZES)
+OLD     By default, to calculate capactity relations between different dasd-
+OLD     types, MVMDISKS uses information from $DASD$ CONSTS file, and the
+OLD     same default BLKsizes that CMS FORMAT uses (mostly 4K)
+OLD     With the BLKSZ option, you can ask to MVMDISKS to use a blocksizeof
+OLD     'n'K ('n' being 1, 2 or 4) (MVMDISKS uses this blocksize then both
+OLD     for input MDISK and output MDISK)
+OLD    -(This is not yet tested if specified "new-dasd-type" and PCT option)
+ Example: if old VMSRES/VMPK01 = 9335 , and new VM5RES/VM5K01 is 3390.
+          Specify: "MVMDISKS VMSRES VMPK01 (AUto 3390"
+ Example: if old VMSRES = 3370 , and new VM5RES is 9345
+          and old VMPK01 = 3370 , and new VM5K01 is 3370
+          Two runs of MVMDISKS are needed as Dasdtype VM5RES ^= VM5K01
+               "MVMDISKS VMSRES (AUto 3380"
+               "MVMDISKS VMPK01 (AUto"
+ 
+ Note: If MVMDISKS would not allocate as you expect, you can always
+       recover by the XEDIT command QQUIT.
+ Note: Minidisks starting at 0 are always skipped, they probably are
+       fullpack minidisks that have to be handled specially.
+ Note: When working wirh an INCLUDE or EXCLUDE file, everything inside
+       the include file is OR-ed.  Example, if the file contains:
+         USER LENNON
+         DISK JOKONO
+       Any MDISK on JOKONO or from user LENNON is selected (if it was
+       en INCLUDE file) or is excluded (if it was an EXCLUDE file).
+ 
+++++++++ Usage notes & options for CLEANUP part. ++++++++
+ 
+ CLEANUP and ONLY parameters:
+==============================
+ The cleanup processing consists of removing the old MDISK cards and
+ replacing them by the new MDISK cards.  By default, MVMDISKS CLEANUP
+ will reread the directory, and scan for the special control cards it
+ inserted, compare the address and if OK do the replace.
+ The difference between CLEANUP and ONLY, is that with ONLY we will
+ simply check what disks are OK, but will not attempt to switch the
+ Mdisk cards.
+ 
+ The available minidisk checking levels are:
+   NOCHECK:   Don't check if COPY went OK
+   MINCHECK:  Link to both Mdisks & compare Q DISK info (default)
+   CHECK:     Link to both Mdisks & Idem + compare LISTFILE info
+   FULLCHECK: Link to both Mdisks & Idem + read some files
+ Checking will produce a CMS file listing all mdisks that still should be
+ copied (either as the contents were changed, either as no copy had been
+ succesfull).
+ 
+ During checking, addresses 001, 002, mode X & Mode Z used.
+ - With an extra "ASK" you are questioned after each mdisk wether or not
+   to change the CHECK level, or to quit from there
+ - Please note that after a disk has been checked and is judged to be
+   identical, we will keep the old mdisks linked R/W (in the 900 range),
+   so that nobody can change the disk until we switch the addresses and
+   place the cleaned directory online.  After this online, you should
+   detach those disks we kept (e.g. by a LOGOFF)
+ 
+ LINK mode
+  By default we issue the M option to LINK, as a WRITE link is the only
+  way to get empty disks, and  the easiest to see fmode0 files (else
+  the ACCESSM0 module should be available).   With the LINK option you
+  can request any linkmode you like.
+  The safest mode to use is EW or SW:then we want a WRITE link (with
+  no-one else reading at all) and an EXCLUSIVE one.
+   This way: - we have the disk in WRITE  (and see mode0 files)
+             - nobody can reach the disk while we keep it as 9xx disk
+   What means that even re-using the old mdisk place can be done.
+   (suppose you use mode M, people can have an R/O link, and if someone
+   re-uses the old mdisk location, those people get in trouble)
+ 
+ 
+ DEFRACF means that we'll issue RDEFINE & PERMIT commands for the disks
+ DELRACF means that we'll issue RDELETE & "in"PERMIT commands
+ 
+++++++++ Usage sequence +++++++++++++++++++++++++++++++++
+ 
+ Usage example: "DRM .. DIRECT A"        (or at least XEDIT .. DIRECT)
+                "MVMDISKS VMSRES (AUTO"  ("duplicates" MDISKs)
+                 press ENTER            --> DRM Allocates the new mdisks
+                "DIRECT .."              (place new direct online)
+                check COPMDSK2 LIST      (see what will be copied)
+                "EXEC COPMDSK2"          (copy all MDISK to new place)
+                "DRM .. DIRECT A"        (Xedit new directory)
+                "MVMDISKS CLEANUP"       (remove old mdisks)
+                "DIRECT .."              (place new direct online)
+ 
+++++++++ The disk copying process +++++++++++++++++++++++
+ To copy the minidisks, we show COPMDSK2 LIST.  This exec can indeed be
+ used directly to the copies (via COPYDDR EXEC), but there is a better
+ way.  You can use e.g. the CLSTSMS EXEC, this exec will read the
+ COPMDSK2 EXEC (or any other fileid), and perform the copies using
+ DFSMS COPY.  A big advantage of this procedure is that it maintains a
+ list of its work, what enables easy restart of copies that failed.
+ Refer to the CSLTSMS/CLSTDDR/CLSTCMS EXEC for more information.
+ 
+++++++++ Cloning a system +++++++++++++++++++++++++++++++
+ 
+ If you understand how MVMDISKS works, you can see you can use it to
+ clone an existing system into a new system (on new dasd)
+  1. Take the directory of system A, make a backup copy of it
+  2. Make a control file listing users/mdisks you don't want to get
+     a minidisk on the new system
+  3. Run MVMDISKS, it'll allocate mdisks in the directory
+  4. Place this directory online in system A
+  5. Run the COPY exec to fill in the new Mdisks
+  When all the copies are OK and you want to start the cloned system:
+  6. Run MVMDISKS CLEANUP on the directory we had during step 5, and
+     place that online in SYSTEM B
+  7. On system A, place the old directory online again (the one you
+     backed up in step1).
+  Note that you could do mdisk cloning in steps: rerun steps 2-5, after
+  careful study of excludes/includes, to avoid cloning mdisks twice.
+ 
+Written by: Kris Buelens IBM Belgium;  BUELENSC at BEVM   20 Mar 1987
+            Kris_Buelens@be.ibm.com
+ 
+19 Aug 1987: Created the AUTO & dasdtype options, improves usability
+ 5 Oct 1987:  2 bugs corrected (CLOSE logfile & prb differ. dasdtype)
+16 Nov 1987: Corrected: last USER had never MDISKs 'moved' if needed
+19 Nov 1987: Added PCT option, and a "still working" message
+14 Apr 1989: Added options VAutoalloc and BLKSZ
+14 Jan 1992: updated for 9345 & to FORGET users
+ 6 Feb 1995: improve documentation, streamline everything, ...
+23 Feb 1995: Improve documentation a little more
+14 Mar 1996: Insert new MDISKs with a NEWMDISK keywords
+23 Jan 1998: Allow for EW linkmode during CLEANUP
+ 9 Jan 2003: a few editorial change to make it WWW ready
+*/
+ 
+/*---- some taylorable stuff */
+CopyFile ='COPMDSK2 LIST A'
+QdiskFile='QDISK LISTING A'
+pswd='$M$D$I$'       /* password to use when no MDISK passw is present */
+DeltaCuuSP='800'     /* For VM/SP-type systems, new mdsk cuu= old+800 */
+DeltaCuuXA='1000'    /* For VM/XA or ESA systems new mdsk cuu=old+1000 */
+/*---- end taylorable stuff */
+/*---- Some defaults        */
+WantDrm='1'          /* give warning is DRM not active */
+msgt='10'            /* give every 10 seconds a message: still working*/
+drmcmd='GET'         /*prefix cmd for DRM to allocate space*/
+AUTO=0               /* no specific automatic DRM allocation*/
+VAUTO=0              /* no specific VOLSER autoallocation*/
+newdasd=''           /* same DASD-type by default */
+append=1             /* by default we erase COPMDSK2 LIST */
+minsize=0            /* by default do not perform Q DISK to find space */
+linkmode='Z'         /* only if GETFMADR fails: ACCESS mode for Q DISK */
+linkaddr='199'       /* only if GETFMADR fails: LINK address for Q DISK*/
+oBLKSZ='1K'          /* default old BLKSIZE if "newdasd-type" option */
+nBLKSZ='4K'          /* default new BLKSIZE if "newdasd-type" option */
+FBA_types=''         /* FB-512 devices */
+pct=0
+SomeDiskInc=0        /* If INCLUDE file: some DISK specially INCLUDEd */
+SomeDiskInc.=0       /* If INCLUDE file: some DISK specially INCLUDEd */
+WrtQdiskFile='EXECIO 1 DISKW' QdiskFile '(STRING'
+ 
+parse value diag(0) with 25 bitmap 33
+sp=bitand(left(bitmap,1),'80'X)='80'X /* SP has high order bit=1 */
+DeltaCuu=x2d(word(DeltaCuuXA DeltaCuuSP,sp+1))
+parse source . . myname mytype . syn .;c ='COMMAND';  cs='COMMAND SET'
+ 
+parse upper arg volsers '(' options 0 w1 .
+if volsers='' then call ErrExit 5,"Volume-serial-numbers missing."
+c 'EXTRACT /FNAME/FTYPE/FMODE'
+if ftype.1 ^= 'DIRECT' then call ErrExit 5,"Filetype must be 'DIRECT'."
+ 
+if word(volsers,1)='CLEANUP' |,
+   word(volsers,1)='ONLY' then signal cleanup
+ 
+parse value '0  0' ,
+      with  inc exc inexu. inexm. inexd.
+/*-----------------------------------------------------------------*/
+INEXFID: /*                                                        */
+/*-----------------------------------------------------------------*/
+if abbrev('INCFILE',w1,3) |, /* in/exclude users/mdisks */
+   abbrev('EXCFILE',w1,3) then do
+   if abbrev('INCFILE',w1,3) then inc=1;else exc=1
+   inEx_fid=subword(volsers '*',2,3)
+   address '' 'CMDCALL ESTATE' inex_fid
+   if rc^=0 then call Errexit rc,'Invalid INCLUDE/EXCLUDE fileid:' inex_fid
+   address '' 'EXECIO * DISKR' inex_fid '1 (FINIS STEM L.'
+   if rc^=0 then call errexit rc,'problem with EXECIO * DISKR' inex_fid
+   do l=1 to l.0
+      parse upper var l.l c1 2 0 w1 w2 w3 w4
+      if c1='*' then iterate
+      Select
+       when w1='USER' then do
+           if w2=''  then call errexit 5,'Missing operand on:' l.l
+           if w3<>'' then call errexit 5,'Extraneus operand on:' l.l
+           inexu.w2=1
+       end
+       when w1='MDISK' then do
+           if w3=''  then call errexit 5,'Missing operand on:' l.l
+           if w4<>'' then call errexit 5,'Extraneus operand on:' l.l
+           w3=strip(w3,'L','0')
+           inexm.w2.w3=1
+           SomeDiskInc.w2=1
+       end
+       when w1='DISK' then do
+           if w2=''  then call errexit 5,'Missing operand on:' l.l
+           if w3<>'' then call errexit 5,'Extraneus operand on:' l.l
+           inexd.w2=1;SomeDiskInc=1
+       end
+       Otherwise
+           call errexit 5,'Invalid keyword' w1 'in record:' l.l
+      end
+   end l
+   drop l.
+end
+ 
+address '' 'EXECIO * DISKR $DASD$ CONSTS * (FINIS STRIP'
+if rc^=0 then call ErrExit 5,,
+   'Sorry I need file "$DASD$ CONSTS *", LINK to MAINT 193, and restart.'
+do queued()
+  parse upper pull rexx 0 a '.' b . s .
+  if a='BLOCKS' & datatype(s,'N') then     /* To know all FBA */
+     fba_types=fba_types b
+  interpret rexx
+end
+/* complete $DASD$ CONSTS information */
+a='FB-512'; blocks1k.a=0.5; blocks2k.a=0.25; blocks4k.a=0.125
+Parse value 4k       1k         1k            1k            2k  ,
+      with DefBlkSz. DefBlkSz.a DefBlkSz.3330 DefBlkSz.3340 DefBlkSz.3350
+ 
+do i=1 to words(options)
+ option=word(options,i)
+ select
+  when option='NODRM' then wantdrm=0
+  when option='PCT' then do
+    minsize=1; i=i+1; pct=word(options,i)
+    if pct='' then pct=10
+    if ^datatype(pct,'N') then call ErrExit 5,'Invalid percentage "'pct'".'
+    end
+  when abbrev('NOAPPEND',option,3) then append=0
+  when abbrev('AUTOALLOC',option,2) then auto=1/*Auto allocation wanted*/
+  when abbrev('VAUTOALLOC',option,2) then vauto=1 /*VAutoalloc wanted*/
+  when abbrev('BLKSZ',option,3) | ,     /* Special blocksize asked */
+       abbrev('BLKSIZE',option,3) | ,     /* Special blocksize asked */
+       abbrev('BLOCKSIZE',option,3) then do /* Special blocksize asked */
+call errexit 6666,'Sorry, function disabled now for the moment'
+ 
+       i=i+1; nblksz=word(options,i)
+       parse var nblksz n 'K' +0 k
+       if ^datatype(n,'N') | k^='K' then call ErrExit 5,,
+          'Invalid blocksize "'nblksz'".'
+       end
+ otherwise    /* must be new dasd-type */
+   newdasd=option /* "newdasd" users specification e.g. 3380, 9335 */
+                  /* "newtype" is DIRECTORY specification e.g. FB-F15*/
+   if find('CKD FBA',dasd_type.newdasd)=0 then call errexit 5,,
+      'New DASD-type "'newdasd'" unkown in file $DASD$ CONSTS *'
+   if find('FBA FB-512',newdasd)^=0 then call errexit 5,,
+      'Specify real dasd type for FB-512, e.g.  9335'
+   if dasd_type.newdasd='FBA' then newtype='FB-512'
+                              else newtype=newdasd
+ end /* select */
+end i
+call checkdrm /* check if DRM is active */
+if vauto then do
+   newvol.=''             /* Volser table */
+   drmcmd='GETV'          /* prefix cmd for DRM to allocate space */
+   if drmact then call checkgapf
+             else c 'EMSG DRM is not active,"VAUTOALLOC" option ignored.'
+end
+else if auto then do
+   drmcmd='GETD'          /* prefix cmd for DRM to allocate space */
+   if drmact then call checkgapf
+             else c 'EMSG DRM is not active, "AUTOALLOC" option ignored.'
+end
+ 
+address ''
+if ^append then do; 'ERASE' copyfile;'ERASE MVMDISKS LOG A';end
+if ^append & minsize then 'ERASE' QdiskFile
+if minsize then do
+   pctplus=1+pct/100
+   WrtQdiskFile '*** Minidisks sized by' myname mytype 'on' date() '  'pct'% added to minimum requirements'
+   WrtQdiskFile left('-',80,'-')
+   WrtQdiskFile ' Userid  vaddr type   volume   size  comments'
+   WrtQdiskFile left('-',80,'-')
+   'MAKEBUF'
+   'GETFMADR'
+   if rc=0 then parse pull . linkmode linkaddr .
+   'DROPBUF'
+end
+'EXECIO 1 DISKW' copyfile '(STRING *--------' date() time() '---------'
+address Xedit
+/*-----------------------------------------------------------------*/
+BIGLOOP: /* Loop on all users                                      */
+/*-----------------------------------------------------------------*/
+c ':0' cs 'MSGMODE OFF';cs 'Z 1 72'
+cs 'WRAP OFF'                                         /* avoid looping */
+parse value 0      0,
+      with  mdisks askeduser. movelins owner
+do forever
+   t=time('E')
+   if t>=msgt then do ; t=time('R')
+      Say  time()': Working on user:' Owner 'Mdisk' addr;end
+   c '/USER / | /MDISK /'                   /* find USER or MDISK card */
+   if rc^=0 then leave
+   c 'EXTRACT /CURLINE/LINE'
+   w1=word(curline.3,1)
+   select
+    when w1='USER' then do                                /* USER card */
+       userid=word(curline.3,2)                     /* remember userid */
+       if movelins^='' then call mvdisk  /* handle previous user Mdisks*/
+       SELECT
+        when inc & SomeDiskInc then owner=userid /* maybe he has some  */
+        when inc & SomeDiskInc.userid then owner=userid /* Maybe */
+        when inc &,                      /* handle only included users */
+                inexu.userid='' then owner=''     /* not wanted userid */
+        when exc &,                   /* handle all but excluded users */
+                inexu.userid='1' then owner=''    /* not wanted userid */
+        otherwise
+             owner=userid
+       end
+       If owner='' then say 'Skipping user' userid
+       parse var  line.1,
+             with userline addrs addr movelins minimize
+       end
+    when w1='MDISK' & owner^='' then call Mdisk /* Remember Mdisk */
+    otherwise iterate
+   end /* Select */
+end
+if movelins^='' then call mvdisk /* handle previous user Mdisks*/
+c ':0' cs 'MSGMODE ON'
+Say mdisks 'MDISKs found to move.'
+c 'MSG' mdisks 'MDISKs found to move.'
+if mdisks^=0 then do
+    c 'MSG -->' copyfile 'created for those MDISKs.'
+    address '' 'FINIS' copyfile
+    address '' 'FINIS MVMDISKS LOG A'
+   if minsize then do; address '' 'FINIS' QdiskFile
+                      c 'MSG -->' QdiskFile 'file created' ; end
+   if drmact then c 'MSG Press ENTER to start DRM' drmcmd 'commands.'
+end
+c 'CMSG'
+exit
+ 
+MDISK: /* MDISK card. Now just remember the card, we want to know all
+          the MDISK addresses before choosing "moving" addresses */
+/* MDISK 191 3350 450 005 VMDPK4 MW RPSWX WPSWXX MULTXXX */
+  parse var curline.3 mdisk addr type sta size vol .
+  addr=strip(addr,'L','0')
+  addrs=addrs addr                               /* remember all Vaddr */
+  SELECT
+   when inc then                         /* handle only included users */
+     if inexu.owner     ='' &,                     /* not wanted user  */
+        inexm.owner.addr='' &,                     /* not wanted mdisk */
+        inexd.vol       ='' then return            /* not wanted disk  */
+   when exc then                        /*handle all but excluded users*/
+     if inexu.owner     ='1' |,                    /* not wanted user  */
+        inexm.owner.addr='1' |,                    /* not wanted mdisk */
+        inexd.vol       ='1' then return           /* not wanted  disk */
+   otherwise
+     if find(volsers,vol)=0 then return           /*must be on 'volser'*/
+  end
+  movelins=line.1 movelins /* remember we have to move this one; botmup*/
+return
+ 
+MVDISK: /* move MDISK */
+ cs 'POINT .USER OFF'
+ cs 'POINT .USER'                              /*remember where we are */
+ do i=1 to words(movelins)
+   c 'L :'word(movelins,i)              /* locate the MDISK card again */
+   c 'EXTRACT /CURLINE'
+   parse var curline.3 mdisk addr type sta size vol mode rpw wpw mpw . 72
+   /* is old Mdisk a Fullpack Mdisk ? We skip those */
+   if sta=0 then do
+      Say '+++' owner addr 'starts at 0, maybe fullpack. MDISK skipped.'
+      iterate i
+   end
+   c '+1' c 'EXTRACT /CURLINE';c '-1'
+   if subword(curline.3,1,4)='*$$$$ MDISK' owner addr then do
+      Say '+++' owner addr 'move already prepared. MDISK skipped.'
+      iterate i
+   end
+   c '-1' c 'EXTRACT /CURLINE';c '+1'
+   parse var curline.3 w1 w2 w3 w4 . . w7 .
+   if w1 w2 w3 w7='*$$$$ MDISK' owner addr then do
+      Say '+++' owner addr 'is a prepared move of' w4'. MDISK skipped.'
+      iterate i
+   end
+   linkpw=rpw
+   if mode='' then mode='R'
+   pwupd= (rpw='' | wpw='' | mpw='' )
+   if pwupd then do            /* we need passwords to be able to copy:*/
+     if rpw='' then rpw='R'pswd /* update old MDISK-card with missing  */
+     if wpw='' then wpw='W'pswd /* passwords                           */
+     if mpw='' then mpw='M'pswd
+     c 'REPLACE  'mdisk addr type sta size vol mode rpw wpw mpw
+   end
+   /* Find a "good" Mdisk-Address for the mdisk on new place */
+   naddr=d2x(x2d(addr)+DeltaCuu)                /* new virtual address */
+   if find(addrs,naddr)^=0 | ,                   /* naddr already used */
+      (sp & length(naddr)>3) then                     /* naddr too big */
+         do j=0 by 1 until find(addrs,naddr)=0   /* find special naddr */
+           naddr=d2x(DeltaCuu+j)/* new virtual address */
+         end j
+   addrs=addrs naddr
+   c 'I *$$$$ MDISK' owner addr 'duplicated as' naddr 'for move.'
+ 
+ /* Let us try to find new required size & new dasdtype */
+   if minsize=1 then do /* Calculate new size after LINKing to it */
+      blocksxk=value('BLOCKS'oblksz'.TYPE')
+      blocksnk=value('BLOCKS'nblksz'.NEWTYPE')
+      linksize=''
+      call minsize /* LINK & ACCESS to find size */
+      if newdasd^='' & newtype^=type then do
+         if datatype(blocksxk,'N') & datatype(size,'N') then do
+            blocks=size*blocksxk
+            dirsize=blocks%blocksnk
+            if blocks//blocksnk^=0 then dirsize=dirsize+1
+            if linksize^='' then dirsize=linksize /* calculated by Q DISK */
+            dirtype=newtype
+         end
+         copycmd='COPYCMS'
+         inpw=mpw
+      end
+      else do/* Same disk-type */
+         dirtype=type
+         if linksize^='' then dirsize=linksize /* calculated by Q DISK */
+                         else dirsize=size     /* size as in Directory */
+         copycmd='COPYDDR' ; inpw=rpw
+      end
+   end
+   else do /* Simply use default blksizes */
+      if newdasd^='' & newtype^=type then do
+         oBlkSz=DefBlkSz.type
+         nBlkSz=DefBlkSz.Newtype
+         TotBlocks=Size      * value('BLOCKS'oBlkSz'.Type')
+         DirSize  =TotBlocks / value('BLOCKS'nBlksz'.NewType')
+         if DirSize//1^=0 then dirsize=trunc(dirsize+1)
+         dirtype=newtype; copycmd='COPYCMS'; inpw=mpw
+      end
+      else do/* Same disk-type */
+         dirsize=size     /* size as in current Directory */
+         dirtype=type; copycmd='COPYDDR'; inpw=rpw
+      end
+   end
+ 
+  /* lets see on which volser it should go */
+   if vauto then do /* Volume specific allocation wanted */
+      if newvol.vol='' then call ask_newvol
+      dirvol=newvol.vol /* replace volser in new MDISK statement */
+   end
+   else dirvol='------' /* replace volser in new MDISK statement */
+  /* Ready to insert the new statement */
+   c 'I  NEWMDISK' naddr dirtype ??? dirsize dirvol mode rpw wpw mpw
+   cs 'PENDING ON' drmcmd /* prepare DRM "GET mdisk extent" command*/
+   mdisks=mdisks+1
+   address '' 'EXECIO 1 DISKW' copyfile '(STRING EXEC' copycmd' ',
+                          left(owner,8) right(addr,4) left(inpw,12),
+                          left(owner,8) right(naddr,4) mpw
+end i
+c 'L .USER'                                /* return to where we where */
+return
+ 
+ASK_NEWVOL:
+ do until nvol^='' & ans=OK
+    Say 'Please enter the volser where you want MDISKs that currently'
+    Say ' reside on' vol 'should be allocated.'
+    parse upper external nvol .
+    if nvol='' then iterate
+    Say ' Confirm you answer "'nvol'"  with    -Yes- or No '
+    parse upper external ans .
+    if abbrev('YES',ans) then ans='OK'
+ end
+ newvol.vol=nvol
+return
+ 
+CHECKDRM:
+c 'EXTRACT /PREFIX SYNONYM GET/MSGLINE'
+drmact=( prefix.1 = '$DRM$')              /* DRM GET synonym is active */
+If drmact | ^wantdrm then return
+cs 'MSGMODE ON'
+select
+ when msgline.1 = OFF then cs 'MSGLINE ON 3 9 Overlay'
+ when msgline.3 < 3 then cs 'MSGLINE ON' msgline.2 '9 Overlay'
+ otherwise nop
+end
+c 'EMSG DRM not initialised.' myname  mytype 'works better under DRM control.'
+c 'EMSG    (DRM can be started by "DRM' fname.1 ftype.1 fmode.1'"'
+do forever
+   c 'EMSG Continue without DRM ? Enter Yes or -No-'
+   address '' 'DESBUF'                     /* Avoid looping */
+   c 'READ CMDLINE'                        /* ask user */
+   do queued()
+      parse upper pull ans .               /* read answer from stack */
+      if abbrev('YES',ans,1) then return
+      if abbrev('NO',ans) then exit
+      c 'EMSG Inavalid answer "'ans'"'
+   end
+end
+exit
+ 
+CHECKGAPF: /* Auto-allocation wanted, ask user about GAPFILE */
+ Procedure expose volsers c cs fname.1 ftype.1 fmode.1 inc exc myname
+ address ''
+ 'DROPBUF'
+ queue 'CASE MIXED'
+ queue 'RESERV 3 Yel NOH Please verify your GAPFILE VOLSERS, include',
+         'here only the volsers'
+If inc | exc then do
+ queue 'RESERV 4 yel NOH   you want to use to allocate the selected MDISKs.'
+ l=5
+end;else do
+ queue 'RESERV 3 Yel NOH Please verify your GAPFILE VOLSERS, include',
+         'here only the volsers'
+ queue 'RESERV 4 yel NOH   you want to use to allocate MDISKs currently on:'
+ queue 'RESERV 5 YEL NOH   ' volsers
+ queue 'RESERV 6 RED   H ---> Do NOT include' volsers 'below'.
+ l=7
+end
+ queue 'RESERV' l 'WHI NOH Included volumes should already have a',
+        '*sized* Fullpack mdisk to be found.'
+ queue 'RESERV' l+1 'GRE NOH For help: see DRM HELPCMS, or HELP DIRMAP'
+ queue 'CASE UPPER'
+ 
+ 'XEDIT GAPFILE VOLSERS (NOPROF'
+ 'STATE GAPFILE VOLSERS *'
+ if rc^=0 then do
+    address xedit c 'EMSG File GAPFILE VOLSERS * not found.' myname,
+                     'can not work correctly.'
+    exit 5 ; end
+ 'GLOBALV SELECT $drm$ GET DIRMOPT OUTFM' /*get DRM options */
+ 'GLOBALV SELECT $drm$ SET REMAP 0' /* Avoid DRM restarting DIRMAP */
+ if find(dirmopt,'GAPFILE')=0 then dirmopt=dirmopt 'GAPFILE'
+/* Recreate the GAPFILE on disk */
+ 'DIRMAP' fname.1 ftype.1 fmode.1 outfm '('dirmopt ; drc=rc
+ 'FINIS * VOLSERS *' /*close DIRMAP workfiles*/
+ if drc^=0 then do forever
+    Say 'Returncode' drc 'from DIRMAP, Continue?  Yes or No'
+    parse upper pull ans .                   /* read answer*/
+    if abbrev('YES',ans,1) then leave
+    if abbrev('NO',ans) then exit drc
+    say 'Invalid answer "'ans'"'
+ end
+ gapfile =fname.1 'GAPFILE'  outfm   /* fileid of GAPFILE */
+ mdiskmap=fname.1 'MDISKMAP' outfm   /* fileid of MDISKMAP */
+ Queue 'CURLINE ON 4'
+ Queue 'PREF ON LEFT'
+ Queue 'MSGLINE ON 4 6 O'
+ Queue 'MSG Please verify this GAPFILE (DRM uses this to find free space)'
+ Queue 'MSG   - Delete any not wanted disk'
+ Queue 'MSG   - FILE when done.'
+ 'XEDIT' gapfile '(NOPROF'
+ 
+address xedit
+ /* QUIT old MDISKMAP and old GAPFILE if edited (presents new to DRM) */
+ c 'EXTRACT /RING'
+ ring=''
+ do i=2 to ring.0
+    ring=ring subword(ring.i,1,2) left(word(ring.i,3),1)
+ end
+ ring=space(ring,1)
+ if find(ring,gapfile)^=0  then do; c 'X 'gapfile  ;c 'QUIT' ;end
+ if find(ring,mdiskmap)^=0 then do; c 'X 'mdiskmap ;c 'QUIT' ;end
+ c 'X 'fname.1 ftype.1 fmode.1
+return
+ 
+ 
+MINSIZE: /* get minimum MDISK size */
+ address ''
+ linkmsg=left(owner,8) right(addr,4) left(type,6) left(vol,6) right(size,6)
+ if linkpw='' then do
+    WrtQdiskFile '*'linkmsg '--> Not linked, no link pw, old size used'
+    return; end
+ 
+ parse value diagrc(8,'CP LINK' owner addr linkaddr 'RR' linkpw,120),
+             with linkrc . ans '15'x
+ if linkrc^=0 then do
+    WrtQdiskFile '*'linkmsg '--> Not linked, rc='linkrc ','ans
+    return; end
+ 'SET CMSTYPE HT' /* it doesn't help avoiding ACCESS ERROR msg*/
+ 'ACC' linkaddr linkmode; arc=rc
+ 'SET CMSTYPE RT'
+/*
+LABEL  CUU M  STAT  CYL TYPE BLKSIZE   FILES  BLKS USED-(%) BLKS LEFT  BLK TOTAL
+KRIS   191 A   R/W    6 3350 1024        289       2540-94        160       2700
+*/
+ if arc^=0 then DO
+      WrtQdiskFile '*'linkmsg '--> ACCESS error, rc:'arc
+      call diag 8 , 'DETACH' linkaddr, 80
+      return; end
+ 'MAKEBUF'
+ 'Q DISK 'linkmode' (LIFO'
+ Parse Pull ll 1 ser 7  8 cuu mod 15  16 rw 19  20 vno 24 25 typ 28  ,
+       30 blksz 34  39 fil 45  50 use 56 57 full 59 63 ble 70  74 blt 81
+'DROPBUF'
+ if ^datatype(blksz,'W') then DO
+      WrtQdiskFile '*'linkmsg '--> no CMS disk:' space(ll,1)
+      'RELEASE' linkmode
+      call diag 8 , 'DETACH' linkaddr,80
+      return; end
+ blk1k=use*blksz*pctplus/1024
+ select  /* Find minsize if same dasd type */
+  when type='FB-512' then linksize=blk1k*2
+  when datatype(blocksxk,'N') then linksize=format(blk1k/blocksxk,6,0)
+  Otherwise nop
+ end
+ if newdasd^='' & newdasd^=type then do
+     if datatype(blocksnk,'N') & datatype(size,'N') then do
+      linksize=format(blk1k/blocksnk,6,0)
+      msgsize='; Minsize on:' newdasd':' linksize
+     end
+ end
+ WrtQdiskFile ' 'linkmsg full'% full --> minsize on' type':' size msgsize
+'RELEASE' linkmode
+ call diag 8 , 'DETACH' linkaddr, 80
+return
+ 
+CLEANUP:         /* remove old MDISK card for duplicated/copied MDISKS */
+parse value 1      1     0       0       'M',
+      with  Switch Check RacfDef RacfDel LinkMode AskCheck Mode0opt
+ 
+parse upper arg what options 0 args
+If what='ONLY' then switch=0
+do while Options<>''
+   parse var options option options
+   select
+    when check='' then check=1
+    when abbrev('NOCHECK',option,1)   then check=0
+    when abbrev('MINCHECK',option,1)  then check=1
+    when abbrev('CHECK',option,1)     then check=2
+    when abbrev('FULLCHECK',option,1) then check=3
+    when option='LINK'    then parse var options LinkMode options
+    when option='ASK'     then askcheck='Y'
+    when option='RACFDEF' then RacfDef=1
+    when option='DEFRACF' then RacfDef=1
+    when option='RACFDEL' then RacfDel=1
+    when option='DELRACF' then RacfDel=1
+    Otherwise
+     c 'EMSG Invalid parameter:' option
+     c 'CMSG' syn args
+     exit 5
+   end
+end
+If LinkMode='' then do
+   c 'EMSG LinkMode missing for LINK option'
+   c 'CMSG' syn args
+   exit 5
+end
+Select
+ When wordpos(LinkMode,'R RR SR ER')<>0 then UsePw='1'
+ When wordpos(LinkMode,'W WR SW EW')<>0 then UsePw='2'
+ When wordpos(LinkMode,'M MR SM'   )<>0 then UsePw='3'
+ Otherwise
+   c 'EMSG Invalid LinkMode' LinkMode '; valid: R RR SR ER W WR SW EW M MR SM'
+   c 'CMSG' syn args
+   exit 5
+end
+ 
+If ^switch & check=0 then do
+   c 'EMSG With ONLY parameter you must at least have CHECK option'
+   c 'CMSG' syn args
+   exit 5
+end
+ 
+CheckMsg. =''
+CheckMsg.0='Disk contents not checked.'
+CheckMsg.1='Q DISK info compared OK.'
+CheckMsg.2='LISTFILE info compared OK.'
+CheckMsg.3='Even some files compared OK.'
+ 
+if check>1 then do
+   address '' 'ESTATE PIPE MODULE *'
+   if rc^=0 then do
+      c 'EMSG PIPE MODULE * not found.'
+      c 'EMSG Sorry need CMS PIPELINES for checklevel > MINCHECK '
+      c 'CMSG' syn args
+      exit 5
+   end
+end
+If UsePw=1 then do /* He wants an R/O link */
+   address '' 'PIPE COMMAND QUERY ACCESSM0|SPEC W2 1|VAR ACCM0STAT'
+   If AccM0stat='OFF' then do
+      address '' 'CMDCALL ESTATE ACCESSM0 MODULE'
+      If rc<>0 Then do
+         Say 'ACCESSM0 would make the checking more accurate.'
+         Say '  (the ACCESSM0 MODULE usually lives on MAINT 193)'
+         Say 'Do you want to continue without it ?   Yes or No.'
+         Parse upper external YN .
+         If ^Abbrev('YES',YN,1) then exit 66
+      end
+      address '' 'ACCESSM0 ON'
+      if rc=0 then Mode0opt='MODE0'
+   end
+end
+ 
+parse value userid() 0       0       0      0,
+      with  userid   removed touched nalloc kept
+cleanuplog='MVMDISKS CLEANLOG A'
+address '' 'EXECIO 1 DISKW' cleanuplog '(STRING',
+              '*-------------------' date() time() '-----------------'
+ 
+c ':0' cs 'MSGMODE OFF'
+cs 'WRAP OFF'                                         /* avoid looping */
+cs 'TABS 1'                                           /* FIND's column */
+WantStop=''
+do mdisks=0 by 1 until WantStop='STOP'
+   c 'FIND *$$$$_MDISK'                        /* find MDISK flag card */
+   if rc^=0 then leave
+   c 'EXTRACT /CURLINE';$$card=curline.3            /* check this card */
+/* *$$$$ MDISK O$MAINT$ 191 duplicated as 991 for move.                */
+   parse var curline.3 flag tmdisk uid toldaddr . . tnewaddr .
+   c '-1' c 'EXTRACT /CURLINE'                      /* check prev card */
+   parse var curline.3 omdisk oaddr .    .    .   .   .    orp owp omp .
+   c '+2' c 'EXTRACT /CURLINE'                      /* check next card */
+   parse var curline.3 nmdisk naddr type sta size vol mode rpw wpw mpw .
+   if flag^='*$$$$' | ,                              /* test the cards */
+      tmdisk^='MDISK' | omdisk^='MDISK' | nmdisk^='MDISK' | ,
+      oaddr^=toldaddr | naddr^=tnewaddr then do
+         Say 'The MDISK cards where changed before and after:'
+         Say '   ' $$card
+         touched=touched+1
+         iterate
+   end
+   if vol='------' then do
+         Say 'MDISK for next card was not yet allocated:'
+         Say '    '$$card
+         nalloc=nalloc+1
+         iterate
+   end
+   if check>=1 then do
+      Opswd=word(orp owp omp,UsePw)
+      Npswd=word(rpw wpw mpw,UsePw)
+      chkmdk=CLEANUP_CHECK(uid toldaddr Opswd uid tnewaddr Npswd)
+      parse var chkmdk isOK 3 LvlChecked
+      if isOK^='OK' then do
+         kept=kept+1
+         address '' 'EXECIO 1 DISKW' cleanuplog '(STRING',
+                      'MUST COPY' left(uid,8) right(toldaddr,4) 'PW',
+                                  left(uid,8) right(tnewaddr,4) 'PW',
+                                      '+++Failed+++' chkmdk
+         iterate mdisks
+      end
+   end
+   Else LvlChecked=0
+   If switch then do
+      removed=removed+1
+      c '-2' c 'DELETE 2'              /* delete old MDISK + flag card */
+      if rpw='R'pswd then rpw=''       /*  and update new MDISK-card ..*/
+      if wpw='W'pswd then wpw=''       /*       to look as the old one */
+      if mpw='M'pswd then mpw=''
+      c 'REPLACE  'nmdisk oaddr type sta size vol mode rpw wpw mpw
+   end
+   If checkMsg.lvlChecked<>'' then t=checkMsg.lvlChecked
+                              else t=chkmdk
+   address '' 'EXECIO 1 DISKW' cleanuplog '(STRING',
+              '*CHK OK'lvlChecked' ' left(uid,8) right(toldaddr,4) '>>',
+                                     left(uid,8) right(tnewaddr,4) '==',
+                                     date() time() 'moved to' vol ';' t
+end mdisks
+ 
+c ':0' cs 'MSGMODE ON'
+c 'MSG' mdisks 'flagged MDISKs found,' removed 'old MDISK cards removed.'
+if nalloc+touched<>0 then c 'MSG' nalloc 'cards not yet allocated;',
+                                  touched '$$-cards mismatched.'
+if check>=1 then
+   c 'MSG   'kept' Mdisks kept due to checking not OK.'
+address '' 'FINIS' cleanuplog
+if rc=0 then c 'MSG Log file' cleanuplog 'created.'
+ 
+If AccM0stat='OFF' & Mode0opt<>'' then address '' 'ACCESSM0 OFF'
+exit
+ 
+/*-----------------------------------------------------------------*/
+CLEANUP_CHECK: /* check both disks before cleanup                  */
+/*-----------------------------------------------------------------*/
+/* *$$$$ MDISK O$MAINT$ 191 duplicated as 991 for move.                */
+/* parse var curline.3 flag tmdisk uid toldaddr . . tnewaddr .*/
+ procedure expose check askcheck LINKAS workdonefile cleanuplog userid,
+                  RacfDef RacfDel Mode0opt LinkMode Switch WantStop
+ address ''
+ if symbol('LINKAS')^='VAR' then linkas='900'
+ parse arg inu ina InPswd outu outa OutPswd
+ Say '=========Checking' inu ina '<>' outu outa '====================='
+ if outu=userid then return 'Can''t check my own disks'
+ if inu=userid then return 'Can''t check my own disks'
+ 
+ If RacfDef then call RACFDEF inu ina outu outa /*define stuff to RACF*/
+ myin=001;linkin=0;accin=0
+ myout=002;linkout=0;accout=0
+ call diag 8,'DET 2 1'
+ 
+ 'MAKEBUF'
+ chkmdk=cleanup_check2(inu ina InPswd outu outa OutPswd)
+ parse var chkmdk isOK 3
+ 'DROPBUF'
+ 
+ if ACCin=1  then 'REL Z'
+ if ACCout=1 then 'REL X'
+ 
+ if Switch &,    /* Keep checked disk LINKed => nobody can change*/
+    isOK='OK' then do /* Keep checked disk LINKed => nobody can change*/
+      If RacfDel then call RACFDEL inu ina outu outa
+      if linkin=1 then do linkas=linkas by 1 until rc=0 | rc<>92
+         parse value diagrc(8,'DEF 001' linkas) with rc .
+      end
+ end
+ else if linkin=1 then call diag 8,'DET' myin
+ 
+ if linkout=1 then call diag 8,'DET' myout
+ if isOK='OK' then 'VMFCLEAR'
+return CHKmdk
+ 
+CLEANUP_CHECK2: /* check both disks before cleanup */
+ parse upper arg inu ina InPswd outu outa OutPswd rest
+ Signal on error
+ if symbol('WORKDONEFILE')^='VAR' & Switch then do
+    workdonefile='WORKDONE DIRECT A'
+    Say 'We''l try to save work done in DIRECTORY as' workdonefile
+    Say 'So you can always recover.'
+ end
+ 
+ parse value diagrc(8,'LINK' inu ina myin LinkMode InPswd),
+       with rc . 17 cpans '15'x
+ if rc=1155 then do  /* Not auth for EXCLUSIVE or STABLE links */
+    Say '++++++ problem: can''t link to old disk:' cpans
+    wantstop='STOP'
+    return cpans
+ end
+ 
+ if (rc>=101 & rc<=103) then do; rc=0;say cpans;end /* forced R/O*/
+ if rc^=0 then do
+    Say '++++++ problem: can''t link to old disk:' cpans
+    return cpans
+ end
+ linkin=1
+ 
+ parse value diagrc(8,'LINK' outu outa myout LinkMode OutPswd),
+       with rc . 17 cpans '15'x
+ if (rc>=101 & rc<=103) then do; rc=0;say cpans;end /* forced R/O*/
+ if rc^=0 then do
+    Say '++++++ problem: can''t link to new disk:' cpans
+    return cpans
+ end
+ linkout=1
+ 
+ 'ACCESS' myin  'Z ('Mode0opt ;accin=1
+ 'ACCESS' myout 'X ('Mode0opt ;accout=1
+ 
+ 'Q DISK Z(STACK' ;parse pull header
+ parse pull label 7 . . . . . blksz files .  0 all
+ 
+ 'Q DISK X(STACK' ;parse pull .
+ parse pull nlabel 7 . . . . . nblksz nfiles . 0 nall
+ 
+ if nlabel^=label | nfiles^=files then do
+    Say '+++++++++++>  Q DISK does not match:'
+    Say header;say all;say nall
+    if find('DOS OS',blksz)^=0 /* old disk is OS fmt */
+       then return 'Old disk is fmt' blksz', new disk is different ???'
+       else return 'Q DISK does not match'
+ end
+ if files=0 then return 'OK Both Disks Empty'
+ if find('DOS OS',blksz)^=0 then do /* old disk is OS fmt */
+    if blksz=nblksz      /* new disk same fmt: OK */
+       then return 'OK-WARNING: old & new both fmt' blksz
+       else return 'Old disk is fmt' blksz', new disk is different ???'
+ end
+ Signal off error
+ 'FINIS' cleanuplog /* CLOSE log in case of Abends */
+ if nosave^='NO' & Switch then do
+    address xedit 'COMMAND SAVE' workdonefile
+    savrc=rc
+    do while savrc^=0
+       Say 'Sorry; can''t save the work done so far on your A-disk.'
+       Say 'Enter    NOSAVE    to stop trying to save.'
+       Say 'Enter    FILELIST  to go to FILELIST.'
+       Say 'Enter    STOP      to stop the work.'
+       parse upper external  ans .
+       select
+         when abbrev('STOP',ans,4) then do;WantStop='STOP';return '';end
+         when abbrev('NOSAVE',ans,3) then do;nosave='NO';leave;end
+         when abbrev('FILELIST',ans,1) then  do
+             'EXEC FILELIST * *' word(workdonefile,3)
+             address xedit 'COMMAND SAVE' workdonefile;savrc=rc;end
+         Otherwise Say 'Waddoyousay ?'
+       end
+    end
+ end
+ Signal on error
+ 
+ if check>1 then do /* compare LISTFILE info */
+    Say 'Q DISK info was OK, now comparing LISTFILE info (' files 'files).'
+/*
+FILENAME FILETYPE FM FORMAT LRECL       RECS     BLOCKS   DATE     TIME
+GG       EXEC     A1 V         73         54          2  1/17/92 19:02:59
+*/
+    'PIPE (END ?)',
+      'COMMAND LISTFILE * * X (DATE NOH|',
+      'PREFACE COMMAND LISTFILE * * Z (DATE NOH|',
+      'SORT 1-17|', /* sort fname & ftype */
+      ,   /*compare all fields except FM-letter & nb-BLOCKS */
+      'UNIQUE (1-17 20-44 56-73) singles |',
+      'SLECHT: FANOUT|',
+        'take 1|', /* If records exist: add a text; else nothing */
+        'SPEC /LISTFILE info does not compare for:/ NEXT |',
+        'VAR FOUT|', /* to inform our REXX exec of mismatches */
+        'CONSOLE', /* send msg to console */
+      '?',
+        'SLECHT:|',         /* mismatch files come here */
+        'NOTALL: TAKE 20|', /* don't send more than 20 fids to console */
+        'CONSOLE',          /* send fids to console */
+      '?',
+        'NOTALL:|',
+        'TAKE 1|',
+        'SPEC /More mismatching files found... (display suppressed)/ 1|',
+        'CONSOLE'   /* message about too much files to console */
+    if symbol('FOUT')='VAR' then /* some mismatch found */
+       return 'LISTFILE info not == for the disks'
+ end
+ 
+ if check>2 then do /* compare contents of some files */
+    'PIPE (END ?)',
+      'COMMAND LISTFILE * * X (ALL NOH|',
+      'SORT 35-44|', /* sort on size */
+      'TAKE 10|',    /* only first 10 files */
+      'SPEC 1-18 1|', /* only fnft */
+      'STEM FILES.'
+    Signal off error
+    do i=1 to files.0
+       fnft=space(files.i)
+       'PIPE (END ?)',
+         'COMMAND COMPARE' fnft 'X = = Z|',
+         'INFO: FANOUT|',
+           'DROP 1|',  /* drop header */
+           'take 1|',  /* If more records exist: file did not compare */
+           'SPEC /++++++++ File' fnft 'not same on X and Z/ NEXT |',
+           'VAR FOUT|',
+           'CONSOLE',  /* send mismatch files to console */
+         '? INFO:|',
+           'take 1|CONSOLE'  /* Give COMPARE's infomsg */
+       if symbol('FOUT')='VAR' | rc^=0 then /* some mismatch found */
+          return 'File' fnft 'not same on X and Z'
+    end i
+    Signal on error
+ end
+ ck='';ocheck=check
+ if askcheck='Y' then do while ck=''
+    Say 'Above disk compared OK,'
+    Say 'Still want' word('MINCHECK CHECK FULLCHECK',ocheck) 'option ?'
+/*  Say '   NOCHECK   means to compare nothing'*/
+    Say '   MINCHECK  means to compare Q DISK info'
+    Say '   CHECK     means to compare also LISTFILE info'
+    Say '   FULLCHECK means to COMPARE some files'
+    Say 'Anwser   checklvl <ask>   or  STOP'
+    Say '  where "checklvl" is Mincheck   Check    or    Fullcheck'
+    Say '        "ask"      is anything, so we''ll  not prompt you any longer.'
+    Say '         STOP      is to stop the work.'
+    parse upper external lvl ask .
+    if lvl='' then leave /* no change */
+    select
+ /*  when abbrev('NOCHECK',lvl,1) | lvl=0 then ck=0*/
+     when abbrev('MINCHECK',lvl,1)| lvl=1 then ck=1
+     when abbrev('CHECK',lvl,1)   | lvl=2 then ck=2
+     when abbrev('FULLCHECK',lvl,1)|lvl=3 then ck=3
+     when abbrev('STOP',lvl,4) then do
+           WantStop='STOP'; return 'OK'ocheck;end
+     Otherwise say 'Invalid answer:' lvl
+    end
+    check=ck; askcheck=ask
+    Say 'Switching now to checklevel' check
+ end
+return 'OK'ocheck
+ 
+ERREXIT:
+ do i=2 to arg();c 'EMSG' arg(i);end
+exit arg(1)
+ 
+ERROR:
+ err=''
+ Say '+++++++ A Command failed:'
+ Say 'Retcode' rc 'from' condition('D')
+ select
+  when word(condition('D'),1)='PIPE'     then error='CMS PIPELINE'
+  when word(condition('D'),2)='LINK'     then error='CP LINK'
+  when word(condition('D'),1)='ACCESS'   then
+     Select
+      when Accin & rc=28 then error='Outputdisk empty'
+      when         rc=28 then error='Inputdisk empty'
+      when Accin         then error='CMS ACCESS rc' rc 'on output disk'
+      Otherwise               error='CMS ACCESS rc' rc 'on input disk'
+     end
+  otherwise error=subword(condition('D'))
+ end
+ return error
+ 
+RACFDEF:
+ procedure expose userid
+ a=trace('O')
+ parse arg u1 a1 u2 a2
+ signal off error
+ 'CP SET MSG OFF'
+ 'SET CMSTYPE HT'
+ 'MAKEBUF'
+ queue 'RDEFINE VMMDISK' u1'.'a1' OWNER('userid')'
+ queue 'PERMIT' u1'.'a1' CLASS(VMMDISK) ID('userid') ACCESS(CONTROL)'
+ queue 'RDEFINE VMMDISK' u2'.'a2' OWNER('userid')'
+ queue 'PERMIT' u2'.'a2' CLASS(VMMDISK) ID('userid') ACCESS(CONTROL)'
+ queue 'END'
+ 'RACF (BATCH'
+ 'DROPBUF'
+ 'CP SET MSG ON'
+ 'SET CMSTYPE RT'
+return
+ 
+RACFDEL:
+ procedure expose userid
+ a=trace('O')
+ parse arg u1 a1 u2 a2
+ signal off error
+ 'CP SET MSG OFF'
+ 'SET CMSTYPE HT'
+ 'MAKEBUF'
+ queue 'PERMIT' u1'.'a1' CLASS(VMMDISK) ID('userid') DELETE'
+ queue 'RDELETE VMMDISK' u2'.'a2
+ queue 'END'
+ 'RACF (BATCH'
+ 'DROPBUF'
+ 'CP SET MSG ON'
+ 'SET CMSTYPE RT'
+return
+ 

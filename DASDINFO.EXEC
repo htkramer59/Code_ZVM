@@ -1,0 +1,300 @@
+/*---------------------------------------------------------------+
+| Function : Collect and display info on the DASD in system      |
+|                                                                |
+| File     : DASDINFO EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DASDINFO .                                          |
+|                                                                |
+| Comments : EDEV part has not been tested                       |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250616 15:36:22                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg selct .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Show help when requested                                       |
++---------------------------------------------------------------*/
+If selct='?' Then Do
+             'VMFCLEAR'
+             'PIPE (NAME DASDINFO.EXEC:26 END ?)',
+                '< 'myfn myft' *',            /* Read myself */
+                '| tolabel Parse',            /* Up to here  */
+                '| cons'                      /* Show        */
+                Exit
+             End
+/*---------------------------------------------------------------+
+| Create header                                                  |
++---------------------------------------------------------------*/
+hdr='Rdev Ch Label  Status    Users CtlUnit DevType Size     Start End   Size  Used  High        Space-Type'
+/*---------------------------------------------------------------+
+| Get the node name                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:40 END ?)',
+   'cp QUERY USERID',                            /* Ask cp           */
+   '| specs w3.1 1',                             /* Take this        */
+   '| var node',                                 /* Hand 2 rexx      */
+   '| specs -3;-1 1',                            /* Reduce to this   */
+   '| var shortnode'                             /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Get all CHPID info                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:49 END ?)',
+    'cp QUERY CHPIDS',                           /* Ask cp           */
+    '| drop last 3',                             /* Remove these     */
+    '| locate /+/',                              /* Select actives   */
+    '| change ~x~~',                             /* Remove this      */
+    '| stem line.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Get more details                                               |
++---------------------------------------------------------------*/
+Do l=1 To line.0
+   strt=Word(line.l,1)
+   rest=Subword(line.l,2)
+   'PIPE (NAME DASDINFO.EXEC:61 END ?)',
+      'var rest',                                /* Take this        */
+      '| space 0',                               /* Remove spaces    */
+      '| deblock 1',                             /* Reduce 2 bytes   */
+      '| specs pad 0 recno from 0 1.2 right 1.1 nw',   /* Add rec no       */
+      '| pick w2.1 == ~+~',                      /* Take actives     */
+      '| specs ~QUERY CHPID 'strt'~ 1 w1.1 d2x n.1 right',   /* Compose cmd      */
+      '| cp',                                    /* Issue cmd        */
+      '| specs w2.1 1 w6;* nw',                  /* Rewrite record   */
+      '| stem dev.'                              /* Hand 2 rexx      */
+End l
+/*---------------------------------------------------------------+
+| Get all device info from active CHPIDS                         |
++---------------------------------------------------------------*/
+adev.0=0
+Do d=1 To dev.0
+   Parse Value dev.d With chpid devs
+   'PIPE (NAME DASDINFO.EXEC:78 END ?)',
+       'var devs',                               /* Take this        */
+       '| split',                                /* Split into recs  */
+       '| t: take first 1',                      /* Take 1           */
+       '| fi: fanin',                            /* Take in others   */
+       '| join * ~-~',                           /* Compose range    */
+       '| specs ~QUERY~ 1 w1.1 nw',              /* Compose cmds     */
+       '| cp',                                   /* Issue cmds       */
+       '| split at ,',                           /* Split here       */
+       '| strip',                                /* Remove spaces    */
+       '| specs 1;* 1 ~'chpid'~ nw',             /* Compose record   */
+       '| stem adev. append',                    /* Add 2 stem       */
+       '? t:',                                   /* Connect 2 take   */
+       '| take last 1',                          /* Take 1           */
+       '| fi:'                                   /* Conn 2 fanin     */
+End d
+/*---------------------------------------------------------------+
+| Select the dasd and find out whos is working on them           |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:97 END ?)',
+    'stem adev.',                                /* Take these       */
+    '| pick w1.1 == ~DASD~',                     /* Selection        */
+    '| specs w2;* 1',                            /* Keep this        */
+    '| f: fanout',                               /* Dupl. records    */
+    '| buffer',                                  /* Prevent stall    */
+    '| fi: faninany',                            /* Take in other    */
+    '| sort w1.1',                               /* Sort on cuu      */
+    '| join keylen 4',                           /* Join on cuu      */
+    '| specs w1.1 1.4',                          /* Re-arrange       */
+            'w10.1 nw.2',                        /* .    records     */
+            'w8.1 nw.6',                         /* .                */
+            'w6.2 nw.10',                        /* .                */
+            'w9.1 nw.4 right',                   /* .                */
+            'w2.1 nw.7',                         /* .                */
+            'w3.1 nw.7',                         /* .                */
+            'w5.1 nw.8 right',                   /* .                */
+            'w11.1 nw.5 right',                  /* .                */
+            'w12.1 nw.5 right',                  /* .                */
+            'w13.1 nw.5 right',                  /* .                */
+            'w14.1 nw.5 right',                  /* .                */
+            'w15.1 nw.5 right',                  /* .                */
+            'w16.1 nw.5 right',                  /* .                */
+            'w17;* nw',                          /* .                */
+    '| stem dev.',                               /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~QUERY DASD DETAILS~ 1 w1.1 nw',    /* Compose cmds     */
+    '| cp',                                      /* Issue cmds       */
+    '| pick w2.1 == ~CUTYPE~',                   /* Select these     */
+    '| change ~=~~',                             /* Remove           */
+    '| change ~,~~',                             /* .  these         */
+    '| specs w1.1 1',                            /* Re-arrange       */
+            'w3.1 nw',                           /* .    records     */
+            'w5.1 nw',                           /* .                */
+            'w8.2 nw',                           /* .                */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY ALLOC MAP',                        /* Ask cp           */
+    '| drop first 3',                            /* Remove header    */
+    '| specs w2;*',                              /* Keep this        */
+    '| fi:'                                      /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Split of the EDEVICEs                                          |
++---------------------------------------------------------------*/
+edev.0=0
+'PIPE (NAME DASDINFO.EXEC:142 END ?)',
+   'stem dev.',                                  /* Take these       */
+   '| buffer',                                   /* Prevent stall    */
+   '| p: pick substr 1.4 of w8.1 == ~9336~',     /* Select these     */
+   '| sort w1.1',                                /* Sort on cuu      */
+   '| stem edev.',                               /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| stem dev.'                                 /* Hand back        */
+If edev.0<>0 Then Call Edev_Processing
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Do d=1 To dev.0
+   dev=Word(dev.d,1)
+   'PIPE (NAME DASDINFO.EXEC:156 END ?)',
+      'cp QUERY SYS 'dev,                        /* Ask cp           */
+      '| drop first 2',                          /* Remove hdr       */
+      '| if1: if pick w2.1 == ~MDISKS~',         /* If this          */
+      '|    specs w2;*',                         /* keep this        */
+      '| if1:',                                  /* Conn 2 if        */
+      '| split at ,',                            /* Split here       */
+      '| strip',                                 /* Remove space     */
+      '| f: fanout',                             /* Dupl. records    */
+      '| buffer',                                /* Prevent stall    */
+      '| fi: fanin',                             /* Take in others   */
+      '| sort w1.2',                             /* Sort on cuu      */
+      '| join keylen 13',                        /* Join them        */
+      '| if2: if pick anycase w1.2 \== w4.2',    /* If this          */
+      '|     specs w1.3 1 ~=~ n w4.2 n x4F n',   /* Rework to this   */
+      '| if2:',                                  /* Conn 2 if        */
+      '|     specs w1.3 1 x4F nw.14 right',      /* Rework others    */
+      '| if2:',                                  /* Conn 2 if        */
+      '| snake 3',                               /* Make 3 columns   */
+      '| change x7E4FFF x40',                    /* Replace          */
+      '| change xFF7E x40',                      /* .   therse       */
+      '| strip trailing x4F',                    /* Remove vert. bar */
+      '| specs ~'dev'~ 1 1;* nw',                /* Add cuu          */
+      '| stem dev. append',                      /* Add 2 stem       */
+      '? f:',                                    /* 2nd pipe         */
+      '| specs ~QUERY MDISK USER~ 1 w1.2 nw',    /* Compose cmds     */
+      '| cp',                                    /* Hand 2 cp        */
+      '| nlocate anycase ~TARGETID~',            /* Remove thse      */
+      '| if3: if pick substr 1.3 of w1.1 == ~HCP~',   /* If this          */
+      '|      specs xFF 1 ~--------- ----~ n xFF n',  /* Add this         */
+      '| if3:',                                  /* Conn 2 if        */
+      '| buffer',                                /* Prevent stall    */
+      '| fi:'                                    /* Conn 2 fanin     */
+End d
+/*---------------------------------------------------------------+
+| Link workspace if present                                      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK WORK (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Write the report                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:196 END ?)',
+   'stem dev.',                                  /* Take these       */
+   '| sort w1.1',                                /* Sort on cuu      */
+   '| specs a: w1.1 .',                          /* Create           */
+              'w2;* 6',                          /* .   breaks       */
+              'break a',                         /* .                */
+              'id a 1',                          /* .                */
+   '| if: if pick 1.1 \== ~ ~',                  /* If this          */
+   '|     specs ~; ;'hdr';~ 1 1;* n',            /* Add hdr and space*/
+   '| if:',                                      /* Conn 2 if        */
+   '| split at ;',                               /* Split here       */
+   '| drop first 1',                             /* Remove empty     */
+   '| preface literal 'myfn myft Date('S') Time()' on LPAR 'node,   /* Add timestamp    */
+   '| > 'myfn node wfm                           /* Write 2 file     */
+/*---------------------------------------------------------------+
+| Show the report                                                |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'myfn node wfm
+/*---------------------------------------------------------------+
+| Remove file and workspace                                      |
++---------------------------------------------------------------*/
+If wfm='A' Then Address CMS 'ERASE' myfn node' A'
+Address CMS 'VMLINK WORK <DET (QUIET WRITE'
+Exit
+ 
+ 
+Edev_Processing:
+/*---------------------------------------------------------------+
+| Process all EDEVICEs on the system                             |
++---------------------------------------------------------------*/
+out.0=0
+/*---------------------------------------------------------------+
+| Check DASD against EDEVices and collect the info               |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:229 END ?)',
+   'stem edev.',                                /* Take these      */
+   '| f1: fanout',                              /* Duplicate recs  */
+   '| specs w1.1 1.5',                          /* Keep this       */
+   '| j: juxtapose',                            /* Put side by side*/
+   '| stem out. append',                        /* Append 2 stem   */
+   '? f1:',                                     /* Conn 2 fanout   */
+   '| specs ~QUERY EDEV~ 1 w1.1 nw ~DETAILS~ nw', /* Compose cmds  */
+   '| cp',                                      /* Ask cp          */
+   '| f2: fanout',                              /* Duplicate recs  */
+   '| change 1.7 ~ ~_~',                        /* Replace spaces  */
+   '| j:',                                      /* Conn 2 juxtapose*/
+   '? f2:',                                     /* Conn 2 fanout   */
+   '| strip leading ~_~',                       /* Remove these    */
+   '| join * x40',                              /* Make 1 rec      */
+   '| split before string ~EDEV~',              /* Split here      */
+   '| split before string ~FCP_DEV:~',          /* .....and here   */
+   '| specs w1.2',                              /* Keep these      */
+   '| join * x40',                              /* Make 1 rec      */
+   '| split before string ~EDEV~',              /* Split here      */
+   '| specs w2.1 1 w4.1 nw w6.1 nw',            /* Remove stuff    */
+   '| stem fcp.'                                /* Store here      */
+/*---------------------------------------------------------------+
+| Get info on the Fcp devices found                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:254 END ?)',
+   'stem fcp.',                                 /* Take these      */
+   '| f: fanout',                               /* Duplicate recs  */
+   '| specs w1.2 1.5',                          /* Keep this       */
+   '| j: juxtapose',                            /* Put side by side*/
+   '| stem out. append',                        /* Add to this     */
+   '? f:',                                      /* Conn 2 fanout   */
+   '| specs ~QUERY~ 1 w2.2 nw',                 /* Compose cmds    */
+   '| cp',                                      /* Ask cp          */
+   '| j:'                                       /* Conn 2 juxtapose*/
+/*---------------------------------------------------------------+
+| Process the found dasd                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:267 END ?)',
+   'stem edev.',                                /* Take stem       */
+   '| f: fanout',                               /* Duplicate recs  */
+   '| specs w1.1 1.5',                          /* Keep this       */
+   '| j: juxtapose',                            /* Lay side by side*/
+   '| stem out. append',                        /* Append to stem  */
+   '? f:',                                      /* Conn 2 fanout   */
+   '| specs ~QUERY SYS~ 1 w1.1 nw',            /* Compose cmd     */
+   '| cp',                                      /* Ask cp          */
+   '| pick 1.1 \== ~ ~',                        /* Remove empties  */
+   '| j:'                                       /* Conn 2 juxtapose*/
+/*---------------------------------------------------------------+
+| Format the output and write the file                           |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDINFO.EXEC:281 END ?)',
+   'stem out.',                                 /* Take these      */
+   '| specs pad 0 w1.1 x2d 1.5 right w1;* nw',  /* Make cuu decimal*/
+   '| sort w1.1',                               /* Sort            */
+   '| specs a: w2.1 .',                         /* Compose report  */
+            'if break(a) then',                 /* Break on cuu    */
+            '~;_;~ 1',                          /* Add lines break */
+            'id a n',                           /* Write cuu       */
+            'write',                            /* Really add rec  */
+            'endif',                            /* End of iff      */
+            'w3;* 7',                           /* Add rest        */
+   '| change ~_~ ~',                            /* Replace these   */
+   '| split at ;',                              /* Make extra lines*/
+   '| preface literal 'Date('S') Time() myfn,   /* Add timestamp   */
+            'on LPAR 'node,
+   '> 'myfn' EDEVS 'wfm                         /* Write to file   */
+Return

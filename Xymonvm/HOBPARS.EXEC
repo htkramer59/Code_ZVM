@@ -1,0 +1,158 @@
+/*---------------------------------------------------------------+
+| Function : Show some indicators ...                            |
+|                                                                |
+| File     : HOBPARS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : POOLGAP  EXEC      routine                          |
+|            LINUXOS  DISKMAP   input                            |
+|                                                                |
+| Called   : HOBPARS  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210910 12:50:00                                   |
+| Changes  : .                                                   |
+|            20210910 H.T.Kramer : Rewrite...                    |
+|   H.T.Kramer 20200608 Removed GLOBALV PUT because it is        |
+|              filling the A-disk unneeded                       |
+|   Herald ten Dam 10/04/2019                                    |
+|       Indicators for performance issues                        |
+|       Indication of possible guest spaces                      |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Initialise some stuff                                          |
++---------------------------------------------------------------*/
+stgrps='LINUXOS'                       /* Dirm group we need */
+guestsize=25165824                     /* size in blocks */
+ 
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBPARS.EXEC:40 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+ 
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status           /*  Send the result in status to bb */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOBPARS.EXEC:51 END ?)',
+                 'var status',
+                 '| split at x15',
+                 '| strip',
+                 '| cons'
+              End
+exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Ask details from perfkit                                       |
++---------------------------------------------------------------*/
+"PIPE (NAME HOBPARS.EXEC:64 END ?)",
+    "fcx privops",                               /* Ask perfkit      */
+    "| strip",                                   /* Remove spaces    */
+    "| split anycase before string ~Diagnose~",  /* Split here       */
+    "| pick w2.1 == ~X'44'~ or w2.1 == ~X'9C'~", /* Select these     */
+    "| specs w2.1 1 w4.1 n",                     /* Keep these values*/
+    "| change ~X'~/DIAG~",                       /* Prep 4 varload   */
+    "| change ~'~/~",                            /* ...idem          */
+    "| varload"                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Change the colors when too high                                |
++---------------------------------------------------------------*/
+msg   = 'Indicators'cr
+color='green'
+If diag44>50000 Then color = 'red'
+If diag9c>5000  Then color = 'red'
+/*---------------------------------------------------------------+
+| Check how many guests we can accomodate on LINUXOS             |
++---------------------------------------------------------------*/
+guests=HOBGFITS(stgrps guestsize)
+If guests < minguests Then color = 'red'
+status='status' machine||'.indicators' color TimeStamp() cr cr,
+       'Below are indicators servers might be very busy' cr,
+       'Diagnose X-44(<50000): 'diag44 cr,
+       'Diagnose X-9C(<5000): 'diag9c cr cr,
+       guests 'guests of 'guestsize' blocks possible on 'stgrps' disk pool'
+return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCPARS'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBPARS.EXEC:151 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

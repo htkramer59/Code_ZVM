@@ -1,0 +1,283 @@
+/*---------------------------------------------------------------+
+| Function : Monitor thruput on the vswitches in an interval     |
+|                                                                |
+| File     : VSWMON   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VSWMON  NAMES    control file                       |
+|                                                                |
+| Called   : VSWMON  <argument> ( <options>                      |
+|                                                                |
+|            <argument>:                                         |
+|                     COMPACT Zero measurements are skipped      |
+|                     LONG    Also zero measurements are shown   |
+|                                                                |
+|            <options> :                                         |
+|                     CONS    Display only                       |
+|                     FILE    To file only                       |
+|                     C&F     Display and to file                |
+|                     NOHDR   Minimal headers                    |
+|                                                                |
+| Comments : Need CP class B                                     |
+|            Interval is defined in NAMES file :nick.wait        |
+|            :nick.VSWMON in NAMES file defines where to         |
+|            store output when FILE or C&F is used.              |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200127 12:46:41                                   |
+| Changes  : .                                                   |
+|            20200206 H.T.Kramer : Added option to store output  |
+|                     in a file, one per day                     |
+|            20200128 H.T.Kramer : Moved input to NAMES file     |
+|                     Added LONG option, default is COMPACT.     |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' option
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Determine what to do                                           |
++---------------------------------------------------------------*/
+Select
+When how='?'       Then Do
+                   'VMFCLEAR'
+                   'PIPE (NAME VSWMON.EXEC:43 END ?)',
+                     '< 'myfn myft' *',         /* Read this file   */
+                     '| tolabel Parse',         /* ..upto here      */
+                     '| cons'                   /* Show             */
+                   Exit
+                   End
+When how=''        Then Do
+                        how='COMPACT'
+                        compact='| pick w-2;-2 \== ~0.0000~'
+                        End
+When how='COMPACT' Then compact='| pick w-2;-2 \== ~0.0000~'
+When how='LONG'    Then compact=''
+Otherwise Exit 98
+End
+/*---------------------------------------------------------------+
+| Are we using the NOHDR option.........                         |
++---------------------------------------------------------------*/
+If Pos('NOHDR',option)<>0 Then Do
+     'PIPE (NAME VSWMON.EXEC:61 END ?)',
+        'var option',                           /* Take this        */
+        '| change ~NOHDR~~',                    /* Remove this      */
+        '| var option'                          /* Store as         */
+      nohdr=1                                   /* Switch this on   */
+      End
+      Else nohdr=0                              /* Switch this off  */
+Select
+When option=''     Then output='| cons'
+When option='CONS' Then output='| cons'
+When option='FILE' Then output='| >> 'myfn' $TODAY$ *'
+When option='C&F'  Then output='| >> 'myfn' $TODAY$ * | cons'
+Otherwise Exit 99
+End
+numeric digits 20                               /* To cope w numbers*/
+wait=''                                         /* Initialise       */
+switches=''                                     /* ...also          */
+legend=,
+     '| preface literal Userid   OSA.Port Receive    Transmit   Receive    Transmit      Receive   Transmit',
+     '| preface literal                   Previous(in MB)       Current(in MB)           Thruput(in MB/s)'
+If option='FILE' | option='C&F' Then disk=1
+                                Else disk=0
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME VSWMON.EXEC:86 END ?)',
+    'CP QUERY USERID',                          /* Ask CP           */
+    '| specs w3.1',                             /* Keep this        */
+    '| var node'                                /* Hand 2 rexx      */
+'PIPE (NAME VSWMON.EXEC:90 END ?)',
+    '< 'myfn' NAMES *',                         /* Get the input    */
+    '| strip',                                  /* Remove spaces    */
+    '| pick 1.1 \== ~*~ and 1.1 \== ~~',        /* Ignore these     */
+    '| join * x40',                             /* Make 1 record    */
+    '| split anycase before string ~:NICK.~',   /* Split here       */
+    '| n1: nlocate anycase ~:NICK.WAIT~',       /* Handle separately*/
+    '| n2: nlocate anycase ~:NICK.'myfn'~',     /* Handle separately*/
+    '| if: if nlocate anycase ~:NODE.~',        /* If missing       */
+    '|    specs 1;* 1 ~:NODE.'node'~ nw',       /* .....add this    */
+    '| if:',                                    /* Conn 2 if        */
+    '| locate anycase ~:NODE.'node'~',          /* Get these        */
+    '| specs fs : f3',                          /* Rework findings  */
+    '| specs fs . f2',                          /* ...a bit more    */
+    '| var switches',                           /* Store as         */
+    '| split',                                  /* Split into recs  */
+    '| stem vsw.',                              /* Store as         */
+    '? n1:',                                    /* Conn 2 nlocate   */
+    '| specs fs . f3',                          /* Keep this        */
+    '| var wait'                                /* Store as         */
+If wait=''     Then wait='00:10'
+If switches='' Then Do
+                    Say TimeStamp() 'No switches to monitor'
+                    Exit 28
+                    End
+/*---------------------------------------------------------------+
+| Get access to where we store output...                         |
++---------------------------------------------------------------*/
+If disk Then Do
+     Address CMS 'VMLINK 'myfn' (ONLY('myfn') .FM'
+     If rc=0 Then Parse Pull . . tfm .
+             Else Exit rc
+     End
+Say TimeStamp() 'Interval between measurements (mm:ss): 'wait
+Say TimeStamp() 'Monitoring: 'switches
+Say TimeStamp() 'Output is : 'how
+/*---------------------------------------------------------------+
+| Initial info gathering                                         |
++---------------------------------------------------------------*/
+Do s=1 To vsw.0
+   vsw=vsw.s                                    /* Fill this        */
+   'PIPE literal 0 | var olddata.'vsw'.0'       /* Init these       */
+   Call Get_Info
+End s
+/*---------------------------------------------------------------+
+| Loop forever...until enter pressed                             |
++---------------------------------------------------------------*/
+Do main=1
+  elapsed=Time('E')                             /* Get elapsed time */
+  Do s=1 To vsw.0
+     'VMFCLEAR'
+     vsw=vsw.s                                  /* Fill this        */
+     Call Get_Info
+     Call Compare_Data
+     'PIPE (NAME VSWMON.EXEC:144 END ?)',
+           'stem newdata.'vsw'.',               /* Move these       */
+           '| stem olddata.'vsw'.'              /* ...into these    */
+  End s
+  z=Time('R')                                   /* Reset timer      */
+  'WAKEUP +'wait' (CC TIME EXT'
+  Select
+  When rc=6 | rc=8 Then Leave main
+  Otherwise Nop
+  End
+End main
+If disk Then Do
+     Address CMS 'VMLINK 'myfn' <DET (ONLY('myfn')'
+     End
+Exit
+ 
+ 
+Compare_Data:
+/*---------------------------------------------------------------+
+| Compare the data we obained                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME VSWMON.EXEC:165 END ?)',
+   'stem olddata.'vsw'.',                       /* Take these       */
+   '| append stem newdata.'vsw'.',              /* ...and these     */
+   '| p: pick w1.1 \== ~Group:~ & w1.1 \== ~RDEV:~',  /* Keep these       */
+   '| sort w1.2',                               /* Sort on name     */
+   '| join keylen 17',                          /* Join the equals  */
+   '| sort w3.2 d',                             /* Sort on this     */
+   '| stem work.'                               /* Store as         */
+Do w=1 To work.0
+   recv='0';sent='0'                            /* Initialise       */
+   Parse Value work.w With . . or os nr ns .
+   If ns<>'' Then sent=ns-os                    /* What is sent     */
+   If nr<>'' Then recv=nr-or                    /* What is received */
+/*---------------------------------------------------------------+
+| If we are at least 1 run into measuring...start calculating    |
++---------------------------------------------------------------*/
+   If main<>1 Then work.w=Subword(work.w,1,2),
+                       Right(Strip(Word(work.w,3),'L','0'),10),
+                       Right(Strip(Word(work.w,4),'L','0'),10),
+                       Right(Strip(Word(work.w,5),'L','0'),10),
+                       Right(Strip(Word(work.w,6),'L','0'),10),
+                       Format(recv/elapsed,4,4),
+                       Format(sent/elapsed,4,4)
+End w
+ 
+/*---------------------------------------------------------------+
+| If we have 2 measurements display the output                   |
++---------------------------------------------------------------*/
+if main<>1 Then Do
+'VMFCLEAR'
+/*---------------------------------------------------------------+
+| It there is output we update the filetype                      |
++---------------------------------------------------------------*/
+If disk Then Do
+     output=Subword(output,1,3) Date('S') tfm Subword(output,6)
+     End
+If nohdr Then Do
+/*---------------------------------------------------------------+
+| If nohdr is on we keep it simple                               |
++---------------------------------------------------------------*/
+      If main=2 Then Do
+        header=,
+        '| preface literal 'TimeStamp() Substr(vsw,1,8) Copies('-',61),
+        legend
+      End
+      Else Do
+        header=,
+        '| preface literal 'TimeStamp() Substr(vsw,1,8) Copies('-',61)
+      End
+     End
+     Else Do
+/*---------------------------------------------------------------+
+| If is is off we give more details                              |
++---------------------------------------------------------------*/
+      header=,
+      legend,
+      '| preface literal 'TimeStamp() Substr(vsw,1,8) 'output is: 'how,
+      '| append  literal ',                      /* ..and this       */
+      '| preface literal '                       /* Add this to outpt*/
+     End
+/*---------------------------------------------------------------+
+| Here we show or write the output                               |
++---------------------------------------------------------------*/
+'PIPE (NAME VSWMON.EXEC:228 END ?)',
+     'stem work.',                              /* Take these       */
+     compact,                                   /* Compact or long  */
+     '| sort w-2;-1 d',                         /* Sort on this     */
+     header,
+     '| append  literal 'TimeStamp() Copies('-',70),
+     output                                     /* ....show it all  */
+End
+Return
+ 
+ 
+Get_Info:
+/*---------------------------------------------------------------+
+| Obtain info per vswitch                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME VSWMON.EXEC:243 END ?)',
+   'cp QUERY VSWITCH 'vsw' DETAILS',            /* Ask cp           */
+   '| strip',                                   /* Remove spaces    */
+   '| all /Group/!/RDEV/!/Owner/!/Bytes/',      /* Extract these    */
+   '| join * x40',                              /* Make 1 rec       */
+   '| split before string ~Adapter~',           /* Split here       */
+   '| split before string ~RDEV~',              /* .....and here    */
+   '| n2: nlocate ~UNASSIGNED~',                /* Remove this      */
+   '| n1: nlocate ~Adapter~',                   /* And this         */
+   '| specs 1;* 1',                             /* Rework record    */
+           'w10.1 nw',                          /* .                */
+           'w13.1 nw',                          /* .                */
+   '| siconv M w14.2',                          /* Transl to Mb     */
+   '| specs w1.7 1',                            /* Rework record    */
+           'w14.1 nw.18 right',                 /* .                */
+           'w15.1 nw.18 right',                 /* .                */
+   '| change w-2;-1 ~M~~',                      /* Remove the M     */
+   '| fi: faninany',                            /* Take in other    */
+   '| stem newdata.'vsw'.',                     /* Store as         */
+   '? n1:',                                     /* Conn 2 nlocate   */
+   '| specs 1;* 1',                             /* Rework record    */
+           'w12.1 nw ',                         /* .                */
+           'w15.1 nw',                          /* .                */
+   '| siconv M w16.2',                          /* Rework to Mb     */
+   '| specs w3.1 1.8',                          /* Rework layout    */
+           'w5.1 nw pad 0',                     /* .                */
+           'w16.1 nw.18 right',                 /* .                */
+           'w17.1 nw.18 right',                 /* .                */
+   '| change w-2;-1 ~M~~',                      /* Remove Mb        */
+   '| sort w1.1',                               /* Sort on highest  */
+   '| fi:'                                      /* Conn 2 faninany  */
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp                                             |
++---------------------------------------------------------------*/
+Return Date('S') Time() Substr(myfn,1,8)

@@ -1,0 +1,1083 @@
+/*---------------------------------------------------------------+
+| Function : Server code for CONPARK                             |
+|                                                                |
+| File     : CONPARKS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 2.0.2                                               |
+|                                                                |
+| Files    : CONPARK NAMES   control file (mandatory)            |
+|            CONPARK <node>  control file curr.node (optional)   |
+|            CONPARK TIMES   for timed events in CONPARK         |
+|            VMLINK  NAMES   (FTP tag)                           |
+|            REACC   EXEC    Re-access disks                     |
+|            TOUCH   EXEC    Change/repair timestamp             |
+|            DECODE  EXEC    Decode password                     |
+|            STASH   FILE    Encoded password                    |
+|            VMLINK  EXEC    Link & access disks/directories     |
+|            RECEIVE EXEC    Get the file from the reader        |
+|            WAKEUP  MODULE  Wakeup when....                     |
+|                                                                |
+| Called   : CONPARKS .                                          |
+|                                                                |
+| Comments : User needs SFS ADMIN or Ownership of the filespace  |
+|            Needs: CP CLASS D to handle spool files             |
+|            FTP forwarding is currently based on FTPing to      |
+|            a zVM filepool                                      |
+|                                                                |
+| Notes    : * Files are currently on a SFS filepool and these   |
+|            are shared with a Linux server using NFS mount.     |
+|            * Timed events can be EXECs or subroutines.         |
+|            * Filespace needs to be FILECONTROL, subdirs will   |
+|            be DIRCONTROL                                       |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180621 17:49:59                                   |
+| Changes  : .                                                   |
+|            20200709 H.T.Kramer : Fixed problem with SFS & added|
+|                                  node specific control file.   |
+|            20200707 H.T.Kramer : Fixed problem with stacked    |
+|                                  lines from TIMES file.        |
+|            20200706 H.T.Kramer : Removed CONS from WAKEUP,     |
+|                                  it stops the code.            |
+|                                  Moved midnight & exits to     |
+|                                  CONPARK TIMES.                |
+|            20200701 H.T.Kramer : Fixed problem with transfer   |
+|                                  of own rdr files.             |
+|            20200629 H.T.Kramer : Add CP CLOSE CONS at MIDNIGHT |
+|            20191111 H.T.Kramer : Fixed problem with daily      |
+|                                  cleanup                       |
+|            20191002 H.T.Kramer : Add collection of stray files |
+|                                  to midnight processing        |
+|            20190927 H.T.Kramer : Some adjustment to have more  |
+|                                  details on errors             |
+|            20190823 H.T.Kramer : Re-work to cope with files of |
+|                                  removed userids.              |
+|                                  Adapted wildcard processing.  |
+|            20190809 H.T.Kramer : Fixed problem with NAMES file |
+|            20190802 H.T.Kramer : Added an EXIT which can run   |
+|                                  at a specified time           |
+|            20190705 H.T.Kramer : Fixed problem with refused    |
+|                                  files.                        |
+|            20190607 H.T.Kramer : Adapted for wildcards         |
+|            20190501 H.T.Kramer : Adapted for 6.4               |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+Call Get_Subs_Version
+Call ShowMsg 'Starting, version: 'version
+Call Save_Settings
+Call Read_Conpark_Names
+Call Check_Filespace
+Call Check_MainDir
+Call Run_WakeUp
+ 
+Exit:
+/*---------------------------------------------------------------+
+| End of show                                                    |
++---------------------------------------------------------------*/
+Parse Arg lrc line
+lineno=sigl
+If lineno='' | lineno='SIGL' Then Do
+     lineno='???'
+     subrtn='Unknown'
+     End
+     Else Do
+     'PIPE (NAME CONPARKS.EXEC:85 END ?)',
+        'stem sub.',                  /* Take these       */
+        '| pick w1.1 <= ~'lineno'~ and w2.1 >= ~'lineno'~',  /* Find subroutine  */
+        '| specs w3.1 1 ~starts at~ nw w1.1 nw', /* Keep this        */
+        '| change ~:~~',
+        '| var subrtn'                         /* Hand 2 rexx      */
+     End
+If lrc<>0 & line<>'' Then Do
+          Call ShowMsg line
+          exrc=lrc
+          End
+         Else exrc=0
+Call Restore_Settings
+Call ShowMsg 'Exit called from line 'lineno' in subroutine: 'subrtn
+Call ShowMsg 'Stopping'
+Exit exrc
+ 
+ 
+Get_Subs_Version:
+/*---------------------------------------------------------------+
+| Get subroutine locations & size & version number               |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:107 END ?)',
+     '< 'myfn myft' *',                         /* Read my self     */
+     '| f: fanout',                             /* Dupl. recs       */
+     '| specs pad 0 recno 1.5 right 1;* nw',    /* Add recno        */
+     '| pick anycase -1;-1 == ~:~ or',          /* Find these       */
+                    'w3.1 == ~PROCEDURE~ or',   /* .                */
+                    'w2.1 == ~EXIT~ or',        /* .                */
+                    'w2.1 == ~RETURN~',         /* .                */
+     '| if1: if pick anycase w2.1 == ~EXIT~ or', /* If this...       */
+                            'w2.1 == ~RETURN~',  /* .   only         */
+     '|    specs x40 1 w1.1 n',                 /* .    want recno  */
+     '| if1:',                                  /* Conn 2 if        */
+     '| join 1',                                /* Join pairs       */
+     '| specs w1.1 1 w-1;-1 nw w2;-2 nw',       /* Adjust layout    */
+     '| stem sub.',                             /* Hand 2 rexx      */
+     '? f:',                                    /* Conn 2 fanout    */
+     '| tolabel Parse',                         /* Read to here     */
+     '| locate anycase ~Version~',              /* Find this        */
+     '| specs w4.1',                            /* Keep this        */
+     '| var version'                            /* Hand 2 rexx      */
+Return
+ 
+ 
+Check_Filespace:
+/*---------------------------------------------------------------+
+| Check if the filespace exists                                  |
++---------------------------------------------------------------*/
+Parse Value maindir With . fpool':'fspace'.' dir
+'PIPE (NAME CONPARKS.EXEC:135 END ?)',
+    'cms QUERY FILEPOOL CURRENT',
+    '| locate anycase ~'fpool'~',
+    '| count lines',
+    '| var fpoolok',
+    '?',
+    'cms QUERY FILESPACE',
+    '| locate anycase ~'fspace'~',
+    '| count lines',
+    '| var fspaceok'
+If \fpoolok | \fspaceok Then Call Exit '128 User not enrolled in filepool can not continue'
+Return
+ 
+ 
+Check_MainDir:
+/*---------------------------------------------------------------+
+| Check if the main directory exists...only once per run         |
++---------------------------------------------------------------*/
+Call Collect_Dirs 1
+If \mainok Then Call Create_MainDir
+Return
+ 
+ 
+Collect_Dirs:
+/*---------------------------------------------------------------+
+| Collect all directories...and store them                       |
++---------------------------------------------------------------*/
+Parse Arg fst .
+'PIPE (NAME CONPARKS.EXEC:163 END ?)',
+   'var maindir',
+   '| specs w2.1',
+   '| deblock 1',
+   '| locate ~.~',
+   '| count lines',
+   '| var drop'
+If fst & drop>1 Then drop=drop-1
+'PIPE (NAME CONPARKS.EXEC:171 END ?)',
+   'cms LISTDIR 'Word(maindir,2),               /* What do we have  */
+   '| d: drop  first 'drop,                     /* Skip heading     */
+   '| specs w2;* 1 ~.~ n',                      /* Keep this        */
+   '| stem direxist.',                          /* Store as         */
+   '? d:',                                      /* Conn 2 drop      */
+   '| locate ~'Word(maindir,2)'~',              /* Take this        */
+   '| count lines',                             /* How many         */
+   '| var mainok'                               /* Store as boolean */
+Return
+ 
+ 
+Create_MainDir:
+/*---------------------------------------------------------------+
+| Split of filespace and subdirs                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:187 END ?)',
+    'var maindir',                              /* Take this        */
+    '| specs w2;*',                             /* Keep this        */
+    '| split at .',                             /* Split here       */
+    '| t: take first 1',                        /* Take filespace   */
+    '| var filespace',                          /* Store as         */
+    '? t:',                                     /* Conn 2 take      */
+    '| stem subdir.'                            /* Rest is subdirs  */
+/*---------------------------------------------------------------+
+| Split filespace into filepool and uid                          |
++---------------------------------------------------------------*/
+Parse Value filespace With fp ':' uid '.' .
+'PIPE (NAME CONPARKS.EXEC:199 END ?)',
+     'cms QUERY ENROLL USER FOR 'uid fp,        /* Ask filepool     */
+     '| locate ~YES~',                          /* Is it yes        */
+     '| count lines',                           /* Prep 4 boolean   */
+     '| var enrollok'                           /* Store as         */
+If \enrollok Then Do
+     Address CMS 'ENROLL USER 'uid fp '(BLOCKS 200000'
+     If rc<>0 Then Call Exit rc 'Problem enrolling user 'filespace
+     Address CMS 'DIRATTR 'filespace' DIRCONTROL (FORCE'
+     If rc<>0 Then Call Exit rc 'Problem changing to DIRCONTROL for 'filespace
+     Call Grant_Auth filespace
+     End
+/*---------------------------------------------------------------+
+| Create subdirs if needed...                                    |
++---------------------------------------------------------------*/
+target=filespace'.'
+Do s=1 To subdir.0
+   target=target||subdir.s'.'
+   If \Check_4_Dir(target) Then Call Create_Dir
+End s
+Return
+ 
+ 
+Run_WakeUp:
+/*---------------------------------------------------------------+
+| Run wakeup in a loop...                                        |
++---------------------------------------------------------------*/
+Do main=1 /* Forever */
+ Address CMS 'WAKEUP +'Update_Interval' (FILE(CONPARK) RDR CC'
+ wrc=rc
+/*---------------------------------------------------------------+
+| The following is from the HELP WAKEUP                          |
+| WAKEUP return codes (not complete)                             |
+| 0       Nothing to wait for--all timer file options are done   |
+| 1       VMCF/SMSG received and stacked                         |
+| 2       The specified time period has elapsed                  |
+| 3       A time from the timer file has been reached            |
+| 4       A reader file of the proper class has arrived          |
+| 5       A message has arrived                                  |
+| 6       Interrupt from the virtual console                     |
+| 7       I/O interrupt                                          |
+| 8       External interrupt                                     |
++---------------------------------------------------------------*/
+ Select
+ When wrc=1 Then Nop
+ When wrc=2 Then Do
+                 Call Read_Conpark_Names
+                 Call Collect_Dirs 0 /* Reload direxist. */
+                 End
+ When wrc=3 Then Call Timed_Event
+ When wrc=4 Then Call Check_RDR
+ When wrc=5 Then Nop
+ When wrc=6 Then Call Exit wrc 'Console Interrupt'
+ When wrc=7 Then Call Exit wrc 'I/O Interrupt'
+ When wrc=8 Then Call Exit wrc 'External Interrupt'
+ Otherwise Call ShowMsg 'Return code 'wrc' from WAKEUP (unhandled)'
+ End
+End main
+Return
+ 
+ 
+Timed_Event:
+/*---------------------------------------------------------------+
+| Do this when we get a timed event from WAKEUP                  |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:264 END ?)',
+    'stack',                                     /* Read the stack   */
+    '| specs w6;*',                              /* Keep this        */
+    '| var eventname'                            /* Store as         */
+Select
+When eventname='MIDNIGHT' Then Call MidNight_Processing
+Otherwise Do
+          Call ShowMsg '0 Starting event: 'eventname
+          'PIPE (NAME CONPARKS.EXEC:272 END ?)',
+              'literal 'eventname' EXEC *',      /* Compose name     */
+              '| state',                         /* Does it exist    */
+              '| count lines',                   /* 2 make boolean   */
+              '| var evexst'                     /* Use as           */
+          If evexst Then Address CMS eventname
+                    Else Call ShowMsg '45 eventname does not exist: 'eventame' EXEC *'
+          Call ShowMsg '0 Completed event: 'eventname
+          End
+End
+Drop eventname
+Return
+ 
+ 
+MidNight_Processing:
+/*---------------------------------------------------------------+
+| Executing midnight processing                                  |
++---------------------------------------------------------------*/
+Call ShowMsg '0 Midnight processing started'
+Address COMMAND 'CP CLOSE CONS'
+Call Daily_CleanUp
+Call Daily_Collect
+Call ShowMsg '0 Midnight processing finished with rc: 'rc
+rc=0
+Return
+ 
+ 
+Daily_Collect:
+/*---------------------------------------------------------------+
+| Daily collection of stray files...                             |
++---------------------------------------------------------------*/
+Call ShowMsg '0 Daily collection of stray files'
+whichques='RDR PRT PUN'
+captfile.0=0                                     /* Reset            */
+/*---------------------------------------------------------------+
+| Take these and put in stem                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:309 END ?)',
+     'var whichques',                           /* Take this        */
+     '| split',                                 /* Split into recs  */
+     '| stem que.'                              /* Make a stem      */
+/*---------------------------------------------------------------+
+| Loop thru the queues                                           |
++---------------------------------------------------------------*/
+Do q=1 To que.0
+   Call ShowMsg '0 Checking 'que.q
+   'PIPE (NAME CONPARKS.EXEC:318 END ?)',
+        'cp QUERY 'que.q' ALL ISODATE',         /* Get these        */
+        '| pick w4.1 == ~CON~',                 /* Select these     */
+        '| pick w1.1 \== ~'Userid()'~',         /* Ignore my own    */
+        '| pick w8.1 \== ~OPEN-~',              /* Ignore these     */
+        '| specs w1.1 1.8 ~'que.q'~ nw w2.1 nw', /* Keep these items */
+        '| stem splfile. append'                /* Add 2 stem       */
+End q
+Call Filter_Nick
+Call Filter_Wildc
+'PIPE (NAME CONPARKS.EXEC:328 END ?)',
+   'stem captfile. ',
+   '| sort w1.2',
+   '| specs ~TRANSFER~ 1 w1.1 nw.8 w2.1 nw.3 w3.1 nw.4 ~* RDR~ nw',
+   '| stem cmd.'
+If cmd.0<>0 Then Call Issue_Cmds 'CP IGNORE'
+Return
+ 
+ 
+Filter_Nick:
+/*---------------------------------------------------------------+
+| Filter the ones from nick from the files found...              |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:341 END ?)',
+    'stem splfile.',                            /* Take these       */
+    '| buffer',                                 /* Prevent stall    */
+    '| l: lookup w1.1 w1.1 details',            /* Take only matches*/
+    '| stem captfile. append',                  /* Add 2 stem       */
+    '?',                                        /* 2nd pipe         */
+    ' stem nick.',                              /* Take these       */
+    '| l:',                                     /* Conn 2 lookup    */
+    '| stem splfile.'                           /* Store unmatched  */
+Return
+ 
+ 
+Filter_Wildc:
+/*---------------------------------------------------------------+
+| Filter the ones from the wildcards from the files found        |
++---------------------------------------------------------------*/
+Do n=1 To nickwc.0
+   'PIPE (NAME CONPARKS.EXEC:358 END ?)',
+        'stem splfile.',                        /* Take these       */
+        '| buffer',                             /* Prevent stall    */
+        '| w: wildcard anycase w1.1 /'Word(nickwc.n,1)'/',  /* Select these     */
+        '| stem captfile. append',              /* Add 2 stem       */
+        '? w:',                                 /* Conn 2 wildcard  */
+        '| stem splfile.'                       /* Store unmatched  */
+End n
+Return
+ 
+ 
+Daily_CleanUp:
+/*---------------------------------------------------------------+
+| Daily Clean UP of SFS...removing non existing user ids         |
++---------------------------------------------------------------*/
+Call ShowMsg '0 Daily clean up of non-existing user ids'
+Call ShowMsg '0 Setting KEEP and COMPRESS to defaults'
+keep=default_keep
+compress=default_compress
+/*---------------------------------------------------------------+
+| Which users are stored on the main dir                         |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:380 END ?)',
+    'cms LISTDIR 'Word(maindir,2),              /* Which directories*/
+    '| drop first 2',                           /* Remove heading   */
+    '| specs w2;* 1',                           /* Keep only this   */
+    '| specs recno 1.5 1;* nw',                 /* Add rec numbers  */
+    '| fo: fanout',                             /* Duplicate recs   */
+    '| buffer',                                 /* Prevent stall    */
+    '| fi: faninany',                           /* Take in other    */
+    '| sort 1.5',                               /* Sort on recno    */
+    '| join keylen 5',                          /* Join on recno    */
+    '| specs w2.1 1.8 w3;* nw',                 /* Dispose of recno */
+    '| nlocate ~'exitname'~',                   /* Forget this one  */
+    '| stem dir.',                              /* Store as         */
+    '? fo:',                                    /* Conn 2 fanout    */
+    '| change ~'Word(maindir,2)'~~',            /* Remove this      */
+    '| fi:'                                     /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Check if the users still exist...                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:399 END ?)',
+    'stem dir.',                                /* Take these       */
+    '| f: fanout',                              /* Duplicate recs   */
+    '| specs w1;* 1 x40 n',                     /* Add a space      */
+    '| j: juxtapose',                           /* Put side by side */
+    '| locate ~HCPQMD053E~',                    /* Select these     */
+    '| specs w1.2',                             /* Remove err msg   */
+    '| stem clean.',                            /* Store as         */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| specs ~QUERY MDISK USER~ 1 w1.1 nw ~0 DIR~ nw',  /* Prep 2 CP*/
+    '| cp',                                     /* Ask CP           */
+    '| j:'                                      /* Conn 2 juxtapose */
+/*---------------------------------------------------------------+
+| Loop thru all the items we need to clean/remove                |
++---------------------------------------------------------------*/
+Do c=1 To clean.0
+  uid=Word(clean.c,1)
+  product='.DIR 'Word(clean.c,2)
+  Call ShowMsg '0 Cleaning up user id: 'uid
+  Address CMS 'VMLINK 'product' (NONAMES 'quiet' WRITE .fm'
+  If rc=0 Then Parse Pull . . wfm .
+               Else Call ShowMsg rc 'Problem with VMLINK of 'product' rc: 'rc
+  Call Clean_Up
+  Call Compress_Files
+  Address CMS 'VMLINK 'product' <DET (NONAMES 'quiet' WRITE '
+/*---------------------------------------------------------------+
+| Remove directory for removed user id...when empty              |
++---------------------------------------------------------------*/
+  If Check_Empty() Then Do
+                   Call ShowMsg '0 Removing: 'product
+                   Address CMS 'ERASE 'Word(clean.c,2)'.'
+                   End
+End c
+Return
+ 
+ 
+Check_Empty:
+/*---------------------------------------------------------------+
+| Check if any files left on the dir                             |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:439 END ?)',
+   'cms LISTFILE * * 'wfm' (NOHEADER',          /* Ask cms          */
+   '| nfind DMSLST',                            /* Remove this      */
+   '| count lines',                             /* How many         */
+   '| if: if pick w1.1 \== ~0~',                /* Is it 0          */
+   '| specs ~0~',                               /* Nope make it 0   */
+   '| if:',                                     /* Conn 2 if        */
+   '| specs ~1~',                               /* Yepp make it 1   */
+   '| if:',                                     /* Conn 2 if        */
+   '| var empty'                                /* Hand 2 cms       */
+Return empty
+ 
+ 
+ 
+Check_RDR:
+/*---------------------------------------------------------------+
+| Rdr contents checked against control file                      |
++---------------------------------------------------------------*/
+Call ShowMsg 'Checking reader for authorised files'
+'PIPE (NAME CONPARKS.EXEC:458 END ?)',
+     'stack',                                    /* Receive these    */
+     '| hole'                                    /* Dump m           */
+Address COMMAND 'CP CHANGE * RDR ALL NOHOLD NOSYS'  /* To make sure ... */
+'PIPE (NAME CONPARKS.EXEC:462 END ?)',
+   'CP QUERY RDR * ALL ISODATE',                /* What we have?   */
+   '| nlocate ~OPEN- ~',                        /* Ignore open files */
+   '| pick w1.1 \== ~ORIGINID~',                /* Remove header   */
+   '| pick w1.1 \== ~OWNERID~',                 /* Remove header   */
+   '| sort w1.1',                               /* Sort on sender  */
+   '| specs w1.2 1 w8.2 nw w8.2 nw ~;~ n',      /* Kp spoolid & date*/
+   '| dateconvert w5.1 iso usa',                /* Need US date also */
+   '| change w3.1 ~-~~',                        /* Remove -        */
+   '| change w4.1 ~:~~',                        /* Remove :        */
+   '| join keylen 9',                           /* Join on sender  */
+   '| l: lookup w1.1 w1.1',                     /* Lookup on sender*/
+   '| join keylen 9',                           /* Join on sender  */
+   '| stem accept.',                            /* Matched records */
+   '?',                                         /* 2nd pipe        */
+   'stem nick.',                                /* Add these       */
+   '| l:',                                      /* Connect lookup  */
+   '| stem refuse.'                             /* Store here      */
+/*---------------------------------------------------------------+
+| Now process the wildcards                                      |
++---------------------------------------------------------------*/
+Call ShowMsg 'Processing authorised wildcards'
+Do n=1 To nickwc.0
+    wildc=Word(nickwc.n,1)
+    tags=Subword(nickwc.n,2)
+   'PIPE (NAME CONPARKS.EXEC:487 END ?)',
+      'stem refuse.',                           /* Take these       */
+      '| buffer',                               /* Prevent stall    */
+      '| w: wildcard w1.1 ~'wildc'~',           /* Select these     */
+      '| join keylen 9',                        /* Join on sender   */
+      '| specs w1;* 1 ~'tags'~ nw',             /* Rework           */
+      '| stem accept. append',                  /* Add 2 stem       */
+      '? w:',                                   /* Conn 2 wildcard  */
+      '| stem refuse.'                          /* Store as         */
+End n
+If refuse.0<>0 Then Call Refuse_Files
+If accept.0<>0 Then Call Accept_Files
+Return
+ 
+ 
+Refuse_Files:
+/*---------------------------------------------------------------+
+| Return files to sender and changing the name of the file       |
++---------------------------------------------------------------*/
+Say
+Call ShowMsg 'Returning refused files'
+'PIPE (NAME CONPARKS.EXEC:508 END ?)',
+   'stem refuse.',
+   '| f: fanout',
+   '| specs ~CHANGE * RDR~ 1 w2.1 nw ~NAME CONPARK REFUSED~ nw',
+   '| fi: faninany',
+   '| stem cmd.',
+   '? f:',
+   '| specs ~TRANSFER * RDR~ 1 w2.1 nw w1.1 nw ~RDR~ nw',
+   '| fi:'
+If cmd.0<>0 Then Call Issue_Cmds 'CP'
+Say
+Return
+ 
+ 
+Issue_Cmds:
+/*---------------------------------------------------------------+
+| Issue the commands that are in the stem cmd.                   |
++---------------------------------------------------------------*/
+Parse Upper Arg envir ign_err .
+If ign_err='IGNORE' Then ign_err=1
+                    Else ign_err=0
+Do cm=1 To cmd.0
+   Call ShowMsg cmd.cm
+   If \test Then Do
+     Select
+     When envir='CP'  Then Address COMMAND 'CP 'cmd.cm
+     When envir='CMS' Then Address CMS cmd.cm
+     Otherwise Call Exit '55 Invalid environment: 'envir
+     End
+   End
+   If rc<>0 Then Do
+                 If ign_err Then Call ShowMsg 'Problem with: 'cmd.cm rc', continuing'
+                            Else Call Exit rc 'Problem with: 'cmd.cm
+                 End
+End cm
+cmd.0=0 /* Re-initialize for safety sake */
+Return
+ 
+ 
+Save_Settings:
+/*---------------------------------------------------------------+
+| Save some settings...                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:551 END ?)',
+    'CP QUERY SET',                             /* Settings        */
+    '| split at ,',                             /* Split 2 records */
+    '| strip',                                  /* Remove spaces   */
+    '| all /MSG/',                              /* Take these      */
+    '| specs ~/CP_~ 1 w1.1 n ~/~ n w2.1 n',     /* Prep 4 varload  */
+    '| fi: faninany',                           /* Take in others  */
+    '| varload',                                /* Hand to rexx    */
+    '?',                                        /* 2nd pipe        */
+    'CP QUERY TERM',                            /* Q this          */
+    '| split at ,',                             /* Split 2 records */
+    '| strip',                                  /* Remove spaces   */
+    '| all /MORE/!/HOLD/!/CHARDEL/',            /* We want these   */
+    '| join * x40',                             /* Make 1 record   */
+    '| specs ~/CP_TERM/~ 1 w1;* n',             /* Prep 4 varload  */
+    '| fi:'                                     /* Conn faninany   */
+Return
+ 
+ 
+Restore_Settings:
+/*---------------------------------------------------------------+
+| Restore the settings saved at start                            |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET MSG' cp_msg
+Address COMMAND 'CP SET SMSG' cp_smsg
+Address COMMAND 'CP SET IMSG' cp_imsg
+Address COMMAND 'CP SET EMSG' cp_emsg
+Address COMMAND 'CP TERM 'cp_term
+Return
+ 
+ 
+Accept_Files:
+/*---------------------------------------------------------------+
+| Process the accepted files                                     |
++---------------------------------------------------------------*/
+Say
+Call ShowMsg 'Processing accepted files'
+'PIPE (NAME CONPARKS.EXEC:588 END ?)',
+   'stem accept.',                              /* Take these      */
+   '| f: fanout',                               /* Duplicate recs  */
+   '| specs fs ; f1;-2',                        /* Keep the files  */
+   '| stem rfiles.',                            /* Store here      */
+   '? f:',                                      /* Connect fanout  */
+   '| specs fs ; f-1;-1',                       /* Take this part  */
+   '| stem proc.'                               /* Store processing*/
+/*---------------------------------------------------------------+
+| Loop thru the users and their files                            |
++---------------------------------------------------------------*/
+Do r=1 To rfiles.0
+   Call ProcOptions proc.r
+   Parse Value rfiles.r With uid files
+   target=Word(maindir,2)||uid'.'
+   If \Check_4_Dir(target) Then Call Create_Dir
+   product='.DIR 'target
+   Address CMS 'VMLINK 'product' (NONAMES 'quiet' WRITE .fm'
+   If rc<>0 Then Call Exit rc 'Problem VMLINKing 'product
+            Else Parse Pull . . wfm .
+   Call Group_Files files
+   If method='STORE'   | method='STORE&FORWARD' Then Call Store_Files
+   If method='FORWARD' | method='STORE&FORWARD' Then Call Forward_Files
+   Call Clean_Up
+   Call Compress_Files
+   Address CMS 'VMLINK 'product' <DET (NONAMES 'quiet' WRITE '
+End r
+Call ShowMsg 'Finished processing accepted files rc: 'rc
+Return
+ 
+ 
+Check_4_Dir:
+/*---------------------------------------------------------------+
+| Check if the directory exists...                               |
++---------------------------------------------------------------*/
+Parse Upper Arg targetdir .
+'PIPE (NAME CONPARKS.EXEC:624 END ?)',
+     'stem direxist.',
+     '|cons',
+     '| l: lookup w1.1 details',
+     '| count lines',
+     '| var dirok',
+     '?',
+     'var targetdir',
+     '| l:'
+Return dirok
+ 
+ 
+Forward_Files:
+/*---------------------------------------------------------------+
+| Forwarding files                                               |
++---------------------------------------------------------------*/
+Say
+Call ShowMsg 'Forwarding files for: 'uid
+/*---------------------------------------------------------------+
+| Preparing all for forwarding files                             |
++---------------------------------------------------------------*/
+Address Command 'CP TERM CHARDEL OFF' /* Stop interference of @ */
+Select
+When forwarding_tool='SENDFILE' Then Do
+        cmd=forwarding_tool
+        cmd_opts='(SMTP'
+/*---------------------------------------------------------------+
+| Actually forward the files                                     |
++---------------------------------------------------------------*/
+        Do g=1 To group.0
+            Parse Value group.g With fn'_'ft .
+            'PIPE (NAME CONPARKS.EXEC:655 END ?)',
+                 'literal 'cmd fn ft wfm forwarding_dest cmd_opts,
+                 '| stem cmd.'
+        If cmd.0<>0 Then Call Issue_Cmds 'CMS'
+        End g
+        End
+When forwarding_tool='FTP'      Then Do
+/*---------------------------------------------------------------+
+| Create FTP DATA file and issue cmd...                          |
++---------------------------------------------------------------*/
+        Address CMS 'VMLINK FTP (QUIET'
+        Parse Value forwarding_dest With ftpid ftptarget .
+        Call Prep_FTP
+/*---------------------------------------------------------------+
+| Check source dir, create target dir, copy files                |
++---------------------------------------------------------------*/
+        cmd=forwarding_tool
+        cmd_opts=Translate(forwarding_opts,':','!')
+        newdir=Word(cmd_opts,20)||uid'.'
+/*---------------------------------------------------------------+
+| Ftp change local&remote directories                            |
+| Assumes files are stored in the same structure as source       |
++---------------------------------------------------------------*/
+        Queue 'lcd 'wfm               /* Change local dir */
+        Queue 'mkdir 'newdir          /* Create remote dir */
+        Queue cmd_opts||uid'.'        /* Change remote dir */
+        'PIPE (NAME CONPARKS.EXEC:681 END ?)',
+            'stem group.',                      /* Take these      */
+            '| specs ~put~ 1 w1.1 nw',          /* add ftp cmd     */
+            '| change /_/./',                   /* change _ to .   */
+            '| stack'                           /* Queue cmds      */
+        Queue cmd_opts                /* Change to main dir */
+        Queue 'quit'                  /* Quit */
+        cmd ftptarget                 /* Issue FTP command */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+        Address CMS 'VMLINK FTP <DET (QUIET'
+        Address CMS 'ERASE NETRC DATA A' /* Safety */
+        End
+Otherwise Call Exit '28 Invalid forwarding tool: 'forwarding_tool
+End
+Return
+ 
+ 
+Prep_FTP:
+/*---------------------------------------------------------------+
+| Prepare NETRC DATA for FTP command...                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:704 END ?)',
+     'literal machine 'ftptarget' login 'ftpid' password 'decode(ftpid),
+     '| > NETRC DATA A'
+Return
+ 
+ 
+Create_Dir:
+/*---------------------------------------------------------------+
+| Create a directory
+|+---------------------------------------------------------------*/
+Address CMS 'CREATE DIR 'target' (DIRCONTROL'
+If rc<>0 Then Call Exit rc 'Problem creating directory 'target
+         Else Call Collect_Dirs 0 /* Update direxist. */
+Call Grant_Auth target
+Return
+ 
+ 
+Grant_Auth:
+/*---------------------------------------------------------------+
+| Grant authorisation to....                                     |
++---------------------------------------------------------------*/
+Parse Upper Arg authtarget .
+Do s=1 To sfsauth.0
+   Address CMS 'GRANT AUTH 'authtarget' TO 'sfsauth.s' (DIRREAD'
+   If rc<>0 Then Call Exit rc 'Problem with authorising 'sfsauth.s' for:'authtarget
+End s
+Return
+ 
+ 
+ProcOptions:
+/*---------------------------------------------------------------+
+| Prepare process options and load them                          |
++---------------------------------------------------------------*/
+Parse Arg options
+'PIPE (NAME CONPARKS.EXEC:738 END ?)',
+     'var options',                             /* Take this       */
+     '| change ~:KEEP.~/KEEP/~',                /* .               */
+     '| change ~:COMPRESS.~/COMPRESS/~',        /* .               */
+     '| change ~:FREQUENCY.~/FREQUENCY/~',      /* .               */
+     '| change ~:METHOD.~/METHOD/~',            /* .               */
+     '| split',                                 /* Split into lines*/
+     '| change ~_~ ~',                          /* Open spaces     */
+     '| varload'                                /* Hand to rexx    */
+/*---------------------------------------------------------------+
+| Assigning defaults...                                          |
++---------------------------------------------------------------*/
+If keep='' |,
+   keep='KEEP'           Then Do
+                     keep=default_keep
+                     Call ShowMsg 'Using defaults for keep: 'default_keep
+                     End
+If compress='' |,
+   compress='COMPRESS'   Then Do
+                     compress=default_compress
+                     Call ShowMsg 'Using defaults for compress: 'default_compress
+                     End
+If frequency='' |,
+   frequency='FREQUENCY' Then Do
+                     frequency=default_frequency
+                     Call ShowMsg 'Using defaults for frequency: 'default_frequency
+                     End
+If method='' |,
+   method='METHOD'       Then Do
+                     method=default_method
+                     Call ShowMsg 'Using defaults for method: 'default_method
+                     End
+Drop options
+Return
+ 
+ 
+Store_Files:
+/*---------------------------------------------------------------+
+| Read the files....                                             |
++---------------------------------------------------------------*/
+Say
+Call ShowMsg 'Processing files for 'uid
+Do g=1 To group.0
+  Parse Value group.g With fnft line
+  If frequency='I' Then touch=''
+                   Else Do
+/*---------------------------------------------------------------+
+| Rework date for touch ... and set touch                        |
++---------------------------------------------------------------*/
+                   newdate=Word(line,4)
+                   newtime=Word(line,5)
+                   Parse Value newdate With newmm'/'newdd'/'newyyyy
+                   newtimestamp=newyyyy'-'newmm'-'newdd newtime
+                   touch='TOUCH 'fnft wfm newtimestamp';'
+                   End
+  'PIPE (NAME CONPARKS.EXEC:793 END ?)',
+       'var line',                              /* Take this       */
+       '| split at ;',                          /* Split &make cmds*/
+       '| specs ~RECEIVE~ 1 w1.1 nw ~'myfn' $TEMP$ 'wfm' (REPLACE OLDDATE NOLOG;',
+                'COPYFILE 'myfn' $TEMP$ 'wfm fnft wfm' ('copyopt';',
+                touch,
+                'ERASE 'myfn' $TEMP$ 'wfm'~ nw',
+       '| change ~_~ ~',                        /* Open spaces     */
+       '| split at ;',                          /* Split cmds      */
+       '| strip',                               /* Remove spaces   */
+       '| stem cmd.'                            /* Show            */
+  If cmd.0<>0 Then Call Issue_Cmds 'CMS'
+End g
+Return
+ 
+ 
+Group_Files:
+/*---------------------------------------------------------------+
+| Group the files according to frequency                         |
++---------------------------------------------------------------*/
+Select
+When frequency='D' Then Do
+     fcode='| specs w2.1 1 ~_LOG~ n w1;* nw ~;~ nw| join keylen 12'
+     copyopt='APPEND'
+     End
+When frequency='H' Then Do
+     fcode='| specs w2.1 1 ~_~ n substring 1.2 of w3.1 n w1;* nw ~;~ nw | join keylen 11'
+     copyopt='APPEND'
+     End
+When frequency='A' Then Do
+     fcode='| specs ~'uid'_LOG~ 1 w1;* nw'
+     copyopt='APPEND'
+     End
+When frequency='I' Then Do
+     fcode='| specs w2.1 1 ~_~ n w3.1 n w1;* nw'
+     copyopt='OLDDATE'
+     End
+Otherwise Call Exit '33 Invalid frequency: 'frequency
+End
+'PIPE (NAME CONPARKS.EXEC:832 END ?)',
+   'var files',                                 /* Take the files  */
+   '| strip',                                   /* Remove spaces   */
+   '| split at ~;~',                            /* Rec per spoolid */
+   '| sort w-2;-1',                             /* Sort on date    */
+   fcode,                                       /* Determine freq  */
+   '| strip ;',                                 /* Remove semicolon*/
+   '| stem group.'                              /* Store here      */
+Return
+ 
+ 
+Compress_Files:
+/*---------------------------------------------------------------+
+| Compress files according to compression settings               |
++---------------------------------------------------------------*/
+Say
+Call ShowMsg 'Compressing files older than 'compress' days for 'uid
+cut_off_date=Calc_Cut_Off(compress)
+Call Identify_Files 'PACKED'
+Select
+When compressiontool='COPYFILE' Then Do
+           compress_stmt='| specs ~COPYFILE~ 1 w1.3 nw ~= = = (REPLACE OLDDATE PACK~ nw'
+           End
+When compressiontool='FCOPY' Then Do
+           compress_stmt='| specs ~FCOPY~ 1 w1.3 nw ~= = = (REPLACE OLDDATE PACK~ nw'
+           End
+Otherwise Call Exit '34 Invalid compression tool: 'compressiontool
+End
+'PIPE (NAME CONPARKS.EXEC:860 END ?)',
+     'stem identfile.',                         /* Idntfied files  */
+     compress_stmt,                             /* Compress        */
+     '| stem cmd.'                              /* Show            */
+If cmd.0<>0 Then Call Issue_Cmds 'CMS'
+Return
+ 
+ 
+Clean_Up:
+/*---------------------------------------------------------------+
+| Remove older files accoring to keep setting                    |
++---------------------------------------------------------------*/
+Say
+Call ShowMsg 'Removing files older than 'keep' days for 'uid
+cut_off_date=Calc_Cut_Off(keep)
+Call Identify_Files
+'PIPE (NAME CONPARKS.EXEC:876 END ?)',
+     'stem identfile.',
+     '| specs ~ERASE~ 1 w1.3 nw',
+     '| stem cmd.'
+If cmd.0<>0 Then Call Issue_Cmds 'CMS'
+Drop identfile.
+Return
+ 
+ 
+Identify_Files:
+/*---------------------------------------------------------------+
+| Identify files                                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg pack .
+If pack='' Then unpacked=''
+           Else unpacked='| zone w4.2 not all /F/&/1024/'
+'PIPE (NAME CONPARKS.EXEC:892 END ?)',
+     'cms LISTFILE * * 'wfm' (NOHEADER ISODATE',/* What files      */
+     '| nfind DMSLST',                          /* Remove these    */
+     '| specs w1.5 1 w8.1 nw',                  /* Keep fnftfm&date*/
+     '| change 20;* ~-~~',                      /* Remove this     */
+     '| sort w6.1',                             /*  and this       */
+     '| pick w6.1 <<= ~'cut_off_date'~',        /* Keep older ones */
+     unpacked,                                  /* Select unpacked */
+     '| stem identfile.'                        /* Store here      */
+Drop pack unpacked
+Return
+ 
+ 
+Calc_Cut_Off:
+/*---------------------------------------------------------------+
+| Calculate the date                                             |
++---------------------------------------------------------------*/
+Parse Upper Arg cut_off_days
+work_date=(Date('B'))-cut_off_days
+'PIPE (NAME CONPARKS.EXEC:911 END ?)',
+    'var work_date',                            /* Take this       */
+    '| dateconv rexxb isodate',                 /* Convert 2 iso   */
+    '| change ~-~~',                            /* Remove -        */
+    '| var newdate'                             /* Store here      */
+Call ShowMsg 'Calculated cut-off date: 'newdate
+Drop work_date
+Return newdate
+ 
+ 
+ShowMsg:
+/*---------------------------------------------------------------+
+| Show the messages                                              |
++---------------------------------------------------------------*/
+Parse Arg msgline
+timestamp=Date('S') Time()
+Say timestamp myfn msgline
+Drop msgline
+Return 0
+ 
+ 
+Read_Conpark_Names:
+/*---------------------------------------------------------------+
+| Read the names file and store them and set defaults            |
++---------------------------------------------------------------*/
+Call ShowMsg 'Reading CONPARK NAMES'
+Address CMS 'REACC'          /* Re-access disks/fps for new content */
+'PIPE (NAME CONPARKS.EXEC:938 END ?)',
+     'cms IDENTIFY',                            /* Ask CMS          */
+     '| specs w3.1',                            /* Keep this        */
+     '| var node',                              /* Store as         */
+     '| specs substr -2;-1 of w1.1',            /* Keep this        */
+     '| var shortnode'                          /* Store as         */
+'PIPE (NAME CONPARKS.EXEC:944 END ?)',
+     '< CONPARK NAMES *',                       /* Read this        */
+     '| append disk CONPARK 'node' *',          /* If fnd add these */
+     '| strip',                                 /* Remove spaces    */
+     '| pick 1.1 \== ~*~',                      /* Remove comments  */
+     '| pick 1.1 \== ~~',                       /* Remove emptiess  */
+     '| xlate upper',                           /* Uppercase it     */
+     '| join * x40',                            /* Make 1 record    */
+     '| split before string ~:MAINDIR.~',       /* Split here...    */
+     '| split before string ~:USERS.~',         /* Split here...    */
+     '| split before string ~:SYSTEM.~',        /* ...and here      */
+     '| split before string ~:DEFAULTS.~',      /* .....and here    */
+     '| n1: nfind :USERS.',                     /* Filter away      */
+     '| n2: nfind :SYSTEM.',                    /* ..once more      */
+     '| n3: nfind :DEFAULTS.',                  /* ....again        */
+     '| n4: nfind :MAINDIR.',                   /* ....again        */
+     '| nfind :NICK.',                          /* .....and again   */
+     '| fi: faninany',                          /* Take in records  */
+     '| strip',                                 /* Remove spaces    */
+     '| varload',                               /* Hand 2 rexx      */
+     '? n1:',                                   /* Conn 2 nlocate   */
+     '| specs w2;*',                            /* Keep this        */
+     '| split before string ~:NICK.~',          /* Split into recs  */
+     '| specs fs . f2;* 1',                     /* Remove some      */
+     '| sort unique',                           /* Remove duplicates*/
+     '| n5: nlocate w1.1 ~*~',                  /* Filter wildcards */
+     '| stem nick.',                            /* Hand 2 rexx      */
+     '? n2:',                                   /* Conn 2 nlocate   */
+     '| specs w3;*',                            /* Keep this        */
+     '| split',                                 /* ..make recs      */
+     '| change ~:~/~ 1',                        /* Prep 4 varload   */
+     '| change ~.~/~ 1',                        /* More prep        */
+     '| fi:',                                   /* Conn 2 faninany  */
+     '? n3:',                                   /* Conn 2 nlocate   */
+     '| specs w3;*',                            /* Keep this        */
+     '| split before string ~:~',               /* Split here       */
+     '| change ~:~/DEFAULT_~ 1',                /* Add this         */
+     '| change ~.~/~ 1',                        /* Prep 4 varload   */
+     '| fi:',                                   /* Conn 2 faninany  */
+     '? n4:',                                   /* Conn 2 nlocate   */
+     '| split before string ~:NICK.~',          /* Split here       */
+     '| locate ~'shortnode'~',                  /* Find this        */
+     '| specs fs . f3;*',                       /* Remove some      */
+     '| specs w1;-2',                           /* Keep this        */
+     '| var maindir',                           /* Store as         */
+     '? n5:',                                   /* Conn 2 nlocate   */
+     '| stem nickwc.'                           /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPARKS.EXEC:993 END ?)',
+     'var authorize',                           /* Take this        */
+     '| split at ,',                            /* Split 4 stem     */
+     '| stem sfsauth.'                          /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If the following are not set use defaults                      |
++---------------------------------------------------------------*/
+If test           ='TEST'            Then Do
+                    test=default_test
+                    Call ShowMsg 'Using defaults for test: 'test
+                    End
+                    Else Call ShowMsg 'Test set to: 'test
+If debug          ='DEBUG'           Then Do
+                    debug=default_debug
+                    Call ShowMsg 'Using defaults for debug: 'debug
+                    End
+                    Else Call ShowMsg 'Debug set to: 'debug
+If update_interval='UPDATE_INTERVAL' Then Do
+                    update_interval=default_update_interval
+                    Call ShowMsg 'Using defaults for update_interval: 'update_interval
+                    End
+                    Else Call ShowMsg 'Update interval set to: 'update_interval
+If compressiontool='COMPRESSIONTOOL' Then Do
+                    compressiontool=default_compressiontool
+                    Call ShowMsg 'Using defaults for compressiontool: 'compressiontool
+                    End
+                    Else Call ShowMsg 'Compressiontool set to: 'compressiontool
+If method         ='METHOD' Then Do
+                    method=default_method
+                    Call ShowMsg 'Using defaults for method: 'method
+                    End
+                    Else Call ShowMsg 'Method set to: 'method
+If forwarding_tool='FORWARDING_TOOL' Then Do
+                    forwarding_tool=default_forwarding_tool
+                    Call ShowMsg 'Using defaults for forwarding tool: 'forwarding_tool
+                    End
+                    Else Call ShowMsg 'Forwarding tool set to: 'forwarding_tool
+If forwarding_dest='FORWARDING_DEST' Then Do
+                    forwarding_dest=default_forwarding_dest
+                    Call ShowMsg 'Using defaults for forwarding dest: 'forwarding_dest
+                    End
+                    Else Call ShowMsg 'Forwarding dest set to: 'forwarding_dest
+If forwarding_opts='FORWARDING_OPTS' Then Do
+                    forwarding_opts=default_forwarding_opts
+                    Call ShowMsg 'Using defaults for forwarding opts: 'forwarding_opts
+                    End
+                    Else Call ShowMsg 'Forwarding opts set to: 'forwarding_opts
+If exitname       ='EXITNAME' then runexit=0
+                              Else runexit=1
+If runexit          Then Do
+                    Call ShowMsg 'Using exit: 'exitname' running at: 'runat
+/*---------------------------------------------------------------+
+| Determine the interval in which the exit has to run            |
++---------------------------------------------------------------*/
+                    intervals_per_day=(24*60)/update_interval
+                    Parse Value runat With hh':'mm .
+                    runat=((hh*60)+mm)%update_interval
+                    End
+                    Else Call ShowMsg 'No exit specified'
+If test='YES'  Then test=1
+               Else test=0
+If debug='YES' Then Trace 'I'
+               Else Trace 'O'
+/*---------------------------------------------------------------+
+| Initialise some arrays                                         |
++---------------------------------------------------------------*/
+captfile.0=0
+splfile.0=0
+cmd.0=0
+/*---------------------------------------------------------------+
+| Abort if no entries                                            |
++---------------------------------------------------------------*/
+If nick.0=0 Then Call Exit '33 No valid contents in CONPARK NAMES'
+Call ShowMsg 'Accepting files from:'
+'PIPE (NAME CONPARKS.EXEC:1067 END ?)',
+   'stem nick. ',                               /* Take these       */
+   '| specs w1.1 1.9 ',                         /* Add a space      */
+   '| sort',                                    /* ...as said       */
+   '| snake 4 ',                                /* Make 4 columns   */
+   '| specs w1;* 12',                           /* Move them to left*/
+   '| cons'                                     /* Show all         */
+Call ShowMsg 'Accepting files for the following wildcards:'
+'PIPE (NAME CONPARKS.EXEC:1075 END ?)',
+   'stem nickwc. ',                             /* Take these       */
+   '| specs w1.1 1.9 ',                         /* Add a space      */
+   '| sort',                                    /* ...as said       */
+   '| snake 4 ',                                /* Make 4 columns   */
+   '| specs w1;* 12',                           /* Move them to left*/
+   '| cons'                                     /* Show all         */
+Return

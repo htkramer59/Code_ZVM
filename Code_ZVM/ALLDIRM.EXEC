@@ -1,0 +1,360 @@
+/*---------------------------------------------------------------+
+| Function : Create an overview of DIRMAINT info                 |
+|                                                                |
+| File     : ALLDIRM  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC                                       |
+|            RSCS     EXEC      Pipe stage for RSCS              |
+|            SAPI     EXEC      Dirmaint interface               |
+|            SENDFILE EXEC      Sending files to...              |
+|            RECEIVE  EXEC      Receiving files from....         |
+|            ALLDIRM  *         In/output                        |
+|            ALLDIRM  OVERVIEW  Output                           |
+|                                                                |
+| Called   : ALLDIRM  <what>                                     |
+|                     DATA     collect and send data             |
+|                     empty    if empty send cmd to all nodes,   |
+|                              receive data and make overview    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210727 08:37:36                                   |
+| Changes  : .                                                   |
+|            20221007 H.T.Kramer : Adjusted to suppress HOLD     |
+|            20220926 H.T.Kramer : Add cleanup of RDR files      |
+|            20220628 H.T.Kramer : Check for RMCMD and its output|
+|                     is now built in                            |
+|            20220520 H.T.Kramer : Reworked the output           |
+|            20220301 H.T.Kramer : To remove dependency on the   |
+|                     A-disk we now use VMLINK                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what returnaddress '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Determine what to do with the input parms                      |
++---------------------------------------------------------------*/
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+ 
+'PIPE (NAME ALLDIRM.EXEC:43 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode',                     /* Hand 2 rexx      */
+   '?',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Call Exit '28 Can not run: RMCMD EXEC is missing'
+Select
+When what=''     Then Call Start_Code
+When what='?'    Then Do
+                 'PIPE (NAME ALLDIRM.EXEC:57 END ?)',
+                     '< 'myfn myft' *',          /* .                */
+                     '| tolabel Parse',          /* .                */
+                     '| cons'                    /* .                */
+                 Exit
+                 End
+When what='DATA' Then Call Send_Data
+Otherwise Do
+          Call Exit '99 Do not understand 'what
+          End
+End
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+ 
+Start_Code:
+/*---------------------------------------------------------------+
+| This on the invoking end of the process                        |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+z=Time('R')
+/*---------------------------------------------------------------+
+| Ask the other LPARs for info                                   |
++---------------------------------------------------------------*/
+Address CMS 'RMCMD CMS 'myfn' DATA 'Userid()' AT 'node', , , QUIET'
+If rc<>0 Then Call Exit '128 Can not execute RMCMD'
+Say 'Elapsed: 'Time('E')
+/*---------------------------------------------------------------+
+| Access the work disk/directory                                 |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Now we are getting serious                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:104 END ?)',
+   'cp QUERY TERM',                              /* Ask cp           */
+   '| split at ,',                               /* Split into recs  */
+   '| strip',                                    /* Remove spaces    */
+   '| pick w1.1 == ~MORE~ or',                   /* Select           */
+          'w1.1 == ~HOLD~',                      /* ....these        */
+   '| join * x40',                               /* Make 1 record    */
+   '| var termsetting'                           /* Store as         */
+Call Gather_Files
+Call Proc_PoolUsg
+Call Proc_Locked
+Call Proc_DataMove
+Call Proc_WorkUnit
+Call Proc_WucFfail
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Call CleanUp
+Return
+ 
+ 
+CleanUp:
+/*---------------------------------------------------------------+
+| Clean up these in case of error...                             |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:128 END ?)',
+   'cp QUERY RDR * ALL',                         /* Ask what I have  */
+   '| pick w10.1 == ~'myfn'~ or',                /* Select these     */
+          'w10.1 == ~RMCMD~',                    /* .                */
+   '| specs ~PUR * RDR~ 1 w2.1 nw',              /* Compose cmds     */
+   '| cp'                                        /* Hand 2 cp        */
+Return
+ 
+ 
+Proc_WucFfail:
+/*---------------------------------------------------------------+
+| Here we process the failed/stalled dirmaint workunits          |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:141 END ?)',
+   '< 'myfn' WUCFFAIL 'wfm,                      /* Read this        */
+   '| sort w1.1',                                /* Sort on node     */
+   '| nlocate anycase ~LISTFILE~',               /* Ignore these     */
+   '| preface literal Checking Failed/Stalled workunits',   /* Add header       */
+   '| >> 'myfn' OVERVIEW 'wfm                    /* Append to file   */
+Return
+ 
+ 
+Proc_WorkUnit:
+/*---------------------------------------------------------------+
+| Here we process the outcome of SAPI WORKUNITS ALL              |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:154 END ?)',
+   '< 'myfn' WORKUNIT 'wfm,                      /* Read this file   */
+   '| strip',                                    /* Remove spaces    */
+   '| join keylen 14',                           /* Join on this key */
+   '| sort w1.1',                                /* Sort on node     */
+   '| preface literal Checking WORKUNITs',       /* Add header       */
+   '| append literal ',                          /* Add separator    */
+   '| >> 'myfn' OVERVIEW 'wfm                    /* Append to file   */
+Return
+ 
+ 
+Proc_DataMove:
+/*---------------------------------------------------------------+
+| Here we process the outcome of SAPI DATAMOVE ALL               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:169 END ?)',
+   '< 'myfn' DATAMOVE 'wfm,                      /* Read this file   */
+   '| sort w2;*',                                /* Sort on this     */
+   '| l: locate anycase ~SYSAFFIN~',             /* Take these       */
+   '| append literal ',                          /* Add empty line   */
+   '| fi: fanin',                                /* Take in others   */
+   '| preface literal Checking DATAMOVE status', /* Add header       */
+   '| append literal ',                          /* Add empty line   */
+   '| >> 'myfn' OVERVIEW 'wfm,                   /* Append to file   */
+   '? l:',                                       /* Conn 2 locate    */
+   '| buffer',                                   /* Prevent loop/stal*/
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+Proc_Locked:
+/*---------------------------------------------------------------+
+| Processing the outcome of SAPI STATUS LOCKED ALL               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:188 END ?)',
+   '< 'myfn' LOCKED 'wfm,                        /* Read this file   */
+   '| sort w2;*',                                /* Sort on this     */
+   '| l: locate anycase ~DEVICE~',               /* Select these     */
+   '| sort w1.1',                                /* Sort on node     */
+   '| append literal ',                          /* Add empty line   */
+   '| fi: fanin',                                /* Take in others   */
+   '| preface literal Checking for DEVICE and USER LOCKs',   /* Add header       */
+   '| append literal ',                          /* Add empty line   */
+   '| >> 'myfn' OVERVIEW 'wfm,                   /* Append to file   */
+   '? l:',                                       /* Conn 2 locate    */
+   '| buffer',                                   /* Prevent loop/stal*/
+   '| sort w1.1',                                /* Sort on node     */
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+Proc_Poolusg:
+/*---------------------------------------------------------------+
+| Processing the outcome of POOLUSG CMSDISKS ICUDISKS LINUXOS    |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:209 END ?)',
+   '< 'myfn' POOLUSG 'wfm,                       /* Read this file   */
+   '| p: pick anycase w2.1 == ~POOL~',           /* Select these     */
+   '| specs 4;* 4',                              /* Only want this   */
+   '| sort unique',                              /* Ignore duplicates*/
+   '| fi: fanin',                                /* Take in others   */
+   '| append literal ',                          /* Add empty line   */
+   '| change 1.1  ~_~ ~',                        /* Replace undrscore*/
+   '| > 'myfn' OVERVIEW 'wfm,                    /* Write 2 file     */
+   '? p:',                                       /* Conn 2 pick      */
+   '| if1: if locate ~CMSDISKS~',                /* Add labels       */
+   '|    specs ~CMSDISKS~ 1.11 1;* nw',          /* .                */
+   '| if1:',                                     /* .                */
+   '| if2: if locate ~ICUDISKS~',                /* .                */
+   '|    specs ~ICUDISKS~ 1.11 1;* nw',          /* .                */
+   '| if2:',                                     /* .                */
+   '| if3: if locate ~LINUXOS~',                 /* .                */
+   '|    specs ~LINUXOS~ 1.11 1;* nw',           /* .                */
+   '| if3:',                                     /* .                */
+   '| sort w1.2',                                /* Sort on lbl&node */
+   '| specs a: w1.1 .',                          /* Break on label   */
+   '        w2;* 13',                            /* .                */
+   '        break a',                            /* .                */
+   '        id a 1',                             /* .                */
+   '| change 1.11 ~ICUDISKS  ~;_;ICUDISKS~',     /* Prep 4 empty line*/
+   '| change 1.11 ~LINUXOS   ~;_;LINUXOS ~',     /* .                */
+   '| split at ;',                               /* Split here       */
+   '| change 1.11 ~CMSDISKS~~',                  /* Remove these     */
+   '| change 1.11 ~ICUDISKS~~',                  /* .                */
+   '| change 1.11 ~LINUXOS~~',                   /* .                */
+   '| specs w1;* 1',                             /* .                */
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+Gather_Files:
+/*---------------------------------------------------------------+
+| Check if we received all the files                             |
++---------------------------------------------------------------*/
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+'PIPE (NAME ALLDIRM.EXEC:249 END ?)',
+    'rscs query system',
+    '| pick anycase w3.1 == ~CONNECT~',
+    '| specs w2.1',
+    '| append var node',
+    '| stem node.'
+Address CMS 'EXECDROP RSCS REXX'
+maxloop=5
+sleepsec=2
+filespernode=5
+exp_files=filespernode*node.0
+nofiles=0
+Address COMMAND 'CP TERM MORE 0 0 HOLD OFF'
+Do z=1 Until nofiles>=exp_files
+  'VMFCLEAR'
+  'PIPE (NAME ALLDIRM.EXEC:264 END ?)',
+     'cp QUERY RDR * ALL',                       /* Check reader     */
+     '| p: pick w-2;-2 == ~'myfn'~',             /* Filter these     */
+     '| sort w-1;-1',                            /* Sort on fn       */
+     '| specs w-2;-1 1.18 w2.1 nw',              /* Keep this        */
+     '| stem tofile.',                           /* Hand 2 rexx      */
+     '? p:',                                     /* Conn 2 pick      */
+     '| pick w-2;-2 == ~RMCMD~',                 /* Select these     */
+     '| specs w2.1 1',                           /* Keep spool id    */
+     '| stem clean.'                             /* Hand 2 rexx      */
+  If z=max Then Do
+                Call CleanUp
+                Call Exit '98 Response from LPARs takes too long'
+                End
+  nofiles=tofile.0+clean.0
+/*   'CP SLEEP 'sleepsec' SEC' */
+  Address CMS 'WAKEUP +00:00:'RIght(sleepsec,2,0)' (CC RDR QUIET'
+End z
+Address COMMAND 'CP TERM 'termsetting
+/*---------------------------------------------------------------+
+| Preparing for the actual receiving of the files                |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:286 END ?)',
+   'stem tofile.',                               /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| join keylen 18',                           /* Join on fn & ft  */
+   '| f: fanout',                                /* Duplicate recs   */
+   '| specs w1.2 1',                             /* Keep fn ft       */
+   '| stem tofile.',                             /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w3;* 1',                             /* Keep spool ids   */
+   '| stem spid.',                               /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'stem clean.',                                /* Take these       */
+   '| specs ~PURGE * RDR~ 1 w1.1 nw',            /* Compose cmds     */
+   '| cp'                                        /* Issue them       */
+/*---------------------------------------------------------------+
+| Here we receive the files, append them and erase them.         |
++---------------------------------------------------------------*/
+Address CMS 'SET CMSTYPE HT'
+Do t=1 To tofile.0
+   Do s=1 To Words(spid.t)
+     Address CMS 'RECEIVE 'Word(spid.t,s) myfn' WORK 'wfm' (NOLOG NOPROMPT'
+     Address CMS 'COPY 'myfn' WORK 'wfm tofile.t wfm' (APPEND'
+     Address CMS 'ERASE 'myfn' WORK 'wfm
+   End s
+End t
+Address CMS 'SET CMSTYPE RT'
+Return
+ 
+ 
+Send_Data:
+/*---------------------------------------------------------------+
+| Show the data                                                  |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+cmds='POOLUSG CMSDISKS LINUXOS ICUDISKS : POOLUSG;',
+     'SAPI STATUS LOCKED BOTH : LOCKED ;',
+     'SAPI STATUS DATAMOVE ALL : DATAMOVE ;',
+     'SAPI STATUS WORKUNIT ALL : WORKUNIT;',
+     'VMLINK DIRMAINT 1DF (NON NOT INVOKE LISTFILE * WUCFFAIL .fm (NOH ISO : WUCFFAIL'
+'PIPE (NAME ALLDIRM.EXEC:327 END ?)',
+    'var cmds',                                  /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| f: fanout',                               /* Duplicate recs   */
+    '| specs fs : f1',                           /* Chop here        */
+    '| strip',                                   /* Remove spaces    */
+    '| stem cmd.',                               /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs fs : f2',                           /* Chop here        */
+    '| strip',                                   /* Remove spaces    */
+    '| stem outft.'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Do we need to return the output to invoker?                    |
++---------------------------------------------------------------*/
+If Wordpos(node,returnaddress)=0 Then send=1
+                                 Else send=0
+/*---------------------------------------------------------------+
+| Now issue all the commands                                     |
++---------------------------------------------------------------*/
+Do c=1 To cmd.0
+  'PIPE (NAME ALLDIRM.EXEC:347 END ?)',
+      'literal 'cmd.c,                           /* Take a command   */
+      '| cons',                                  /* Show it          */
+      '| cms',                                   /* Issue it         */
+      '| specs ~'shortnode'~ 1 1;* nw',          /* Prefix with node */
+      '| > 'myfn outft.c wfm                     /* Write 2 file     */
+   If send Then Address CMS 'SENDFILE 'myfn outft.c wfm returnaddress' (NOTYPE NOLOG'
+End c
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

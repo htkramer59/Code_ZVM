@@ -1,0 +1,353 @@
+/*---------------------------------------------------------------+
+| Function : Server code for Poor Man's Dirmaint                 |
+|                                                                |
+| File     : DMSERVER EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DMSERVER TIMES                                      |
+|            WAKEUP   MODULE                                     |
+|            DM       EXEC                                       |
+|            DM       COMMANDS                                   |
+|            DM       NAMES                                      |
+|            DM       ADMINS                                     |
+|                                                                |
+| Called   : DMSERVER <input> ( <starter>                        |
+|                             ( RUN to start                     |
+|                                                                |
+| Comments : Need access to SOURCE DIRECTORY, DIRECTXA MODULE,   |
+|                MAINT 123 (CP DIRECTORY space)                  |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240716 17:34:28                                   |
+| Changes  : .                                                   |
+|            20250528 H.T.Kramer : Change the DM NAMES content   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg input '(' starter .
+Parse Source . . myfn myft .
+show=1                                           /* Initial setting  */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DMSERVER.EXEC:33 END ?)',
+   'cp QUERY USER 'Userid(),                     /* Asl CP           */
+   '| pick fs - f2 == ~DSC~',                    /* Select this part */
+   '| count lines',                              /* How many         */
+   '| var dsc'                                   /* Store as boolean */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If starter='RUN' |,
+   dsc           Then Call Server_Code
+                 Else Do
+                      Say TimeStamp()
+                      Say '   To start the server the userid needs to be'
+                      Say '   running DISCONNECTED or'
+                      Say '   you type: DMSERVER (RUN'
+                      Call Exit
+                      End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+/*---------------------------------------------------------------+
+| Clean up when we are going to exit                             |
++---------------------------------------------------------------*/
+Address COMMAND 'CP TERM MORE 10 10 HOLD ON'
+Address COMMAND 'CP SET OBSERVER OFF'
+If ws<>'A' Then Address CMS 'VMLINK WORKSPACE <DET (ONLY(DM NAMES *) NOTYPE'
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Server_Code:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'Server_Code Started'
+Address COMMAND 'CP TERM MORE 0 0 HOLD OFF'
+Address CMS 'VMLINK WORKSPACE (ONLY(DM NAMES *) NOTYPE .fm'
+If rc=0 Then Parse Pull . . ws .
+        Else ws='A'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call ReadNames
+Call ReadAdmin
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET SMSG IUCV'
+Do z=1
+  Say TimeStamp()
+  Address CMS 'WAKEUP 'interval' ('options
+  Select
+  When rc=0   Then Nop
+  When rc=1   Then Call ProcessMSG
+  When rc=2   Then Say TimeStamp() 'Timer expired'
+  When rc=3   Then Call ProcessTimedCmds
+  When rc=4   Then Call ProcessRDR
+  When rc=5   Then Call ProcessMSG
+  When rc=6   Then Do
+                   Say TimeStamp()' Console interupted'
+                   Say TimeStamp()' Exiting: 'myfn myft
+                   Call Exit rc
+                   End
+  When rc=100 Then Nop
+  Otherwise Call Exit rc
+  End
+End z
+Return
+ 
+ 
+ProcessMSG:
+/*---------------------------------------------------------------+
+| Receiving messages with commands                               |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp()' ProcessMSG'
+'PIPE (NAME DMSERVER.EXEC:113 END ?)',
+   'stack',                                      /* Empty stack      */
+   '| pick anycase w1.1 == ~*SMSG~',             /* Find these       */
+   '| specs w2;* 1',                             /* Keep this        */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs w1.1',                               /* Keep name        */
+   '| var rqstr',                                /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2;*',                               /* Keep this        */
+   '| var reqst'                                 /* Hand 2 rexx      */
+Address COMMAND 'CP SET OBSERVER 'rqstr
+/*---------------------------------------------------------------+
+| Display the request and check if we are allowed                |
++---------------------------------------------------------------*/
+Call Display rqstr reqst 'Started'
+If \CheckAdmin() Then Call Display 'Not authorised'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If reqst<>'RELOAD' Then Do
+     'PIPE (NAME DMSERVER.EXEC:133 END ?)',
+        'cms DM 'reqst,                          /* Start DM w REQst */
+        '| buffer',                              /* Prevent stall    */
+        '| specs ~'TimeStamp()'~ 1 1;* nw',      /* Add timestamp    */
+        '| specs ~SMSG 'rqstr'~ 1 1;* nw',       /* Return to sender */
+        '| cp'                                   /* Hand 2 cp        */
+     End
+/*---------------------------------------------------------------+
+| Check some of the output that needs to be returned             |
++---------------------------------------------------------------*/
+cmd=Word(reqst,1)
+uid=Word(reqst,2)
+Select
+When cmd='MAP'    Then Call SendOutput 'USER MDISKMAP'
+When cmd='USED'   Then Call SendOutput 'USER USEDXT'
+When cmd='FREE'   Then Call SendOutput 'USER FREEXT'
+When cmd='GET'    Then Call SendOutput uid 'DIRECT'
+When cmd='RELOAD' Then Do
+                       Call ReadNames
+                       Call ReadAdmin
+                       End
+Otherwise NOP
+End
+/*---------------------------------------------------------------+
+| Display an empty line and a marker                             |
++---------------------------------------------------------------*/
+Call Display rqstr reqst 'Ended'
+Address COMMAND 'CP SET OBSERVER OFF'
+Return
+ 
+ 
+SendOutput:
+/*---------------------------------------------------------------+
+| Send the output to the requester                               |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp()' SendOutPut'
+Parse Upper Arg sffnft
+'PIPE (NAME DMSERVER.EXEC:170 END ?)',
+   'CMS SENDFILE 'sffnft ws rqstr,               /* Return output    */
+   '| specs ~SMSG 'rqstr'~ 1 1;* nw',            /* Msg 2 sender     */
+   '| cp'                                        /* Hand 2 CP        */
+Address CMS 'ERASE 'sffnft ws
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Show message and send it to the requester                      |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'Display'
+Parse Arg returnmsg
+Say TimeStamp() returnmsg
+Address COMMAND CP 'SMSG ' rqstr TimeStamp() returnmsg
+Return
+ 
+ 
+CheckAdmin:
+/*---------------------------------------------------------------+
+| Check the requester against the admin array                    |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'CheckAdmin'
+'PIPE (NAME DMSERVER.EXEC:194 END ?)',
+  'stem admin.',                                 /* Take these       */
+  '| pick anycase w1.1 == ~'rqstr'~',            /* Is rstr there?   */
+  '| count lines',                               /* How many         */
+  '| var result'                                 /* Store as boolean */
+Return result
+ 
+ 
+ReadAdmin:
+/*---------------------------------------------------------------+
+| Read the file containing ADMINS                                |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'ReadAdmin'
+Say TimeStamp() 'Reading DM ADMINS file'
+'PIPE (NAME DMSERVER.EXEC:208 END ?)',
+   '< DM ADMINS *',                              /* Get admins       */
+   '| pick 1.1 \== ~*~ and',                     /* Ignore these     */
+          '1.1 \== ~ ~ and',                     /* .                */
+          '1.1 \== ~~',                          /* .                */
+   '| xlate upper',                              /* Uppercase the lot*/
+   '| stem admin.'                               /* Hand 2 rexx      */
+Return
+ 
+ 
+ProcessTimedCmds:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'ProcessTimedCmds'
+'PIPE (NAME DMSERVER.EXEC:223 END ?)',
+    'stack',                                     /* Take from stack  */
+    '| cons',                                    /* Show them        */
+    '| specs w6;* 1',                            /* Remove some stuff*/
+    '| var cmdline'                              /* Hand 2 rexx      */
+Select
+When Word(cmdline,1)='RELOAD' Then Do
+                                   Call ReadNames
+                                   Call ReadAdmin
+                                   End
+Otherwise Nop
+End
+Return
+ 
+ 
+ReadNAMES:
+/*---------------------------------------------------------------+
+| Read the file containing Settings                              |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'ReadNAMES'
+Say TimeStamp() 'Reading DM NAMES file'
+'PIPE (NAME DMSERVER.EXEC:244 END ?)',
+   '< DM NAMES *',                               /* Read config      */
+   '| pick 1.1 \== ~*~ and',                     /* Ignore these     */
+          '1.1 \== ~ ~ and',                     /* .                */
+          '1.1 \== ~~',                          /* .                */
+   '| pick anycase fs . f1.1 == ~:SOURCEFILE~ or', /* Select these     */
+                       'f1.1 == ~:INTERVAL~ or',   /* .                */
+                       'f1.1 == ~:OPTIONS~ or',    /* .                */
+                       'f1.1 == ~:VALIDFILES~ or', /* .                */
+                       'f1.1 == ~:TEST~ or',       /* .                */
+                       'f1.1 == ~:TRACE~ or',      /* .                */
+                       'f1.1 == ~:SHOW~ or',       /* .                */
+                       'f1.1 == ~:TRACECTL~ or',   /* .                */
+                       'f1.1 == ~:TRACETARGET~ or',   /* .                */
+                       'f1.1 == ~:FORMAT_NEW_DISK~',  /* .                */
+   '| change ~:~/~ 1',                           /* Replace these    */
+   '| change ~.~/~ 1',                           /* .                */
+   '| change anycase ~SOURCEFILE~DIRFNFT~ 1',    /* .                */
+   '| change anycase  ~/ON~/1~',                 /* .                */
+   '| change anycase  ~/OFF~/0~',                /* .                */
+   '| specs fs : f1',                            /* Remove :title.   */
+   '| xlate upper',                              /* Uppercase        */
+   '| varload'                                   /* Hand 2 rexx      */
+Return
+ 
+ 
+ProcessRDR:
+/*---------------------------------------------------------------+
+| Process the rdr files, check if sent by admin                  |
++---------------------------------------------------------------*/
+If show Then Say TimeStamp() 'ProcessRDR'
+'PIPE (NAME DMSERVER.EXEC:275 END ?) stack | cons'
+'PIPE (NAME DMSERVER.EXEC:276 END ?)',
+  'cp QUERY RDR * ALL ISODATE',                  /* Check what fnd   */
+  '| drop first 1',                              /* Ignore hdr       */
+  '| l: lookup w1.1 w1.1 details',               /* Compare          */
+  '| stem adminok.',                             /* These are ok     */
+  '?',                                           /* 2nd pipe         */
+  'stem admin.',                                 /* Take these       */
+  '| l:',                                        /* Conn 2 lookup    */
+  '| specs ~'TimeStamp()' Not allowed/Not admin~ 1 1;* nw',   /* Compose msg      */
+  '| cons',                                      /* Show it          */
+  '| specs ~PURGE * RDR~ 1 w4.1 nw',             /* Compose cmd      */
+  '| cons',                                      /* Display          */
+  '| cp',                                        /* Issue cmds       */
+  '| cons'                                       /* Show outcome     */
+/*---------------------------------------------------------------+
+| If sent by ADMIN see if the files are acceptable               |
++---------------------------------------------------------------*/
+'PIPE (NAME DMSERVER.EXEC:293 END ?)',
+  'stem adminok.',                               /* Take these       */
+  '| if: if pick w-1;-1 == ~DIRECT~ or',         /* If this          */
+  '              w-1;-1 == ~BATCH~',             /* .or this         */
+  '|     specs w1;-3 1 ~*~ nw.8 w-1;-1 nw.8',    /* ...replace fn    */
+  '| if:',                                       /* Conn 2 iff       */
+  '| specs w-2;-2 1.8 w-1;-1 nw.8 w1;* nw',      /* Adjust records   */
+  '| l: lookup 1.17 1.17 details',               /* Compare          */
+  '| cons',                                      /* Display          */
+  '| specs ~RECEIVE~ 1 w4.1 nw ~= = 'ws' (REPLACE OLDDATE~ nw',   /* Compose cmds     */
+  '| cons',                                      /* Show cmds        */
+  '| cms',                                       /* Issue cmds       */
+  '| cons',                                      /* Display results  */
+  '?',                                           /* 2nd pipe         */
+  'var validfiles',                              /* Take these       */
+  '| split at ~;~',                              /* Split here       */
+  '| specs pad space w1.1 1.8 w2.1 nw.8',        /* Adjust records   */
+  '| l:',                                        /* Conn 2 lookup    */
+  '| specs ~'TimeStamp()' File not allowed:~ 1 1;* nw',   /* Compose msg      */
+  '| cons',                                      /* Show them        */
+  '| specs ~PURGE * RDR~ 1 w9.1 nw',             /* Compose cmds     */
+  '| cons',                                      /* Display them     */
+  '| cp',                                        /* Run cmds         */
+  '| cons'                                       /* Display outcome  */
+Return
+ 
+ 
+/****
+0            Nothing to wait for-all timer file options are done
+1            VMCF/SMSG received and stacked
+2            The specified time period has elapsed
+3            A time from the timer file has been reached
+4            A reader file of the proper class has arrived
+5            A message has arrived
+6            Interrupt from the virtual console
+7            I/O interrupt
+8            External interrupt
+28           WAKEUP TIMES file not found
+100          Explanation complete (when ? specified)
+101          Empty file in card reader, RDR option (RC from FSREAD)
+103          Unknown error from card reader, RDR option (RC from FSREAD)
+200          Invalid command option
+201          Reader not operational
+202          Error from CP SPOOL RDR HOLD
+203          Invalid hours field of time parameter
+204          Invalid minutes field of time parameter
+205          Invalid seconds field of time parameter
+206          Invalid time parameter
+207          Error reading times file
+208          VMCF AUTHORIZE error
+209          VMCF SENDX error
+210          VMCF data transfer error
+211          Error writing times file
+212          Invalid time parameter in times file
+213          Times file not on R/W disk
+214          PSW error
+**/
+ 
+TimeStamp:
+Return Date('S') Time() myfn myft
+ 

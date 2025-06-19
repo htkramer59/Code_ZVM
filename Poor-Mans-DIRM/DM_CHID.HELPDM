@@ -1,0 +1,24 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Rename a user id                                    |
+|                                                                |
+| File     : DM_CHID  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_CHUID EXEC                                       |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_CHID  <uid1> <uid2>                              |
+|          : CHGID    <uid1> <uid2> MOVElinks                    |
+|                                   KEEPlinks                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240701 15:28:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

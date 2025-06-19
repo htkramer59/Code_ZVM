@@ -1,0 +1,229 @@
+/* Display lines from file with quoted strings and comments shown    */
+/*                                 John Hartmann 4 Jul 1987 11:34:02 */
+ 
+signal on novalue
+ 
+/*********************************************************************/
+/* QDI.XEDIT (c) Copyright IBM Danmark  ApS 1987, 2010.  Property of */
+/* IBM.  An unchanged copy may be distributed freely.                */
+/*                                                                   */
+/* Display  lines from  the file  with quoted  strings and  comments */
+/* highlighted in colour.  3270 with colours is a must.              */
+/*                                                                   */
+/* You can customise  two aspects of the display of  a REXX language */
+/* program by  setting a  corresponding global  variable in  the QDI */
+/* group to 1.                                                       */
+/*                                                                   */
+/* To colour parentheses like for PATTERN files:                     */
+/*     GLOBALV SELECT QDI SETP REXXPAREN 1                           */
+/*                                                                   */
+/* To colour continuation commas blue:                               */
+/*     GLOBALV SELECT QDI SETP REXXCONT 1                            */
+/*                                                                   */
+/* Note that the screen you see  is painted by the FULLSCREEN stage, */
+/* not by Xedit.   PFs 1, 4, 5,  7, 8, 10, 11, 19,  20 do something; */
+/* press PF1 to  discover (or read at the bottom  of this file); all */
+/* other attentions will simply terminate and return to Xedit.       */
+/*                                                                   */
+/* This macro is naive about excluded lines and long lines.          */
+/*                                                                   */
+/* Though it may  display things in a way you  don't like, it should */
+/* not crash with Xedit or pipeline errors as long as your terminal */
+/* supports  extended  highlighting  and 14-bit  addressing.   This */
+/* macro was tested with CMS Pipelines 1.1.10.                       */
+/*                                                                   */
+/* Please report errors to cms-pipelines@vm.marist.edu.              */
+/*                                                                   */
+/* Argument: DEBUG while testing                                     */
+/*                                                                   */
+/* Change activity:                                                  */
+/*12 Nov 1998  +++ Add update mode and SID support.                  */
+/*19 Nov 1997  +++ Cleanup; more PF keys.                            */
+/*********************************************************************/
+ 
+arg option '%' ftype
+ 
+/*********************************************************************/
+/* Defaults.  Change as appropriate:                                 */
+/*********************************************************************/
+colours='7654312'
+/*       | | | + Odd nest levels (red)                               */
+/*       | | |+- Even Nested comments (blue)                         */
+/*       | | +-- Odd parentheses nest                                */
+/*       | |+--- Even parentheses                                    */
+/*       | +---- Strings in double quotes                            */
+/*       |+----- Strings in single quotes                            */
+/*       +------ Instructions, etc not in above                      */
+ 
+hilite='2'                            /* Reverse hilite by default   */
+                                    /* Change to '00'x if not wanted */
+ 
+color.=''                             /* For compatibility           */
+'command extract,line,color file,ftype,verify',
+   ',cmdline,curline,msgline,lscreen,line,size,update,sidcode',
+   ',lrecl,prefix'
+ 
+usable=lscreen.6 - 1                  /* If there is no prefix       */
+If prefix.1\='OFF'
+   Then usable=usable-6               /* Account for prefix          */
+Select
+   When lrecl.1<=usable               /* Is there any point?         */
+      Then rscroll=0                  /* Would show only blanks      */
+   When lrecl.1<2*usable
+      Then rscroll=lrecl.1-usable     /* Don't show all blank cols   */
+   Otherwise
+      rscroll=usable                  /* Go whole hog                */
+end
+ 
+scroll=lscreen.5                      /* Scroll full screen          */
+/* Add to taste:  scroll=scroll-1                                    */
+ 
+'command set verify off'              /* Be quiet                    */
+If ftype=''
+   Then ftype=ftype.1
+ 
+parse value diag(8c) with flag+1 +1 cols+2 lines+2
+cols=c2d(cols)
+lines=c2d(lines)
+ 
+parse var color.4 'PS' ps .           /* Using a symbol set?         */
+If abbrev('0', ps)
+   Then ps='00'x
+   Else
+      Address COMMAND 'PIPE (name QDI)',
+         '| fullscrq ',
+         '| fullscrs ',
+         '| spec w11 ',
+         '| split ; ',
+         '| locate 6 /w/ ',
+         '| take 1 ',
+         '| count lines ',
+         '| xlate 0 00 1' c2x(ps),
+         '| var ps'
+ 
+If option\='DEBUG'
+   Then stage='fullscr'
+   Else
+      Do
+         stage='diskslow full screen a|fullscr'
+         address command 'ERASE FULL SCREEN A'
+      End
+ 
+Select
+   When update.1='OFF'
+      Then trim=''
+   When sidcode.1=''
+      Then trim='spec 1;-9 1|'
+   otherwise
+      trim='spec 1;-18 1|'
+end
+ 
+state.='0 0 0'                        /* Default state               */
+ 
+/* This is a doubly nested comment
+ 
+/* curline.2 contains  the actual line  number on the  screen.  This */
+/* can be  used as an  offset to  maintain the same  line placement. */
+/* Note however, that  curline.2 is relative to  the logical screen, */
+/* so it  needs to be  offset by lscreen.3.  Vertical  split screen? */
+/* Forget it!                                                        */
+ 
+   and it is a big one.                                              */
+ 
+line_offset=lscreen.3+curline.2-1
+startcolumn=0                         /* In left margin              */
+ 
+do forever
+   'command extract,line'
+   savelin = line.1                   /* Save current line number.   */
+   If line.1>0
+      Then 'command -'line_offset-1   /* Lines above current         */
+ 
+   'command extract,line'
+   If line.1=0
+      Then
+         Do
+            'command :1'
+            line.1=1
+         End
+ 
+   begline=line.1
+   blanklines=line_offset-(savelin-begline)-1
+ 
+   'command :' begline                /* Go back to current line.    */
+ 
+   address command 'PIPE',
+      'xedit|',
+      'take' lines-blanklines'|',
+      trim,
+      'qdi' cols lines colours hilite ps ftype begline blanklines,
+            startcolumn '|',
+      stage '|',
+      'stem attnid.'
+   r=RC
+ 
+   'command :' savelin                /* Go back to current line.    */
+   If r\=0                            /* Trouble?                    */
+      Then leave                      /* Time to quit, then          */
+ 
+   parse var attnid.1 aid+1
+   select
+      When aid='#'                    /* PF 11                       */
+         Then
+            startcolumn=max(0, min(lrecl.1-usable, startcolumn+rscroll))
+      when aid=':'                    /* PF 10                       */
+         Then
+            If startcolumn>0
+               Then startcolumn=max(0, startcolumn-rscroll)
+      when aid=8
+         Then 'command +'scroll
+      when aid='H'                    /* Uppercase F8                */
+         Then 'command +'scroll%2
+      when aid=7
+         then 'command -'scroll
+      when aid='G'                    /* Uppercase F7                */
+         then 'command -'scroll%2
+      When pos(aid, '5E')>0
+         Then 'command :'max(1, size.1-scroll+line_offset)
+      When pos(aid, '4D')>0
+         Then 'command :'min(size.1, line_offset)
+      When pos(aid, '1A')>0
+         Then call help
+      Otherwise
+         leave
+   end
+end
+ 
+'command set verify' verify.1
+'command sos clear'
+exit
+ 
+help:
+address command
+l1= '                      19 Back/2  20 Forward/2'
+l2= ' 1 Help  4 Top  5 Eof  7 Back     8 Forward '
+If rscroll=0
+   Then br=50
+   Else
+      Do
+         br=70
+         l1=l1 '                    '
+         l2=l2 '10 Left   11 Right  '
+      End
+indent=max(0, (cols-br)%2)
+first=(lines-7)%2*cols+indent
+'PIPE (name QDI.XEDIT:140)',
+   '|literal',
+   '|literal' center('Press enter to continue', br),
+   '|literal',
+   '|literal' center(l1, br),
+   '|literal' center(l2, br),
+   '|literal',
+   '|spec x11 1',
+      'number from' first 'by' cols 'd2c n.2 right',
+      'x2842f2 n 1-* n.'br,
+   '|strliteral x00c3',
+   '|join *',
+   '|fullscr',
+   '|hole'
+return

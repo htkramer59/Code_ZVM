@@ -1,0 +1,256 @@
+/* This exec will make a "flat file" of the CP directory, with
+   one line per user, INCLUDE profiles resolved (show in lowercase).
+   By using XEDIT's ALL command in this flat file it becomes very easy to
+   see all users having a certain option.
+   E.g. simply enter   ALL /MACHINE XC/    while in XEDIT
+    +-----------------------------------------------------------+
+    | format:  | DIRFLAT  directory_fid  <( options >           |
+    +-----------------------------------------------------------+
+ Options:
+    KEEPMdisks    to not remove all MDISK and MINIOPT cards
+    KEEPLinks     to not remove all LINK cards
+    KEEPCmts      to not remove all comment cards
+    KEEPNolog     to not remove all NOLOG users
+    KEEPSpecial   to not remove all SPOOL, SPECIAL, DEDICATE cards
+    Model 1       (default) creates 1 record per USER/PROFILE in wrkfile
+    Model 2       1 record per retained directory card but
+                  each card is preceeded by userid/profilename
+    Resolve       tries to remove include PROFILE cards that are
+                  overridden in the USER section
+    NOXedit       Don't automatically XEDIT the results file
+    ALLdirs       Take all directories as stored in an SFS (see below)
+ Note: 1. By default LINK and MDISK cards are removed as scanning on
+          MDISKS and LINK is better done on DIRMAP's MDISKMAP and LINKMAP
+       2. The other cards removed by default are not that important.
+       3. The ALLDIRS option which takes all DIRECT-0 files as found
+          on SFS72:MAINT.ALL_LAST_DIRBKP.  It generates as many
+          outputfiles on the user A-disk as there are DIRECT-0 files.
+ 
+ 18 Feb 1994: Unpack source & avoid emsg when FNAME only is given
+ 22 Oct 2001: Add the NOXEDIT option
+ 03 Jul 2003: Koen Van Craen: Added the ALLDIRS option
+ 27 Jul 2004: Avoid ending with errmsg if rc is 0
+  Written by: Kris Buelens IBM Belgium;  BUELENS at DIEVMD 8 Sep 1992*/
+parse upper source . . myname mytype . syn .
+nl='15'x
+AlldirsStore='SFS72:MAINT.ALL_LAST_DIRBKP' /* For ALLDIRS option */
+ 
+parse upper arg fid '(' options 0 w1 rest
+if w1='$%PIPE1%$' then signal PIPESUB1 /* called as PIPE subroutine */
+ 
+address command
+parse value 0    0     0     0     0     1     0       1     0,
+      with keepm keepl keepc keepn keeps model resolve Xedit all,
+         . '' toRel
+do while options^='' /* analyse requested options */
+   parse var options option options
+   select
+     when abbrev('KEEPMDISKS',option,5)    then keepm=1
+     when abbrev('KEEPMINIDISKS',option,5) then keepm=1
+     when abbrev('KEEPLINKS',option,5)     then keepl=1
+     when abbrev('KEEPCMTS',option,5)      then keepc=1
+     when abbrev('KEEPCOMMENTS',option,5)  then keepc=1
+     when abbrev('KEEPNOLOG',option,5)     then keepn=1
+     when abbrev('KEEPSPECIAL',option,5)   then keeps=1
+     when abbrev('RESOLVE',option,1)       then resolve=1
+     when abbrev('NOXEDIT',option,3)       then Xedit=0
+     when abbrev('ALLDIRS',option,3)       then all=1
+     when abbrev('MODEL',option,1)   then do
+       parse var options model options
+       if model ^=1 & model ^=2 then call errexit 5,,
+          'Invalid MODEL value: it value must be 1 or 2 ; not "'model'"'
+     End
+     Otherwise call errexit 5, 'Invalid option:' option
+   end
+end
+ 
+if all then do /* look for all DIRECT-0 files */
+  'PIPE COMMAND CMDCALL LISTDIR' allDirsStore '(NOSUB',
+      '|VAR EMSG|DROP|CHOP 1|VAR fm'
+  if rc<>0 then call ErrExit rc,emsg
+  if fm='-' then do
+     call csl 'DMSGETFM RC RS FM'
+     if rc<>0 then call ErrExit rs,'No free filemodes left'
+     'ACCESS' allDirsStore fm
+     if rc<>0 then call ErrExit rs,'Access' allDirsStore 'failed'
+     toRel=fm
+  end
+  'PIPE CMD LISTFILE * DIRECT-0' fm,
+    '| SPECS W1-3 1',
+    '| STEM FIDS.'
+end
+else do /* Just a single item */
+  if words(fid)<2   then do
+     Vfid=subword(fid subword('VMUSERS DIRECT *',words(fid)+1),1,3)
+     'PIPE STATE' vfid '|SPEC W1-3 1|VAR vvfid'
+     vf=(rc=0) ; if vf then vfid=vvfid
+ 
+     Ufid=subword(fid subword('USER DIRECT *',words(fid)+1),1,3)
+     'PIPE STATE' ufid '|SPEC W1-3 1|VAR uufid'
+     uf=(rc=0) ; if uf then ufid=uufid
+ 
+     Dfid=subword(fid subword('USER BACKUP *',words(fid)+1),1,3)
+     'PIPE STATE' dfid '|SPEC W1-3 1|VAR ddfid'
+     df=(rc=0) ; if df then dfid=ddfid
+     select
+      when ^ (vf | uf | df) then call errexit 29,,
+        'Need to give CP directory fileid, none found of:',,
+        '  'vfid ufid dfid
+      when words(fid)=1 then if vf & df then call errexit 29,,
+        'Need to give CP directory filetype:',,
+        '  both' vfid 'and' dfid 'where found.'
+      when vf + uf + df > 1 then call errexit 29,,
+        'Need to give CP directory fileid, more than one found of:',,
+        '  'left(vfid,22*vf) left(ufid,22*uf) left(dfid,22*df)
+      when vf then fid=vvfid
+      when uf then fid=uufid
+      when df then fid=ddfid
+     end
+  end
+  else do
+   'CMDCALL ESTATE' fid
+   if rc^=0 then call errexit rc
+  end
+  parse value 1 fid with fids.0 fids.1
+end
+ 
+ 
+if ^keepm then remove_mdisks='|NFIND MDISK|NFIND MINIOPT'
+          else remove_mdisks=''
+if ^keepl then remove_links ='|NFIND LINK'
+          else remove_links =''
+if ^keepc then remove_cmts  ='|NFIND *'
+          else remove_cmts  =''
+if ^keeps then remove_specs ='|NFIND SPOOL|NFIND SPECIAL|NFIND DEDICATE '
+          else remove_specs =''
+ 
+do i = 1 to fids.0
+  parse var fids.i fn ft fm
+  if ft='DIRECT-0' then opfn=fn /* output filename */
+  else opfn=myname
+  say myname': Reading' fids.i 'as input...'
+  'PIPE (end ?)',
+      '<' fids.i,
+     '|UNPACK',                 /* Unpack if it'd be packed */
+     '|CHOP 72|STRIP|FIND  '||, /* remove cardnbrs & blanks & empty rcs*/
+     remove_cmts||,             /* no comment cards */
+     remove_links,              /* no LINK cards */
+     remove_mdisks,             /* no MDISK/MINIOPT cards */
+     remove_specs,              /* no SPOOL, SPECIAL nor DEDICATE cards*/
+     '|FROMLABEL PROFILE',
+  '|U: TOLABEL USER',
+     '|JOIN * /'nl'/',        /* join all cards */
+     '|SPEC /'nl'/ 1 1-* 2',  /* add NEWLINE char before first profile*/
+     '|SPLIT before string /'nl'PROFILE/', /* split per profile */
+     '|XLATE lower',          /* profile contents to lowercase */
+  '|R: REXX ('myname mytype') $%PIPE1%$' keepn model resolve,
+     '|>' opfn 'WORK A',    /* result to work file */
+  '?U:|R:'                    /* All USER cards directly to REXX part */
+   if rc<>0 then call ErrExit rc,'Problem handling' fids.i
+   if rc=0 & ^all then
+     if xedit then 'XEDIT' opfn 'WORK A'
+end
+ 
+call ErrExit rc
+ 
+ 
+PIPESUB1: /* called as PIPE subroutine */
+ parse var rest keepn model resolve .
+ /* Statements that can occur more than once */
+ multiple='APPCPASS AUTOLOG XAUTOLOG CPU IUCV OPTION',
+          'LINK MDISK DASDOPT MINIOPT DEDICATE SPOOL SPECIAL',
+          'NAMESAVE SCREEN SHARE XCONFIG XSTORE'
+ 
+ profile.='>>>> ERROR: above PROFILE not found.'
+ Say '     Reading directory PROFILEs ...'
+ do forever
+    'READTO profile'
+    if rc^=0 then leave
+    parse var profile 2 . name . (nl) profile
+    profile=space(profile)
+    upper name
+    profile.name=profile
+    out=left('PROF' name,60)||nl||profile
+    call pipe_output 'P' name /* go write record into PIPELINE */
+ end
+ 
+ 'SELECT INPUT 1'  /* now read second stream (with the USER cards) */
+ if rc^=0 then exit rc
+ out=''
+ Say '     Reading directory USER definitions ...'
+ do forever
+    'READTO card'
+    if rc^=0 then leave
+    if left(card,5)='USER' then do
+       if out^='' then do
+          call pipe_output 'U' name /*go to write record into PIPELINE */
+          out=''
+       end
+       out=''
+       parse var card w1 name pw w4 w5 rest /* analyse the card */
+ 
+       if ^keepn & pw='NOLOG' then do /* skip this "NOLOG" user */
+          'CALLPIPE *:|TOLABEL USER|HOLE'
+          iterate
+       end
+ 
+       out=left(w1,4) left(name,8) left(pw,8) right(w4,6) right(w5,6),
+           left(space(rest),23)
+       iterate
+    end
+    if word(card,1)='INCLUDE' then do  /* resolve the INCLUDE */
+       profname=word(card,2)
+       out=out||nl||,     /* append the profile */
+           '*'space(card)||nl||,
+           profile.profname
+    end
+    else out=out||nl||space(card) /* append the card */
+ end
+ if out^='' then
+    call pipe_output 'U' name /*go to write record into PIPELINE */
+exit rc*(rc<>12)
+ 
+/*-----------------------------------------------------------------*/
+PIPE_OUTPUT: /* subroutine to write into PIPELINE                  */
+/*-----------------------------------------------------------------*/
+ if resolve & left(arg(1),1)='U' then
+    'CALLPIPE (end ?)',
+      'VAR out',                   /* get profile */
+     '|DEBLOCK LINEND' nl,            /* split in records */
+     '|SPEC w 1 1  w 2-* 10  1-* 80', /* Double the record*/
+     '|XLATE 1-79 upper',             /* Upper case first part*/
+  '|u: DROP 1',                       /* drop USER card */
+  '|l: LOOKUP PAD 40 1.8 DETAIL',     /* Keep records can occur > once*/
+     '|SORT 1-79 80.8',               /* SORT + UNIQUE throw doubles ..*/
+     '|UNIQUE 1.79 LAST',             /* .. from PROFILE away*/
+  '|f: FANINANY',                     /* Join all again*/
+     '|SORT 1.8',                     /* sort on uppercased keyword */
+  '|f2: FANINANY',                    /* Join all again*/
+     '|SPEC 80-* 1',                  /* take original record */
+     '|JOIN * /'nl'/',                /* join all cards */
+     '|VAR out',                      /* new entry to REXX */
+  '?u:|f2:',                       /* pick up USER card again */
+  '?   VAR MULTIPLE',              /* statements may occur > once */
+     '|SPLIT',                        /* split in words*/
+  '|l:',                              /* feed as key to lookup */
+     ,                             /* these cards may occur once */
+     '|SORT 1.8 81.8',     /* sort on keyw & lowcase keyw of PROFILE */
+     '|UNIQUE 1.8 LAST',              /*keep user's card, not PROFILE's*/
+  '|f:'                               /* Join all again*/
+ 
+ if model=1
+    then 'OUTPUT' out
+    else 'CALLPIPE VAR out',                       /* get record */
+                 '|DEBLOCK LINEND' nl,             /* split records */
+                 '|SPEC /'arg(1)'/ 1  1-* 12',     /* add profileid*/
+                 '|*:'                             /* feed to output */
+ if rc^=0 then exit rc*(rc<>12)
+return
+ 
+ERREXIT: /* general errorexit routine */
+ parse upper source . . myname mytype . syn .
+ if toRel<>'' then 'RELEASE' fm
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)

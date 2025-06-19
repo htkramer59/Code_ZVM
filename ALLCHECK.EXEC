@@ -1,0 +1,49 @@
+/*---------------------------------------------------------------+
+| Function : Contains all the daily checks                       |
+|                                                                |
+| File     : ALLCHECK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : ALLCHEKC INPUT                                      |
+|                                                                |
+| Called   : ALLCHECK .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220223 10:47:06                                   |
+| Changes  : .                                                   |
+|            20220930 H.T.Kramer : Move the code to be executed  |
+|                     to ALLCHECK INPUT                          |
+|                                                                |
+|            20220506 H.T.Kramer : Added the QUIET option to the |
+|                     tools which are called to suppress some    |
+|                     output to the console                      |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If arg1='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME ALLCHECK.EXEC:22 END ?)',
+               '< 'myfn myft' *',
+               '| tolabel Parse',
+               '| cons'
+             Exit
+             End
+'PIPE (end ?)',
+    '< 'myfn' INPUT *',
+    '| pick 1.1 \== ~*~ and',
+           '1.1 \== ~ ~',
+    '| strip',
+    '| stem check.',
+    '?',
+    'cp QUERY RDR * ALL',
+    '| pick w-3;-3 == ~DIRMAINT~ and w-2;-2 == ~NEWMAIL~',
+    '| cons'
+Do c=1 To check.0
+    Say check.c
+    Address CMS check.c
+End c
+Exit

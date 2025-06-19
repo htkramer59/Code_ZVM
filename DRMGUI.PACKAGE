@@ -1,0 +1,89 @@
+**********************  none  ******************************************
+* :nick.DRMGUI     :sec.none                          :disk.VMTOOLS
+* :title.CMSGUI interface to defragment disks
+* :version.1.2     :date.02/02/01   :summary.HELPCMS  :support.N
+* :oname.Kris Buelens               :onode.BEVM       :ouser.BUELENSC
+* :aname.Kris Buelens               :anode.BEVM       :auser.BUELENSC
+* :sw.VM/ESA V2 with CMS/GUI feature, Dirmaint, DRM PACKAGE
+* :ops.VM/ESA V2                    :lang.REXX        :source.Y
+* :doc.HELPCMS
+* :kwd.Defragmentation, DIRMAINT, CMS/GUI, DT
+* :abs.DRMGUI makes it easier to move minidisks and so defragment disks.
+* Diskmaps are displayed in a GUI windows, and some mouse clicks are
+* enough to move minidisks.  DIRMAINT is required, DFSMS/VM is strongly
+* recommended for its speed and other advantages (DFSMS is a free
+* feature of VM/ESA and z/VM).
+* :lic.By placing material on this conference, I agree to grant IBM a
+* non-exclusive, royalty-free license for the material as set forth in
+* the LICENSE AGREEMNT file on this conference.
+************************************************************************
+*   DRMGUI   PACKAGE *
+*
+    DRMGUI   EXEC     *  Starts DRMGUI
+    $DRMFRAG EXEC     *  The meat of DRMGUI, started by DRMGUI EXEC
+    DRMDFSMS WARNING  *
+    DRM      NAMES    *  Defines some options
+    $DRMNAM$ EXEC     *  subexec to update DRM NAMES
+    $DRMGETD EXEC     *  subexec to get a mononlitc directory
+    CPLINKPW MODULE   *  Link to a minidisk, without risking pswd prompt
+* Required too: DRM PACKAGE, at least V4
+*   DRM      PACKAGE  *
+* Images for some push buttons (must remain on VM)
+    DRMHOME  GIF      *
+    DRMDOWN  GIF      *
+    DRMUP    GIF      *
+    DRMABO   GIF      *
+* GUI panel REXX code (displayed by DRMGUI)
+    $$CMD$$  GBEXEC   *
+    DRMFINDU GBEXEC   *
+    DRMFRAGD GBEXEC   *
+    DRMFRAGK GBEXEC   *
+    DRMFRAGL GBEXEC   *
+    DRMFRAG0 GBEXEC   *
+    DRMFRAG1 GBEXEC   *
+    DRMFRAG2 GBEXEC   *
+    DRMGABO  GBEXEC   *
+    DRMMDINF GBEXEC   *
+    DRMMLOG  GBEXEC   *
+    DRMSETUP GBEXEC   *
+    DRMHOW   GBEXEC   *
+    DRMFSTAT GBEXEC   *
+    DRMFSTAD GBEXEC   *
+    DRMGREFR GBEXEC   *
+    DRMMDM   GBEXEC   *
+* Help files (displayed by DRMGUI)
+    DRMFRAG  HELPCMS  *
+    LIST     HELPDRMF *
+    MAP      HELPDRMF *
+    MOVE     HELPDRMF *
+    MVLIST   HELPDRMF *
+    REFRESH  HELPDRMF *
+    SET      HELPDRMF *
+    VOLLIST  HELPDRMF *
+* All remaining files are not required for execution:
+* Source files of panels, modify using the WSA Gui Builder
+    $$CMD$$  GBBIN    *
+    DRMFINDU GBBIN    *
+    DRMFRAGD GBBIN    *
+    DRMFRAGK GBBIN    *
+    DRMFRAGL GBBIN    *
+    DRMFRAG0 GBBIN    *
+    DRMFRAG1 GBBIN    *
+    DRMFRAG2 GBBIN    *
+    DRMGABO  GBBIN    *
+    DRMMDINF GBBIN    *
+    DRMMLOG  GBBIN    *
+    DRMSETUP GBBIN    *
+    DRMHOW   GBBIN    *
+    DRMFSTAT GBBIN    *
+    DRMFSTAD GBBIN    *
+    DRMGREFR GBBIN    *
+    DRMMDM   GBBIN    *
+*
+    DRMFRAG  GUIWIRE  *  GUIWIRE Source of the program.  Rqd: GUIWIRE V4
+    DRMFRGWR GIF      *  Wiring diagram for some complex pieces
+    DRMFRAG  NOTES    *
+    DRMGUI   TODO     *
+*?  DRMFRAG  VARUSED  *
+*?  DRMMOVE  GIF      *
+*?  DRMMOVE2 GIF      *

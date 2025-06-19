@@ -1,0 +1,171 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*
+/-  Herald ten Dam 10/04/2019                                          -/
+/-      Client cpu                                                    */
+trace off
+parse source . call_type myname .
+cr='15'x                                         /*  Carriage return   */
+emsgstart=date('U') time() myname':'   /* Start of error message line  */
+'globalv stack BBDISPLAY BBPORT FQDN VMPTK PTKSVM'
+pull bbdisplay
+pull bbport
+pull fqdn
+pull vmptk
+pull ptksvm
+if vmptk <> 1 then exit 4
+rc = diagrc('8','QUERY USER' ptksvm)
+if word(rc,1) <> 0 then notloggedon=1
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call init_open_socket      /*  Initialize and Open the socket  */
+call get_timestamp         /*  Get a linux-like timestamp      */
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+call send status           /*  Send the result in status to bb */
+call close_term_socket     /*  Close and terminate the socket  */
+exit
+ 
+do_the_test:
+/*  Check logged on flag, if true send yellow icon with message.  */
+if notloggedon=1 then do
+  msg = ptksvm 'Not logged on'
+  msg = 'yellow' dow month day time() tz year msg
+  status = 'status' machine||'.guests' msg cr
+  return
+end
+'PIPE (NAME HOBGUEST.EXEC:54 END ?) vmc' ptksvm 'cms ERASE XYGUEST LISTING A | hole'
+'cp sleep 1 sec'
+/*---------------------------------------------------------------+
+| Update so we can ignore 1 header and have it sorted...         |
+| PERFKIT is very picky with respect to the order of the options!|
++---------------------------------------------------------------*/
+'PIPE (NAME HOBGUEST.EXEC:60 END ?) vmc 'ptksvm' CURRENT'
+'PIPE (NAME HOBGUEST.EXEC:61 END ?)',
+    'vmc 'ptksvm' PRINT USER (SORT %CPU PAGESIZE OFF CLOSE TOFILE XYGUEST LISTING A',
+    '| HOLE'
+'cp sleep 1 sec'
+'reacc quiet'
+work:
+/* 'listfile xyguest listing * ' */
+'state xyguest listing * '
+If rc<>0 Then Exit
+/* Display result ordened */
+'pipe (NAME HOBGUEST.EXEC:71 END ?)',
+    '< XYGUEST LISTING *',                      /* Read this file   */
+    '| strip',                                  /* Remove space     */
+    '| frlabel >>Mean>>',                       /* Start from here  */
+    '| drop first 1',                           /* Ignore label     */
+    '| change ~...~0~',
+    '| specs w1.2 1 x40 n',                     /* Adjust           */
+    '| spec a: w2.1 .',                         /* Rework to        */
+           'print a pic zzz9v.99 1',            /*   nnn.nn         */
+           'fieldseperator blank field 1;* nw', /*     without zeros*/
+    '| specs w2.1 1.8 ~:~ nw  w1.1 nw.7 right', /* Re-shuffle       */
+    '| f: fanout ',                             /* Duplicate recs   */
+    '| join * x15',                             /* Make 1 record    */
+    '| var lstat ',                             /* Store as         */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| specs',                                  /* Totalise         */
+    '        printonly eof',                    /* .                */
+    '        b: w3.1 .',                        /* .                */
+    '        set #0+=b',                        /* .                */
+    '        eof',                              /* .                */
+    '        print #0 picture zzz9v.99 1',      /* .                */
+    '| var maxcpu'                              /* Store as         */
+color = 'green'
+/* if maxcpu > 90 then color = 'yellow'
+   if maxcpu > 99 then color = 'red'
+*/
+msg = color dow month day time() tz year cr cr
+status = 'status' machine||'.guests' msg||lstat cr
+/* 'pipe var status | split at x15 | console' */
+return
+ 
+init_open_socket:
+sock_name='SOCGUEST'
+ret=Socket('Initialize',sock_name)
+parse var ret rc .
+if rc <> 0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+ret=socket('Gethostname')
+parse var ret rc hostname .
+if rc<>0 then
+  say 'Gethostname:' ret
+ret=socket('Getdomainname')
+parse var ret rc domainame .
+if rc<>0 then
+  say 'Getdomainname:' ret
+fullname=hostname||'.'||domainame
+/*  Change periods to commas  */
+fullname=translate(fullname,',','.')
+'globalv put hostname'
+'globalv put domainame'
+'globalv put fullname'
+bbdate=date('U')
+'globalv put bbdate'
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return
+ 
+get_timestamp:
+'PIPE (NAME HOBGUEST.EXEC:163 END ?) CP QUERY TIMEZONE' ,
+  '| locate /Active/' ,
+  '| specs w1 1' ,
+  '| var TZ'
+dow = substr(date('W'),1,3)
+parse value date('N') with day month year .
+timestamp = dow month day time() tz year
+return

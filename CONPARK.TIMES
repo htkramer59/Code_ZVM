@@ -1,0 +1,4 @@
+* Here we schedule extra things to be done in CONPARK                           
+* Below creates and extract of the LOGS for security                            
+ALL      00:00:01 07/06/20    MIDNIGHT                                          
+ALL      00:15:00 07/06/20    EXTR4SEC                                          

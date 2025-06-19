@@ -1,0 +1,17 @@
+/**/
+Parse Upper Arg env .
+Parse Source . how myfn myft .
+'PIPE  (end ?)',
+      '< 'myfn' NAMES *',
+      '| pick 1.1 \== ~*~',
+      '| xlate upper',
+      '| locate /'env'/',
+      '| specs fs . f3;*',
+      '| var ip'
+Select
+When how='FUNCTION'   Then Exit ip
+When how='SUBROUTINE' Then Exit ip
+When how='COMMAND'    Then Say ip
+Otherwise Nop
+End
+Exit

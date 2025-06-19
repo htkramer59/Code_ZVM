@@ -1,0 +1,19 @@
+/*---------------------------------------------------------------+
+| Function : Profile exec for all Linux servers                  |
+|                                                                |
+| File     : PROFILE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PROFILE  .                                          |
+|                                                                |
+| Comments : To be placed on LINUX191 191                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220518 12:16:25                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Address CMS 'LNXSTART'

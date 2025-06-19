@@ -1,0 +1,879 @@
+/*---------------------------------------------------------------+
+| Function : SFS filepool admin tool                             |
+|                                                                |
+| File     : FPADMIN  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CHKOBJ   EXEC tool to check SFS/BFS                 |
+|                                                                |
+| Called   : FPADMIN  <fpname>                                   |
+|                                                                |
+| Comments : Need ADMIN rights on the filepool(s)....            |
+|            NO BFS SUPPORT implemented                          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20191101 16:38:40                                   |
+| Changes  : .                                                   |
+|            20220601 H.T.Kramer : Fixed problem with modifying  |
+|                            allocated blocks                    |
+|            20220211 H.T.Kramer : Added check for SFS/BFS when  |
+|                         looking at the content                 |
+|            20211215 H.T.Kramer : Reworked the GetInfo sub-     |
+|                         routine and layout of initial panel    |
+|            20210413 H.T.Kramer : Fixed problem with LIST       |
+|                                  function                      |
+|            20201001 H.T.Kramer : Changed syntax for siconv     |
+|                                  required an update, fixed     |
+|                                  display after F10 (listusage) |
+|            20200710 H.T.Kramer : Removed warning for PUBLIC.   |
+|            20200708 H.T.Kramer : Added check to see if user    |
+|                                  exists in cp directory        |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fpname .
+Parse Source . . myfn myft .
+ 
+Address CMS 'PIPE (NAME FPADMIN.EXEC:38 END ?)',
+   'cp QUERY USERID',                           /* Ask CP           */
+   '| specs substr -2;-1 of w3.1',              /* Keep this        */
+   '| var node'                                 /* Store as         */
+If fpname=''  Then fpname='VMUSERS'
+If fpname='?' Then Do
+              Address CMS 'HELP FPAD FPADMIN'
+              Exit
+              End
+ 
+Select
+When myft='EXEC'    Then Call RunExec
+When myft='XEDIT'   Then Call RunXedit
+Otherwise Exit 99
+End
+Exit
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| The exec part of this tool                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME FPADMIN.EXEC:60 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',            /* Ask CMS          */
+   '| drop first 1',                      /* Ignore header    */
+   '| count lines',                       /* Count findings   */
+   '| if: if pick 1.1 == ~1~',            /* Check this       */
+   '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */
+   '|     cms',                           /* Issue cmd      */
+   '| if:',                               /* Comm 2 if        */
+   '| var exldd'                          /* Hand 2 rexx      */
+Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+Address CMS 'XEDIT 'myfn fpname' A (WIDTH 120 PROFILE 'myfn
+Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+RunXedit:
+/*---------------------------------------------------------------+
+| The xedit part of this tool                                    |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:79 END ?)',
+    'var fpname 1',                             /* Take from caller */
+    '| var fpname'                              /* Store as         */
+lvl=1
+data.0=0
+Call XeditSettings
+Call InitDisp
+/*---------------------------------------------------------------+
+| Loop...                                                        |
++---------------------------------------------------------------*/
+Do x=1
+    Call Display
+    'READ ALL NUMBER'
+    'PIPE (NAME FPADMIN.EXEC:92 END ?)',
+        'stack',                                /* Read from stack  */
+        '| xlate upper',                        /* Uppercase        */
+        '| var cmd'                             /* Store as         */
+/*---------------------------------------------------------------+
+| What to do....                                                 |
++---------------------------------------------------------------*/
+    Select
+    When cmd=''         Then Nop
+    When cmd='HELP'     Then Address CMS 'HELP FPADMIN'
+    When cmd='RETURN'   Then Do
+                        lvl=1
+                        Call InitDisp
+                        End
+    When cmd='QUIT'     Then Do
+                        Queue 'QQUIT'
+                        Exit
+                        End
+    When cmd='DIRATR'   Then Call FlipDirAttr
+    When cmd='ZOOM'     Then Do
+                             from='ZOOM'
+                             Call ZoomIN
+                             End
+    When cmd='ACSOR'    Then Call QueryAccessor
+    When cmd='CONFLICT' Then Call QueryConflict
+    When cmd='ENROLL'   Then Call EnrollUsr
+    When cmd='DELUSR'   Then Call DeleteUser
+    When cmd='ADMIN'    Then Do
+                             from='ADMIN'
+                             Call FlipAdmin
+                             End
+    When cmd='LIST'     Then Do
+                             from='LIST'
+                             Call ShowContent
+                             End
+    When cmd='CONFRM'   Then Call CmdConfirmed
+    When cmd='GRANT'    Then Call UserGRANT_REVOKE
+    When cmd='REVOKE'   Then Call UserGRANT_REVOKE
+    When cmd='MODAUT'   Then Call ModifyAuth
+    When cmd='MODSIZ'   Then Call ModifySize
+    When cmd='LISTUSG'  Then Call ListUsage
+    When cmd='STATS'    Then Call Statistics
+    When cmd='CHSIZE'   Then Do
+                        Address cms 'PIPE (NAME FPADMIN.EXEC:135 END ?)',
+                                       'stack', /* Take from stack  */
+                                       '| var newsize'  /* Store as         */
+                        Call ChangeSize
+                        End
+    When cmd='EMSG'     Then Queue cmd
+    Otherwise Say '>>>>' cmd '<<<<<'
+    End
+End x
+Return
+ 
+ 
+QueryConflict:
+/*---------------------------------------------------------------+
+| Show who is accessing this at the moment                       |
++---------------------------------------------------------------*/
+id=Word(data.1,3)
+dirtype=Strip(Word(data.1,5),'B','_')
+title='Current Accessors/Lock for 'dir
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10;11;12 Quit'
+Call SetPFKeys
+Address CMS 'PIPE (NAME FPADMIN.EXEC:156 END ?)',
+    'cms QUERY FILEPOOL CONFLICT 'id fpname,    /* Ask cms          */
+    '| specs ~%Y %y~ 1 1;* nw',                 /* Add field marks  */
+    '| d: drop first 1',                        /* Remove hdr       */
+    '| stem data.',                             /* Store as         */
+    '? d:',                                     /* Conn 2 drop      */
+    '| specs w3;* 5',                           /* Adjust layout    */
+    '| var header'                              /* Hand 2 rexx      */
+Call MakeSeparator
+Call Display
+'CURSOR CMDLINE'
+Return
+ 
+ 
+QueryAccessor:
+/*---------------------------------------------------------------+
+| Show who is accessing this at the moment                       |
++---------------------------------------------------------------*/
+dir=Word(data.1,4)
+dirtype=Strip(Word(data.1,5),'B','_')
+title='Current Accessors/Lock for 'dir
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10;11;12 Quit'
+Call SetPFKeys
+Select
+When dirtype='DIRCONTROL'  Then sfsqry='ACCESSOR 'dir
+When dirtype='FILECONTROL' Then sfsqry='LOCK * * 'dir
+Otherwise Nop
+End
+Address CMS 'PIPE (NAME FPADMIN.EXEC:184 END ?)',
+    'cms QUERY 'sfsqry,                         /* Ask cms          */
+    '| specs ~%Y %y~ 1 1;* nw',                 /* Add fieldmarks   */
+    '| d: drop first 1',                        /* Remove hdr       */
+    '| stem data.',                             /* Hand 2 rexx      */
+    '? d:',                                     /* Conn 2 drop      */
+    '| specs w3;* 5',                           /* Adjust layout    */
+    '| var header'                              /* Store as         */
+Call MakeSeparator
+Call Display
+'CURSOR CMDLINE'
+Return
+ 
+ 
+Statistics:
+/*---------------------------------------------------------------+
+| Show statistics for the filepool                               |
++---------------------------------------------------------------*/
+title='Filepool statistics 'fpname
+header=''
+separator=''
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10;11;12 Quit'
+Call SetPFKeys
+Address CMS 'PIPE (NAME FPADMIN.EXEC:207 END ?)',
+    'cms QUERY FILEPOOL MINIDISK 'fpname,       /* Ask cms          */
+    '| pick w1.1 \== ~~',                       /* Remove empties   */
+    '| specs ~%Y~ 1 1;* nw',                    /* Add fieldmarks   */
+    '| stem data.'                              /* Hand 2 rexx      */
+Call Display
+'CURSOR CMDLINE'
+Return
+ 
+ 
+ModifySize:
+/*---------------------------------------------------------------+
+| Modify the number of blocks for an enrolled id                 |
++---------------------------------------------------------------*/
+from='MODSIZE'
+Call GetContent
+Parse Value content With . '%Y' uid  . size .
+size=Strip(size)
+Drop data.
+data.0=3
+data.1='%YChanging userid:%G'uid'%Y, current no of blocks: %G'size
+data.2='%Y'
+data.3='%YEnter the new amount of blocks: %g           %G'
+title='Changing assigned no of blocks'
+header=' '
+Call MakeSeparator
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9 CHSIZE;10;11;12 Quit'
+Call SetPFKeys
+'CURSOR SCREEN  9 35'
+Return
+ 
+ 
+ChangeSize:
+/*---------------------------------------------------------------+
+| Change the size after it was entered                           |
++---------------------------------------------------------------*/
+from='LISTUSG'
+chg=0
+Call GetContent
+Select
+When \Datatype(newsize,num) Then 'EMSG Invalid input: 'newsize
+When newsize=size Then 'EMSG No changes detected'
+When newsize<size Then Do
+                         chg=1
+                         newsize='-'size-newsize
+                         End
+When newsize>size Then Do
+                         chg=1
+                         newsize='+'newsize-size
+                         End
+Otherwise 'EMSG Invalid input 'newsize
+End
+If chg Then Address CMS 'MODIFY USER 'newsize' FOR 'uid fpname
+If from='LISTUSG' Then Call ListUsage
+Return
+ 
+ 
+ModifyAuth:
+/*---------------------------------------------------------------+
+| Modify authorizations                                          |
++---------------------------------------------------------------*/
+from='MODAUT'
+Call GetContent
+Address CMS 'PIPE (NAME FPADMIN.EXEC:270 END ?)',
+   'stem data. ',                               /* Take these       */
+   '| take first 'curline' ',                   /* Select this      */
+   '| specs pad 0 recno 1.2 1;* nw ',           /* Add record no    */
+   '| sort d ',                                 /* Sort             */
+   '| pick 19.1 \== ~ ~',                       /* Skip empties     */
+   '| take first 1',                            /* Take this        */
+   '| specs w4;*',                              /* Keep this        */
+   '| var ownerdetails'                         /* Hand 2 rexx      */
+Parse Value ownerdetails with . dir dirtype .
+section=section+2
+auth=Strip(Substr(content,section,2))
+actid=Strip(Substr(content,59,8))
+actid=Strip(Strip(actid,'B','<'),'B','>')
+/*---------------------------------------------------------------+
+| What to do when AUTH is filled...                              |
++---------------------------------------------------------------*/
+Select
+When auth='R'  Then newauth='-'
+When auth='W'  Then newauth='-KEEPREAD'
+When auth='DR' Then newauth='--'
+When auth='DW' Then newauth='-KEEPDIRREAD'
+When auth='NR' Then newauth='--'
+When auth='NW' Then newauth='-KEEPNEWREAD'
+When auth='-'  & section=68 Then newauth='READ'
+When auth='-'  & section=70 Then newauth='WRITE'
+When auth='--' & section=72 & dirtype='DIRCONTROL'  Then newauth='DIRREAD'
+When auth='--' & section=72 & dirtype='FILECONTROL' Then newauth='NEWREAD'
+When auth='--' & section=75 & dirtype='DIRCONTROL'  Then newauth='DIRWRITE'
+When auth='--' & section=75 & dirtype='FILECONTROL' Then newauth='NEWWRITE'
+Otherwise Nop
+End
+If Pos('-',newauth)=0 Then authcmd='GRANT  AUTH TO'
+                      Else authcmd='REVOKE AUTH FROM'
+Say Subword(authcmd,1,2) dir Word(authcmd,3) actid '(' newauth
+Return
+ 
+ 
+UserGRANT_REVOKE:
+/*---------------------------------------------------------------+
+| Grant a user for a directory/filespace                         |
++---------------------------------------------------------------*/
+dirtype=Strip(Word(data.1,5),'B','_')
+dir2show=Strip(Word(data.1,4))
+'READ CMDLINE'
+Address CMS 'PIPE (NAME FPADMIN.EXEC:315 END ?)',
+   'stack  ',                                   /* Take from stack  */
+   '| xlate upper',                             /* Uppercase        */
+   '| var input'                                /* Store as         */
+newuser=Word(input,1)
+auth=Subword(input,2)
+If cmd='GRANT' Then Do
+     If dirtype='DIRCONTROL'  & auth='' Then auth='DIRREAD'
+     If dirtype='FILECONTROL' & auth='' Then auth='READ'
+     If dirtype='DIRCONTROL'  Then auth_list='DIRREAD DIRWRITE'
+     If dirtype='FILECONTROL' Then auth_list='READ WRITE NEWREAD NEWWRITE'
+     sfscmd='GRANT AUTH 'dir2show' TO 'newuser' ( '
+     End
+If cmd='REVOKE' Then Do
+     If dirtype='DIRCONTROL'  & auth='' Then auth='RWAUTH'
+     If dirtype='FILECONTROL' & auth='' Then auth='RWAUTH'
+     If dirtype='DIRCONTROL'  Then auth_list='KEEPREAD KEEPDIRREAD RWAUTH'
+     If dirtype='FILECONTROL' Then auth_list='NEWAUTH KEEPNEWREAD RWAUTH'
+     sfscmd='REVOKE AUTH 'dir2show' FROM 'newuser' ( '
+     End
+Address CMS 'PIPE (NAME FPADMIN.EXEC:335 END ?)',
+        'var auth',                             /* Take this        */
+        '| split',                              /* Split into recs  */
+        '| l: lookup master',                   /* Compare          */
+        '| join * x40',                         /* Make 1 record    */
+        '| var auth',                           /* Store as         */
+        '?',                                    /* 2nd pipe         */
+        'var auth_list',                        /* Take this        */
+        '| split',                              /* Split            */
+        '| l:'                                  /* Conn 2 lookup    */
+If UserExist() Then Do
+               Address CMS sfscmd auth
+               Call GetZoomInfo
+               End
+               Else 'EMSG User 'newuser' does not exist'
+Return
+ 
+ 
+CmdConfirmed:
+/*---------------------------------------------------------------+
+| Execute the confirmed cmd                                      |
++---------------------------------------------------------------*/
+Address CMS confirmcmd
+Select
+When from='INIT' Then Call GetInfo
+When from='ZOOM' Then Call GetZoomInfo
+Otherwise Nop
+End
+Return
+ 
+ 
+ShowContent:
+/*---------------------------------------------------------------+
+| Show the content for a filespace/directory                     |
++---------------------------------------------------------------*/
+Call GetContent
+If from='LISTUSG' Then dir2show=fpname':'Word(Substr(content,2,9),1)'.'
+                  Else dir2show=Word(content,5)
+objstat=CHKOBJ(dir2show)
+Select
+When objstat='20' Then Address CMS 'VMLINK .DIR 'dir2show' (NONAMES WRITE QUIET FILELIST '
+When objstat='21' Then Address CMS 'FLBFS 'dir2show
+Otherwise 'EMSG Can not handle: 'dir2show
+End
+Address CMS 'PIPE (NAME FPADMIN.EXEC:379 END ?)',
+    'stack',                                    /* Read stack       */
+    '| specs w2;* 1',                           /* Keep this        */
+    '| append literal ',                        /* Add empty line   */
+    '| join *',                                 /* .2 prevent noval */
+    '| var emsg'                                /* Store as         */
+If emsg<>''|emsg<>'EMSG' Then 'EMSG 'emsg
+Return
+ 
+ 
+EnrollUsr:
+/*---------------------------------------------------------------+
+| Enroll a user...                                               |
++---------------------------------------------------------------*/
+from='INIT'
+'READ CMDLINE'
+Address CMS 'PIPE (NAME FPADMIN.EXEC:395 END ?)',
+   'stack',                                     /* Read stack       */
+   '| xlate upper',                             /* Upper case       */
+   '| split',                                   /* Split into recs  */
+   '| t: take 1',                               /* Take first 1     */
+   '| var newuser',                             /* Store as         */
+   '? t:',                                      /* Conn 2 take      */
+   '| var newblocks'                            /* Store as         */
+If newuser=''   | newuser='NEWUSER'     Then Iterate
+If newblocks='' | newblocks='NEWBLOCKS' Then newblocks=20000
+If UserExist() Then Address CMS 'ENROLL USER 'newuser fpname '(BLOCKS 'newblocks
+               Else 'EMSG >>>> userid 'newuser' does not exist, can not be ENROL
+Led'
+If from='INIT' Then Call InitDisp
+Return
+ 
+ 
+DeleteUser:
+/*---------------------------------------------------------------+
+| Delete a user from the filepool                                |
++---------------------------------------------------------------*/
+from='INIT'
+Call GetContent
+id=Word(content,3)
+dir2show=Word(content,4)
+role=Word(content,5)
+If role='ADMIN' Then 'EMSG >>>> Can not remove this user id it has ADMIN rights'
+                Else Do
+                from='INIT'
+                confirmcmd='DELETE USER 'id fpname' (NOCONFIRM NOTYPE'
+                'SET PF9 CONFRM'
+                'MSG >>>> Press PF9 to CONFIRM deletion: 'confirmcmd
+                End
+Return
+ 
+ 
+FlipAdmin:
+/*---------------------------------------------------------------+
+| Flip the ADMIN attribute for a user/admin                      |
++---------------------------------------------------------------*/
+Call GetContent
+id=Word(content,3)
+dir2show=Word(content,5)
+role=Substr(Word(content,4),2,1)
+Select
+  When role='A' Then Address CMS 'DELETE ADMIN 'id fpname' (NOTYPE'
+  When role='_' Then Address CMS 'ENROLL ADMIN 'id fpname
+  Otherwise Nop
+End
+Call GetInfo
+Return
+ 
+ 
+FlipDirAttr:
+/*---------------------------------------------------------------+
+| Flip the directory attribute                                   |
++---------------------------------------------------------------*/
+from='DIRATR'
+Call GetContent
+content=Substr(content,15)
+id=Word(content,3)
+dir2show=Word(content,1)
+dirtype=Word(content,2)
+Select
+  When dirtype='DIRCONTROL'  Then Address CMS 'DIRATTR 'dir2show' FILECONTROL'
+  When dirtype='FILECONTROL' Then Address CMS 'DIRATTR 'dir2show' DIRCONTROL  (FORCE'
+Otherwise Nop
+End
+dir2show=olddir
+Call GetZoomInfo
+Return
+ 
+ 
+ZoomIN:
+/*---------------------------------------------------------------+
+| Zoom in on more details                                        |
++---------------------------------------------------------------*/
+Call GetContent
+Drop data.
+id=Word(content,3)
+dir2show=Word(content,5)
+olddir=dir2show
+Call GetZoomInfo
+lvl=0
+Return
+ 
+ 
+UserExist:
+/*---------------------------------------------------------------+
+| Check if a user id exists                                      |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:486 END ?)',
+    'cp QUERY MDISK USER 'newuser' 0 DIR',      /* Ask CP           */
+    '| find HCPQMD040E',                        /* Locate this      */
+    '| count lines',                            /* How many         */
+    '| var idok'                                /* Hand 2 rexx      */
+Return idok
+ 
+ 
+InitDisp:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+title='Main Menu'
+header='    Userid   Status Filespace'
+Address CMS 'PIPE (NAME FPADMIN.EXEC:500 END ?)',
+      'var header',                             /* Take this        */
+      '| specs 1;* 1.44',                       /* Adjust           */
+      '| dup 1',                                /* Duplicate        */
+      '| join *',                               /* Make 1 rec       */
+      '| var header'                            /* Store as         */
+Call MakeSeparator
+pfkeys='1 Help;2 Stats;3 Quit;4 Zoom;5 Enroll;6 Admin;7;8;9 DelUsr;10 ListUsg;11 List;12 Quit'
+Call SetPFKeys
+If lvl Then Call GetInfo
+Return
+ 
+ 
+SetPFKeys:
+/*---------------------------------------------------------------+
+| Set the pf keys                                                |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:517 END ?)',
+   'var pfkeys',                                /* Take this        */
+   '| split at ~;~',                            /* Split here       */
+   '| f: fanout',                               /* Duplicate recs   */
+   '| xlate upper',                             /* Uppercase        */
+   '| specs ~SET PF~ 1 1;* n',                  /* Compose cmd      */
+   '| stem set.',                               /* Store as         */
+   '? f:',                                      /* Conn 2 fanout    */
+   '| specs w1.1 1 ~=~ n w2.1 nw',              /* Adjust layout    */
+   '| if: if pick w2.1 \== ~~',                 /* It is not empty  */
+   '|     specs w1.1 1 ~%B~ n w2.1 n ~%W~ n',   /* Adjust layout    */
+   '| if:',                                     /* Conn 2 if        */
+   '|     specs w1.1 1 ~ ~ n.5',                /* Adjust layout    */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Make 1 record    */
+   '| specs ~Pf~ 1 1;* n',                      /* Add this         */
+   '| var pfkeyline'                            /* Store as         */
+/*---------------------------------------------------------------+
+| Get the keys set in XEDIT                                      |
++---------------------------------------------------------------*/
+Do s=1 To set.0
+  Address XEDIT set.s
+End s
+Return
+ 
+ 
+GetZoomInfo:
+/*---------------------------------------------------------------+
+| Get all directories for this filespace                         |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:547 END ?)',
+    'cms LISTDIR 'dir2show,                     /* Ask cms          */
+    '| drop first 1',                           /* Remove header    */
+    '| specs w2.1',                             /* Adjust layout    */
+    '| stem work.'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Get the authorization details                                  |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:555 END ?)',
+    'stem work.',                               /* Take these       */
+    '| f: fanout',                              /* Duplicate records*/
+    '| specs 1;* 1 x40 n',                      /* Adjust layout    */
+    '| j: juxtapose',                           /* Join records     */
+    '| specs ~2~ 1 w1;* nw',                    /* Adjust format    */
+    '| stem data.',                             /* Store as         */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| specs ~QUERY AUTH~ 1 w1.1 nw',           /* Compose cmd      */
+    '| cms',                                    /* Hand 2 cms       */
+    '| nlocate anycase ~GRANTEE~',              /* Remove these     */
+    '| nlocate anycase ~DIRECTORY = ~',         /* .......and these */
+    '| specs 1;* 1 ~;~ nw',                     /* Adjustment       */
+    '| change w2;* ~  ~ ~',                     /* Replace some     */
+    '| change w2.1 /X/R/',                      /* ..........values */
+    '| change w3.1 /X/W/',                      /* .                */
+    '| change w4.1 /X/xR/',                     /* .                */
+    '| change w4.1 /-/--/',                     /* .                */
+    '| change w5.1 /X/xW/',                     /* .                */
+    '| change w5.1 /-/--/',                     /* .                */
+    '| strip',                                  /* Remove spaces    */
+    '| j:'                                      /* Conn 2 juxtapose */
+/*---------------------------------------------------------------+
+| Get the details of the directories                             |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:580 END ?)',
+    'stem work.',                               /* Take these       */
+    '| f: fanout',                              /* Duplicate        */
+    '| specs 1;* 1 x40 n',                      /* Adjustment       */
+    '| j: juxtapose',                           /* Join details     */
+    '| specs ~1~ 1 w1.1 nw w2.1 nw.12',         /* Re-work          */
+    '| change ~DIRCONTROL~DIRCONTROL_~',        /* Some changes     */
+    '| stem data. append',                      /* Add to this      */
+    '? f:',                                     /* Conn 2 fanout    */
+    '| specs ~QUERY DIRATTR~ 1 w1.1 nw',        /* Compose cmd      */
+    '| cms',                                    /* Ask cms          */
+    '| j:'                                      /* Conn 2 juxtapose */
+/*---------------------------------------------------------------+
+| Rework data for display                                        |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:595 END ?)',
+    'stem data.',                               /* Take these       */
+    '| buffer',                                 /* Prevent loop     */
+    '| sort w2.1 w1.1',                         /* Sort...          */
+    '| specs w2.1 1.30 w3;* nw',                /* Adjust...        */
+    '| join keylen 30',                         /* Join equals      */
+    '| if1: if pick w2.1 == ~FILECONTROL~',     /* If this          */
+    '|    change ~xR~NR~',                      /* Changes these    */
+    '|    change ~xW~NW~',                      /* .                */
+    '| if1:',                                   /* Conn 2 if1       */
+    '| if2: if pick w2.1 == ~DIRCONTROL_~',     /* If this          */
+    '|    change ~xR~DR~',                      /* Changes these    */
+    '|    change ~xW~DW~',                      /* .                */
+    '| if2:',                                   /* Conn 2 if2       */
+    '| split before string ~;~',                /* Split            */
+    '| if3: if pick 1.1 == ~;~',                /* If we find this  */
+    '|    specs w2;* 44',                       /* ....adjust       */
+    '| if3:',                                   /* Conn 2 if3       */
+    '| pick w1.1 \== ~~',                       /* Select these     */
+    '| t: take first 1',                        /* Remove this one  */
+    '| specs ~%y %Y 'Substr(id,1,8)'~ 1 1;* nw', /* Adjust layout    */
+    '| fi: faninany',                           /* Take in others   */
+    '| stem data.',                             /* Hand 2 rexx      */
+    '? t:',                                     /* Conn 2 take      */
+    '| specs ~%y %Y 'Copies(' ',8)'~ 1 1;* nw', /* Adjust layout    */
+    '| fi:'                                     /* Conn 2 faninany  */
+title='Detail overview 'dir2show
+header='    Userid   Filespace/Directory            DirType     Authorizations'
+Call MakeSeparator
+pfkeys='1 Help;2 Conflict;3 Return;4 ModAut;5 Grant;6 DirAtr;7;8;9 Revoke;10 Acs
+or;11 List;12 Quit'
+Call SetPFKeys
+'CURSOR CMDLINE'
+Return
+ 
+ 
+MakeSeparator:
+/*---------------------------------------------------------------+
+| Create a separator to measure...                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FPADMIN.EXEC:635 END ?)',
+   'var header ',                               /* Take this        */
+   '| deblock 1',                               /* Split into recs  */
+   '| if: if pick 1.1 \== ~ ~',                 /* If not empty     */
+   '|   specs ~-~ 1',                           /* Do this          */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Re-instate record*/
+   '| var separator'                            /* Store as         */
+Return
+ 
+ 
+ListUsage:
+/*---------------------------------------------------------------+
+| List usage                                                     |
++---------------------------------------------------------------*/
+from='LISTUSG'
+title='Usage statistics'
+header='   Userid   S MaxBlocks  UsedBlocks-%% Limit  MaxMb    UsdMb'
+Address CMS 'PIPE (NAME FPADMIN.EXEC:653 END ?)',
+    'var header',                               /* Take this        */
+    '| specs 1;* 1.63',
+    '| dup 1',                                  /* Make 1 copy      */
+    '| join * x4040',                           /* Make 1 record    */
+    '| var header'                              /* Store as         */
+Call MakeSeparator
+pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10 MODSiz;11 List;12 Quit'
+Call SetPFKeys
+zone='1;60 66;120 +0'
+Address CMS 'PIPE (NAME FPADMIN.EXEC:663 END ?)',
+   'cms QUERY LIMITS ALL 'fpname,               /* Ask cms          */
+   '| drop first 1',                            /* Forget header    */
+   '| specs 1;* 1 w3.1 nw w4.1 nw',             /* Adjust           */
+   '| specs fs - f1.2',                         /* .                */
+   '| specs w1;-3 1',                           /* Some calculations*/
+   '        a: w-2;-2 .',                       /* .                */
+   '        b: w-1;-1 .',                       /* .                */
+   '        set (#0:=a*4;#1:=b*4)',             /* .                */
+   '        print #0 nw',                       /* .                */
+   '        print #1 nw',                       /* .                */
+   '| siconv w6.1 k2m 9.3 M',                   /* Change KB to MB  */
+   '| siconv w7.1 k2m 9.3 M',                   /* Change KB to MB  */
+   '| specs ~%y %Y~ 1',                         /* Adjust layout    */
+           'w1.1 n.8',                          /* .                */
+           'w2.1 nw.2',                         /* .                */
+           'w3.1 nw.8 right',                   /* .                */
+           'w4.1 nw.15 right',                  /* .                */
+           'w5.1 nw.4 right',                   /* .                */
+           'pad 0',                             /* Add spaces       */
+           'w6.1 nw.9 right',                   /* .                */
+           'w7.1 nw.9 right',                   /* .                */
+           'x40 n',
+   '| sort w-1;-1 d',                           /* Sort on usage    */
+   '| snake 2',                                 /* Create 2 columns */
+   '| stem data.'                               /* Store as         */
+Return
+ 
+ 
+GetContent:
+/*---------------------------------------------------------------+
+| Get the content of the actual reserved line                    |
++---------------------------------------------------------------*/
+Select
+When from='LIST'     Then zones='1;44 45;100 +4'
+When from='LISTUSG'  Then zones='5;60 72;* +5'
+When from='ADMIN'    Then zones='1;44 45;100 +4'
+When from='ZOOM'     Then zones='1;44 45;100 +4'
+When from='INIT'     Then zones='1;44 45;100 +4'
+When from='MODSIZE'  Then zones='1;51 52;100 +4'
+Otherwise zones='1;*'
+End
+Parse Value zones With zones '+' offset
+If offset='' Then offset='0'
+'EXTRACT /CURSOR'
+curline=cursor.1-6
+section=cursor.2+offset
+Address CMS 'PIPE (NAME FPADMIN.EXEC:710 END ?)',
+   'var zones',                                 /* Take this        */
+   '| split',                                   /* Split            */
+   '| stem zone.'                               /* Store as         */
+Do z=1 To zone.0
+   Parse Value zone.z With colstrt ';' colend .
+   If colend='*' Then colend=9999
+   If section>=colstrt & section<=colend Then Do
+                            part=zone.z
+                            Leave z
+                            End
+End z
+Address CMS 'PIPE (NAME FPADMIN.EXEC:722 END ?)',
+   'literal 'data.curline' ',                   /* Add this         */
+   '| specs 'part' ',                           /* Rework           */
+   '| strip',
+   '| var content'                              /* Store as         */
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Set the reserved lines...                                      |
++---------------------------------------------------------------*/
+time=Date('S') Time() myfn
+l=Length(time)
+'SET RESERVE 3 WHITE NO 'Center(title,120-l)'%G'time
+'SET RESERVE 4 WHITE NO 'header
+'SET RESERVE 5 WHITE NO 'separator
+If data.0<=maxlines Then Do
+          rep=maxlines-data.0-1
+          Address CMS 'PIPE (NAME FPADMIN.EXEC:741 END ?)',
+              'literal ',                       /* Make empty rec   */
+              '| dup 'rep,                      /* Copy x times     */
+              '| stem data. append'             /* Add to this      */
+          End
+Do d=1 To data.0
+ lineno=d+6
+ 'RESERVE 'lineno 'HIGH' data.d
+End d
+'SET RESERVE -1 WHITE NO 'pfkeyline
+Return
+ 
+ 
+GetInfo:
+/*---------------------------------------------------------------+
+| Get some admin info on the filepool                            |
++---------------------------------------------------------------*/
+legend='Legenda:;',
+       '%YU%G= Enrolled as User;',
+       '%YA%G= Enrolled as Admin;',
+       '%Y*%G= Logged On or DISConnected;',
+       '%R!%G= User enrolled but not in CP directory'
+Address CMS 'PIPE (NAME FPADMIN.EXEC:763 END ?)',
+   'cms QUERY ENROLL USER FOR ALL 'fpname,       /* Ask filepool     */
+   '| drop first 1',                             /* Ignore header    */
+   '| specs w1.1 1.8 ~U~ nw',                    /* Add marker       */
+   '| fi1: faninany',                            /* Take in others   */
+   '| sort w1.1',                                /* Sort on name     */
+   '| join keylen 8',                            /* Join on name     */
+   '| if1: if pick w2.1 \== ~U~',                /* If this is not   */
+   '|    specs w1.1 1.8 ~_~ nw w2;* nw',         /* ...add this      */
+   '| if1:',                                     /* Conn 2 if        */
+   '| if2: if pick w3.1 \== ~A~',                /* If this is       */
+   '|    specs w1.1 1.8 w2.1 nw ~_~ nw',         /* .empty add this  */
+   '| if2:',                                     /* Conn 2 if        */
+   '| f: fanout',                                /* Dupl. records    */
+   '| buffer',                                   /* Prevent stall    */
+   '| fi2: faninany',                            /* Take in others   */
+   '| sort w1.2',                                /* Sort on name & no*/
+   '| join keylen 8',                            /* Join on name     */
+   '| change ~ 1 ~~',                           /* Remove           */
+   '| change ~ 2 ~~',                           /* ...order         */
+   '| change ~ 3 ~~',                           /* ....flags        */
+   '| specs w1.1 1.8 w2.1 nw w3;* n',
+   '| specs ~%y %Y~ 1 1;* nw.42',                /* Add sel. box     */
+   '| snake 2',                                  /* Make 2 columns   */
+   '| append literal ',                          /* Add empty line   */
+   '| append var legend',                        /* Add legend       */
+   '| split at ;',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| stem data.',                               /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cms QUERY ENROLL ADMIN FOR ALL 'fpname,      /* Ask filepool     */
+   '| drop first 1',                             /* Ignore header    */
+   '| specs w1.1 1.8 ~A~ nw',                    /* Add marker       */
+   '| fi1:',                                     /* Conn 2 faninany  */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.1 1.9',                           /* Adjust id        */
+   '| j1: juxtapose',                            /* Join records     */
+   '| if3: if pick w2.1 == ~HCPCQU045E~',        /* If this          */
+   '|    specs w1.1 1.8 ~1 _~ nw',               /* Add empty marker */
+   '| if3:',                                     /* Conn 2 if        */
+   '|    specs w1.1 1.8 ~1 *~ nw',               /* Add use marker   */
+   '| if3:',                                     /* Conn 2 if        */
+   '| fi2:',                                     /* Conn 2 faninany  */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY USER~ 1 w1.1 nw',             /* Compose cmds     */
+   '| cp',                                       /* Hand 2 cp        */
+   '| j1:',                                      /* Conn 2 juxtapose */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.1 1.9',                           /* Adjust id        */
+   '| j2: juxtapose',                            /* Join records     */
+   '| if4: if pick w2.1 == ~HCPQMD053E~',        /* If we find thus  */
+   '|    specs w1.1 1.8 ~2 %R!%Y ~ nw',           /* We add a marker  */
+   '| if4:',                                     /* Conn 2 if        */
+   '|    specs w1.1 1.8 ~2 %Y_%Y ~ nw',           /* Empty marker     */
+   '| if4:',                                     /* Conn 2 if        */
+   '| if5: if pick w1.1 == ~<PUBLIC>~',          /* If this          */
+   '|    specs w1.2 1 ~%Y_%Y~ nw',               /* ..replace this   */
+   '| if5:',                                     /* Conn 2 if        */
+   '| fi2:',                                     /* Conn 2 faninany  */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY MDISK USER~ 1',               /* Compose cmds     */
+           'w1.1 nw',                            /* .                */
+           '~0 DIR LOC~ nw',                     /* .                */
+   '| cp',                                       /* Ask cp           */
+   '| j2:',                                      /* Conn 2 juxtapose */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.1 1.9',                           /* Rework id        */
+   '| j3: juxtapose',                            /* Join records     */
+   '| if6: if pick w2.1 == ~DMSJQD1184E~',       /* If this          */
+   '|    specs w1.1 1.8 ~3 _~ nw',               /* ..empty filespace*/
+   '| if6:',                                     /* Conn 2 if        */
+   '|    specs w1.1 1.8',                        /* Add filespace    */
+              '~3 'fpname':~ nw',                /* .                */
+              'w1.1 n',                          /* .                */
+              '~.~ n',                           /* .                */
+   '| if6:',                                     /* Conn 2 if        */
+   '| fi2:',                                     /* Conn 2 faninany  */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY DIRATTR 'fpname':~ 1',        /* Compose cmds     */
+           'w1.1 n',                             /* .                */
+           '~.~ n',                              /* .                */
+   '| cms',                                      /* Ask cms          */
+   '| j3:'                                       /* Conn 2 juxtapose */
+Return
+ 
+ 
+XeditSettings:
+/*---------------------------------------------------------------+
+| Initial XEDIT settings                                         |
++---------------------------------------------------------------*/
+'RECFM V'
+'LRECL 120'
+'TRUNC *'
+'VERIFY 1 *'
+'CURLINE ON 4'
+'PREFIX OFF'
+'TOFEOF OFF'
+'SCALE  OFF'
+'EXTRACT /SCREEN'
+'SET ENTER IGNORE'
+maxlines=Word(screen.1,2)-8
+/*---------------------------------------------------------------+
+| Define the control char and colors we are going to use...      |
++---------------------------------------------------------------*/
+'SET CTLCHAR % ESCAPE'
+'SET CTLCHAR Y PROTECT   YELLOW HIGH'
+'SET CTLCHAR y NOPROTECT YELLOW HIGH'
+'SET CTLCHAR W PROTECT   WHITE  HIGH'
+'SET CTLCHAR w NOPROTECT WHITE  HIGH'
+'SET CTLCHAR B PROTECT   BLUE   HIGH'
+'SET CTLCHAR b NOPROTECT BLUE   HIGH'
+'SET CTLCHAR G PROTECT   GREEN  HIGH'
+'SET CTLCHAR g NOPROTECT GREEN  HIGH'
+'SET CTLCHAR R PROTECT   RED    HIGH'
+'SET CTLCHAR r NOPROTECT RED    HIGH'
+'SET CTLCHAR $ OFF'
+Return

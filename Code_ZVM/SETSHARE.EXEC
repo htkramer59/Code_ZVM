@@ -1,0 +1,137 @@
+/*---------------------------------------------------------------+
+| Function : Set SHARE to a new value for a selected set of ids  |
+|                                                                |
+| File     : SETSHARE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : SETSHARE <ids> ( <increment> <cputype>              |
+|                                                                |
+|                     <ids> list of ids, separated by spaces or  |
+|                           .,;: or wildcards                    |
+|                     <increment> to calculate max percentage    |
+|                                 based on capacaty of 1 CPU     |
+|                                 Defaults to 1.                 |
+|                     <cputype>   CPU type as allowed by CP SET  |
+|                                 SHARE command                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200311 13:38:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg input '(' increment cputype
+Parse Source . . myfn myft .
+'VMFCLEAR'
+If input='?' Then Do
+                 'PIPE (end ?)',
+                      '< 'myfn myft' *',
+                      '| tolabel Parse',
+                      '| cons'
+                  Exit
+                  End
+If input=''  Then Exit 28
+/*---------------------------------------------------------------+
+| Some defaults                                                  |
++---------------------------------------------------------------*/
+If increment='' Then increment='1'
+If cputype=''   Then cputype='IFL'
+Say 'Increment is set to: 'increment
+Say 'CPU type selected  : 'cputype
+Say
+/*---------------------------------------------------------------+
+| Obtain some info and split the input...                        |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'var input',                                /* Take this        */
+    '| split at anyof ~ ,.;:~',                 /* Split            */
+    '| n: nlocate ~*~',                         /* Remove these     */
+    '| stem srch.',                             /* Store as         */
+    '? n:',                                     /* Conn 2 nlocate   */
+    '| stem wildc.',                            /* Store as         */
+    '?',                                        /* 2nd pipe         */
+    'cp QUERY NAMES',                           /* Ask cp           */
+    '| split at ,',                             /* Split            */
+    '| specs fs - f1',                          /* Keep this        */
+    '| strip',                                  /* Remove spaces    */
+    '| stem name.',                             /* Store 4 later use*/
+    '?',                                        /* 3rd pipe         */
+    'cp QUERY PROC',                            /* Ask CP           */
+    '| nlocate ~PARKED~',                       /* Ignore these     */
+    '| count lines',                            /* How many         */
+    '| var maxifl'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Select with the input from QUERY NAMES                         |
++---------------------------------------------------------------*/
+check.0=0
+Do s=1 To srch.0
+   'PIPE (end ?)',
+      'stem name.',                             /* Take these       */
+      '| locate /'srch.s'/',                    /* Select these     */
+      '| stem check. append'                    /* Add 2 stem       */
+End s
+Do w=1 To wildc.0
+   'PIPE (end ?)',
+      'stem name.',                             /* Take these       */
+      '| wildcard /'wildc.w'/',                 /* Select these     */
+      '| stem check. append'                    /* Add 2 stem       */
+End w
+/*---------------------------------------------------------------+
+| Remove duplicates if any                                       |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'stem check.',                               /* Take these       */
+   '| buffer',                                  /* Prevent loop     */
+   '| sort unique',                             /* Remove duplicates*/
+   '| stem check.'                              /* Store as         */
+/*---------------------------------------------------------------+
+| No get to the stuff and find the right values                  |
++---------------------------------------------------------------*/
+Do c=1 To check.0
+  Say 'Working on 'check.c
+  'PIPE (end ?)',
+     'cp IND USER 'check.c' EXPANDED',          /* Ask cp           */
+     '| find CPU',                              /* Select these     */
+     '| count lines',                           /* Count them       */
+     '| var inp4share',                         /* Store as         */
+     '?',                                       /* 2nd pipe         */
+     'cp QUERY SHARE 'check.c,                  /* Ask cp           */
+     '| strip',                                 /* Remove spaces    */
+     '| join * ~;~',                            /* Make 1 record    */
+     '| specs fs : f2',                         /* Select this      */
+     '| split before string ~'cputype'~',       /* Split here       */
+     '| find 'cputype,                          /* Select this      */
+     '| specs fs ; f1.2',                       /* Keep this        */
+     '| specs w2;*',                            /* More selecting   */
+     '| split at ;',                            /* Split here       */
+     '| change ~ SHARE = ~/~',                  /* Prep 4 varload   */
+     '| specs ~/~ 1 1;* n',                     /* More prep        */
+     '| varload'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Some questions...do we need to change                          |
++---------------------------------------------------------------*/
+  showmax=maximum
+  If inp4share+increment > maxifl Then Do
+                                     Say 'Can not change settings, due to max IFLs 'maxifl' vs 'inp4share+increment,
+                                         'requested'
+ 
+                                     Iterate
+                                     End
+  If maximum='NOLIMIT' then maximum=relative
+  If relative/inp4share<>100 Then newshare=relative*inp4share
+                             Else newshare=''
+  If maximum/(inp4share+increment)<>100 Then newmax=maximum*(inp4share+increment)
+                                        Else newmax=''
+  If newshare<>'' & newmax<>'' Then Do
+            cpcmd='SET SHARE 'check.c' TYPE 'cputype' RELATIVE 'newshare 'RELATIVE 'newmax' LIMITHARD'
+            Say 'No of VCPUs : 'inp4share
+            Say 'New relative share is: 'newshare ', current 'relative
+            Say 'New maximum share is : 'newmax   ', current 'showmax
+            Say 'New setting: 'cpcmd
+            Say
+            End
+End c

@@ -1,0 +1,48 @@
+.cm                                                                             
+                                                                                
+ GLVMGR Management tool for GLOBALV (Global Variables)                          
+                                                                                
+                                                                                
+ Shows the content of:                                                          
+       Global  variables in Memory                                              
+       Session variables stored in SESSION GLOBALV                              
+       Lasting variables stored in LASTING GLOBALV                              
+                                                                                
+ Notes: Session variables are only available during your CMS session            
+        Lasting variables will survive an IPL or LOGOFF                         
+        Other variables are set by other programs                               
+                                                                                
+ Function keys                                                                  
+   PF1   Shows this Help                                                        
+                                                                                
+   PF2   Add a new entry to a group or a complete new group                     
+                                                                                
+         To add a new entry:                                                    
+         Put the name of the new entry on an existing entry and overwrite the   
+         the current value and press PF2                                        
+                                                                                
+         To add a new group:                                                    
+         Put the name of the new group over an existing group, add the new      
+         entries at the end of the line in the format newentry1=newvalue1,      
+                ...,newentryn=newvaluen and press PF2                           
+                                                                                
+   PF3   QUIT                                                                   
+                                                                                
+   PF4                                                                          
+                                                                                
+   PF5                                                                          
+                                                                                
+   PF6   Apply the change to an entry in a group which you overtyped            
+                                                                                
+   PF7   Page backward                                                          
+                                                                                
+   PF8   Page forward                                                           
+                                                                                
+   PF9   Remove an entry from a group or a complete group                       
+                                                                                
+   PF10  Go to the top of the list                                              
+                                                                                
+   PF11  Go to the bottom of the list                                           
+                                                                                
+   PF12  QUIT                                                                   
+                                                                                

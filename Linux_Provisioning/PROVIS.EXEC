@@ -1,0 +1,259 @@
+/**/
+Parse Upper Arg mmm .
+Parse Source . how myfn myft
+myid=Userid()
+Call Setup
+Call WakeUpLoop
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Uniform way of exiting the code...                             |
++---------------------------------------------------------------*/
+Parse Arg exrc exmsg
+If exrc='' |,
+   exrc='EXRC' Then exrc=0
+               Else Call Logging exrc exmsg
+Exit exrc
+ 
+ 
+WakeUpLoop:
+/*---------------------------------------------------------------+
+| The wakeup loop... return code are from HELP WAKEUP            |
++---------------------------------------------------------------*/
+Do f=1
+  Address CMS 'WAKEUP 'wakeint' (CC IUCVMSG VMCF SMSG RDR'
+  Select
+  When rc=0 Then Nop
+  When rc=1 Then Call Proc_SMSG
+  When rc=2 Then Nop
+  When rc=3 Then Call Proc_Timer
+  When rc=4 Then Call Proc_RDR
+  When rc=5 Then Call Proc_MSG
+  When rc=6 Then Call Exit
+  When rc=7 Then Call Proc_IO
+  When rc=8 Then Call Exit
+  Otherwise Call Exit rc 'Unhandled return code'
+  End
+  If f//loopcount=0 Then Call Setup  /* Reload input file */
+End f
+Return
+ 
+ 
+Proc_SMSG:
+/*---------------------------------------------------------------+
+| Process IUCV/SMSGes received                                   |
++---------------------------------------------------------------*/
+Parse Upper Pull . sender cmdline
+Call Logging 'Processing 'sender cmdline
+Call Chk_Sender
+If sndrok Then Do
+                 Call Logging 'Sender 'sender' ok'
+                 Call Chk_Cmdline
+                 If cmdok Then Call Proc_Cmdline
+                          Else Call Logging 'Invalid command : 'cmdline
+               End
+               Else Call Logging 'Unauthorized sender: 'sender cmdline
+Return
+ 
+ 
+Logging:
+/*---------------------------------------------------------------+
+| Logging....tracing, audit...                                   |
++---------------------------------------------------------------*/
+Parse Arg msgline
+Say TimeStamp() Userid() myfn  msgline
+Return
+ 
+ 
+Chk_Sender:
+/*---------------------------------------------------------------+
+| Check if the sender is allowed to send commands...             |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+If what='' Then what='ALLOWEDSRVR'
+'PIPE (NAME PROVIS.EXEC:74 END ?)',
+    'stem 'what'.',
+    '| append var master',
+    '| append var admin',
+    '| append var worker',
+    '| locate ~'sender'~',
+    '| count lines',
+    '| var sndrok'
+Return
+ 
+ 
+Chk_Cmdline:
+/*---------------------------------------------------------------+
+| Check if the commands issued are correct..                     |
++---------------------------------------------------------------*/
+Call Logging 'Check for valid command'
+Parse Value cmdline With cmd .
+'PIPE (NAME PROVIS.EXEC:89 END ?)',
+    'stem allowedcmd.',
+    '| locate ~'cmd' ~',
+    '| count lines',
+    '| var cmdok'
+Return
+ 
+ 
+Proc_Cmdline:
+/*---------------------------------------------------------------+
+| Run the command...or hand it to a worker...                    |
++---------------------------------------------------------------*/
+If Word(cmdline,1)='STATUS' Then Call Status cmdline
+           Else Do
+           Call Logging cmdline
+           If workers<>'' Then Call Dispatch
+                          Else Do
+                               Call Status myid cmdline
+                               Address CMS cmdline
+                               End
+           End
+Return
+ 
+ 
+Status:
+/*---------------------------------------------------------------+
+| Record the status of a process                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg id line
+'PIPE (NAME PROVIS.EXEC:118 END ?)',
+     '< 'myfn' STATUS A',
+     '| take last 'reccnt,
+     '| append literal 'TimeStamp() id line,
+     '| > 'myfn' STATUS A'
+Return
+ 
+ 
+Dispatch:
+/*---------------------------------------------------------------+
+| Dispatch the work to a free worker...                          |
++---------------------------------------------------------------*/
+'PIPE (NAME PROVIS.EXEC:130 END ?)',
+    'var workers',
+    '| split at ;',
+    '| specs ~QUERY~ 1 w1.1 nw',
+    '| cp',
+    '| locate ~045~',
+    '| take first 1',
+    '| specs w2.1',
+    '| var actwork'
+Call Status actwork cmdline
+Say 'Address COMMAND XAUTOLOG 'actwork cmdline
+Return
+ 
+ 
+Proc_RDR:
+/*---------------------------------------------------------------+
+| Check and process reader file                                  |
++---------------------------------------------------------------*/
+Call Logging 'Checking reader file'
+'PIPE (NAME PROVIS.EXEC:149 END ?)',
+     'cp QUERY RDR * ALL',
+     '| drop first 1',
+     '| f: fanout',
+     '| specs w1.1',
+     '| stem sender.',
+     '? f:',
+     '| specs w2.1',
+     '| stem spid.'
+     '? f:',
+     '| specs w-2;-1',
+     '| stem fn.'
+ 
+Do s=1 To sender.0
+  sender=sender.s
+  spid=spid.s
+  fn=fn.s
+  Call Chk_Sender admin
+  If sndrok Then Do
+                 Call Logging 'Processing file 'fn
+                 Address CMS 'COPYFILE 'fn.s' A = OLD = (REPLACE OLDDATE'
+                 Address CMS 'RECEIVE  'spid.s' (REPLACE'
+                 End
+            Else Do
+                 Call Logging 'Returning file to 'sender
+                 Address COMMAND 'CP TRANSFER * RDR 'spid.x' TO 'sender' RDR'
+                 End
+End s
+Return
+ 
+ 
+/*---------------------------------------------------------------+
+| Some unhandled returncodes/subroutines....                     |
++---------------------------------------------------------------*/
+Proc_Timer:
+Proc_MSG:
+Proc_CONS:
+Proc_IO:
+Parse Pull line
+Call Logging 'Not processed: 'line
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Make a timestamp                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME PROVIS.EXEC:196 END ?)',
+   'literal ',                                  /* Empty line       */
+   '| timestamp isodate ',                      /* Take time        */
+   '| var timestamp'                            /* Store here       */
+Return timestamp myid myfn
+ 
+ 
+Setup:
+/*---------------------------------------------------------------+
+| Save some settings and work on input file                      |
++---------------------------------------------------------------*/
+Call Logging 'Loading control file'
+'PIPE (NAME PROVIS.EXEC:208 END ?)',
+   'CP QUERY SET',
+   '| split at ,',
+   '| strip',
+   '| all ~MSG~!~WARN~',
+   '| specs ~/SAVED_~ 1 w1.1 n ~/~ n w2.1 n',
+   '| varload',
+   '?',
+   '< 'myfn' NAMES *',
+   '| pick 1.1 \== ~*~',
+   '| xlate upper',
+   '| change ~:NICK.~/~',
+   '| change ~:VALUE.~/~',
+   '| specs w1.1 1 w2;* n',
+   '| varload'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME PROVIS.EXEC:226 END ?)',
+   'var cpsettings',
+   '| split at ;',
+   '| specs ~SET~ 1 w1;* nw',
+   '| cp',
+   '| cons',
+   '?',
+   'var allowedserver',
+   '| split at ;',
+   '| strip',
+   '| stem allowedsrvr.',
+   '?',
+   'var allowedcmds',
+   '| split at ;',
+   '| strip',
+   '| specs w1.1 1 x40 n',
+   '| stem allowedcmd.',
+   '?',
+   'var admin',
+   '| split at ;',
+   '| strip',
+   '| specs w1.1 1 x40 n',
+   '| stem admin.'
+/*---------------------------------------------------------------+
+| Determine the number of loops before we reload the defaults..  |
++---------------------------------------------------------------*/
+Parse Value wakeint With '+'hh':'mm':'ss .
+wakesecs=(hh*3600)+(mm*60)+ss
+Parse Value reload With '+'hh':'mm':'ss .
+relosecs=(hh*3600)+(mm*60)+ss
+loopcount=relosecs/wakesecs
+Return

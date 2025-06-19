@@ -1,0 +1,368 @@
+/*---------------------------------------------------------------+
+| Function : Add, Change, Deleter or Query OPTION stmt           |
+|                                                                |
+| File     : DM_OPTIO EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_OPTIO <uid> <action> <reqopts>                   |
+|          : OPTION   <uid> <action> <reqopts>                   |
+|                           QRY                                  |
+|                           ADD                                  |
+|                           DEL                                  |
+|                           CHNG                                 |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:00:31                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid action reqopts
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Get some global setting                                        |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Set the options with an operand                                |
++---------------------------------------------------------------*/
+opts_oper='CHPIDVirtualization OFF/ONE;',
+          'CHPIDV OFF/ONE;',
+          'Cpuid xxxxxxx;',
+          'Cpu   xxxxxxx;',
+          'Lang langid;',
+          'L    langid;',
+          'Maxconn 64/nn;',
+          'M       64/nn;',
+          'MAXVMCFI 2147483647/maxno;'
+/*---------------------------------------------------------------+
+| Set  the single options                                        |
++---------------------------------------------------------------*/
+opts_single='Acct A APPLmon APPL CFVM CFUSER COMSRV CONceal CON  CRYMeasure CRYM',
+        'DEVInfo DEVI DEVMaint DEVM DIAG88 DIAG98 D84NOPAS IGNMAXU LKFAC',
+        'LNKExclu LNKE LNKNOPAS LNKStabl LNKS LXAPP MAINTCCW',
+        'MIH NOMEMAssist NOMEMA NETAccounting NETA NETRouter NETR',
+        'NOMDCFS QUICKDsp QUICKD RMCHINFO SECUREIPLREQuired SEQUREIPLREQ',
+        'SETORIG STGEXempt STGEX',
+        'STHYI-Util STHYI-U STHYI-GuestRespool STHY-G SVC76VM SVMstat SVM TODENab TODEN'
+chgstmt=''
+chgstmt_next=''
+/*---------------------------------------------------------------+
+| Select the fitting actions                                     |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+Select
+When action='QRY'  Then Call ShowOptions
+When action='ADD'  Then Call AddOptions
+When action='DEL'  Then Call DelOptions
+When action='CHNG' Then Call ChngOptions
+Otherwise Call Exit 065
+End
+/*---------------------------------------------------------------+
+| Replace stuff in the directory                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_OPTIO.EXEC:74 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Make changes     */
+   '| split at ;',                               /* Split here       */
+   '| specs 7;* 1.80',                           /* Remove lineno    */
+   '| > 'dirfnft ws' FIXED 80',                  /* Write 2 file     */
+   chgstmt_next                                  /* 2nd part of chges*/
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Put it online                                                  |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowOptions:
+/*---------------------------------------------------------------+
+| Show the options that are set for this user                    |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft 'The following OPTIONs are present for 'uid
+Call Get_Options
+'PIPE (NAME DM_OPTIO.EXEC:104 END ?)',
+   'var curopts',                                /* Take this        */
+   '| spill 40',                                 /* Adjust 2 40bytes */
+   '| specs 1;* 20',                             /* Prep display     */
+   '| cons'                                      /* Display          */
+Call Exit
+Return
+ 
+ 
+AddOptions:
+/*---------------------------------------------------------------+
+| Add options to the id                                          |
++---------------------------------------------------------------*/
+Call Set_Possibles
+Call Get_Options
+/*---------------------------------------------------------------+
+| Split the current options                                      |
++---------------------------------------------------------------*/
+Call Split_Options curopts
+curopts_oper=fndopts_oper
+curopts_single=fndopts_single
+If inerror<>'' Then Say 'Invalid option(s):' inerror
+/*---------------------------------------------------------------+
+| Validate requested options                                     |
++---------------------------------------------------------------*/
+Call Split_Options reqopts
+newopts_oper=fndopts_oper
+newopts_single=fndopts_single
+If inerror<>'' Then Say 'Invalid option(s):' inerror
+/*---------------------------------------------------------------+
+| Add the new options to the current options                     |
++---------------------------------------------------------------*/
+Do x=1 To Words(newopts_oper) By 2
+   srch=Word(newopts_oper,x)
+   strg=Subword(newopts_oper,x,2)
+   z=Wordpos(srch,curopts_oper)
+   If z<>0 Then Do
+                If z=1 Then curopts_oper=Subword(curopts_oper,3) strg
+                       Else curopts_oper=Subword(curopts_oper,1,z-1) Subword(curopts_oper_oper,z+2) strg
+                End
+           Else curopts_oper=curopts_oper strg
+End x
+/*---------------------------------------------------------------+
+| Add the word OPTION                                            |
++---------------------------------------------------------------*/
+new=''
+Do x=1 To Words(curopts_oper) By 2
+   new=new';OPTION 'SubWord(curopts_oper,x,2)
+End x
+curopts_oper=Strip(new,'B',';')
+/*---------------------------------------------------------------+
+| Take all single string options and validate them               |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_OPTIO.EXEC:157 END ?)',
+   'var curopts_single',                         /* Take these       */
+   '| split',                                    /* Split them       */
+   '| sort unique',                              /* Remove duplicates*/
+   '| l: lookup anycase w1.1 w1.1',              /* Compare          */
+   '| sort unique',                              /* Remove duplicates*/
+   '| fi: faninany',                             /* Take in others   */
+   '| join * x40',                               /* Make 2 record    */
+   '| var newopts',                              /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'var newopts_single',                         /* Take these       */
+   '| split',                                    /* Split into recs  */
+   '| sort unique',                              /* Remove duplicates*/
+   '| l:',                                       /* Conn 2 lookup    */
+   '| fi:',                                      /* Conn 2 fanin     */
+   '? l:',                                       /* Conn 2 lookup    */
+   '| fi:'                                       /* Conn 2 fanin     */
+Call Compose_ChgStmt
+Return
+ 
+ 
+Compose_ChgStmt:
+/*---------------------------------------------------------------+
+| Find the locations around the option stmts                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_OPTIO.EXEC:182 END ?)',
+    'stem curopts.',                             /* Take these       */
+    '| f: fanout',                               /* Duplicate        */
+    '| specs x4F 1 ~NLOCATE~ nw 1;* nw',         /* Compose NLOCATEs */
+    '| join * x40',                              /* Make 1 record    */
+    '| var chgstmt',                             /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| take first 1',                            /* Remove first 1   */
+    '| specs w1.1',                              /* Keep word 1      */
+    '| var strtloc',                             /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| take last 1',                             /* Take last 1      */
+    '| specs w1.1',                              /* Keep word 1      */
+    '| var endloc'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Compose some change statements                                 |
++---------------------------------------------------------------*/
+strtloc=Right(strtloc-1,5,'0')
+endloc=Right(endloc+1,5,'0')
+chgstmt='| d: drop first 'strtloc' | frtarget pick w1.1 == ~'endloc'~'
+ 
+If newopts_oper<>'' Then Do
+newopts_oper=';        OPTION 'newopts_oper
+chgstmt=chgstmt' | preface var newopts_oper'
+End
+ 
+If newopts<>''      Then Do
+newopts='        OPTION 'Strip(newopts)
+chgstmt=chgstmt' | preface var newopts'
+End
+ 
+chgstmt=chgstmt' | f: faninany'
+chgstmt_next='? d: | buffer | f:'
+Return
+ 
+ 
+Set_Possibles:
+/*---------------------------------------------------------------+
+| Split the allowed values into arrays                           |
++---------------------------------------------------------------*/
+opts_oper.0=0
+'PIPE (NAME DM_OPTIO.EXEC:223 END ?)',
+    'var opts_oper',                             /* Take this        */
+    '| split at ;',                              /* split here       */
+    '| strip',                                   /* Remove spaces    */
+    '| sort',                                    /* Sort them        */
+    '| stem opts_oper.',                         /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'var opts_single',                           /* Take this        */
+    '| split',                                   /* Split            */
+    '| strip',                                   /* Remove spaces    */
+    '| sort',                                    /* Sort them        */
+    '| stem opts_single.'                        /* Hand 2 rexx      */
+Return
+ 
+ 
+Split_Options:
+/*---------------------------------------------------------------+
+| Split options into singles and ones with operands              |
++---------------------------------------------------------------*/
+Parse Upper Arg work
+fndopts_oper=''
+fndopts_single=''
+find.0=0
+/*---------------------------------------------------------------+
+| Find all the options with operands in the input                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_OPTIO.EXEC:249 END ?)',
+    'stem opts_oper.',                           /* Take these       */
+    '| l: lookup anycase w1.1 w1.1 master',      /* Compare          */
+    '| stem find.',                              /* Hand 2 rexx      */
+    '?',                                         /* 2 pipe           */
+    'var work',                                  /* Take this        */
+    '| split',                                   /* Split into recs  */
+    '| l:'                                       /* Conn 2 lookup    */
+/*---------------------------------------------------------------+
+| Take out the options with operands from input                  |
++---------------------------------------------------------------*/
+If find.0<>0 Then Do f=1 To find.0
+    loc=Wordpos(find.f,work)
+    fndopts_oper=Strip(fndopts_oper Subword(work,loc,2))
+    If loc=1 Then work=Strip(Subword(work,3))
+             Else work=Strip(Subword(work,1,loc-1) Subword(work,loc+2))
+End f
+/*---------------------------------------------------------------+
+| Split the rest of the options into a stem                      |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_OPTIO.EXEC:269 END ?)',
+   'var work',                                   /* Take this        */
+   '| split at x40',                             /* Split into recs  */
+   '| sort',                                     /* Sort them        */
+   '| stem work.'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If found remove the item from reqopts and add it to new var    |
++---------------------------------------------------------------*/
+inerror=''
+'PIPE (NAME DM_OPTIO.EXEC:278 END ?)',
+    'stem opts_single.',                         /* Take these       */
+    '| l: lookup anycase w1.1 w1.1 details',     /* Find equals      */
+    '| join * x40',                              /* Make 1 record    */
+    '| var fndopts_single tracking',             /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'stem work.',                                /* Take these       */
+    '| l:',                                      /* Conn 2 lookup    */
+    '? l:',                                      /* Conn 2 lookup    */
+    '| join * x40',                              /* Make 1 record    */
+    '| var inerror tracking'                     /* Hand 2 rexx      */
+Return
+ 
+ 
+Get_Options:
+/*---------------------------------------------------------------+
+| Get all option statements                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_OPTIO.EXEC:296 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~OPTION~',            /* Find these       */
+   '| stem curopts.',                            /* Hand 2 rexx      */
+   '| specs w2;* 1',                             /* Remove recno     */
+   '| join keylen 6',                            /* Make 1 record    */
+   '| specs w2;* 1',                             /* Keep this        */
+   '| var curopts'                               /* Hand 2 rexx      */
+Return
+ 
+ 
+DelOptions:
+/*---------------------------------------------------------------+
+| Delete options from the id                                     |
++---------------------------------------------------------------*/
+Call Set_Possibles
+Call Get_Options
+Call Split_Options curopts
+newopts_oper=fndopts_oper
+newopts_single=fndopts_single
+If inerror<>'' Then Say 'Invalid option(s):' inerror
+/*---------------------------------------------------------------+
+| Remove the singles                                             |
++---------------------------------------------------------------*/
+Do w=1 To Words(reqopts)
+   srch=Word(reqopts,w)
+   optpos=Wordpos(srch,newopts_single)
+   If optpos<>0 Then newopts_single=Delword(newopts_single,optpos,1)
+End w
+/*---------------------------------------------------------------+
+| Remove ones with an operand                                    |
++---------------------------------------------------------------*/
+Do w=1 To Words(reqopts)
+   srch=Word(reqopts,w)
+   optpos=Wordpos(srch,newopts_oper)
+   If optpos<>0 Then  newopts_oper=Delword(newopts_oper,optpos,2)
+End w
+newopts=newopts_single
+Call Compose_ChgStmt
+Return
+ 
+ 
+ChngOptions:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Set_Possibles
+Call Get_Options
+/*---------------------------------------------------------------+
+| Split the current options                                      |
++---------------------------------------------------------------*/
+Call Split_Options curopts
+curopts_oper=fndopts_oper
+curopts_single=fndopts_single
+/*---------------------------------------------------------------+
+| Validate requested options                                     |
++---------------------------------------------------------------*/
+Call Split_Options reqopts
+newopts_oper=fndopts_oper
+newopts_single=fndopts_single
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wrkopts_oper=curopts_oper
+Do w=1 To Words(newopts_oper) by 2
+   srch=Word(reqopts,w)
+   optpos=Wordpos(srch,curopts_oper)
+   If optpos<>0 Then  wrkopts_oper=Delword(wrkopts_oper,optpos,2) Subword(newopts_oper,w,2)
+End w
+newopts_oper=wrkopts_oper
+newopts=curopts_single
+Call Compose_ChgStmt
+Return

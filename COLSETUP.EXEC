@@ -1,0 +1,28 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*    Routine to set up COL prefix commands in the users        */
+/*      PROFILE XEDIT                                           */
+/*--------------------------------------------------------------*/
+ 
+Parse Upper Arg fn ft fm .
+If fn = '' Then fn = 'PROFILE'
+If ft = '' Then ft = 'XEDIT'
+If fm = '' Then fm = 'A'
+ 
+Address Command 'STATE' fn ft fm
+If rc = 0
+Then Do
+  Queue 'MACRO COLSETUP'
+ 'XEDIT' fn ft fm
+End
+Else Do
+  Say fn ft fm 'cannot be found'
+  Say ''
+  Say 'Either copy PROFILE XEDIT to your A disk'
+  Say 'or enter the command "COLSETUP fn ft fm" where'
+  Say 'fn ft fm is the id of the XEDIT profile that you'
+  Say 'desire to place COL prefix commands into.'
+End

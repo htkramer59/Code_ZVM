@@ -1,0 +1,27 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Format a new created mdisk or deleted mdisk         |
+|                                                                |
+| File     : DM_FORMT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|            GETFMADR MODULE                                     |
+|                                                                |
+| Called   : DM_FORMT <uid> <cuu> <dummy>                        |
+|                                                                |
+|                     <uid>     User id, owner of MDISK          |
+|                     <cuu>     MDISK address 0000-FFFF          |
+|                     <dummy>   If not empty a dummy file        |
+|                               will be created on the           |
+|                               formatted disk                   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250526 17:43:32                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

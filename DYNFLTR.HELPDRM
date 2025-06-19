@@ -1,0 +1,137 @@
+1. Dynamic Filtering Overview
+*-----------------------------
+With the "GAP/MDISKMAP file filter" panel you can filter the volumes you want
+to see in a GAP file or in the MDISKMAP file.  This "GAP/MDISKMAP file filter"
+panel is shown when hitting PF9 in the GAPFILE or MDISKMAP file.
+Here an example (with 2 groups defined):
+     +-----------------MDISKMAP file filtering------------------+
+     º  Groups in red are in error.  PF12 for details           º
+     +--------------Select-the-filtering-you-want.--------------+
+     º›+PPRC  Disks with PPRC copy active (110 vols)          ›! AA
+     º›+VMSYS Disks reserved for z/VM System Software (4 vols)›! VV
+     º ¦                                                        º
+     º  Enter = View only the volumes in selected group         º
+     º  PF4   = View only the volumes NOT in selected group     º
+     º  PF11  = Back to listing all MDISKMAP volumes            º
+     +------PF:--1=Help---2=listVol----3=Exit---12=Errors-------+
+ 
+ 
+Groups of disks must be defined in the DRM NAMES file.  Then the panel enables
+you to tell which group of disks must be shown or hidden.
+ 
+Example of useful groups:
+ - You could create a "VMSYS" group, to list the packs on which IBM
+   delivers z/VM (540RES, 540WK1 etc.for a 5.4 system)
+ - You may have a subset of volumes synchronized with a remote site using PPRC.
+   Then a group of disks part of PPRC pairs is very handy: when defining a new
+   MDISK you know if it should be on PPRC or not and filter the GAP file
+   accordingly.
+ 
+ 
+When you filter the GAP file and search a place for a new MDISK, the MDISK will
+go to a disk that is displayed, never to a disk in hidden lines.
+The same disk groups can be used to filter the MDISKMAP, so you can more easily
+verify if your MDISKs are placed in the groups you want.
+ 
+Behind the scenes we use the same mechanism as XEDIT's ALL macro to hide
+"unwanted" lines.  These lines are still in the file, but excluded from
+display.  Consequently, if you filtered the MDISKMAP and you use the FILE
+or SAVE command, the hidden lines will be written to disk too.
+If wanting to SAVE only the displayed lines, use the PUT command;
+for example    -* PUT * MYxyz MDISKMAP
+   (the -* makes XEDIT first goes to "top of file" before executing PUT)
+ 
+The RELATED section (PF11) contains links to all XEDIT commands related
+to "selective line editing", of which the ALL macro is part.
+ 
+ 
+ 
+2. Why Dynamic Filtering ?
+*------------------------------------
+One could almost achieve the same result by listing the wanted volumes in a
+GAPFILE VOLSERS file before running DIRMAP, but that is not very dynamic.
+And when you relatively often change the contents of GAPFILE VOLSERS you will
+most probably forget which set of volumes are currently in GAPFILE VOLSERS.
+ 
+When using DRM's dynamic filtering, you have no GAPFILE VOLSERS, or you include
+in GAPFILE VOLSERS all volumes that some times can be candidates after which
+you filter when allocating a new MDISK.
+ 
+ 
+3. Defining disk groups in DRM NAMES
+*------------------------------------
+ 
+The DRM NAMES file defines some environment variables for DRM, so disk groups
+must be defined there too.
+ 
+Defining disk groups obviously is a pre-requisite for filtering the GAPFILE or
+MDISKMAP file.
+ 
+ 
+Each disk group is defined groups with a :NICK. and extra tags:
+ ›+:NICK.groupname  :TYPE.DYNFILTER
+ ›+      :INFO.description  :VOLSxyz.vol1 vol2 ....
+For example:
+ ›|:nick.VMSYS :type.DYNFILTER :Info.Disks reserved for z/VM System SW
+ ›|  :VOLS1.540RES 540W01 540W02
+ 
+ 
+Details:
+ - :TYPE.DYNFILTER is required for us to be able to recognize that :nick
+   entry as a filter group.
+ - :INFO. is displayed as description on the DRM panels
+ - :VOLSxxx. (anything startig with VOLS) defines a series of volsers.
+   Tag data can span lines (e.g. like the VMSYS6 example below), but can never
+   grow longer than 255 chars.  To bypass this limitation, you can use as many
+   :VOLSxxx. tags as you like.
+   Maybe you have a tool that generates CMS files listing volumes in a group.
+   To make your life easier, you can tell DRM to use that CMS file:
+     write "fn.ft"  or "fn.ft.fm" or "fn.ft.dirid" (without the " chars)
+     instead of or amongst the volids
+Examples
+›|:nick.DYNFILTER
+›| :List.PPRC VMSYS VMSYS6
+ 
+ * example with a CMS file included, the file resides in SFS
+›|:nick.VMSYS :type.DYNFILTER :Info.Disks reserved for z/VM System Software
+›| :VOLS1.540RES 540W01 540W02
+›| :VOLS2.540W03 Geen.disks.VMSYS:MAINT.TEST
+ 
+ * example with tags data that span lines (the :vols1. tag)
+›|:Nick.VMSYS6 :type.DynFilter :Info.Systems disks z/VM 6.2
+›| :vols1.M01P01 M01RES M01S01
+›|        M01W01 VMCOM1 VMCOM2
+›| :vols2.620RL1 620RL2
+ 
+›|:nick.PPRC :type.DYNFILTER :Info.Disks with PPRC copy active
+›| :VOLS1.PPRCVOLS.VOLSERS
+ 
+›&Notes:›!When changing DRM NAMES (or an imbedded CMS file) DRM may have to
+        be restarted to make it use the updates.
+        Because: the first time you use the filter selection panel, DRM reads
+        the DRM NAMES filer and keeps the defintions in storage.
+ 
+ 
+.cs 7 on
+ 
+For related and other DRM information:
+   place the cursor under the topic of your choice and press ENTER or PF1
+ 
+ 
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM DYNFLTR (ALL
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips, README
+ 
+XEDIT ALL (ALL          ALL          ›%XEDIT's ALL macro; "Selective Line Editing"
+SET SELECT  (ALL         SET SELECT  ›%- Assign nbrs for "Selective Line Editing"
+SET DISPLAY (ALL         SET DISPLAY ›%- Which lines will be displayed
+SET SCOPE  (ALL          SET SCOPE   ›%- To which lines apply commands
+SET SHADOW (ALL          SET SHADOW  ›%- Display "shadow" lines or not
+PREFIX S   (ALL          S           ›%- The S(show) prefix command
+PREFIX X   (ALL          X           ›%- The X(exclude) prefix command
+.cs 7 off

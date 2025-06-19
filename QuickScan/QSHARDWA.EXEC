@@ -1,0 +1,90 @@
+/*---------------------------------------------------------------+
+| Function : Check hardware items                                |
+|                                                                |
+| File     : QSHARDWA EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSHARDWA REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSHARDWA <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSHARDWA REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSHARDWA.EXEC:38 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSHARDWA.EXEC:49 END ?)',
+    'var hardware_cmds 1',                       /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| stem cmd.',                               /* Hand 2 rex       */
+    '?',                                         /* 2nd pipe         */
+    'var hardware_env 1',                        /* Take this        */
+    '| var env',                                 /* Store as         */
+    '?',                                         /* 3rd pipe         */
+    'literal 'TimeSTamp(),                       /* Create ts        */
+    '| append var hardware_header 1',            /* Add this         */
+    '| join *',                                  /* Make 1 record    */
+    '| var hardware_header',                     /* Hand 2 rexx      */
+    '?',                                         /* 4th pipe         */
+    'var rcpuid 1',                              /* Take this        */
+    '| var rcpuid'                               /* Hand 2 rexx      */
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+work.0=0
+Do c=1 To cmd.0
+   'PIPE (NAME QSHARDWA.EXEC:70 END ?)',
+      env cmd.c,                                 /* Issue cmds       */
+      '| preface literal * 'cmd.c,               /* Add title        */
+      '| append literal ',                       /* Add empty line   */
+      '| stem work. append'                      /* Add 2 stem       */
+End c
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSHARDWA.EXEC:79 END ?)',
+   'stem work.',                                 /* Take stem        */
+   '| preface literal Real cpuid: 'rcpuid,       /* Add this         */
+   '| preface var hardware_header',              /* ...and this      */
+   '| preface literal ',                         /* ...and 2 emtpties*/
+   '| preface literal ',                         /* .                */
+   output                                        /* Hand back        */
+Exit
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

@@ -1,0 +1,51 @@
+/* Default start comment */
+Parse Upper Arg arg1 '(' dryrun
+Parse Source . . myfn myft .
+ 
+/* tt='ABBF'x */
+s0='B0'x
+s1='B1'x
+s2='B2'x
+s3='B3'x
+s4='B4'x
+s5='B5'x
+s6='B6'x
+s7='B7'x
+s8='B8'x
+s9='B9'x
+ba='BA'x
+ne='BE'x
+tlc='AC'x
+trc='BC'x
+blc='AB'x
+brc='BB'x
+horline='-'
+horline2='BF'x
+verline='6A'x
+verline2='|'
+t_up='60EB60'x
+t_up2='BFEBBF'x
+t_dn='60EA60'x
+t_dn2='BFEABF'x
+t_left='EE60'x
+t_left2='EEBF'x
+t_right='60EF'x
+t_right2='BFEF'x
+cross='+'
+cross2='8F'x
+r_arrow='BF'x||'>'
+l_arrow='<'||'BF'x
+'PIPE rexxvars toload | sort | > temp file a'
+/* Exit */
+alph='0123456789ABCDEF'
+'PIPE var alph|deblock 1|stem hex.'
+z=1
+Do h=1 To hex.0
+   Do m=1 To hex.0
+     char=hex.h||hex.m
+     char.z=char x2c(char)
+     z=z+1
+   End m
+End h
+char.0=z-1
+'PIPE stem char.| specs 1;* 5 | > work file a'

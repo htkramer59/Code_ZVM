@@ -1,0 +1,48 @@
+/*---------------------------------------------------------------+
+| Function : Create a VMSTAT like output                         |
+|                                                                |
+| File     : HOBVMSTT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBVMSTT .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220125 10:33:59                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+ 
+If dryrun<>'' Then test=1
+              Else test=0
+If test Then output='| cons'
+        Else output='| > HOBVM600 CLIENT A'
+/*---------------------------------------------------------------+
+| Set some variables                                             |
++---------------------------------------------------------------*/
+hdr='[vmstat];procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu-----;'||,
+    ' r  b   swpd   free   buff  cache   si   so    bi    bo   in    cs us sy id wa st'
+prefix=' 0  0      0      0      0      0    0    0     0     0    0     0'
+/*---------------------------------------------------------------+
+| Get the info from perfkit                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMSTT.EXEC:35 END ?)',
+    'fcx CPU',                                   /* Ask perfkit      */
+    '| inside anycase ~ PROC~ ~   ~',            /* Within this range*/
+    '| specs ~'prefix'~ 1',                      /* Rework layout    */
+            'w4.1 nw.2 right',                   /* .                */
+            'w3.1 nw.2 right',                   /* .                */
+            'w5.1 nw.2 right',                   /* .                */
+            '~00~ nw right',                     /* .                */
+            '~00~ nw ',                          /* .                */
+            'w1.1 nw',                           /* .                */
+    '| preface var hdr',                         /* Add header       */
+    '| split at ;',                              /* Split here       */
+    output                                       /* Show or write?   */
+Exit

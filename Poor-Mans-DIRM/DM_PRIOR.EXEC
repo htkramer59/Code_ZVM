@@ -1,0 +1,73 @@
+/*---------------------------------------------------------------+
+| Function : Set the PRIORITY for a user/identity                |
+|                                                                |
+| File     : DM_PRIOR EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DMPRIOR  <uid> <priority>                           |
+|          : PRIOR    <uid> <priority>                           |
+|                     <priority> is a value between 1-64         |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid newprio .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Get some settings                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get the userid and other directory stmts                       |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Check and work on the priority                                 |
++---------------------------------------------------------------*/
+If \Datatype(newprio,'NUM') Then Call Exit 750
+If newprio<1 | newprio>64 Then Call Exit 751
+'PIPE (NAME DM_PRIOR.EXEC:44 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| take first 1',                             /* Take user/ident. */
+   '| var curusr'                                /* Hand to rexx     */
+curprio=Word(curusr,8)
+If curprio>1 & curprio<64 Then newusr=Subword(curusr,1,7) newprio Subword(curusr,9)
+                          Else newusr=Subword(curusr,1,7) newprio Subword(curusr,8)
+/*---------------------------------------------------------------+
+| Write the USER DIRECT file                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_PRIOR.EXEC:54 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change anycase ~'curusr'~ ~'newusr'~',     /* Replace this     */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online the USER DIRECT                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

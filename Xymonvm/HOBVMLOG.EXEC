@@ -1,0 +1,145 @@
+/*---------------------------------------------------------------+
+| Function : Create the Xymon client-data section for the        |
+|            system log file                                     |
+|                                                                |
+| File     : HOBVMLOG EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : LNXTS     REXX     local pipe stage                 |
+|          : WINDOW    REXX     local pipe stage                 |
+|            yyyymmmdd EXCPLOG  perfkit log file                 |
+|                                                                |
+| Called   : HOBVMLOG .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220121 11:46:19                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVARS.SKELETON:4 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Are we running in test mode??                                  |
++---------------------------------------------------------------*/
+If test Then output='| cons'
+        Else output='| > HOBVM701 CLIENT A'
+/*---------------------------------------------------------------+
+| Prepare some items for later use                               |
++---------------------------------------------------------------*/
+If Substr(msgs,1,6)='MDISK:' Then Do
+                                  Parse Value msgs With 'MDISK:' tuser taddr tfn tft .
+                                  taddr=Right(taddr,4,'0')
+                                  tfileid=Date('S')'.'tft
+                                  target=tuser taddr
+                                  hdr='/'user'/'taddr'/'tfileid
+                                  End
+                             Else Do
+                                  Parse Value msgs With . ':' tuser '.'
+                                  'PIPE (End ?)',
+                                      'var msgs',
+                                      '| specs w-1;-1',
+                                      '| var tft'
+                                  filepool=Word(msgs,1)
+                                  target='.DIR 'filepool
+                                  tfileid=Date('S')'.'tft
+                                  hdr='/'filepool'/'tfileid
+                                  End
+/*---------------------------------------------------------------+
+| Access the EXCPLOG files                                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'target '< * Z (NONAMES QUIET'
+If rc<>0 Then Call Exit rc 'Problem with VMLINK rc='rc
+/*---------------------------------------------------------------+
+| Prepare the header for the output                              |
++---------------------------------------------------------------*/
+msgs_hdr='[msgs:'||hdr||']',
+        ';[file:'||hdr||']',
+        ';type:100000 (file)',
+        ';mode:640 (-rw-r-----)',
+        ';linkcount:1',
+        ';owner:0 (root)',
+        ';group:3 (sys)'
+/*---------------------------------------------------------------+
+| Process the EXCPLOG file of today                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'cms LISTFILE 'Date('S') tft' Z (NOH ALLDATES ISODATE',   /* Ask 4 details    */
+   '| n: nfind DMS',                             /* Move errors      */
+   '| change ~-~~',                              /* Replace these    */
+   '| sort w8.2 d',                              /* Sort on date/time*/
+   '| take first 1',                             /* Take latest      */
+   '| f1: fanout',                               /* Duplicate record */
+   '| getfiles',                                 /* Read file        */
+   '| f2: fanout',                               /* Duplicate records*/
+   '| specs ~'Date('S')'~ 1 w2;* nw',            /* Add date         */
+   '| nlocate ~(~',                              /* Ignore these     */
+   '| window w1.1 w2.1 RS 30',                   /* Take inside windo*/
+   '| var status',                               /* Store as         */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| count lines',                              /* Count records    */
+   '| var error',                                /* Store as         */
+   '? f1:',                                      /* Conn 2 fanout    */
+   '| specs ~clock: 'Date('S') Time() Date('S') Time(),   /* Compose records  */
+            '; atime:~ 1 w7.1 nw w8.1 nw w7.1 nw w8.1 nw',   /* .                */
+            '~; ctime:~ nw w4.1 nw w5.1 nw w4.1 nw w5.1 nw',   /* .                */
+            '~; mtime:~ nw w7.1 nw w8.1 nw w7.1 nw w8.1 nw',   /* .                */
+   '| if: if pick w14.4 == ~- - - -~',           /* If this          */
+   '|     specs w1.13 1 w8.4 nw w15;* nw',       /* Duplicate some   */
+   '| if:',                                      /* Conn 2 if        */
+   '| split at ;',                               /* Split            */
+   '| strip',                                    /* Remove spaces    */
+   '| change w2.1 ~-~~',                         /* Remove these     */
+   '| change w4.1 ~-~/~',                        /* Replace this     */
+   '| lnxts w2.2',                               /* Replace timestamp*/
+   '| specs w1.2 1 ~(~ nw w3.1 n  ~-~ n w4.1 n ~)~ n',   /* Adjust layout    */
+   '| join * x15',                               /* Join into 1 recrd*/
+   '| append literal ',                          /* Prevent no var   */
+   '| var filedates',                            /* Store as         */
+   '? f2:',                                      /* Conn 2 fanout    */
+   '| digest md5',                               /* Compose md5      */
+   '| specs w1.1 c2x 1',                         /* Make readable    */
+   '| xlate lower',                              /* Lower case it    */
+   '| specs ~md5:~ 1 w1.1 nw',                   /* Compose record   */
+   '| var file_md5',                             /* Store as         */
+   '? f2:',                                      /* Conn 2 fanout    */
+   '| count bytes',                              /* How many?        */
+   '| specs ~size:~ 1 w1.1 nw',                  /* Compose record   */
+   '| var file_size'                             /* Hand 2 rexx      */
+Address CMS 'VMLINK 'target '<DET (NONAMES QUIET'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If error Then status='[msgs:'||hdr||']; ERROR: No such file or directory 'Date('S') tft
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'var msgs_hdr',                 /* Take in these    */
+   '| append var file_size',       /* .                */
+   '| append var filedates',       /* .                */
+   '| append var file_md5',        /* .                */
+   '| append var status',          /* .                */
+   '| split at ;',                 /* Split at these   */
+   '| split at x15',               /* .                */
+   output                          /* Write or show    */
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Upper Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg
+                        Else exrc=0
+Exit exrc

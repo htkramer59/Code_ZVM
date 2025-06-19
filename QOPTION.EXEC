@@ -1,0 +1,88 @@
+/*---------------------------------------------------------------+
+| Function : Ask DIRMAINT which Directory OPTIONS we have...     |
+|                                                                |
+| File     : QOPTION  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SAPI     EXEC                                       |
+|                                                                |
+| Called   : QOPTION  <user id> <options>                        |
+|                                                                |
+| Comments : If called as function it returns 1 if the options   |
+|            are found, 0 when one or more classes is missing.   |
+|            When not called as a function it will return        |
+|            standard rc's and a message                         |
+|            Need DIRMAINT admin                                 |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220819 15:17:06                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid qopts
+Parse Source . how myfn myft .
+If how='FUNCTION' Then func=1
+                  Else func=0
+/*---------------------------------------------------------------+
+| Asses the input                                                |
++---------------------------------------------------------------*/
+If arg1='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME QOPTION.EXEC:32 END ? .EXEC:31)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+If uid=''    Then Do
+                  If func Then Call Exit '0'
+                          Else Call Exit '28 No uid specified'
+                  End
+If qopts='' Then Do
+                 If func Then Call Exit '0'
+                         Else Call Exit '128 No OPTIONs to query'
+                 End
+/*---------------------------------------------------------------+
+| Check if the user id exists                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME QOPTION.EXEC:49 END ?)',
+    'cp QUERY MDISK USER 'uid' 0 DIR',
+    '| hole'
+If rc='53' Then Do
+                If func Then Call Exit '0'
+                        Else Call Exit rc' Id 'uid' does not exist'
+                End
+/*---------------------------------------------------------------+
+| Load the SAPI code                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME QOPTION.EXEC:59 END ?) CMS EXECLOAD SAPI EXEC * = REXX | hole'
+'PIPE (NAME QOPTION.EXEC:60 END \)',
+   'sapi for 'uid' option ?',                    /* Ask dirmaint     */
+   '| specs w3;*',                               /* Keep this        */
+   '| split',                                    /* Split into words */
+   '| strip',
+   '| l: lookup w1.1 w1.1 master',               /* Compare          */
+   '| count lines',                              /* How many         */
+   '| var fndcnt',                               /* Hand 2 rexx      */
+   '\',                                          /* .                */
+   'var qopts',                                  /* Take this        */
+   '| split',                                    /* Split into words */
+   '| strip',
+   '| f: fanout',                                /* Dupl. records    */
+   '| l:',                                       /* Conn 2 lookup    */
+   '\ f:',                                       /* Conn 2 fanout    */
+   '| count lines',                              /* How many         */
+   '| var askcnt'                                /* Hand 2 rexx      */
+exrc=fndcnt%askcnt                               /* Set rc 2 1/0     */
+If \func & \exrc Then Call Exit '228 One or more OPTIONS missing: 'qopts
+                 Else Call Exit exrc
+Exit:
+/*---------------------------------------------------------------+
+| Unload the sapi code                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+'PIPE (NAME QOPTION.EXEC:85 END ?) CMS EXECDROP SAPI REXX |hole'
+If Datatype(exrc,'NUM') & \func & errmsg<>'' Then Say errmsg' reasoncode: 'exrc
+If exrc>1 Then exrc=0
+Exit exrc

@@ -1,0 +1,240 @@
+/*---------------------------------------------------------------+
+| Function : Talk to dirmaint and store stuff in stem so         |
+|            we don't have to scrape the answers from the screen |
+|            or the rdr                                          |
+|                                                                |
+| File     : SAPI     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DIRMAINT EXEC     to load & unload code             |
+|            RECEIVE  EXEC     read in the files                 |
+|                                                                |
+| Called   : SAPI     <any dirmaint command>                     |
+|                                                                |
+| Comments : Might not work for all commands                     |
+|            EXECLOAD SAPI EXEC * = REXX to use this as a stage  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210915 08:22:22                                   |
+| Changes  : .                                                   |
+|            20220823 H.T.Kramer : Changed so the queries (?)    |
+|                     now only pass data                         |
+|            20220207 H.T.Kramer : Fixed for zVM 7.1/7.2         |
+|                     Adapted for use with SSI                   |
+|            20220204 H.T.Kramer : Rewritten so it can be        |
+|                     used as a pipe stage                       |
+|            20211223 H.T.Kramer : Remove old and diagnose files |
+|                     from rdr                                   |
+|            20211125 H.T.Kramer : Fixed for FREEXT & USEDEXT    |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline '(' clnsw .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Show help                                                      |
++---------------------------------------------------------------*/
+if cmdline='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME SAPI.EXEC:39 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show it          */
+             Call Exit
+             End
+max=5 /* Max times wakeup will be called */
+/*---------------------------------------------------------------+
+| Do some settings depending on how we were called               |
++---------------------------------------------------------------*/
+If myft='REXX' Then Do
+                 pipestage=1
+                 pipecmd='CALLPIPE'
+                 output='| *:'
+                 fileout='| *:'
+               End
+               Else Do
+                 pipestage=0
+                 pipecmd='PIPE'
+                 output='| cons'
+                 fileout=''
+               End
+/*---------------------------------------------------------------+
+| Now we start working...                                        |
++---------------------------------------------------------------*/
+Parse Value cmdline With cmd .
+pipecmd' (NAME SAPI.EXEC:65 END ?)',
+    'CMS DIRMAINT EXECLOAD',                     /* Run this         */
+    '| hole'                                     /* Suppess output   */
+pipecmd' (NAME SAPI.EXEC:68 END %)',
+    'cms DVHSAPI 'cmdline,                       /* Issue the cmd    */
+    '| hole'                                     /* Suppress output  */
+dirmrc=rc
+If dirmrc<>0 Then Call Exit
+qm=0                                             /* Assume no ? in cmdline  */
+proc_record='| specs w9.1 1 w11.1 n w3.1 nw w13;* nw'   /* Keep these       */
+proc_msg='| specs w-1;-1 1 w2;-3 nw'                    /* Reshuffle        */
+Call Extra_Action
+pipecmd' (NAME SAPI.EXEC:77 END %)',
+    'stem dvhsapi.',                             /* Take the output  */
+    '| pick fs = substr w1.1 of f4 \== ~1191~ and', /* Remove these     */
+                'substr w1.1 of f4 \== ~1196~ and', /* .                */
+                'substr w1.1 of f4 \== ~2288~ and', /* .                */
+                'substr w1.1 of f4 \== ~2289~',     /* .                */
+    '| change ~=~ ~',                            /* Replace these    */
+    proc_record,
+    '| stem msg.'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Here we translate the messages                                 |
++---------------------------------------------------------------*/
+Select
+When Abbrev(cmd,'CMS')    Then Do
+       pipecmd' (NAME SAPI.EXEC:91 END ?)',
+          'stem msg.',
+          '| specs w11;*',
+          output
+      End
+Otherwise Do
+     If qm Then pipecmd' (NAME SAPI.EXEC:97 END \) stem msg. 'output
+           Else Do
+           Address CMS 'VMLINK DIRMAINT 11F (NON NOT'
+           pipecmd' (NAME SAPI.EXEC:100 END ?)',
+               'cms LISTFILE 150A* MSGADVH * (NOH',         /* Find these       */
+               '| getfiles',                                /* Read them        */
+               '| l: lookup 1.6 1.6',                       /* Find msg nos     */
+               '| join 1 x40',                              /* Join pairs       */
+               '| pick w2.1 \== ~0~',                       /* Ignore this one  */
+               proc_msg,                                    /* Reshuffle        */
+               output,                                      /* Show or hand of  */
+               '?',                                         /* 2nd pipe         */
+               'stem msg.',                                 /* Take these       */
+               '| l:'                                       /* Conn 2 lookup    */
+           Address CMS 'VMLINK DIRMAINT 11F <DET (NON NOT'
+           End
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME SAPI.EXEC:117 END ?)',
+    'CMS DIRMAINT EXECDROP',                     /* Undo ...         */
+    '| hole'                                     /* Ignore output    */
+Exit:
+/*---------------------------------------------------------------+
+| End of the show                                                |
++---------------------------------------------------------------*/
+Parse Arg dirmrc errmsg
+If Datatype(dirmrc,'NUM') Then Say dirmrc errmsg
+                          Else dirmrc=0
+Exit dirmrc
+ 
+ 
+Extra_Action:
+/*---------------------------------------------------------------+
+| Extra actions for certain commands...these send files          |
++---------------------------------------------------------------*/
+Select
+When Wordpos('?',cmdline)<>0 Then Do
+          qm=1                                  /* We found ? in cmdline */
+          proc_record='|specs w13;* 1'
+          proc_msg=''
+          End
+When Abbrev(cmd,'FREE')    Then Call Check_Dirm_Setup Word(cmdline,3) 'FREEXT'
+When Abbrev(cmd,'USED')    Then Call Check_Dirm_Setup Word(cmdline,3) 'USEDEXT'
+when Abbrev(cmd,'DIRMAP')  Then Call Check_Dirm_Setup 'USER MDISKMAP'
+when Abbrev(Word(cmdline,3),'REV') Then Call Check_Dirm_Setup Word(cmdline,2) 'DIRECT'
+When Abbrev(cmd,'FILE')    Then Nop
+When Abbrev(cmd,'STAT')    Then Nop
+When Abbrev(cmd,'FOR')     Then Nop
+When Abbrev(cmd,'CMS')     Then Nop
+Otherwise Say 'Can not handle 'cmd
+End
+Return
+ 
+ 
+Check_Dirm_Setup:
+/*---------------------------------------------------------------+
+| Check if DIRMAINT or DIRMSAT is running                        |
++---------------------------------------------------------------*/
+Parse Upper Arg infn inft .
+If inft='' Then Do
+                inft=infn
+                infn='ALLVOLS'
+                End
+pipecmd' (NAME SAPI.EXEC:162 END ?)',
+    'cp QUERY DIRMAINT',                         /* Ask CP           */
+    '| if1: if pick w3.1 == ~DSC~',              /* Do we have this  */
+    '|     specs ~1~ 1 write',                   /* ..set to 1       */
+    '| if1:',                                    /* Conn 2 if        */
+    '|     specs ~0~ 1 write',                   /* ..else set to 0  */
+    '| if1:',                                    /* Conn 2 if        */
+    '| var dirmaint',                            /* Store as bool    */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY DIRMSAT',                          /* Ask CP           */
+    '| if2: if pick w3.1 == ~DSC~',              /* Do we have this  */
+    '|     specs ~1~ 1 write',                   /* ...set to 1      */
+    '| if2:',                                    /* Conn 2 if        */
+    '|     specs ~0~ 1 write',                   /* ..else set to 0  */
+    '| if2:',                                    /* Conn 2 if        */
+    '| var dirmsat'                              /* Store as bool    */
+Select
+When dirmaint  & \dirmsat Then Call Get_Rdr_File
+When \dirmaint & dirmsat  Then Call Wait4File
+When \dirmaint & \dirmsat Then Call Exit '9998 No DIRMAINT or DIRMSAT running'
+When dirmaint  & dirmsat  Then Call Exit '9997 DIRMAINT and DIRMSAT running'
+Otherwise Call Exit '9996 Can not handle this'
+End
+Return
+ 
+ 
+Get_Rdr_File:
+/*---------------------------------------------------------------+
+| If reader files are involved take them in & clean up           |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| See what files we need to receive                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME SAPI.EXEC:195 END %)',
+    'cp QUERY RDR * ALL ISODATE',                /* Ask cp           */
+    '| p: pick w-2;-2 == ~'infn'~ and',          /* Select these     */
+              'w-1;-1 == ~'inft'~',              /* .                */
+    '| sort w8.2 d',                             /* Take latest      */
+    '| t: take first 1',                         /* Take only 1      */
+    '| specs ~RECEIVE~ 1',                       /* Compose cmd      */
+            'w2.1 nw',                           /* .                */
+            '~= = A (NOLOG REPLACE~ nw',         /* .                */
+    '| cms',                                     /* Hand 2 cms       */
+    '% p:',                                      /* Conn 2 pick      */
+    '| elastic',                                 /* Prevent loop     */
+    '| pick w-2;-2 == ~DIAGNOSE~',               /* Select these     */
+    '| fi: faninany',                            /* Take in others   */
+    '| specs ~PURGE * RDR~ 1 w2.1 nw',           /* Compose cmd      */
+    '| cp',                                      /* Remove selected  */
+    '% t:',                                      /* Conn 2 take      */
+    '| fi:'                                      /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| If we are running as a pipe stage then we insert this          |
++---------------------------------------------------------------*/
+If pipestage Then Do
+     pipecmd' (NAME SAPI.EXEC:217 END ?)',
+        'cms LISTFILE 'infn inft' A (NOH',       /* Find this file   */
+        '| getfiles',                            /* Read it          */
+        fileout                                  /* Hand of to..     */
+        End
+If pipestage & clnsw<>'' Then Address CMS 'ERASE 'infn inft' A'
+Return
+ 
+ 
+Wait4File:
+/*---------------------------------------------------------------+
+| If DIRMSAT is running we have to wait...                       |
++---------------------------------------------------------------*/
+Do z=1 To max
+Address CMS 'WAKEUP +00:00:05 (RDR CC'
+Select
+When rc='4' Then Do
+                 Call Get_Rdr_File
+                 Leave z
+                 End
+Otherwise Call Exit '1'rc' Can not handle WAKEUP rc: 'rc
+End
+End z
+Return

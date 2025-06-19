@@ -1,0 +1,21 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Do some batch processing                            |
+|                                                                |
+| File     : DM_BATCH EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_BATCH <input filename>                           |
+|          : BATCH    <input filename>                           |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240629 11:28:07                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

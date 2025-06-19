@@ -1,0 +1,63 @@
+/* Install the XYMONVM code */
+Parse Upper Arg tfm .
+Parse Source . . myfn myft .
+If tfm='' Then Exit 28
+If tfm='?' Then Call Help
+'PIPE (end ?)',
+    'cms QUERY DISK 'tfm,
+    '| drop first 1',
+    '| pick w3.1 == ~'tfm'~',
+    '| count lines',
+    '| var accessed'
+If \accessed Then Do
+                 Say 'Disk/directory 'tfm' target for the code is NOT accessed'
+                 Exit 128
+                 End
+/*---------------------------------------------------------------+
+| Install the code/                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    '< HOBPACK EXEC *',
+    '| f: fanout',
+    '| inside ~/*INPUT*/~ ~/*ENDINPUT*/~',
+    '| if1: if pick w3.1 == ~~',
+    '|    specs w1.2 1 ~'tfm'~ nw',
+    '| if1:',
+    '| specs ~VMARC UNP XYMVM15 VMARC *~ 1 w1.3 nw ~(OLDDATE~ nw',
+    '| cons',
+    '? f:',
+    '| inside ~/*ADDITIONAL*/~ ~/*ENDADDITIONAL*/~',
+    '| if2: if pick w3.1 == ~~',
+    '|    specs w1.2 1 ~'tfm'~ nw',
+    '| if2:',
+    '| specs ~VMARC UNP XYMVM15 VMARC *~ 1 w1.3 nw ~(OLDDATE~ nw',
+    '| cons'
+Exit
+ 
+ 
+Help:
+/*HELP*/
+/**
+Invocation: HOBINST <code target filemode>
+ 
+Install the code to a separate Disk/directory and make
+  sure that this is accessed
+ 
+Some parts like PROFILE EXEC will be installed on the
+  A-disk of the user id that will be running the code
+ 
+ 
+ 
+ 
+ 
+ 
+**/
+/*END-HELP*/
+'PIPE (end ?)',
+   '< 'myfn myft' *',
+   '| inside anycase ~/*HELP*/~ ~/*END-HELP*/~',
+   '| drop first 1',
+   '| drop last 1',
+   '| cons'
+Exit
+Return

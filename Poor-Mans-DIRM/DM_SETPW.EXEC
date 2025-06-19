@@ -1,0 +1,67 @@
+/*---------------------------------------------------------------+
+| Function : Change the password                                 |
+|                                                                |
+| File     : DM_SETPW EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_ONLIN EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|                                                                |
+| Called   : DM_SETPW <uid> <pw>                                 |
+|          : SETPW    <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 12:54:12                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid pw .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_SETPW.EXEC:38 END ?)',
+    'var dirfnft 1',
+    '| var dirfnft',
+    '?',
+    'var ws 1',
+    '| var ws'
+'PIPE (NAME DM_SETPW.EXEC:44 END ?)',
+    '< 'dirfnft wfm,                             /* Take file        */
+    '| specs 1;* 1.72',                          /* Remove nrs       */
+    '| if: if pick anycase (w1.1 == ~USER~ or',  /* Select           */
+                           'w1.1 == ~IDENTITY~) and',   /* This             */
+                           'w2.1 == ~'uid'~',    /* .and this        */
+    '|   specs w1.2 1 ~'pw'~ nw w4;* nw',        /* Replace pw       */
+    '| if:',                                     /* Conn 2 if        */
+    '| specs 1;* 1.80',                          /* Adjust recs      */
+    '| > 'dirfnft ws' FIXED 80'                  /* Write 2 file     */
+    piprc=rc
+wfm=DM_VMLNK('SOURCEDIR DET')
+If piprc=0 Then Do
+                Address CMS 'DM_ONLIN'
+                If rc<>0 Then Call Exit rc
+                End
+           Else Call Exit '128'
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

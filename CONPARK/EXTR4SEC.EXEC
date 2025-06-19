@@ -1,0 +1,228 @@
+/*---------------------------------------------------------------+
+| Function : Make an extract from various log files for security |
+|                                                                |
+| File     : EXTR4SEC EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : EXTR4SEC NAMES , input , control file               |
+|            EXTR4SEC LOGxx , output, extract file               |
+|            EXTR4SEC STATUS, when was this run                  |
+|                                                                |
+| Called   : EXTR4SEC .                                          |
+|                                                                |
+| Comments : Need permission to write to the OUTPUT_DIR          |
+|            OUTPUT_DIR must be present!!                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190715 10:10:59                                   |
+| Changes  : .                                                   |
+|            20190927 H.T.Kramer : Small update to fix problem   |
+|                          when no input found.                  |
+|            20190719 H.T.Kramer : Added check to run it only    |
+|                           once a day and added timestamp       |
+|            20190716 H.T.Kramer : Added remarks in NAMES...and  |
+|                           output                               |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+Call Check_Status
+Call Read_Names
+/*---------------------------------------------------------------+
+| Loop thru the servers...                                       |
++---------------------------------------------------------------*/
+Do s=1 To server.0
+  Say TimeStamp()' Working on: 'server.s s' of 'server.0
+  target='VMUSERS:CONPARK.'server.s
+  Say TimeStamp()' Searching in: 'target
+  Call Collect_Data
+  Call Add_Date
+End s
+/*---------------------------------------------------------------+
+| Write the report                                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK OUTPUT_DIR (ONLY('myfn') QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Do
+              Say TimeStamp()' Problem VMLINKing OUTPUT_DIR 'rc
+              Exit rc
+             End
+'PIPE (NAME EXTR4SEC.EXEC:50 END ?)',
+   'stem new. ',
+   '| preface literal Created: 'Date('S') Time(),
+   '| > 'output wfm
+Address CMS 'VMLINK OUTPUT_DIR <DET (ONLY('myfn') QUIET WRITE'
+/*---------------------------------------------------------------+
+| Write status file... when we are done                          |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTR4SEC.EXEC:58 END ?)',
+   'literal 'Date('S'),                         /* Compose content  */
+   '| > 'myfn' STATUS A'                        /* (Re-)write file  */
+Exit
+ 
+ 
+ 
+Check_Status:
+/*---------------------------------------------------------------+
+| Check if we already ran today                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTR4SEC.EXEC:69 END ?)',
+     'disk 'myfn' STATUS A',                    /* Read file if ther*/
+     '| pick w1.1 == ~'Date('S')'~',            /* Locate today     */
+     '| var status',                            /* Store as         */
+     '| count lines',                           /* Count finds      */
+     '| var done'                               /* Make a boolean   */
+If done Then Do
+         Say TimeStamp()' Already executed on 'status
+         Exit 99
+         End
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a uniform timestamp                                     |
++---------------------------------------------------------------*/
+timestamp=Date('S') Time() myfn
+Return timestamp
+ 
+ 
+ 
+Collect_Data:
+/*---------------------------------------------------------------+
+| Collect the required data from the files                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK .dir 'target' (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (NAME EXTR4SEC.EXEC:98 END ?)',
+   'cms LISTFILE * * 'wfm' (NOHEADER ISODATE',  /* Get files        */
+   '| pick w5.1 == ~132~',                      /* Only unpacked    */
+   '| fo1: fanout',                             /* Dupl records     */
+   '| specs w1.2 1.20',                         /* Adjust recs      */
+   '| j: juxtapose',                            /* Put side by side */
+   '| specs w1.1 1.8 w2.1 nw.8 w3;* 28',        /* Adjust layout    */
+   '| stem work.',                              /* Store as         */
+   '? fo1:',                                    /* Conn 2 fanout    */
+   '| getfiles',                                /* Read files       */
+   search,                                      /* Select recs      */
+   '| j:'                                       /* Conn 2 juxtapose */
+Address CMS 'VMLINK .dir 'target' <DET (NONAMES QUIET'
+Return
+ 
+ 
+Add_Date:
+/*---------------------------------------------------------------+
+| Add the correct dates...                                       |
++---------------------------------------------------------------*/
+If work.0>0 Then Do
+     'PIPE (NAME EXTR4SEC.EXEC:119 END ?)',
+        'stem work.',                                /* Take these       */
+        '| specs recno 1.5 1;* nw',                  /* Add record no    */
+        '| locate ~HCPMID~',                         /* Find these       */
+        '| specs w1.1 1 w-1;-1 nw',                  /* Keep only this   */
+        '| dateconv w2.1 usa iso_short',             /* Transform date   */
+        '| dateconv w2.1 iso_short rs',              /*   to rexx sorted */
+        '| stem mid.',                               /* Store as         */
+        '| take first 1',                            /* Keep this        */
+        '| specs w2.1',                              /* Remove recno     */
+        '| var firstdate'                            /* Store as         */
+/*---------------------------------------------------------------+
+| Take 1 day off....                                             |
++---------------------------------------------------------------*/
+     firstdate='1 'Date('S',Date('B',firstdate,'S')-1,'B')
+/*---------------------------------------------------------------+
+| Add the 1st date...                                            |
++---------------------------------------------------------------*/
+     'PIPE (NAME EXTR4SEC.EXEC:137 END ?)',
+        'stem mid. ',                                /* Take these       */
+        '| buffer',                                  /* Prevent stall    */
+        '| preface var firstdate ',                  /* Add this         */
+        '| stem mid.'                                /* Store again      */
+/*---------------------------------------------------------------+
+| Here we actually add the date on the record...                 |
++---------------------------------------------------------------*/
+     Do m=1 To mid.0
+       Parse Value mid.m With strtl rdate .
+       'PIPE (NAME EXTR4SEC.EXEC:147 END ?)',
+           'literal 'work.strtl,                     /* Take this        */
+           '| specs w1.2 1.17 ~'rdate'~ nw.8 w3;* nw', /* Add date       */
+           '| var temp'                              /* Store as         */
+       work.strtl=temp                               /* Overwrite record */
+     End m
+End
+/*---------------------------------------------------------------+
+| Add the headers...                                             |
++---------------------------------------------------------------*/
+id=server.s
+If remarks.id<>'' Then remark='| preface literal >>> 'remarks.id
+                  Else remark=''
+'PIPE (NAME EXTR4SEC.EXEC:160 END ?)',
+   'stem work. ',
+   '| preface literal Fn       Ft       Date     Time/Text',
+   remark,
+   '| preface literal ***************** Section for: 'server.s,
+   '| stem new. append'
+work.0=0
+Return
+ 
+ 
+Read_Names:
+/*---------------------------------------------------------------+
+| Read the input file for details                                |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTR4SEC.EXEC:174 END ?)',
+   '< 'myfn' NAMES *',                          /* Read this file   */
+   '| pick 1.1 \== ~*~',                        /* Remove comments  */
+   '| strip',                                   /* Remove spaces    */
+   '| join * x40',                              /* Make 1 record    */
+   '| split anycase before string ~:NICK.~',    /* Split here       */
+   '| change anycase ~:NICK.~~',                /* Remove this      */
+   '| change anycase ~:LIST.~ ~',               /* ...and this      */
+   '| n1: nlocate anycase ~SERVERS~',           /* Put somewhere els*/
+   '| n2: nlocate anycase ~OUTPUT_DIR~',        /* Put somewhere els*/
+   '| n3: nlocate anycase ~REMARKS~',           /* Put somewhere els*/
+   '| specs w2;*',                              /* Keep these       */
+   '| var srchdisp',                            /* Store as         */
+   '| split',                                   /* Split them       */
+   '| specs ~/~ 1 w1.1 n ~/~ nw',               /* ..add slashes    */
+   '| join * ~!~',                              /* Make 1 record    */
+   '| specs x4F 1 ~ALL~ nw 1;* nw',             /* Add this         */
+   '| var search',                              /* Store as         */
+   '? n1:',                                     /* Conn 2 nlocate   */
+   '| specs w2;*',                              /* Keep these       */
+   '| split',                                   /* Split them       */
+   '| stem server.',                            /* Store as stem    */
+   '? n3:',                                     /* Conn 2 nlocate   */
+   '| split before string ~ :~',                /* Split here       */
+   '| t: take first 1',                         /* Take this        */
+   '| specs w1.1 1 ~.~ n',                      /* Add a point      */
+   '| j: juxtapose',                            /* Lay side by side */
+   '| change ~.:~.~',                           /* Replace this     */
+   '| specs fs . ~/~ 1 f1.2 n ~/~ n f3;* n',    /* Prep 4 varload   */
+   '| xlate fs / f2 upper',                     /* Another prep     */
+   '| varload',                                 /* Hand 2 rexx      */
+   '? t:',                                      /* Conn 2 take      */
+   '| strip',                                   /* Remove spaces    */
+   '| j:',                                      /* Conn 2 juxtapose */
+   '?',                                         /* 2nd pipe         */
+   'cms IDENTIFY ',                             /* Ask cms          */
+   '| specs substr -2;-1 of word 3.1 ',         /* Select this      */
+   '| var shortnode'                            /* Store as         */
+If rc<>0 Then Do
+              Say 'Problem reading 'myfn' NAMES file, rc='rc
+              Exit rc
+              End
+/*---------------------------------------------------------------+
+| Display some info                                              |
++---------------------------------------------------------------*/
+output=myfn' LOG'shortnode
+Say TimeStamp()' Looking for the following strings: 'srchdisp
+Say TimeStamp()' Output file: 'output
+/*---------------------------------------------------------------+
+| Initialise some arrays                                         |
++---------------------------------------------------------------*/
+work.0=0
+mid.0=0
+new.0=0
+Return

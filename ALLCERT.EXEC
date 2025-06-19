@@ -1,0 +1,117 @@
+/*---------------------------------------------------------------+
+| Function : Check the expiry date of certificates/keys          |
+|                                                                |
+| File     : ALLCERT  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC        tool to talk to the nodes      |
+|            ALLCERT  NAMES       control file                   |
+|            ALLCERT  ALLNODES    output file                    |
+|                                                                |
+| Called   : ALLCERT  <data>                                     |
+|                     When this is filled it will collect and    |
+|                     send data                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20221017 11:51:45                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' options
+Parse Source . . myfn myft .
+Select
+When what=''     Then Call Collect
+When what='DATA' Then Call SendData
+Otherwise Nop
+End
+Exit
+ 
+ 
+Collect:
+/*---------------------------------------------------------------+
+| Start collecting the info                                      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+Address CMS 'RMCMD 'myfn' DATA , , , FILE , 'myfn' ALLNODES 'wfm
+hdr='Node     DB-date  Expires  Days2Expiry'
+'PIPE (NAME ALLCERT.EXEC:42 END ?)',
+  '< 'myfn' ALLNODES 'wfm,
+  '| drop first 2',
+  '| nlocate ~RMCMD~',
+  '| specs w1.1 1.8',
+          'w2.1 nw.8',
+          'w3.1 nw.8',
+          'w5.1 nw.8 right',
+  '| preface var hdr',
+  '| preface literal 'TimeStamp(),
+  '| > 'myfn' OVERVIEW 'wfm
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE 'myfn' ALLNODES 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+SendData:
+/*---------------------------------------------------------------+
+| Ask the rest to send the info                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLCERT.EXEC:62 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+'PIPE (NAME ALLCERT.EXEC:68 END ?)',
+   '< 'myfn' NAMES *',                           /* Read this file   */
+   '| pick 1.1 \== ~*~ and',                     /* Ignore these     */
+          '1.1 \== ~ ~',                         /* .                */
+   '| change ~:~/~ 1',                           /* Replace these    */
+   '| change ~.~/~ 1',                           /* .                */
+   '| xlate fs / f2 upper',                      /* Upper 4 varload  */
+   '| f: fanout',                                /* Duplicate recs   */
+   '| nlocate anycase ~:NODE.~',                 /* Remove these     */
+   '| varload',                                  /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| pick anycase w-1;-1 == ~:NODE.'node'~',    /* Select my node   */
+   '| specs w1;-2',                              /* Remove node tag  */
+   '| stem nodespec.'                            /* Hand 2 rexx      */
+If nodespec.0<>0 Then 'PIPE (NAME ALLCERT.EXEC:82 END ?) stem nodespec. | varload'
+today=Date('S')
+todayb=Date('B',today,'S')
+'PIPE (NAME ALLCERT.EXEC:85 END ?)',
+    'cms OPENVM LISTFILE /../'db_dir,            /* Ask openvm       */
+    '| locate ~'dbname'~',                       /* Select this      */
+    '| specs w1.1 1',                            /* Keep this        */
+    '| specs fs / f3 1 f1 n f2 n',               /* Reowrk date      */
+    '| specs w1.1 1 w1.1 nw',                    /* Duplicate info   */
+    '| dateconv w1.1 rs rb',                     /* Convert 2 base   */
+    '| specs a: w1.1 .',                         /* Calc             */
+    '        w2.1 1',                            /* .expiry          */
+    '        set #0:=a+'days,                    /* ...date          */
+    '        print #0 nw',                       /* .                */
+    '| specs w1.1 1',                            /* Add some info    */
+            'w2.1 nw',                           /* .into the record */
+            '~'today'~ nw',                      /* .                */
+            'w2.1 nw',                           /* .                */
+            '~'todayb'~ nw',                     /* .                */
+    '| dateconv w2.1 rb rs',                     /* Convert 2 rexxsrt*/
+    '| specs w1.3 1',                            /* Calculate        */
+            'a: w4.1 .',                         /* .days            */
+            'b: w5.1 .',                         /* ..until          */
+            'set #0:=a-b',                       /* ...expiry        */
+            'print #0 pict ------9 nw',          /* .                */
+    '| if: if pick w4.1 <= ~'lim'~',             /* Add extra text   */
+    '|     specs 1;* 1',                         /* .                */
+                '~!!! Less than 'lim' days left !!!~ nw',   /* .                */
+    '| if:',                                     /* Conn 2if         */
+    '| cons'                                     /* Show results     */
+Return
+ 
+TimeStamp:
+Return Date('S') Time() myfn
+ 

@@ -1,0 +1,333 @@
+/**/
+/* Call 8 */
+10:
+/* VS Condensing the file a bit */
+/*---------------------------------------------------------------+
+| Collect all the switch names                                   |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| stem vswitch.'                           /* Store into stem */
+/*---------------------------------------------------------------+
+| Now process per switch found                                   |
++---------------------------------------------------------------*/
+stats.0=0                                       /* Easy way to initialise a stem */
+info.0=0                                        /* for use  with STEM <stem> APPEND */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| fo1: fanout',                         /* Duplicate to fo1 label */
+       '| locate anycase /Adapter Owner/',      /* Find these       */
+       '| specs w3.1 1.8 x40 n',                /* Keep this from the recordd   */
+       '| j: juxtapose',                        /* Join records side by side */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| join keylen 8',                       /* Join so we see more than 1 IP address */
+       '| fo2: fanout',                         /* Send records 2 label fo2 */
+       '| specs 1;* 1.55',                         /* Adjust the records to 55 chars */
+       '| snake 2',                                /* Make 2 columns  */
+       '| preface literal * Info for: 'vswitch.v,  /* Add a header at start  */
+       '| append literal ',                     /* Add empty line at end  */
+       '| stem info. append',                   /* Show results     */
+       '? fo1:',                                /* Label connecting to fanout*/
+       '| strip',                               /* Remove spaces */
+       '| inside anycase /UNICAST MAC/ /MULTICAST MAC/',  /* Sel. records between these strings */
+       '| specs w3.1 1 x40 n',                  /* Keep this bit and add a space */
+       '| j:',                                  /* Feed records to juxtapose  */
+       '? fo2:',                                /* Take records from fanout */
+       '| specs w1.1 1',                        /* Keep only user id */
+       '| count lines',                         /* Count the lines */
+       '| specs /'vswitch.v' * No of servers found/ 1 w1.1 nw.3 right',  /* Add some text */
+       '| fi: faninany',                        /* Take records from fi labels */
+       '| specs w1.1 1.8 w2;* nw',              /* Adjust layout */
+       '| sort',                                /* Sort records */
+       '| join keylen 8',                       /* Join on switch name */
+       '| stem stats. append',                  /* Add records to stem */
+       '? fo2:',                                /* Take records from fo2 */
+       '| specs w2;* 1',                        /* Keep ip addresses */
+       '| count words',                         /* Count them */
+       '| specs /'vswitch.v' * No of ip addresses found/ 1 w1.1 nw.3 right',  /* Add text */
+       '| fi:'                                  /* Connect to faninany  */
+End v                                           /* To easily identify the loop */
+/*---------------------------------------------------------------+
+| Write all the output to a file                                 |
++---------------------------------------------------------------*/
+'PIPE (End ?)',
+    'stem stats.',                              /* Take the stem    */
+    '| preface literal * Statistics:',          /* Add a header     */
+    '| append literal ',                        /* Add empty line   */
+    '| append stem info.',                      /* Add other stem   */
+    '| > VSWIP FILE A'                           /* Write to file    */
+Exit
+9:
+/* VS Combining the results and write to a file */
+/*---------------------------------------------------------------+
+| Collect all the switch names                                   |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| stem vswitch.'                           /* Store into stem */
+/*---------------------------------------------------------------+
+| Now process per switch found                                   |
++---------------------------------------------------------------*/
+stats.0=0                                          /* Easy way to initialise a stem */
+info.0=0                                           /* for use  with STEM <stem> APPEND */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| fo1: fanout',                         /* Duplicate to fo1 label */
+       '| locate anycase /Adapter Owner/',      /* Find these       */
+       '| specs w3.1 1.8 x40 n',                /* Keep this from the recordd   */
+       '| j: juxtapose',                        /* Join records side by side */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| join keylen 8',                       /* Join so we see more than 1 IP address */
+       '| fo2: fanout',                         /* Send records 2 label fo2 */
+       '| preface literal * Info for: 'vswitch.v,  /* Add a header at start  */
+       '| append literal ',                        /* Add empty line at end  */
+       '| stem info. append',                   /* Show results     */
+       '? fo1:',                                /* Label connecting to fanout*/
+       '| strip',                               /* Remove spaces */
+       '| inside anycase /UNICAST MAC/ /MULTICAST MAC/',  /* Sel. records between these strings */
+       '| specs w3.1 1 x40 n',                  /* Keep this bit and add a space */
+       '| j:',                                  /* Feed records to juxtapose  */
+       '? fo2:',                                /* Take records from fanout */
+       '| specs w1.1 1',                        /* Keep only user id */
+       '| count lines',                         /* Count the lines */
+       '| specs /'vswitch.v' * No of servers found/ 1 w1.1 nw.3 right',  /* Add some text */
+       '| fi: faninany',                        /* Take records from fi labels */
+       '| specs w1.1 1.8 w2;* nw',                 /* Adjust layout */
+       '| sort',                                   /* Sort records */
+       '| join keylen 8',                          /* Join on switch name */
+       '| stem stats. append',                     /* Add records to stem */
+       '? fo2:',                                /* Take records from fo2 */
+       '| specs w2;* 1',                        /* Keep ip addresses */
+       '| count words',                         /* Count them */
+       '| specs /'vswitch.v' * No of ip addresses found/ 1 w1.1 nw.3 right',  /* Add text */
+       '| fi:'                                  /* Connect to faninany  */
+End v                                           /* To easily identify the loop */
+/*---------------------------------------------------------------+
+| Write all the output to a file                                 |
++---------------------------------------------------------------*/
+'PIPE (End ?)',
+    'stem stats.',                                 /* Take the stem    */
+    '| preface literal * Statistics:',             /* Add a header     */
+    '| append literal ',                           /* Add empty line   */
+    '| append stem info.',                         /* Add other stem   */
+    '| > VSWIP FILE A'                             /* Write to file    */
+Exit
+8:
+/* VS adding a count for the ip addresses on the switch */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| pick 1.3 == ~VSR~ and 5.1 == ~O~',           /* To make sure we can capture the result */
+    '| stem vswitch.'                           /* Store into stem */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| fo1: fanout',                         /* Duplicate to fo1 label */
+       '| locate anycase /Adapter Owner/',      /* Find these       */
+       '| specs w3.1 1.8 x40 n',                /* Keep this from the recordd   */
+       '| j: juxtapose',                        /* Join records side by side */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| join keylen 8',                       /* Join so we see more than 1 IP address */
+       '| fo2: fanout',                         /* Send records 2 label fo2 */
+       '| fi: faninany',                        /* Take records from fi labels */
+       '| cons',                                /* Show results     */
+       '? fo1:',                                /* Label connecting to fanout*/
+       '| strip',                               /* Remove spaces */
+       '| inside anycase /UNICAST MAC/ /MULTICAST MAC/',  /* Sel. records between these strings */
+       '| specs w3.1 1 x40 n',                  /* Keep this bit and add a space */
+       '| j:',                                  /* Feed records to juxtapose  */
+       '? fo2:',                                /* Take records from fanout */
+       '| specs w1.1 1',                        /* Keep only user id */
+       '| count lines',                         /* Count the lines */
+       '| specs /'vswitch.v' * No of servers found/ 1 w1.1 nw',  /* Add some text */
+       '| fi:',                                 /* Send records 2 faninany     */
+       '? fo2:',                                   /* Take records from fo2 */
+       '| specs w2;* 1',                           /* Keep ip addresses */
+       '| count words',                            /* Count them */
+       '| specs /'vswitch.v' * No of ip addresses found/ 1 w1.1 nw',  /* Add text */
+       '| fi:'                                     /* Connect to faninany  */
+End v                                           /* To easily identify the loop */
+Exit
+7:
+/* VS adding a count for the users connected to the switch */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| pick 1.3 == ~VSR~ and 5.1 == ~O~',           /* To make sure we can capture the result */
+    '| stem vswitch.'                           /* Store into stem */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| fo1: fanout',                         /* Duplicate to fo1 label */
+       '| locate anycase /Adapter Owner/',      /* Find these       */
+       '| specs w3.1 1.8 x40 n',                /* Keep this from the recordd   */
+       '| j: juxtapose',                        /* Join records side by side */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| join keylen 8',                       /* Join so we see more than 1 IP address */
+       '| fo2: fanout',                            /* Send records 2 label fo2 */
+       '| fi: faninany',                           /* Take records from fi labels */
+       '| cons',                                /* Show results     */
+       '? fo1:',                                /* Label connecting to fanout*/
+       '| strip',                               /* Remove spaces */
+       '| inside anycase /UNICAST MAC/ /MULTICAST MAC/',  /* Sel. records between these strings */
+       '| specs w3.1 1 x40 n',                  /* Keep this bit and add a space */
+       '| j:',                                  /* Feed records to juxtapose  */
+       '? fo2:',                                /* Take records from fanout */
+       '| specs w1.1 1',                        /* Keep only user id */
+       '| count lines',                         /* Count the lines */
+       '| specs /'vswitch.v' * No of IP addresses found/ 1 w1.1 nw',  /* Add some text */
+       '| fi:'                                     /* Send records 2 faninany     */
+End v                                           /* To easily identify the loop */
+Exit
+6:
+/* VS join adapter owner and IP addresses */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| stem vswitch.'                           /* Store into stem */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| fo1: fanout',                         /* Duplicate to fo1 label */
+       '| locate anycase /Adapter Owner/',      /* Find these       */
+       '| specs w3.1 1.8 x40 n',                /* Keep this from the recordd   */
+       '| j: juxtapose',                            /* Join records side by side */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| cons',                                /* Show results     */
+       '? fo1:',                                /* Label connecting to fanout*/
+       '| strip',                               /* Remove spaces */
+       '| inside anycase /UNICAST MAC/ /MULTICAST MAC/',  /* Select records between these strings */
+       '| specs w3.1 1 x40 n',                  /* Keep this bit and add a space */
+       '| j:'                                      /* Feed records to juxtapose  */
+End v                                           /* To easily identify the loop */
+Exit
+5:
+/* VS gathering IP addresses */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| stem vswitch.'                           /* Store into stem */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| fo1: fanout',                             /* Duplicate to fo1 label */
+       '| locate anycase /Adapter Owner/',      /* Find these       */
+       '| specs w3.1 1.8 x40 n',                /* Keep this from the recordd   */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| cons',                                /* Show results     */
+       '? fo1:',                                   /* Label connecting to fanout*/
+       '| strip',                                  /* Remove spaces */
+       '| inside anycase /UNICAST MAC/ /MULTICAST MAC/',  /* Select records between these strings */
+       '| specs w3.1 1 x40 n',                     /* Keep this bit and add a space */
+       '| cons'                                    /* Show results  */
+End v                                           /* To easily identify the loop */
+Exit
+4:
+/* VS retaining the adapter owners */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| stem vswitch.'                           /* Store into stem */
+Do v=1 To vswitch.0                             /* Start my loop  */
+   Say '******* 'vswitch.v                      /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',  /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| locate anycase /Adapter Owner/',         /* Find these       */
+       '| specs w3.1 1.8 x40 n',                   /* Keep this from the recordd   */
+       '| change /SLB/XYZ/',
+       '| change /SLD/VWX/',
+       '| change /SLT/TST/',
+       '| change /ONE/SHO/',
+       '| cons'                                 /* Show results     */
+End v                                           /* To easily identify the loop */
+Exit
+3:
+/* VS we get more details on the switches */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                   /* Replace this     */
+    '| specs w2.1 1',                           /* Keep 2nd word    */
+    '| specs fs . f2',                          /* Keep 2nd field   */
+    '| stem vswitch.'                              /* Store into stem */
+Do v=1 To vswitch.0                                /* Start my loop  */
+   Say '******* 'vswitch.v                         /* To separate output  */
+   'PIPE (end ?)',
+       'cp QUERY VSWITCH 'vswitch.v' DETAILS',     /* Ask cp for details */
+       '| frtarget pick anycase w1.2 == /Adapter Connections:/',  /* Take it from here */
+       '| cons'                                    /* Show results     */
+End v                                              /* To easily identify the loop */
+Exit
+2:
+/* VS only retain the switch names */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == ~VSWITCH~',                 /* Select these records */
+    '| change / SYSTEM / ./',                      /* Replace this     */
+    '| specs w2.1 1',                              /* Keep 2nd word    */
+    '| specs fs . f2',                             /* Keep 2nd field   */
+    '| cons'                                    /* Show output */
+Exit
+1:
+/* VS check which vswitches we have */
+'PIPE (end ?)',
+    'cp QUERY VSWITCH ALL',                     /* Send query 2 CP  */
+    '| pick w1.1 == /VSWITCH/',                 /* Select these records  */
+    '| cons'                                    /* Show output */
+Exit

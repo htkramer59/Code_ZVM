@@ -1,0 +1,163 @@
+/*---------------------------------------------------------------+
+| Function : Show the OSA port for the network                   |
+|                                                                |
+| File     : HOBOSA   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : HOBVM090 CLIENT  as input                           |
+|            FCX      EXEC    execloaded as REXX                 |
+|                                                                |
+| Called   : HOBOSA   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220117 13:55:29                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+color='GREEN'
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBOSA.EXEC:30 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+ 
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call Send status           /*  Send the result in status to bb */
+              Call Close_Term_Socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOBOSA.EXEC:41 END ?)',
+                  'var status',                  /* Take this        */
+                  '| split at x15',              /* Split here       */
+                  '| strip',                     /* Remove spaces    */
+                  '| cons'                       /* Show             */
+              End
+Exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+hdr='VSWitch    Port Controller Port Controller Port_status'
+'PIPE (NAME HOBOSA.EXEC:55 END ?)',
+  'fcx VSWITCH',                                 /* Ask perfkit      */
+  '| frtarget pick anycase w2.1 == ~System~',    /* Select this      */
+  '| drop first 1',                              /* Ignore 1st one   */
+  '| specs w2.1 1.10 w1.1 nw.4 w3.1 nw.10',      /* Keep this        */
+  '| sort w1.1',                                 /* Sort on switch   */
+  '| f: fanout',                                 /* Duplicate records*/
+  '| fi: fanin',                                 /* Take in others   */
+  '| sort w1.1',                                 /* Sort on switch   */
+  '| join keylen 10',                            /* Join on switch   */
+  '| preface var hdr',                           /* Add header       */
+  '| join * x15',                                /* Make 1 record    */
+  '| var status',                                /* Store as         */
+  '? f:',                                        /* Conn 2 fanout    */
+  '| buffer',                                    /* Prevent stall    */
+  '| specs w1.1',                                /* Keep this        */
+  '| unique count',                              /* Count unique ones*/
+  '| specs 11;* 1.10  1.10 strip nw',            /* Rework records   */
+  '| pick w2.1 <= ~1~',                          /* Select these     */
+  '| specs 1;* 1 ~Missing port(s)~ nw',          /* Add text         */
+  '| stem missing.',                             /* Store as         */
+  '| fi:'                                        /* Conn 2 fanin     */
+If missing.0<>0 Then color 'RED'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBOSA.EXEC:81 END ?)',
+  '< HOBVM090 CLIENT *',                         /* Use this file    */
+  '| casei all ~QDIO~ ! ~Reason:~',              /* Select these     */
+  '| drop first 1',                              /* Remove RDEV      */
+  '| strip',                                     /* Remove spaces    */
+  '| join * x40',                                /* Make 1 record    */
+  '| split anycase before string ~Adapter~',     /* Split here       */
+  '| locate anycase ~Reason~',                   /* Select these     */
+  '| specs ~<b>~ 1 w1.1 n ~:~ n w11;* nw ~</b>~ n',   /* Add html bold    */
+  '| join * x15',                                /* Make 1 record    */
+  '| append literal ',                           /* Make sure of var */
+  '| var vsw_error'                              /* Store as         */
+If error='' Then color='RED'
+status = 'status' machine||'.osa' color TimeStamp('TZ') msg cr cr vsw_error cr cr status
+Return
+ 
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCOSA'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBOSA.EXEC:157 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

@@ -1,0 +1,142 @@
+.cs 0 on
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+XEDIT Prefix commands and subcommands may be applied to columns
+using the COL command "^" to exclude columns or the COL command "Y"
+to indicate which columns are to be included.
+ 
+XEDIT Prefix commands and subcommands may be applied to lines which
+contain specific text by entering the desired text into the COL
+command line and:
+ 
+1.  Simultaneously entering a prefix command in the COL prefix area
+    adjacent to the COL command line
+ 
+2.  Simultaneously entering an XEDIT command into the XEDIT command line.
+ 
+.cs 0 off
+.cs 1 on
+ XEDIT command line entries when text is entered in the COL command line:
+ ------------------------------------------------------------------------
+    When an XEDIT command is entered in conjunction with text entered
+    into the COL command line, then that command is applied to each line
+    within the COL range that contains a text match.
+ 
+    EXAMPLE: ===== :dt?????????????????????????????????????????
+             ===== :dt.Lawn
+             ===== :dt.gopher
+             ===== :dt.agapanthus
+             ====> i :dd.
+ 
+    yields:  ===== ????????????????????????????????????????????
+             ===== :dt.Lawn
+             ===== :dd.
+             ===== :dt.gopher
+             ===== :dd.
+             ===== :dt.agapanthus
+             ===== :dd.
+             ====>
+ 
+    To insert above the text match, precede the XEDIT command with
+    a relative target.
+ 
+             ====> -1 i :dd.
+ 
+.cs 1 off
+.cs 5 on
+ XEDIT prefix entries when text is entered in the COL command line:
+ ------------------------------------------------------------------
+    When an XEDIT command is entered in conjunction with text entered
+    into the COL command line, then that command is applied to each line
+    within the COL range that contains a text match.
+ 
+    Examples:
+             |...+....1....+....2...
+       d==== ????       ????????????
+    This deletes all lines with blanks in column 5-11 within COL range.
+ 
+       i2=== :dt????????????????????
+    Inserts two blank lines after lines with :dt in column 1-3.
+ 
+       "==== ????abc????????????????
+    Duplicates lines with  abc in column 5-7.
+ 
+       x4=== 1??????????????????????
+    Excludes four lines starting with lines containing a 1 in column 1.
+ 
+       s==== ????abc????????????????
+    Show or redisplay lines that were excluded by the X prefix macro
+    or the ALL command.  Those lines that match the COL command line
+    will be redisplayed.
+ 
+*   The logical operator ^ may be used.  This operator is used when
+    you desire to apply the prefix command to all lines that DO NOT
+    contain the indicated text.
+ 
+       d^=== ????abc????????????????
+    Deletes all lines that do NOT contain abc in column 5-7
+ 
+*   The logical operator * may be used.  This operator is used when you
+    desire to apply the prefix command to all lines that contain the
+    indicated text regardless of the column it is found in.
+ 
+       i*=== ????abc????????????????
+    Inserts one blank line after lines with abc in any column between
+    XEDIT's current Zone setting.
+ 
+*   The logical operators <, <=, > and >= may be used.  The logical
+    operators apply to numeric and alpha data.  If the values are numeric
+    (after commas and $ signs are removed), then a numeric comparison is
+    made.  Otherwise a character by character alpha comparison is made.
+ 
+       x<    ???? 10????????????????
+    Excludes all lines with values less than 10 in column 5-7
+ 
+*   XEDIT prefix commands may be offset as required by using an "@"
+    operator and an offset number.
+ 
+       i@-1= ????abc????????????????
+    Applies the XEDIT Prefix "I" which will be offset by one line (-1 is
+    one line above) from the line containing the matching text.
+    Negative displacements such as "@-1" may be abbreviated to "-1" to
+    save space in the prefix area for other operators such as "I2" used
+    in conjunction with "^".  For symmetry "@1" may be entered as "+1".
+ 
+    Delayed execution of XEDIT prefix block commands is supported
+    using the "@" operator.
+ 
+       @dd== ????abc????????????????
+    Applies DD for delayed execution AT lines matching the text (set
+    pending as @DD).  You may build sets of block commands prior to
+    executing them.  You may also offset the command by adding a number
+    to the prefix entry (i.e. DD@2).
+ 
+       @==== ???????????????????????
+    Execute all delayed prefix block commands.
+ 
+    "@n" may be used to move delayed block commands down or up where
+    n is the desired number of lines to move down or up if n is
+    negative.
+.cs 5 off
+.cs 7 on
+For detailed information, place the cursor under the topic of your choice
+and press ENTER or the PF1 key.
+ 
+ 
+COL COLMCMD5 (ALL        Applying XEDIT prefix commands or subcommands
+COL COLMCMD5 (ALL            To specified columns, excluding columns
+COL COLMCMD5 (ALL            which are to be left unchanged.
+ 
+COL APPLYXED (NOTES      Applying XEDIT prefix commands
+COL APPLYXED (NOTES          To lines which contain specified text
+COL APPLYXED (NOTES          within a column.
+ 
+COL APPLYXED (DESC       Applying XEDIT subcommands
+COL APPLYXED (DESC           To lines which contain specified text
+COL APPLYXED (DESC           within a column.
+.cs 7 off

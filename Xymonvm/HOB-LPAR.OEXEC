@@ -1,0 +1,215 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*
+/-  Thomas Kern  12/04/2006  Created from template                     -/
+/-      New test for LPAR CPU Utilization                              -/
+/-  Rich Smrcina 02/10/2009                                            -/
+/-      Changed project name to Xymon                                  -/
+/-  Herald ten Dam 03/21/2019                                          -/
+/-      Layout adjustment, multiple cpus for lpar display             */
+ /*---------------------------------------------------------------+
+ | H.T.Kramer 20200608 Removed GLOBALV PUT because it is filling  |
+ |                     the A-disk unneeded                        |
+ +---------------------------------------------------------------*/
+trace off
+parse source . call_type myname .
+cr='15'x                                         /*  Carriage return   */
+emsgstart=date('U') time() myname':'   /* Start of error message line  */
+'globalv stack BBDISPLAY BBPORT FQDN VMPTK PTKSVM LPAR'
+pull bbdisplay
+pull bbport
+pull fqdn
+pull vmptk
+pull ptksvm
+pull thresholds
+parse value thresholds with yellow red .
+if vmptk <> 1 then exit 4
+rc = diagrc('8','QUERY USER' ptksvm)
+if word(rc,1) <> 0 then notloggedon=1
+call init_open_socket      /*  Initialize and Open the socket  */
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call get_timestamp         /*  Get a linux-like timestamp      */
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+call send status           /*  Send the result in status to bb */
+call close_term_socket     /*  Close and terminate the socket  */
+exit
+ 
+do_the_test:
+/*  Check logged on flag, if true send yellow icon with message.  */
+if notloggedon=1 then do
+  msg = ptksvm 'Not logged on'
+  msg = 'yellow' dow month day time() tz year msg
+  status = 'status' machine||'.lpar' msg
+  return
+  end
+'pipe vmc' ptksvm 'LPAR' ,
+  '| between anycase / Partition/ /General LPAR/' ,
+  '| drop first 1' ,
+  '| drop last 3' ,
+  '| nlocate /IFL/' ,
+  '| specs ~XX~ 1 2-10 n 56-60 nw' ,
+  '| stem lparstat.'
+msg   = ''
+tcpu  = 0
+lstat = cr
+/* multiple cpus display, lpar is not visable after 1th cpu */
+oldlname = 'XX'
+nrlpar=0
+do i = 1 to lparstat.0
+  parse value lparstat.i with lname lcpu
+  lname = strip(lname,'L','X')
+  if oldlname = 'XX' then oldlname = lname
+  if lname='' then lname=oldlname
+  else oldlname=lname
+  if datatype(lcpu)='CHAR' then lcpu = 0
+  /* check on last 2 characters for lpar */
+  if substr(lname,4,2)=substr(machine,4,2) then
+   do
+     nrlpar = nrlpar + 1
+     tcpu = tcpu + lcpu
+     lstat = lstat || strip(lname)'_'nrlpar':' format(strip(lcpu),3,1) cr
+  end
+end
+'pipe vmc' ptksvm 'LSHARACT | locate ~IFL~| locate ~'substr(machine,3,3)'~ | specs w6 | var entitlement'
+lstat = lstat'Total:' format(tcpu,3,1)  cr
+avg = tcpu/entitlement*100
+select
+  when avg > red then do
+    color='red'
+    msg = 'General Processor LPAR entitlement exceeds threshold:' red '%'
+    end
+  when avg > yellow then do
+    color='yellow'
+    msg = 'General Processor LPAR entitlement exceeds threshold:' yellow '%'
+    end
+  otherwise do
+    color='green'
+    msg = 'General Processor LPAR entitlement within thresholds'
+    end
+  end
+if avg > yellow then call TopTen
+else topten.0=0
+tens=''
+do i = 1 to topten.0
+  tens = tens cr topten.i
+end
+ 
+/* check multithreading */
+'pipe cp q mt | take 1 | var multi'
+msg = color dow month day time() tz year msg
+msg = msg||cr||multi||cr||'Entitlement ==> 'entitlement||cr||tens||cr
+status = 'status' machine||'.lpar' msg lstat
+/* 'pipe var status | split at x15 | console' */
+return
+ 
+init_open_socket:
+ret=Socket('Initialize','SOCLPAR')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+ret=socket('Gethostname')
+parse var ret rc hostname .
+if rc<>0 then
+  say 'Gethostname:' ret
+ret=socket('Getdomainname')
+parse var ret rc domainame .
+if rc<>0 then
+  say 'Getdomainname:' ret
+/* fullname=hostname||'.'||domainame */
+/*  Change periods to commas  */
+/* fullname=translate(fullname,',','.') */
+/* 'globalv put hostname' */
+/* 'globalv put domainame' */
+/* 'globalv put fullname' */
+bbdate=date('U')
+'globalv put bbdate'
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return
+ 
+get_timestamp:
+'PIPE CP QUERY TIMEZONE' ,
+  '| locate /Active/' ,
+  '| specs w1 1' ,
+  '| var TZ'
+dow = substr(date('W'),1,3)
+parse value date('N') with day month year .
+timestamp = dow month day time() tz year
+return
+ 
+TopTen:
+/** Extract the top ten CPU users from PERFSVM **/
+'PIPE (End ?)',
+    'vmc perfsvm user (3000',
+    '| drop first 4',
+    '| t: take first 2',
+    '| buffer',
+    '| fi: faninany',
+    '| stem topten.',
+    '? t:',
+    '| specs fs .',
+    '        w1.1 1.8',
+    '        pad 0',
+    '        substr w2.1 of f1 nw.3 right',
+    '        ~.~ n',
+    '        substr w1.1 of f2 n.2 left',
+    '        pad space',
+    '        w3;* nw.61 right',
+    '| sort w2.1 d',
+    '| take first 10',
+    '| fi:'
+Return

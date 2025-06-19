@@ -1,0 +1,83 @@
+/*---------------------------------------------------------------+
+| Function : Delete a MDISK from a User                          |
+|                                                                |
+| File     : DM_DMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_VMLNK EXEC     To link items in DM NAMES         |
+|            VMLINK   EXEC     To link other disks               |
+|            DM_ONLIN EXEC     Write CP directory                |
+|            DM_CKMDK EXEC     Check for MDISK                   |
+|            DM_INDEX EXEC     Locate user id                    |
+|            DM_FORMT EXEC     Format MDISK before deletion      |
+|            <directory file>                                    |
+|                                                                |
+| Called   : DM_DMD   <uid> <cuu> <NOCLEAN>                      |
+|          : DMD      <uid> <cuu> <NOCLEAN>                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 12:07:16                                   |
+| Changes  : .                                                   |
+|            20250527 H.T.Kramer : Replaced subroutine with      |
+|                                  external routine for FORMATING|
+|            20240708 H.T.Kramer : Add NOCLEAN option            |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu option .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Main line                                                      |
++---------------------------------------------------------------*/
+If option='NOCLEAN' Then clnsw=0
+                    Else clnsw=1
+If \DM_CKMDK(uid cuu) Then Call Exit '328'
+Call Find_Mdisk
+If clnsw Then Address CMS 'DM_FORMT 'uid cuu
+Call Create_Directory
+Address CMS 'DM_ONLIN'
+ 
+Exit:
+Parse Upper Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+Find_Mdisk:
+/*---------------------------------------------------------------+
+| Find the MDISK in the source directory                         |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_DMD.EXEC:64 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~MDISK~ and',            /* Find the         */
+                 '(w3.1 == ~'Right(cuu,4,0)'~ or',  /* ...right         */
+                  'w3.1 == ~'cuu'~)',               /* .....mdisk       */
+   '| specs w1.1 1',                             /* Keep recno       */
+   '| var remove'                                /* Storeas          */
+Return
+ 
+ 
+Create_Directory:
+/*---------------------------------------------------------------+
+| Create the directory without the MDISK specified               |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_DMD.EXEC:78 END ?)',
+      'stem direct.',                            /* Take these       */
+      '| nfind 'remove,                          /* Remove this one  */
+      '| specs 7;* 1.80',                        /* Adjust layout    */
+      '| > 'dirfnft ws' FIXED 80'                /* Write 2 file     */
+Return

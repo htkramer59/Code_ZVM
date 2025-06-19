@@ -1,0 +1,4591 @@
+/*------------------------------------------------------------------*
+ * IBM Advanced Technology Group (Washington Systems Center)
+ *
+ * Exec Name:         PIPEDDR  EXEC
+ * Date Written:      16 Nov 2001
+ * Author:            Bruce Hayden         (bjhayden@gmail.com)
+ *
+ * Purpose:  Dump/Restore a disk using PIPES.
+ *
+ * Description:
+ *   This exec was somewhat mis-named, because it did not dump and
+ *   restore in DDR format but uses PIPE's TRACKREAD and TRACKWRITE
+ *   (for ECKD disks) or FBAREAD and FBAWRITE (for FB-512 disks)
+ *   stages.  It also supports DDR format, using the pipe interface
+ *   to DDR starting with z/VM 6.2 (or using the DRPC tool.)
+ *   This exec will dump a disk into a regular CMS file to
+ *   allow sending the data over the network.  The output file is
+ *   packed by default, or optionally tersed.  The terse option
+ *   requires the terse pipeline stage, available on the Pipelines
+ *   page in the PIPSYSF package.  See the help file for more info.
+ *
+ *   The CMS file created by this exec has the file information in
+ *   the first record and the contents of the disk in the rest.
+ *
+ *   The disk can also be dumped over a TCP/IP connection directly to
+ *   a receiving PIPEDDR exec running on a remote system.  Also, there
+ *   are many more options, including ftp, tape, and using a filedef.
+ *   See the HELPCMS file for more information.
+ *
+ * Command Syntax:  See help section below and HELPCMS file.
+ *
+ * Notes:  Thanks to John for the support in PIPEs that allowed this.
+ *   Thanks to Dave Jones for the suggestion for including CKSUM
+ *      and for the cipher CSL routines for encryption.
+ *   Thanks to Rob van der Heij for the ideas and code to implement
+ *      the remote incremental update algorithm.
+ *
+ *   Format of the header record (first line of the file):
+ *   *userid vaddr devtype size userid AT nodeid crc compact cipher
+ *      digesttype digestlength
+ *   Maximum length defined in "fileheadermax" variable.
+ *
+ * Copyright International Business Machines Corporation 2002, 2024.
+ *------------------------------------------------------------------*/
+/*%COPYRIGHT Copyright IBM Corporation 2002, 2024 */
+   Version='1.7.15'
+ 
+Parse upper source . howcalled execn exect execm synonym how .
+Trace Off
+Signal on novalue
+ 
+Parse upper arg cmd cmdargs '('
+Parse upper arg . fullargs
+Parse arg . mixedargs '(' opts
+Parse arg . fullmixed
+/*-- Some variables and constants used by Pipe stages             --*/
+erc =0                            /* Exit return code               */
+emsgmodule='PDDRMS'               /* Module id for error msgs (EMSG)*/
+e='04'x                           /* Pipe end char                  */
+zlibmodule='ZLIBSTG'              /* Module providing ZLIB stage    */
+findfilter=-1                     /* Flag when finding pipe filter  */
+pipecall=(how='?')                /* Called as a pipe stage         */
+pipe.   = 'PIPE'                  /* Normal pipe command            */
+pipe.1  = 'callpipe'              /* Pipe command in a stage        */
+ 
+If pipecall then                  /* Called as a Pipe stage?        */
+ Select                           /* Select routine to branch to    */
+   When cmd = 'UNPACK' then       /* Improved unpack selection code */
+     Signal UnpackStage
+   When cmd = 'CIPHER' then       /* Pipe Cipher code               */
+     Signal CipherStage
+   When cmd = 'CIPHCHK' then      /* Correct cipher key check       */
+     Signal CipherCheck
+   Otherwise                      /* Main function called in Pipe   */
+     AddressPipe=Address()        /* Save the addressing environment*/
+ End
+ 
+Address Command
+ 
+/*-- The rest of the variables and constants used by the program  --*/
+ipsleep= 2                        /* Default sleep seconds for IP   */
+timeout= 0                        /* Optional listen timeout        */
+linktcp= ''                       /* We did VMLINK to TCPIP?        */
+ipport = 0                        /* Default to TCPIP assigned port */
+eod    = copies('$',20)'EOD'      /* End of data marker for TCP/IP  */
+eodpad = left(eod,1024)           /* Marker padded to block size    */
+fileheadermax= 87                 /* Longest possible fileheader    */
+maxinfoline = (2*fileheadermax)+3 /* EBCDIC & ASCII file info       */
+tcpid  = ''                       /* TCPIP server name              */
+ftp.   = ''                       /* Decoded ftp parameter string   */
+haveurl= 0                        /* URL passed as option?          */
+ftpparms=''                       /* Input ftp parms                */
+ftppasswordvar=''                 /* Calling exec var w/ftp password*/
+ftpsite=''                        /* Site command from site option  */
+tapedevs=''                       /* Tape drives                    */
+afn=''                            /* File name of input or output   */
+aft=''                            /* File type of input or output   */
+afm=''                            /* File mode of input or output   */
+mixedfn=''                        /* Mixed case filename fn.ft      */
+old.=0                            /* For testing older support      */
+cmsddrflag=''                     /* "*" in header for CMSDDR format*/
+trackwritelimit=32767             /* Need fixed pipes for large disk*/
+nonEAVmax=65520                   /* Maximum non-EAV DASD cyls.     */
+fbablocking=762                   /* FBA blocks in record (observed)*/
+cipherparm=''                     /* Parms on the cipher stage      */
+cipherkey=''                      /* Cipher key                     */
+ciphervarkey=''                   /* Calling exec var holding key   */
+validcipher='AES DES 3DES TDES'   /* Valid cipher methods           */
+validdigest='SHA1 SHA256 SHA384 SHA512 MD5' /* Valid digest args    */
+defaultdigest='SHA256'            /* Default one (w/hardware suppt.)*/
+digestparm=defaultdigest          /* Parms on the digest stage      */
+altform=0                         /* File structure is alt format   */
+asciisep='x0A'                    /* Char in hex for ASCII delimiter*/
+emsg='EXECIO 1 EMSG (STRING' emsgmodule /* Cmd to issue a emessage  */
+fullscreen=''                     /* Pipe stages if fullscreen on   */
+zlibdeflate=''                    /* zlib compression factor        */
+pipecipher=0                      /* Cipher built-in to Pipes?      */
+pipemsgout=0                      /* Secondary output for messages? */
+tlslabel=''                       /* Optional secure label          */
+secureclient=''                   /* "SECURE" if TLS (tcpclient)    */
+securedata=''                     /* "SECURE" if TLS (tcpdata)      */
+keycheck.=0
+keycheck.AES.16=1                 /* Valid keylengths               */
+keycheck.AES.24=1
+keycheck.AES.32=1
+keycheck.AES   ='16, 24, or 32'   /* Describe the valid lengths     */
+keycheck.DES.8 =1
+keycheck.DES   ='8'
+keycheck.TDES.16=1
+keycheck.TDES.24=1
+keycheck.TDES   ='16 or 24'
+cblocksize.=8                     /* Length of a cipher block       */
+cblocksize.AES=16                 /* All are 8 except this one      */
+kmfunc.        =0                 /* Functions allowed in KM CSL    */
+kmfunc.DES.8   =1                 /* DES, 8 byte key                */
+kmfunc.TDES.16 =2                 /* Triple DES, 16 or 24 byte key  */
+kmfunc.TDES.24 =3
+kmfunc.AES.16 =18                 /* AES, 16, 24, or 32 byte key    */
+kmfunc.AES.24 =19
+kmfunc.AES.32 =20
+digestbytes.=0                    /* Number of bytes of each digest */
+digestbytes.MD5   =16
+digestbytes.SHA1  =20
+digestbytes.SHA256=32
+digestbytes.SHA384=48
+digestbytes.SHA512=64
+globalv     = 'GLOBALV SELECT $PIPEDDR' /* GLOBALV command & group  */
+validformat = 'PIPE DDR'          /* Dump formats                   */
+validcomp   = 'PACK NOPACK TERSE COMPACT LZCOMPACT ZLIB' /* Compact */
+drpcmodule  = 'DRPC'              /* DDR to Pipes interface module  */
+cipherlib   = 'KMRTNS'            /* CSL lib with cipher routines   */
+pickpipe    = 'PICKPIPE'          /* Exec to uplevel pipelines      */
+pickpipearg = 'UP (QUIET'         /* Arguments to pickpipe          */
+FTpipelines = 'PIPELINE'          /* Field test (uplevel) Pipelines */
+readlink    = 'RR'                /* Link mode for a read only link */
+writelink   = 'M'                 /* Link mode for a R/W link       */
+ 
+'IDENTIFY (LIFO'
+pull i1 i2 i3 .
+ident = i1 i2 i3                  /* An identifier for remote dump  */
+Parse value diag(8,'QUERY SET') with 'EMSG' emsgset ','
+issueEmsg = (emsgset<>'OFF' & emsgset<>'CODE') /* text emsgs issued */
+numeric digits 10
+ 
+/* Check for a valid command */
+Parse value 0 0 0 0 0 with DumpCmd RestoreCmd CopyCmd FLCopyCmd SetCmd .
+Select
+  When abbrev('DUMP',cmd,1) then
+    DumpCmd = 1
+  When abbrev('RESTORE',cmd,1) then
+    RestoreCmd = 1
+  When pipecall then do
+    emsg'076E Only DUMP or RESTORE are valid when called as',
+      'a Pipeline stage'
+    Exit 76
+  end
+  When abbrev('COPY',cmd,1) then
+    CopyCmd = 1
+  When abbrev('FLASHCOPY',cmd,2) then
+    Parse value '1 1' with FLCopyCmd CopyCmd .
+  When abbrev('SET',cmd,1) | abbrev('QUERY',cmd,1) then
+    SetCmd = 1
+  When cmd='' & translate(opts)='DEBUG' then do /* Showing version? */
+    say execn exect execm 'Version' Version
+    Exit 1
+  end
+  Otherwise
+    If cmd<>'?' & cmd<>'' then do
+       emsg'008E Invalid command:' cmd
+       If issueEmsg then
+          Say
+    end
+    If issueEmsg then do
+       say 'Usage:' execn '<command> <userid> <vaddr> <target> ( <opts>'
+       say ' <command> can be Dump, Restore, Copy, FLashcopy, or Set'
+       say ' <userid> <vaddr> is the disk to dump, restore, or',
+           'to copy from'
+       say '     (A userid of "*" will use an existing disk.)'
+       say ' <target> is where the input is coming from or',
+           'where the output is going.'
+       say
+       say 'Enter HELP PIPEDDR for a description of the options.'
+    end
+    Exit 8
+End
+ 
+If pipecall then do               /* Check where we are in pipeline */
+   Address value addresspipe
+   If DumpCmd then do
+      'stagenum'
+      If RC<>1 then do            /* Must be a first stage          */
+         'issuemsg 087' emsgmodule
+         Exit RC
+      end
+   end
+   else do                        /* Restore command                */
+      'stagenum'
+      If RC=1 then do             /* Must not be a first stage      */
+         'issuemsg 127' emsgmodule
+         Exit RC
+      end
+      'streamstate output 0'
+      If RC>=0 & RC<12 then do    /* No output stream allowed       */
+         'issuemsg 1197' emsgmodule '"0"'
+         Exit RC
+      end
+   end
+   Address Command
+end
+ 
+''globalv 'GET DUMPFORMAT COMPFORMAT CRCOPTION',
+    'CIPHERTYPE PROGRESS DIGESTTYPE CBCOPTION KEYVALUE SECURE TLS_LABEL'
+/* See if the stored format is valid.  If not, ignore the value.    */
+If wordpos(dumpformat,validformat)=0 then
+   dumpformat=''
+If wordpos(crcoption,'YES NO CKSUM DIGEST SDIGEST')=0 then
+   crcoption=''
+If wordpos(ciphertype,validcipher)=0 then
+   ciphertype=''
+If wordpos(progress,'YES NO')=0 then
+   progress=''
+If wordpos(digesttype,validdigest)=0 then
+   digesttype=''
+If wordpos(cbcoption,'YES NO')=0 then
+   cbcoption=''
+If wordpos(secure,'YES NO')=0 then
+   secure=''
+If datatype(tls_label,'A')=0 | length(tls_label)>8 then
+   tls_label=''
+If compformat<>'' then do
+   Do i=1 to 9
+      validcomp = validcomp 'ZLIB'i  /* ZLIB with deflate option    */
+   end
+   If wordpos(compformat,validcomp)=0 then
+      compformat=''
+end
+ 
+If SetCmd then do
+   Call ProcSetCmd fullargs
+   Exit erc
+end
+ 
+/* If we have the special first option DEFAULTS, process it         */
+If abbrev('DEFAULTS',translate(word(opts,1)),7) then do
+   parse var opts . opts          /* Remove it from options         */
+                                  /* Reset all stored values        */
+   Parse value '' with dumpformat compformat crcoption ciphertype,
+         progress digesttype cbcoption keyvalue secure tls_label .
+end
+ 
+/* Set initial options */
+Parse value copies('0 ',48) with awsopt cipher cksumopt cmsddr cmsfile,
+  compopt crcopt debug digestopt filedef ftpopt ftpvaropt hfsopt httpopt,
+  keyopt keyvaropt listenopt lzopt matchopt nocbcopt nopackopt noprompt,
+  nosizechk nosquish notypeopt oldopt oneopt packopt passiveopt pipetrk,
+  portopt rawopt rmtrecv rmtsend stableopt tapeopt terseopt timeoopt,
+  uptsend zlibopt secureopt secoptkwd unsafeopt vmftpopt sdigestopt,
+  truncopt siteopt noimsg .
+If wordpos(execn,  'VMDDR CMSDDR')<>0 |,   /* Exec renamed to these?*/
+   wordpos(synonym,'VMDDR CMSDDR')<>0 |,   /* Invoked by synonym?   */
+   dumpformat='DDR' then          /* globalv default is DDR?        */
+   cmsddr = 1                     /* Assume CMSDDR option specified */
+If crcoption='YES' then           /* globalv default of crc?        */
+   crcopt = 1
+If crcoption='CKSUM' then         /* globalv default of cksum?      */
+   cksumopt = 1
+If crcoption='DIGEST' then        /* globalv default of digest?     */
+   digestopt = 1
+If crcoption='SDIGEST' then       /* globalv default single digest? */
+   sdigestopt = 1
+If cbcoption='NO' then            /* globalv default of nocbc?      */
+   nocbcopt = 1
+If progress='NO' then             /* globalv default of notype?     */
+   notypeopt = 1
+If ciphertype <> '' then do       /* Default cipher type?           */
+   cipher = 1                     /* Default to cipher parm         */
+   cipherparm = ciphertype
+end
+If digesttype <> '' then do       /* Default digest type?           */
+   If digestopt+sdigestopt=0 then /* No digest option set?          */
+      digestopt = 1               /* Default to digest option       */
+   digestparm = digesttype
+end
+If secure='YES' then do           /* globalv default of secure?     */
+   secureopt = 1
+   tlslabel  = tls_label          /* Set any saved label            */
+end
+/*------------------------------------------------------------------*
+ * Validate the options
+ *------------------------------------------------------------------*/
+chkopts=opts
+Do while chkopts<>''
+   Parse var chkopts opt chkopts
+   If pos('(',opt)<>0 then do     /* For ftp options                */
+      parse var opt o '(' x
+      opt = o
+      chkopts = '('||x chkopts
+   end
+   If pos('/',opt)<>0 then do     /* Maybe we have a url?           */
+      parse var opt o '://' u
+      If u<>'' then do
+        opt = o
+        haveurl=1
+        chkopts = u chkopts
+      end
+   end
+   upper opt                      /* Options are mixed case for ftp */
+   Select
+     When abbrev('DEFAULTS',opt,7) then
+       emsg'135W The DEFAULTS option is ignored unless it is the first',
+           'option.'
+     When opt=')' Then            /* Option "closing" char?         */
+       nop                        /* .. just ignore it.             */
+     When abbrev('NOPROMPT',opt,4) Then do
+       noprompt = 1
+       If DumpCmd then
+          emsg'101W The NOPROMPT option is ignored for a DUMP command.'
+     end
+     When abbrev('NOTYPE',opt,3) | opt='QUIET' Then
+       notypeopt = 1
+     When abbrev('TYPE',opt,3) Then
+       notypeopt = 0
+     When abbrev('NOSIZECHECK',opt,7) |,
+          abbrev('NOSIZECHK',opt,7) Then do
+       nosizechk = 1
+       If DumpCmd then
+          emsg'102W The NOSIZECHECK option is ignored on a DUMP command.'
+     end
+     When abbrev('DEBUGDDD',opt,5) Then do
+       If debug=0 then            /* Only say it once               */
+          say execn exect execm 'Version' Version
+       If opt = 'DEBUG' then
+          debug = debug + 1       /* Increase debug level           */
+       else
+          debug=1 + length(substr(opt,6))
+       If debug>3 then
+          trace Commands          /* Trace host commands            */
+     end
+     When abbrev('STABLE',opt,3) Then
+       stableopt = 1
+     When abbrev('TRUNCATE',opt,5) Then do
+       Parse var chkopts truncdump chkopts
+       If datatype(truncdump,'W') & truncdump >= 0 then
+          truncopt = 1
+       else do
+          chkopts = truncdump chkopts
+          emsg'138W Invalid truncate value specified.',
+              'No truncation performed.'
+       end
+     end
+     When opt='NOIMSG' Then
+       noimsg = 1
+     /* Options above are only valid with FLASHCOPY, so issue msg   */
+     When FLCopyCmd Then
+       emsg'103W The' opt 'option is ignored for a disk to disk',
+           'flashcopy.'
+     When abbrev('CMSDDR',opt,3) | opt='VMDDR' | opt='DDR' then
+       Parse value '1 0' with cmsddr pipetrk .
+     When abbrev('PIPEDDR',opt,4) | abbrev('PIPETRACK',opt,4),
+       | opt='PIPEFBA' then
+       Parse value '0 1' with cmsddr pipetrk .
+     /* Options above are only valid with COPY, so issue message    */
+     When CopyCmd Then
+       emsg'103W The' opt 'option is ignored for a disk to disk copy.'
+     When opt = 'PACK' Then
+       Parse value '1 0 0 0 0' with,
+          packopt nopackopt terseopt awsopt zlibopt .
+     When abbrev('NOPACK',opt,4) Then
+       Parse value '1 0 0 0' with nopackopt packopt terseopt zlibopt .
+     When abbrev('TERSE',opt,3) Then
+       Parse value '0 1 0 0 0 0 0' with,
+          nopackopt terseopt packopt compopt lzopt awsopt zlibopt .
+     When abbrev('AWSTAPE',opt,4) Then
+       Parse value '0 0 0 0 1' with,
+          nopackopt packopt terseopt zlibopt awsopt .
+     When abbrev('COMPACT',opt,2) Then
+       Parse value '0 1 0 0' with terseopt compopt lzopt zlibopt .
+     When abbrev('LZCOMPACT',opt,2) Then
+       Parse value '0 0 1 0' with terseopt compopt lzopt zlibopt .
+     When opt = 'ZLIB' Then do
+       Parse value '0 0 0 0 0 0 1' with,
+          nopackopt packopt terseopt compopt lzopt awsopt zlibopt .
+       If datatype(word(chkopts,1),'W') then do
+          Parse var chkopts x chkopts
+          If x >= 1 & x <= 9 then
+             zlibdeflate = x
+          else
+             emsg'130W The ZLIB deflate value must be between 1 and 9'
+       end
+     end
+     When opt = 'CRC' Then
+       Parse value '1 0 0 0' with crcopt cksumopt digestopt sdigestopt .
+     When opt='NOCRC' | opt='NOCKSUM' Then
+       Parse value '0 0 0 0' with crcopt cksumopt digestopt sdigestopt .
+     When opt = 'CKSUM' Then
+       Parse value '0 1 0 0' with crcopt cksumopt digestopt sdigestopt .
+     When abbrev('MATCHDISK',opt,6) Then do
+       matchopt = 1
+       If DumpCmd then
+          emsg'104W The MATCHDISK option is ignored for a DUMP command.'
+     end
+     When abbrev('ONEREAD',opt,3) Then do
+       oneopt = 1
+       If DumpCmd then
+          emsg'106W The ONEREAD option is ignored on a DUMP command.'
+     end
+     When abbrev('CIPHER',opt,2) Then do
+       cipher = 1
+       Parse var chkopts cipherparm chkopts /* Cipher type          */
+       upper cipherparm
+     end
+     When abbrev('NOCIPHER',opt,4) Then
+       cipher = 0
+     When opt = 'KEY' Then
+       If pos(left(chkopts,1),'"''(')>0 then do
+          keyopt = 2              /* Character string only          */
+          odelim = left(chkopts,1)
+          cdelim =translate(odelim,')','(')
+          Parse var chkopts (odelim) cipherkey (cdelim) chkopts
+       end
+       else do
+          keyopt = 1              /* Character string or hex        */
+          Parse var chkopts cipherkey chkopts
+       end
+     When abbrev('KEYVARIABLE',opt,6) Then do
+       keyvaropt = 1
+       Parse var chkopts ciphervarkey chkopts /* Get variable name  */
+     end
+     When opt = 'CBC' Then        /* Default                        */
+       nocbcopt = 0
+     When opt = 'NOCBC' Then
+       nocbcopt = 1
+     When abbrev('DIGEST',opt,3) | abbrev('SDIGEST',opt,4) then do
+       Parse value '0 0 0 0' with crcopt cksumopt digestopt sdigestopt .
+       If left(opt,3)='DIG' then
+          digestopt = 1
+       else
+          sdigestopt = 1
+       digestparm=translate(word(chkopts,1)) /* Digest type         */
+       If wordpos(digestparm,validdigest)<>0 then /* Valid?         */
+          Parse var chkopts . chkopts /* Remove from options string */
+       else
+          digestparm = defaultdigest  /* Use default one            */
+     end
+     When abbrev('NOSQUISH',opt,4) then
+       nosquish = 1
+     When opt='RAW' Then
+       rawopt = 1
+     When opt='OLD' Then do       /* Force using old code or formats*/
+       If left(chkopts,1)='(' then do
+          Parse var chkopts '(' z ')' chkopts
+          Do while z <> ''
+             Parse var z y z
+             Call value 'old.0'y, 1
+          end
+       end
+       else
+          oldopt = 1
+     end
+     When pipecall then do
+       emsg'079W Option' opt 'ignored.'
+       emsg'079W No input or output options are valid when running',
+           'as a Pipelines stage.'
+     end
+     When abbrev('FILEDEF',opt,4) Then   /* Deprecated option       */
+       Parse value '1 1' with filedef oneopt .
+     When abbrev('LISTEN',opt,2) Then do /* Deprecated option       */
+       Parse value '1 1' with listenopt rmtrecv .
+       If DumpCmd then
+          emsg'105W The LISTEN option is ignored on a DUMP command.'
+     end
+     When abbrev('PORT',opt,2) Then do
+       Parse var chkopts x chkopts /* Port number                   */
+       If datatype(x,'W') then do  /* Must be a whole number        */
+          ipport = x
+          portopt = 1
+       end
+       else do
+          emsg'108W Number on PORT option missing or invalid.'
+          chkopts = x chkopts     /* Assume it is another option    */
+       end
+     end
+     When opt = 'SLEEP' Then do    /* IP sleep option               */
+       Parse var chkopts x chkopts /* Next word is number of secs   */
+       If datatype(x,'W') then     /* Must be a whole number        */
+          If x >= 1 & x <= 60 then /* Range of 1 sec to 60 secs     */
+             ipsleep = x
+     end
+     When abbrev('TIMEOUT',opt,5) Then do
+       timeoopt = 1
+       Parse var chkopts x chkopts /* Next word is number of secs   */
+       If datatype(x,'W') then     /* Must be a whole number        */
+          timeout = x
+       If DumpCmd then
+          emsg'124W The TIMEOUT option is ignored on a DUMP command.'
+     end
+     When opt = 'TAPE' Then do    /* Deprecated option              */
+       tapeopt = 1
+       If chkopts<>'' & datatype(word(chkopts,1),'X') then
+          Parse var chkopts tapedevs chkopts
+     end
+     When abbrev('PASSWORDVARIABLE',opt,11) Then do
+       ftpvaropt = 1
+       Parse var chkopts ftppasswordvar chkopts /* Get variable name*/
+     end
+     When opt = 'FTP' Then do
+       ftpopt = 1
+       Select
+         When left(chkopts,1)='(' then
+           Parse var chkopts '(' ftpparms ')' chkopts
+         When haveurl then
+           Parse var chkopts ftpparms chkopts
+         Otherwise
+           ftpparms = chkopts     /* Use rest of options string     */
+           chkopts=''
+       End
+       If ftpparms='' then do
+          emsg'041E No FTP host parameters supplied.'
+          Exit 41
+       end
+     end
+     When opt='HTTP' | opt='HTTPS' Then do /* Deprecated options    */
+       If dumpCmd then do
+          emsg'044E Dump to HTTP not supported.'
+          Exit 44
+       end
+       httpopt = 1
+       Select
+         When left(chkopts,1)='(' then
+           Parse var chkopts '(' ftpparms ')' chkopts
+         When haveurl then
+           Parse var chkopts ftpparms chkopts
+         Otherwise
+           ftpparms = chkopts     /* Use rest of options string     */
+           chkopts=''
+       End
+       If ftpparms='' then do
+          emsg'042E No HTTP host parameters supplied.'
+          Exit 42
+       end
+       If opt = 'HTTPS' then
+          secureopt=1
+     end
+     When abbrev('BFSPATH',opt,4) |,      /* Deprecated option      */
+          abbrev('HFSPATH',opt,4) Then do
+       hfsopt = 1
+       If left(chkopts,1)='(' then  /* In case of embedded blanks   */
+          Parse var chkopts '(' hfspath ')' chkopts
+       else
+          Parse var chkopts hfspath chkopts
+       If right(hfspath,1)<>'/' then
+          hfspath = hfspath'/'    /* Must have "/" before file name */
+     end
+     When opt='BFS' | opt='HFS' Then do /* Deprecated option        */
+       If hfsopt = 0 then         /* Don't reset if specified twice */
+          hfspath = ''
+       hfsopt = 1
+     end
+     When abbrev('EPASSIVE',opt,6) | opt='EPSV' then
+       passiveopt = 0
+     When abbrev('PASSIVE',opt,5) | opt='PASV' then
+       passiveopt = 1
+     When abbrev('NOPASSIVE',opt,7) | opt='NOPASV'|opt='NPASV' then
+       passiveopt = 2
+     When abbrev('SECURE',opt,3) then
+       parse value '1 1' with secureopt secoptkwd .
+     When abbrev('NOSECURE',opt,5) then
+       secureopt = 0
+     When abbrev('TLSLABEL',opt,4) then do
+       Parse var chkopts x chkopts /* Get the specified label       */
+       If datatype(x,'A')=0 | length(x)>8 then do
+          emsg'137W Label on the TLSLABEL option missing or invalid.'
+          tlslabel=''
+       end
+       else do
+          tlslabel = x
+          parse value '1 1' with secureopt secoptkwd . /* Implied   */
+       end
+       If dumpCmd then
+          emsg'074W TLSLABEL is not valid on a DUMP command.',
+              'SECURE is enabled.'
+     end
+     When opt='UNSAFE' Then
+       unsafeopt = 1
+     When opt='VMFTP' Then
+       vmftpopt = 1
+     When opt='FTPSITE' Then do
+       siteopt=1
+       If pos(left(chkopts,1),'"''(')>0 then do
+          odelim = left(chkopts,1)
+          cdelim =translate(odelim,')','(')
+          Parse var chkopts (odelim) ftpsite (cdelim) chkopts
+       end
+       else
+          Parse var chkopts ftpsite chkopts
+     end
+     Otherwise
+       emsg'009E Invalid option' opt
+       Exit 9
+   End
+   If RestoreCmd & packopt+terseopt+compopt+lzopt+truncopt<>0 then do
+      emsg'107W The' opt 'option is ignored on a RESTORE command.'
+      Parse value 0 with,
+        1 packopt 1 terseopt 1 compopt 1 lzopt 1 truncopt
+   end
+End /* Do while chkopts<>'' */
+/*------------------------------------------------------------------*
+ * Process the arguments now that we know the options.
+ *------------------------------------------------------------------*/
+Parse var cmdargs userid vaddr fromto output1 cmdrest
+If userid='*' then                  /* Use an existing disk         */
+   username=userid()
+else
+   username=userid
+If left(vaddr,4)='DISK' then
+   vaddr=substr(vaddr,5)          /* Allow vaddr of "DISKvvvv"      */
+If vaddr<>'' then
+   vaddr = right(vaddr,4,'0')
+If datatype(vaddr,'X')=0 | vaddr='' then do
+   emsg'030E Invalid virtual address' vaddr
+   Exit 30
+end
+fromtokwd = (fromto='FROM' | fromto='TO')
+If fromtokwd then do
+   If fromto='FROM' & DumpCmd then do
+      emsg'063E Use the TO keyword on a Dump command.'
+      Exit 63
+   end
+   If fromto='TO' & RestoreCmd then do
+      emsg'064E Use the FROM keyword on a Restore command.'
+      Exit 64
+   end
+end
+Parse var mixedargs . . . mixedurl .
+Parse var mixedurl urltype '://' urlrest
+upper urltype
+urlspec = wordpos(urltype,'FTP FTPS HTTP HTTPS') > 0
+Select
+  When filedef then               /* Deprecated filedef option      */
+    ddname = fromto
+  When fromtokwd=0 & DumpCmd & pos('.',fromto)<>0 & pos('/',fromto)=0 &,
+    ftpopt+httpopt+hfsopt+pipecall=0 then do /* ipname without "TO" */
+    rmtsend = 1
+    Parse value fromto output1 with remoteip remoteport .
+  end
+  When pipecall & fromto<>'' & fromtokwd=0 then do
+    emsg'077W Only FROM or TO PIPE is allowed when called as a',
+           'Pipeline stage'
+    Exit 77
+  end
+  When fromtokwd=0 | hfsopt | ftpopt | httpopt then do /* Old opts? */
+    Parse var cmdargs . . afn aft afm . /* Get the file name        */
+    Parse var mixedargs . . mixedfn .
+  end
+  When pipecall & output1<>'PIPE' then do
+    emsg'077W Only' fromto 'PIPE is allowed when called as a',
+           'Pipeline stage'
+    Exit 77
+  end
+  When output1='' then do
+    emsg'065E No input or output was specified after' fromto
+    Exit 65
+  end
+  When urlspec then do
+    haveurl = 1
+    If left(urltype,3)='FTP' then
+       ftpopt = 1
+    else
+       httpopt = 1
+    If httpopt & dumpCmd then do
+       emsg'044E Dump to' urltype 'is not supported.'
+       Exit 44
+    end
+    ftpparms = urlrest
+    If right(urltype,1)='S' then  /* URL uses a secure connection?  */
+       secureopt=1                /* Secure option implied          */
+  end
+  When output1='FILE' then        /* File specification             */
+    Parse var cmdrest afn aft afm .
+  When RestoreCmd & abbrev('REMOTE',output1,3) then do
+    Parse value '0 1' with listenopt rmtrecv .
+    Select
+      When cmdrest='' then
+        nop
+      When portopt then
+        emsg'118I Port number on PORT option will be used.'
+      When datatype(cmdrest,'W') then do /* IP port allowed here    */
+        ipport = cmdrest
+        portopt = 1
+      end
+      Otherwise
+        emsg'132W Unknown argument keyword' cmdrest 'ignored.'
+    end
+  end
+  When DumpCmd & abbrev('REMOTE',output1,3) then do
+    rmtsend = 1
+    Parse var mixedargs . . . . remoteip remoteport .
+  end
+  When DumpCmd & abbrev('UPDATE',output1,3) then do
+    rmtsend = 1
+    uptsend = 1
+    Parse var mixedargs . . . . remoteip remoteport .
+  end
+  When abbrev('FILEDEF',output1,5) then do
+    Parse value '1 1' with filedef oneopt .
+    Parse var cmdrest ddname .
+  end
+  When output1 = 'BFS' | output1 = 'HFS' then do
+    hfsopt = 1
+    hfspath = ''
+  end
+  When abbrev('BFSFILE',output1,4) |,
+       abbrev('HFSFILE',output1,4) then do
+    hfsopt = 1
+    Parse var mixedargs . . . . mixedfn
+    mixedfn=strip(mixedfn)
+    hfspath = ''
+  end
+  When abbrev('BFSPATH',output1,4) |,
+       abbrev('HFSPATH',output1,4) then do
+    hfsopt = 1
+    Parse var mixedargs . . . . hfspath
+    hfspath=strip(hfspath)
+  end
+  When output1 = 'TAPE' then do
+    tapeopt = 1
+    If cmdrest<>'' & datatype(word(cmdrest,1),'X') then
+       Parse var cmdrest tapedevs .
+  end
+  When output1 = 'PIPE' then
+    If pipecall=0 then do
+       emsg'078E' execn 'must be called as a Pipeline stage to use',
+            fromto 'PIPE'
+       Exit 78
+    end
+  When DumpCmd & fromto='TO' then do
+    rmtsend = 1
+    Parse var mixedargs . . . remoteip remoteport .
+  end
+  Otherwise
+    emsg'066E Unknown argument keyword' output1
+    Exit 66
+End
+ 
+If FLCopyCmd then                 /* Flashcopy - DDR is fallback    */
+   Parse value '1 0' with cmsddr pipetrk .
+/* If we only have CMS pipelines and no dump preference, set to DDR.*/
+/* Skip this on later CMS releases that have updated pipelines.     */
+If pipetrk+cmsddr=0 & dumpformat='' & GetCMSlevel()<92 then
+   If state(drpcmodule  'MODULE *')=1 &, /* Have PIPE DDR interface?*/
+      (state(FTpipelines 'MODULE *')=0 |,  /* No uplevel pipelines? */
+      execstat(pickpipe 'EXEC')=0) then do /* No pickpipe exec?     */
+      cmsddr=1                    /* Assume CMS DDR format          */
+      emsg'114W The CMSDDR option was not specified and the uplevel',
+          'Pipelines module'
+      emsg'114W is not available.  The CMSDDR option is implied.'
+   end
+/* If an IP name/address is specified as the filename, and no other */
+/* IP option is specified, we will send disk to a remote system.    */
+If rmtsend then do                /* Doing a remote connection      */
+   If pos(':',remoteip)>0 then    /* Handle format ip:port          */
+      Parse var remoteip remoteip ':' remoteport .
+   Select
+     When remoteip='' then do
+       emsg'068E No remote IP address or name supplied.'
+       Exit 68
+     end
+     When portopt & remoteport<>'' then /* Port spec'd in 2 places? */
+       emsg'117I Port number on PORT option will be used.'
+     When portopt then            /* We have a remote port already  */
+       nop
+     When datatype(remoteport,'W') then /* Valid number supplied?   */
+       ipport = remoteport              /* Use it as the port       */
+     Otherwise
+       emsg'051E Remote port number of listening system' remoteip,
+           'required for dump.'
+       emsg'051E Please supply it using the PORT option.'
+       Exit 51
+   end
+end
+If RestoreCmd & listenopt & fromto<>'' then /* Listen port given?   */
+   Select
+     When portopt then            /* Port specified in 2 places?    */
+       emsg'118I Port number on PORT option will be used.'
+     When datatype(fromto,'W') then
+       ipport = fromto
+     Otherwise
+       emsg'100W The specified IP port is not numeric; it is ignored.'
+   End
+ 
+If DumpCmd & nopackopt+packopt+terseopt+compopt+lzopt+zlibopt+uptsend=0,
+   & compformat<>'' then
+   Select                         /* Set packing based on setting   */
+     When compformat='TERSE'                then terseopt=1
+     When compformat='COMPACT'   & cmsddr=1 then compopt=1
+     When compformat='LZCOMPACT' & cmsddr=1 then lzopt=1
+     When compformat='PACK'      & cmsddr=0 then packopt=1
+     When compformat='NOPACK'               then nopackopt=1
+     When left(compformat,4)='ZLIB'         then do
+       zlibopt=1
+       zlibdeflate=substr(compformat,5)
+       If datatype(zlibdeflate,'W') then /* A number and 1 to 9     */
+          If zlibdeflate < 1 | zlibdeflate > 9 then
+             zlibdeflate=''
+     end
+     Otherwise
+   End
+If cksumopt+digestopt>0 then
+   altform=1
+If CopyCmd+filedef+rmtsend+rmtrecv+tapeopt=0 then do
+   If afn='' | afn='=' | afn='*' then
+      afn=username
+   If aft='' | aft='=' | aft='*' then
+      aft='DISK'vaddr
+   If afm='' | afm='=' then
+      afm='*'
+end
+If (compopt | lzopt) & cmsddr=0 then do
+   emsg'031E The COMPACT or LZCOMPACT options can only specified if the'
+   emsg'031E CMSDDR option is also specified.'
+   Exit 31
+end
+If pipecall then
+   oneopt = 1
+If filedef & rmtsend+rmtrecv+ftpopt+httpopt+tapeopt+hfsopt<>0 then do
+   emsg'032E A FILEDEF cannot be specified with TAPE or',
+       'TCP/IP options'
+   emsg'032E (LISTEN, HTTP, FTP, BFS, or an IP address)'
+   Exit 32
+end
+If hfsopt then do
+   If rmtsend+rmtrecv+ftpopt+httpopt+tapeopt+filedef<>0 then do
+      emsg'033E A BFS file or path cannot be specified with TAPE,',
+          'FILEDEF, or any other'
+      emsg'033E TCP/IP options (LISTEN, HTTP, FTP, or an IP address)'
+      Exit 33
+   end
+   quotechar=''
+   If pos(left(hfspath,1),'7D7F'x)>0 then do     /* quotes: ' and " */
+      quotechar=left(hfspath,1)
+      hfspath=substr(hfspath,2,length(hfspath)-2) /* Remove quotes  */
+   end
+   If pos(left(mixedfn,1),'7D7F'x)>0 then do     /* quotes: ' and " */
+      quotechar=left(mixedfn,1)
+      mixedfn=substr(mixedfn,2,length(mixedfn)-2) /* Remove quotes  */
+   end
+   If mixedfn='' then
+      mixedfn = lower(afn'.'aft)  /* Supply default file name       */
+   If hfspath<>'' & right(hfspath,1)<>'/' then
+      hfspath=hfspath'/'          /* Separate path and file name    */
+   hfsfullname = quotechar||hfspath||mixedfn||quotechar
+end
+If oneopt & rmtrecv then do
+   emsg'110W The ONEREAD option is ignored with REMOTE connections.'
+   oneopt=0
+end
+If rawopt & rmtrecv+rmtsend<>0 then do
+   emsg'136W The RAW option is ignored with REMOTE connections.'
+   rawopt=0
+end
+If timeoopt & rmtrecv=0 then
+   emsg'125W The TIMEOUT option is only for REMOTE connections.'
+If awsopt & rawopt=0 then do
+   emsg'111W The AWSTAPE option also implies the RAW option.'
+   rawopt = 1
+end
+If rawopt & crcopt+cksumopt+matchopt+digestopt+sdigestopt<>0 then do
+   emsg'034E The RAW option cannot be used with CRC, CKSUM, DIGEST, or',
+       'MATCHDISK options.'
+   Exit 34
+end
+If cipher & rawopt then do
+   emsg'070W The CIPHER option cannot be used with the RAW option.'
+   Exit 70
+end
+If rawopt then                    /* RAW option supersedes ONEREAD  */
+   oneopt=0                       /* (One read is only done anyway) */
+ 
+pipeq='query level',              /* Do we have correct PIPEs?      */
+   '| strfind x11',               /* Must be a modern level         */
+   '| spec 1-* c2d 1',
+   '| append literal 0' ||,
+   '| var pipelevel'
+'PIPE' pipeq
+If RC<>0 then do
+   emsg'090S Severe Pipelines error, Pipelines Return Code='RC
+   Exit 90
+end
+minlevel=285933572                /* Minimum pipe level             */
+diglevel=285933581                /* Has Digest 110B000D            */
+piclevel=285933592                /* Has enhanced PICK 110B0018     */
+fbalevel=285999108                /* Minimum level for FBA support  */
+trwlevel=285999114                /* Level fixed for large disks    */
+eavlevel=285999118                /* EAV support - VM66139 in 6.4   */
+tlslevel=285999122                /* TLS sockets level- 110C0012    */
+DIGpipelevel='110B000D (15 Jan 2007 level) or z/VM 6.4'
+FBApipelevel='110C0004 (01 Jul 2010 level) or z/VM 6.4'
+TRWpipelevel='110C000A (24 Jul 2012 level) or z/VM 6.4'
+EAVpipelevel='110C000E (z/VM 6.4 with VM66139)'
+TLSpipelevel='110C0012 (z/VM 7.1 with VM66365)'
+If cmsddr & CopyCmd=0 then do
+   If FindDDR()=0 then do
+      emsg'039E The CMSDDR option was specified, but the Pipelines',
+          '"DDR" stage is not available.'
+      If issueEmsg=0 then
+         Exit 39
+      If GetCMSLevel() >= 84 then /* z/VM 6.2 or later?             */
+         say 'The correct modules should be on your S (190) disk',
+             'already.'
+      else
+         say 'Get the' drpcmodule 'MODULE and make the correct',
+             'DDR MODULE available.'
+      say 'Enter HELP PIPEDDR for more information.'
+      Exit 39
+   end
+end
+/* Uplevel needed for CKSUM, HTTPSPLIT, and track r/w               */
+If cksumopt | httpopt | digestopt | cmsddr=0 then do
+   If pipelevel<minlevel & execstat(pickpipe 'EXEC') & pipecall=0 then
+      'EXEC' pickpipe pickpipearg
+   'PIPE' pipeq
+   If RC<>0 | pipelevel<minlevel then do
+      emsg'091E A later version of PIPELINES is required for the',
+          'specified options.'
+      If IssueEmsg=0 then
+         Exit 91
+      say 'You need z/VM 6.4 or later, or the runtime level of Pipelines'
+      say 'at a minimum level of 110B0004 (15 May 2002 level).'
+      Exit 91
+   end
+end
+PIPEok=(pipelevel>=minlevel)      /* Have level supporting ECKD?    */
+FBAok =(pipelevel>=fbalevel)      /* Have level supporting FBA?     */
+Pickok=(pipelevel>=piclevel)      /* Have level w/enhanced PICK?    */
+trwok =(pipelevel>=trwlevel)      /* Have level w/fixed trackwrite? */
+digok =(pipelevel>=diglevel)      /* Have level w/Digest stage?     */
+eavok =(pipelevel>=eavlevel)      /* Have level supporting EAV?     */
+tlsok =(pipelevel>=tlslevel)      /* Have level w/TLS support?      */
+ 
+Select
+  When uptsend & digok=0 then do
+    emsg'071E A remote dump w/update requires Pipeline DIGEST support.'
+    If issueEmsg then
+       say 'Minimum level is' DIGpipelevel
+    Exit 71
+  end
+  When uptsend then do
+    If ftpopt+httpopt+tapeopt+filedef+hfsopt+cmsddr+crcopt+cksumopt+,
+          packopt+nopackopt+terseopt+zlibopt<>0 then do
+       emsg'069E Extra options specified for remote dump with update.'
+       If IssueEmsg then do
+          say 'The only options allowed are PORT, DIGEST, TYPE, CIPHER,',
+              'and STABLE.'
+          say 'Any extra options are ignored.'
+       end
+    end
+    Parse value copies('0 ',13) with cksumopt ftpopt hfsopt sdigestopt,
+      terseopt zlibopt compopt lzopt cmsddr awsopt rawopt crcopt .
+    digestopt=1                   /* Must be digest                 */
+    nopackopt=1                   /* No packing is done             */
+  end
+  When rmtsend then do
+    digestopt = (digok & crcopt=0) /* Digest is default if possible */
+    crcopt = (digestopt=0)         /* otherwise must be CRC         */
+    cksumopt = 0                   /* CKSUM not used                */
+  end
+  Otherwise
+End
+ 
+If terseopt then
+   If HaveStage('terse')=0 then do /* terse is not available        */
+      emsg'045W TERSE option specified, but the Pipelines "terse" stage',
+          'is not available.'
+      If cmsddr then do
+         emsg'045W The LZCOMPACT option of CMS DDR will be used instead.'
+         Parse value '0 0 0 1' with nopackopt terseopt compopt lzopt .
+      end
+      else
+         Exit 45
+   end
+If zlibopt then
+   If FindZlib()=0 then do
+      emsg'058W ZLIB option specified, but the Pipelines "zlib"',
+          'stage is not available.'
+      If issueEmsg=0 then
+         Exit 58
+      say 'You need the' zlibmodule 'MODULE to load this stage.'
+      say 'Enter HELP PIPEDDR for more information.'
+      Exit 58
+   end
+ 
+If tapeopt then do                /* Validate tape option           */
+   If rmtsend+rmtrecv+ftpopt+httpopt+filedef+hfsopt<>0 then do
+      emsg'035E The TAPE selection cannot be specified with FILEDEF or',
+          'TCP/IP options'
+      emsg'035E (LISTEN, HTTP, FTP, BFS, or an IP address)'
+      Exit 35
+   end
+   If tapedevs='' then            /* Default tape device            */
+      tapedevs='181'
+   Parse value diagrc(8,'QUERY VIRTUAL' tapedevs) with RC . 17 vtype .
+   If RC<>0 | vtype<>'TAPE' then do
+      emsg'038E No tape device is attached at address' tapedevs
+      Exit 38
+   end
+end
+ 
+If secureopt then do 1
+   If rmtsend+rmtrecv+httpopt+ftpopt=0 then do
+      secureopt=0
+      If secoptkwd then
+         emsg'072W The SECURE option is only valid with HTTP and remote',
+             'send and receive'
+      leave
+   end
+   If tlsok=0 then do
+      emsg'073E Your level of Pipelines does not support secure',
+          'connections'
+      If issueEmsg then
+         say 'You need level' TLSpipelevel
+      Exit 73
+   end
+   Select
+     When rmtsend+rmtrecv=0 then  /* Only for remote send & receive */
+       nop
+     When rmtrecv & tlslabel<>'' then
+       securedata = 'tlslabel' tlslabel /* Arg on tcpdata w/SECURE  */
+     When rmtrecv then
+       securedata = 'secure'          /* Arg on tcpdata stage       */
+     When unsafeopt then
+       secureclient = 'secure unsafe' /* Arg on tcpclient           */
+     Otherwise
+       secureclient = 'secure'        /* Arg on tcpclient           */
+   End
+end
+ 
+If cipher then do                 /* Cipher option specified?       */
+   If wordpos(cipherparm,validcipher)=0 then do
+      emsg'046E No valid Cipher method was specified.'
+      Exit 46
+   end
+   If trwok then                  /* A more recent level            */
+      pipecipher=havestage('cipher') /* Pipes cipher loaded/avail?  */
+   If pipecipher=0 then
+      ciphrfunc = SetupCSLcipher(nocbcopt)
+   If cipherparm='3DES' then      /* Old term for triple DES        */
+      cipherparm='TDES'           /* Change to new term             */
+   If keyvaropt then do 1
+      keyvaropt=0                 /* Turned back on if it is found  */
+      If symbol(ciphervarkey)='BAD' then do
+         emsg'049W The KEYVARIABLE value is an invalid symbol.'
+         leave
+      end
+      'PIPE (name keyar end /)',
+           'var ciphervarkey',    /* The variable to fetch          */
+        '|a:varfetch 1 nomsg233', /* See if there, suppress error   */
+        '|  var keyvar',          /* Get value or drop if not found */
+        '/a:',
+        '|  hole'
+      Select
+        When RC=233 then
+          emsg'049W No exec environment exists to fetch key variable',
+               ciphervarkey
+        When symbol('keyvar')='LIT' then
+          emsg'049W The key variable' ciphervarkey 'is not defined.'
+        When keyvar='' then
+          emsg'049W The key variable' ciphervarkey 'has a null value.'
+        Otherwise
+          keyvaropt=1
+          cipherkey=keyvar
+      End
+   end
+   If keyvaropt=0 & keyopt=0 & keyvalue='' then do
+      emsg'047E The Cipher option is specified, but no key was supplied.'
+      Exit 47
+   end
+   Select
+     When keyvaropt=1 then        /* We have the key already        */
+       nop
+     When keyopt=1 & datatype(cipherkey,'X') then /* Key in hex     */
+       cipherkey = x2c(cipherkey)
+     When keyopt > 0 then                    /* Use key as is       */
+       nop
+     When keyvalue<>'' & datatype(keyvalue,'X') then
+       cipherkey = x2c(keyvalue)  /* Stored key in hex (normal way) */
+     Otherwise
+       cipherkey = keyvalue       /* Stored key                     */
+   End
+   keylength=length(cipherkey)
+   If keycheck.cipherparm.keylength=0 then do
+      keytype='key'
+      If keyvalue<>'' then
+         keytype='stored key'
+      emsg'048E The' keytype 'is' keylength 'bytes which is invalid for',
+          'cipher method' cipherparm
+      emsg'048E The key must be' keycheck.cipherparm 'bytes.'
+      Exit 48
+   end
+   If pipecipher=0 then do
+      /* Try a test encryption to make sure the hardware supports it   */
+      /* (We don't have a KM-query function to do this the correct way)*/
+      testcode=copies('00'x,cblocksize.cipherparm) /* Encrypt zeros    */
+      encrypt='E'
+      Call CSL 'KM cr cs encrypt' kmfunc.cipherparm.keylength,
+        'cipherkey keylength',
+        'testcode' cblocksize.cipherparm 'testcode' cblocksize.cipherparm
+      If RC<>0 | cr<>0 then do
+         emsg'061E The hardware does not support this encryption method.'
+         If debug>0 then
+            say 'CSL KM RC='cr', Reason code='cs
+         Exit 61
+      end
+   end
+End /* If cipher then do */
+ 
+If rmtsend | rmtrecv | ftpopt | httpopt then do
+   If state('TCPIP DATA *')=0 then
+      Call GetTCPdisk             /* Try to find the disk           */
+   If state('TCPIP DATA *') then do
+      keyw = 'TCPIPUSERID'        /* Get the userid from TCPIP DATA */
+      retbuff = ''
+      Call CSL 'VMTCPDT rc rs keyw' length(keyw),
+               'retbuff 255 returned_length'
+      If rc=0 & returned_length>0 then do /* Get first word         */
+         Parse value left(retbuff,returned_length) with tcpipuser .
+         tcpid = 'USERID' tcpipuser
+      end
+   end
+end
+ 
+If ftpopt then do                 /* Find our ftp filter            */
+   If rmtsend+rmtrecv+tapeopt+httpopt+filedef+hfsopt<>0 then do
+      emsg'036E An FTP specification cannot be specified with FILEDEF,',
+          'TAPE, or other TCP/IP options'
+      emsg'036E (LISTEN, HTTP, BFS, or an IP address)'
+      Exit 36
+   end
+   ftpfilter2 =''
+   ftpblockout='| fblock 1024 00'
+   If vmftpopt+siteopt=2 then do
+      emsg'080W Both the VMFTP and FTPSITE options specified;',
+          'FTPSITE is ignored.'
+      siteopt=0
+   end
+   If vmftpopt then
+      ftpopts    =' SITE "FIX 1024"'
+   else
+      ftpopts    =';TYPE=I'
+   If siteopt then
+      ftpopts = ftpopts 'SITE "'ftpsite'"' /* Uses delimited string */
+   usenewFTP =HaveStage('ftp') & old.0ftprexx=0 & old.0drpcftp=0
+   useFTPrexx=Execstat('FTP REXX') & old.0drpcftp=0
+   Select
+     When usenewFTP then do
+       ftpfilter  ='w:ftp'
+       ftpfilter2 =e'var ftp.0password|w:'
+       If secureopt & unsafeopt then
+          ftpopts=ftpopts 'UNSAFE'
+       If words(tcpid)=2 then
+          ftpopts=ftpopts 'TCPIP' word(tcpid,2)
+       If debug>0 then
+          ftpopts=ftpopts 'TRACE'
+     end
+     When useFTPrexx & secureopt=1 then do
+       emsg'075E FTP REXX does not support the FTPS protocol'
+       Exit 75
+     end
+     When useFTPrexx & oldopt=0 then do  /* FTP REXX unless OLD opt */
+       If DumpCmd then
+          ftpfilter='rexx ftp >'
+       If RestoreCmd then
+          ftpfilter='rexx ftp <'
+       ftpopts = ftpopts tcpid word('EPASSIVE PASSIVE',passiveopt+1)
+       If debug>0 then
+          ftpopts=ftpopts 'NOISY'
+     end
+     Otherwise                    /* Fall back to other ftp stages  */
+      useFTPrexx=0
+      ftpopts=''
+      If DumpCmd then
+         ftpfilter='ftpput'
+      If RestoreCmd then do
+         ftpfilter='ftpget'
+         ftpopts=' -fixed 1024'
+      end
+      ftpblockout=''
+      If HaveStage(ftpfilter)=0 then /* No ftp filter loaded?       */
+         If FindFTP(ftpfilter)=0 then do
+            emsg'043E FTP was specified, but the Pipelines ftp filter'
+                ftpfilter 'was not found.'
+            If issueEmsg then
+               say 'See the HELP for more information.'
+            Exit 43
+         end
+      If debug>0 & wordpos('-debug',ftpparms)=0 then /* Add debug?  */
+         ftpopts = ftpopts ' -debug'
+   end
+   If haveurl then
+      Call DecodeURL ftpparms     /* Create correct ftp args        */
+   else
+      Call DecodeFTP ftpparms     /* Decode arg string to ftp.x     */
+   If cmsflag('Z') & value('KVDBFILE',,'GLOBAL KEYVAULT')<>'' then do
+      'PIPE command KEYVAULT GETKEY' ftp.0hostname ftp.0userid
+      If RC=0 then do             /* If found, get the values       */
+         ftp.0userid  =value('USERID',,  'GLOBAL KEYVAULT')
+         ftp.0password=value('PASSWORD',,'GLOBAL KEYVAULT')
+         'KEYVAULT CLEARKEY'      /* Clear values from memory       */
+         ftp.0PWfrom  ='KEYVAULT'
+      end
+   end
+   If state('NETRC DATA *') & ftp.0PWfrom<>'KEYVAULT' then
+      Call ProcNETRC              /* Process NETRC if we have it    */
+   If ftp.0userid='' then do      /* No userid given - stop         */
+      emsg'050E No ftp userid provided or found in a KEYVAULT',
+          'or in NETRC DATA.'
+      Exit 50
+   end
+   If ftp.0PWfrom='' & ftpvaropt then do 1
+      If symbol(ftppasswordvar)='BAD' then do
+         emsg'131W The PASSWORDVARIABLE value is an invalid symbol.'
+         leave
+      end
+      'PIPE (name passvar end /)',
+           'var ftppasswordvar',  /* The variable to fetch          */
+        '|a:varfetch 1 nomsg233', /* See if there, suppress error   */
+        '|  var passvar',         /* Get value or drop if not found */
+        '/a:',
+        '|  hole'
+      Select
+        When RC=233 then
+          emsg'131W No exec environment exists to fetch ftp variable',
+               ftppasswordvar
+        When symbol('passvar')='LIT' then
+          emsg'131W The ftp variable' ftppasswordvar 'is not defined.'
+        When passvar='' then
+          emsg'131W The ftp variable' ftppasswordvar 'has a null value.'
+        Otherwise
+          ftp.0PWfrom='VAR'
+          ftp.0password=passvar
+      End
+   end
+   If translate(ftp.0userid)='ANONYMOUS' & ftp.0PWfrom='' then do
+      ftp.0password = lower(execn)/* Use exec name as password      */
+      ftp.0PWfrom='ANON'
+   end
+   If ftp.0PWfrom='' then
+      Call GetFTPpw               /* if no pw yet - get it          */
+   If ftp.0filename='' then       /* Need a filename for ftp        */
+      If fromtokwd | mixedfn='' then /* No name in URL or FTP opt?  */
+         ftp.0filename = lower(afn'.'aft) /* Use default name       */
+      else
+         ftp.0filename = mixedfn          /* Use name specified    */
+   If portopt & ftp.0port<>'' then
+      emsg'133W The port number in the URL will be used instead of the',
+          'port option'
+   If ftp.0port='' & portopt then /* Use PORT option value          */
+      ftp.0port=ipport
+   Select
+     When usenewFTP then            /* Only if using ftp stage      */
+       If ftp.0PWfrom<>'URL' then   /* A URL is already encoded     */
+          'PIPE (name encodpw)',    /* Encode for "urldeblock"      */
+               'var ftp.0password', /*  (& and ; are OK already)    */
+             '| change "%"%25"',    /* Percent to ASCII percent     */
+             '| change x40 "%20"',  /* Encode blanks                */
+             '| var ftp.0password'
+     When ftp.0PWfrom='URL' & pos('%',ftp.0password)<>0 then
+       'PIPE (name urldeblk)',
+            'var ftp.0password',      /* Encoded pw from url        */
+          '| xlate from 1047 to 819', /* Must be ASCII for decoding */
+          '| urldeblock',             /* Convert %xx to ascii chars */
+          '| xlate from 819 to 1047', /* and back to EBCDIC for us  */
+          '| var ftp.0password'       /* unencoded password         */
+     Otherwise
+   End
+   Select
+     When usenewFTP then do
+       ftpparms = BuildURL(secureopt)
+       ftp.0password = 'PASS' ftp.0password
+     end
+     When useFTPrexx then do
+       ftpparms = BuildURL(secureopt)
+       ftpopts=ftpopts 'PASSWORDVAR ftp.0password'
+     end
+     Otherwise
+       ftpparms = BuildFTPparm()
+   End
+end /* If ftpopt then do */
+ 
+If httpopt then do
+   If rmtsend+rmtrecv+tapeopt+ftpopt+filedef+hfsopt<>0 then do
+      emsg'037E An HTTP URL cannot be specified with FILEDEF, TAPE,',
+          'or other TCP/IP options'
+      emsg'037E (LISTEN, FTP, BFS, or an IP address)'
+      Exit 37
+   end
+   If haveurl then
+      Call DecodeURL ftpparms     /* Decode url to ftp.x variables  */
+   else
+      Call DecodeFTP ftpparms     /* Decode arg string to ftp.x     */
+   If ftp.0directory<>'' then     /* Fix directory specification    */
+      If right(ftp.0directory,1)<>'/' then
+         ftp.0directory = strip(ftp.0directory'/','L','/')
+      else
+         ftp.0directory = strip(ftp.0directory,'L','/')
+   If ftp.0filename='' then       /* Need a filename to get         */
+      If fromtokwd | mixedfn='' then /* No name in URL or HTTP opt? */
+         ftp.0filename = lower(afn'.'aft) /* Use default name       */
+      else
+         ftp.0filename = mixedfn          /* Use name specified    */
+   If portopt & ftp.0port<>'' then
+      emsg'133W The port number in the URL will be used instead of the',
+          'port option'
+   Select
+     When ftp.0port='' & portopt then /* PORT option?               */
+       ftp.0port=ipport           /* Set to the http port           */
+     When ftp.0port<>'' then      /* Port in URL?  Use it.          */
+       nop
+     When secureopt then          /* Secure connection?             */
+       ftp.0port=443              /* Use port 443 (https)           */
+     Otherwise                    /* No port specified?             */
+       ftp.0port=80               /* Default to port 80             */
+   End
+   /* Create pipeline segment to read http data                     */
+   httpresp=''
+   httpreq='GET /'ftp.0directory || ftp.0filename 'HTTP/1.0'
+   htpipe='var httpreq',
+     '|  strliteral append "Host:' ftp.0hostname':'ftp.0port'"',
+     '|  strliteral append "Connection: close"',
+     '|  strliteral append ""',   /* Null line at end of headers    */
+         copies('| console',(debug>0)), /* Output if debugging      */
+     '|  xlate 1-* from 1047 to 819', /* translate to ASCII         */
+     '|  insert x0d0a after',         /* Ascii CR-LF on each line   */
+     '|j:fanin',
+     '|a:tcpclient' ftp.0hostname ftp.0port 'linger 10',
+            secureclient tcpid,
+     '|h:httpsplit',              /* Split headers from content     */
+     '|  xlate 1-* from 819 to 1047', /* to EBCDIC                  */
+         copies('| console',(debug>0)), /* Output if debugging      */
+     '|  take 1',                 /* Get just http status line      */
+     '|  var httpresp tracking',
+     e'h:',
+     '|n:fanout stop anyeof',
+     '|  take last 1',            /* Wait for all of the data       */
+     '|  drop',
+     '|j:',                       /* Feedback the EOF               */
+     e'n:',                       /* The content                    */
+   ipport = ftp.0port             /* In case of error message       */
+end /* If httpopt then do */
+ 
+'QUERY FULLSCREEN (LIFO'
+Pull . fset .
+If fset='ON' then
+   fullscreen=,                   /* Add stages to refresh screen   */
+     '| spec "PSCREEN REFRESH" 1',/* Refresh the screen             */
+     '| subcom cms'               /* Execute the refresh command    */
+ 
+Parse value '' with fileloc dumpipe dumpipe2 respipe respipe2 resblk .
+Select              /* Variables used in dump and restore pipelines */
+  When rmtsend | rmtrecv then     /* Special pipelines for these    */
+    nop
+  When tapeopt then do
+    fileloc='tape device' tapedevs
+    respipe='tape' tapedevs
+    dumpipe=respipe 'WTM 2'
+  End
+  When filedef then do
+    fileloc ='FILEDEF with ddname' ddname
+    dumpipe='qsam' ddname
+    respipe=dumpipe
+  End
+  When hfsopt then do
+    fileloc ='BFS file' hfsfullname
+    If left(hfspath||mixedfn,1)<>'/' then do /* Relative path?      */
+       'PIPE (name qdir) command EXEC OPENVM QUERY DIRECTORY',
+          '| spec substr 2;-2 of w3-* 1', /* Strip quotes           */
+          '| var qdir'            /* Get current directory          */
+       If RC=0 then               /* Create full path to file       */
+          fileloc ="BFS file '"strip(qdir,'T','/')'/'hfspath||mixedfn"'"
+    end
+    dumpipe='hfsreplace' hfsfullname
+    respipe='hfs' hfsfullname
+    resblk ='| fblock 1024 00'
+  End
+  When ftpopt then do
+    fileloc ='FTP file' ftp.0filename
+    dumpipe=ftpfilter ftpparms || ftpopts
+    dumpipe2=ftpfilter2
+    respipe=ftpfilter ftpparms || ftpopts
+    respipe2=ftpfilter2
+    resblk =ftpblockout
+  End
+  When httpopt then do
+    fileloc ='HTTP file' ftp.0filename
+    respipe=htpipe
+    resblk ='| fblock 1024 00'
+  End
+  When CopyCmd then
+    nop
+  When pipecall then do
+    fileloc ='Pipelines'
+    dumpipe='*:'
+    respipe=dumpipe
+  End
+  Otherwise                       /* To or from a CMS file          */
+    'VALIDATE' afn aft
+    If RC<>0 | length(afn)>8 | length(aft)>8 then do
+       emsg'067E Invalid CMS filename or filetype.'
+       Exit 67
+    end
+    If afm='*' then               /* Wildcard for the file mode?    */
+       Select
+         when DumpCmd then
+           afm='A'                /* Default to A for dumps         */
+         when RestoreCmd then
+           'PIPE state' afn aft afm, /* Find file for restore       */
+              '| spec w3 1.1',
+              '| var afm tracking'   /* No change if not found      */
+         Otherwise
+       End
+    fileloc ='file' afn aft afm
+    dumpipe ='>' afn aft afm
+    respipe ='<' afn aft afm
+    cmsfile = 1
+End
+ 
+Select                            /* Dump or restore                */
+  When DumpCmd then
+    Call DumpDisk
+  When RestoreCmd then
+    Call RestoreDisk
+  When CopyCmd then
+    Call CopyDisk
+  Otherwise
+    erc=16
+End
+If erc=1 & cmsddr then do
+   emsg'040E The DDR MODULE does not support a CMS Pipelines connection.'
+   erc=40
+   If issueEmsg then do
+      If GetCMSLevel() >= 84 then /* z/VM 6.2 or later?             */
+         say 'The correct level should be available on the S (190) disk',
+             'of your level of CMS.'
+      else
+         say 'Please ensure the correct DDR MODULE from the DRPC',
+             'package is available.'
+      say 'Enter HELP PIPEDDR for more information.'
+   end
+end
+If linktcp<>'' then
+   'EXEC VMLINK' linktcp 'NOTYPE POP'
+Exit erc
+ 
+DumpDisk:
+/*------------------------------------------------------------------*
+ * Dump a disk.
+ *------------------------------------------------------------------*/
+If stableopt then
+   readlink = 'SR'
+Parse value GetDisk(userid vaddr readlink) with erc freevaddr diskinfo
+If erc<>0 then
+   Return
+Parse var diskinfo devtype cyls .
+If cmsddr=0 & devtype=3390 & trwok=0 & cyls>trackwritelimit then do
+   emsg'119W Attention:  The disk will be dumped, but your level of',
+       'Pipelines cannot'
+   emsg'119W restore the disk. Minimum level is' TRWpipelevel
+end
+If truncopt then
+   If truncdump >= cyls-1 then    /* Not less than disk size?       */
+      truncopt=0                  /*   then just ignore it          */
+   else
+      diskinfo = devtype truncdump+1 /* Adjust disk size in header  */
+Parse value '' with rexxfilter progresspipe progresspipe2 ddrcmds,
+      addcrc addcrc2 compactopt pack1 pack2 cipherstage1 cipherstage2 .
+ 
+If cmsddr then
+   cmsddrflag='*'                 /* Indicate CMSDDR format         */
+If rawopt then
+   addfileheader = ''             /* No file header for raw         */
+else
+   addfileheader = '| preface var fileheader'
+fileheader = cmsddrflag || username vaddr diskinfo ident
+ 
+If cksumopt & Pickok=0 then do    /* Don't have PIPE level for cksum*/
+   emsg'112W Your level of Pipelines does not support the CKSUM option.'
+   emsg'112W The CRC option is selected instead.'
+   Parse value '1 0' with crcopt cksumopt .
+end
+If (digestopt | sdigestopt) & Digok=0 then do
+   emsg'126W Your level of Pipelines does not support the DIGEST option.'
+   emsg'126W The CRC option is selected instead.'
+   If issueEmsg then
+      say 'Minimum level is' DIGpipelevel
+   Parse value '1 0 0' with crcopt digestopt sdigestopt .
+end
+If crcopt+cksumopt+digestopt+sdigestopt > 1 then
+   emsg'113W Too many checking options specified.  The CRC option',
+       'is used.'
+Select
+  When crcopt then do              /* CRC used if both specified    */
+    addcrc = '| crc append crc-32' /* Add CRC at end of the data    */
+    checkstage = 'crc crc-32'      /* For remote send pipeline    */
+    fileheader = fileheader 'CRC'
+    parse value '0 0' with cksumopt digestopt . /* Can't have these */
+  end
+  When cksumopt then do
+    checkstage = 'crc cksum'      /* Use cksum option of CRC        */
+    fileheader = fileheader 'CKSUM'
+    digestopt = 0                 /* Can't have this also           */
+  end
+  When digestopt | sdigestopt then do
+    checkstage = 'digest' digestparm /* Digest instead of crc       */
+    addcrc = '|c:' checkstage,       /* Also for single digest      */
+             '|z:fanin'
+    addcrc2= e'c:',
+             '|  copy',
+             '|z:'
+    Select
+      When rmtsend | old.0digest then /* Type of digest added later */
+        fileheader = fileheader 'DIGEST'
+      When sdigestopt then
+        fileheader = fileheader 'SDIGEST'
+      Otherwise
+       fileheader = fileheader 'DDIGEST'
+    End
+  end
+  Otherwise
+    checkstage = ''
+    fileheader = fileheader 'NOCRC'
+End
+Parse value '1 0' with fixedrec addcms4 .
+blk1k = (cmsfile|filedef|tapeopt|cipher) & rawopt=0
+Select                            /* Set up default packing         */
+  When awsopt then do
+    pack1='|block 65535 awstape'  /* Maximum size variable records  */
+    comptype = 'AWSTAPE'
+    fixedrec = 0
+  end
+  When compopt then do
+    compactopt='(COMPACT'
+    comptype = 'DDRCOMP'
+    fixedrec = (rawopt=0)
+    If packopt then do            /* Both COMP and PACK?            */
+       pack1='|p:pack variable'   /* Pack it also, as we used to do */
+       blk1k=0
+    end
+    else
+       addcms4  = (rawopt=0)      /* Block it if not raw dump       */
+  end
+  When lzopt then do
+    compactopt='(LZCOMPACT'
+    comptype = 'DDRCOMP'
+    fixedrec = (rawopt=0)
+    If packopt then do            /* Both LZ and PACK?              */
+       pack1='|p:pack variable'   /* Pack it also, as we used to do */
+       blk1k=0
+    end
+       addcms4  = (rawopt=0)      /* Block it if not raw dump       */
+  end
+  When terseopt then do
+    pack1='|p:terse variable'
+    blk1k=0
+    comptype='TERSE'
+  end
+  When zlibopt then do
+    pack1='| addrdw sf4',         /* Preserve input records         */
+          '| zlib deflate' zlibdeflate
+    blk1k    = (filedef | tapeopt | cipher | cksumopt | digestopt)
+    fixedrec = blk1k
+    comptype='ZLIB'
+  end
+  When rawopt & packopt=0 & devtype=9336 & cmsddr=0 then do
+    pack1='|pad' fbablocking*512+16 '00' /* Large fixed records     */
+    comptype='NOPACK'
+  end
+  When rawopt & packopt=0 then do
+    comptype='NOPACK'
+    fixedrec= 0
+  end
+  When nopackopt then do
+    addcms4  = (rawopt=0)         /* Block it if not raw dump       */
+    blk1k    = (filedef | tapeopt | cipher | cksumopt | digestopt,
+               | (devtype=9336 & cmsfile))
+    fixedrec = blk1k
+    comptype='NOPACK'
+  end
+  Otherwise
+    pack1='|p:pack variable'      /* The default is CMS packed      */
+    blk1k=0
+    comptype='PACK'
+    packopt =1
+End
+If fixedrec & cmsfile then
+   dumpipe=dumpipe 'FIXED'        /* Fixed format output file       */
+If addcms4 then
+   pack1='| addrdw cms4',         /* Remember record lengths        */
+         '| strliteral append x00000000'  /* Add null length for EOF*/
+If blk1k then
+   pack1=pack1 '| fblock 1024 00'
+If cmsfile & (packopt | terseopt) then do
+   dumpipe='w:'dumpipe            /* Add connector                  */
+   pack2=e'p:|w:'                 /* Connect to ">" for header rec  */
+end
+tracksquish='| tracksquish'
+If nosquish | devtype=9336 then
+   tracksquish=''
+If truncopt then do
+   ddrdump='0 TO' truncdump
+   If devtype=9336 then
+      pipdump=truncdump+1
+   else
+      pipdump=(truncdump+1)*15
+end
+else do
+   ddrdump='ALL'
+   pipdump='*'
+end
+Select
+  When cmsddr then do
+    diskread= 'd:ddr'
+    ddrcmds =  e'literal DUMP FTR' ddrdump,
+             '|  literal OUTPUT PIPE' compactopt,
+             '|  literal INPUT' freevaddr 'DASD',
+             '|  literal PROMPTS OFF',
+             '|  literal SYSPRINT CONS',
+             '|d:'
+  end
+  When devtype=9336 & uptsend then do
+    diskread = 'fbaread' freevaddr
+    dasdaddr = 8
+    daddrloc = '9.'dasdaddr      /* Where it is in the record      */
+    dasddecode='spec 1.4 c2u 1 5.4 c2u nw'
+    dasdterm = 'blocks'
+    tracksquish=''
+  end
+  When devtype=9336 then
+    diskread = 'fbaread' freevaddr '0' pipdump
+  When uptsend then do
+    diskread = 'trackread' freevaddr
+    dasdaddr = 4
+    daddrloc = '10.'dasdaddr     /* Where it is in the record      */
+    dasddecode='spec 1.2 c2u 1 3.2 c2u nw'
+ 
+    dasdterm = 'tracks'
+  end
+  Otherwise
+    diskread = 'trackread' freevaddr '0 0' pipdump tracksquish
+End
+ 
+fileheader = fileheader comptype
+If notypeopt=0 then
+   Call SetupProgress cmsddr comptype cmsfile, diskinfo
+ 
+If cipher then do
+   cipherstage2 = e'var cipherkey|k:'
+   pack2 = ''                     /* Can't rewrite header           */
+   If nocbcopt=0 then
+      'PIPE random',              /* 4 byte random numbers          */
+         '| take 256',            /* 1024 bytes in a record         */
+         '| join *',
+         '| var randrecord',      /* First record if CBC cipher     */
+         '| take' cblocksize.cipherparm 'bytes',
+         '| spec "x" 1 1-* c2x 2',/* Pipelines hex string form xNN  */
+         '| var randIV'           /* Random IV if needed            */
+   else
+      randIV=''                   /* No IV for ECB encoding         */
+   If pipecipher then do
+      cipherstage = '|k:cipher' cipherparm 'encrypt'
+      If nocbcopt=0 then
+         cipherstage=cipherstage 'cbc iv'
+   end
+   else
+      cipherstage = '|k:rexx ('execn exect') CIPHER' ciphrfunc,
+        kmfunc.cipherparm.keylength 'E' keylength cblocksize.cipherparm
+   If rmtsend then do
+      pipe='random',                       /* Random data           */
+        '|d:deal',
+        '|  take' cblocksize.cipherparm%4, /* Just 1 cipher block   */
+        '|a:fanin',
+        '|  join *',
+            cipherstage randIV,
+        '|  spec "x" 1 1-* c2x 2',
+        '|  var testcipher',      /* Send this in header            */
+       ,
+        e'd:',
+        '|  take' cblocksize.cipherparm%8, /* Half a cipher block   */
+        '|  join *',              /* Make it one record             */
+        '|  dup 1',               /* Block with each half equal     */
+        '|a:',
+            cipherstage2
+      If debug>1 then
+         say 'PIPE (end' e 'name tstciph)' pipe
+      'PIPE (end' e 'name tstciph)' pipe
+   end
+   else
+      testcipher=''
+   Select
+     When uptsend & devtype<>'9336' & tlsok then
+       cipherstage1=,             /* The TLS level fixed the problem*/
+         '| pad left 0 modulo' cblocksize.cipherparm '00',
+            cipherstage randIV
+     When uptsend & devtype<>'9336' then
+       cipherstage1=,
+         '| preface literal ||pad 65535', /* Start with large record*/
+         '| pad left 0 modulo' cblocksize.cipherparm '00',
+         '| drop 1',                      /* Drop the extra record  */
+            cipherstage randIV
+     When rmtsend=0 & nocbcopt=0 then
+       cipherstage1=,
+         '| preface var randrecord',
+            cipherstage 'x00'
+     Otherwise
+       cipherstage1=cipherstage randIV
+   End
+   If nocbcopt then do
+      fileheader = fileheader 'CIPHER'
+      cipherheader = 'XT'testcipher
+   end
+   else do
+      fileheader = fileheader 'CIPHERCBC'
+      cipherheader = 'XT'testcipher 'IV'randIV
+   end
+   If old.0notestcipher then
+      cipherheader = ''
+end /* If cipher then do */
+else
+   fileheader = fileheader '-'    /* No encryption                  */
+Select                            /* Add digest type and length     */
+  When uptsend then
+    fileheader = fileheader digestparm 'UPDATE'
+  When digestopt | sdigestopt then
+    fileheader = fileheader digestparm digestbytes.digestparm
+  When cksumopt then
+    fileheader = fileheader '- 12'  /* A CKSUM is 12 bytes          */
+  When rmtsend then
+    fileheader = fileheader '- -'
+  Otherwise
+End
+If rmtsend & cipher then          /* Add the extended header        */
+   fileheader = fileheader cipherheader
+If tapeopt then
+   'PIPE (name tapemode)',        /* Set mode to compressed         */
+        'var tapedevs',
+      '| split',
+      '| spec "TAPE MODESET (" 1 1-* nw "COMP" nw',
+      '| command',
+      '| console'
+ 
+If debug>1 then do
+   say 'Disk info and encoding record:'
+   say fileheader
+end
+Select
+  When devtype=9336 & FBAok=0 & cmsddr=0 then do
+    emsg'121E The input device type is FBA, but the current level of'
+    emsg'121E Pipelines does not support FBA disks.'
+    If issueEmsg then
+       say 'Minimum level is' FBApipelevel
+    erc=121
+  End
+  When devtype=3390 & eavok=0 & cmsddr=0 & cyls>nonEAVmax then do
+    emsg'129E A disk larger than' nonEAVmax 'cyls cannot be dumped',
+        'in Pipelines format'
+    If issueEmsg then
+       say 'Minimum level is' EAVpipelevel
+    emsg'129E Specify the CMSDDR option to dump this disk.'
+    erc=129
+  End
+  When rmtsend then do
+    Call DumpInfo remoteip        /* Show messages about the dump   */
+    response=''
+    pipe='var fileheader',        /* Send header info first         */
+      '|a:tcpclient' remoteip ipport 'linger 10 reuseaddr oneresponse',
+             secureclient tcpid
+    If debug>0 & secureopt then pipe=pipe 'getsecinfo', /* Get info */
+      '|s:take 1',
+      '|  strliteral "Secure socket information:"',
+      '|  console',
+      '/s:'
+    pipe=pipe,
+      '|  var response tracking',
+      '/a:',
+      '|  strnfind "0"',          /* Ignore normal completion       */
+      '|  var clienterr'
+    If debug>1 then
+       say 'PIPE (end / name iphead)' pipe
+    'PIPE (end / name iphead)' pipe
+    prc=RC
+    If symbol('clienterr')='VAR' then do /* If error number set     */
+       emsg'214E Error creating initial connection to remote side.'
+       parse var clienterr errno .
+       If errno < 100 then
+          erc=900+errno
+       else
+          erc=214                 /* emsg number for unknown errno  */
+       emsg||erc'E' GetERRNO('iphead' clienterr)
+       RC=1015                    /* Catch this error below         */
+    end
+    Select
+      When RC=0 & translate(response)='PROCEED' then do
+        'CP SLEEP' ipsleep 'SEC'  /* Wait for other side to be ready*/
+        If uptsend then do
+         tcrc=0
+         rcrc=0
+         pipe=,
+           'f:fanin',
+          '|t:count bytes',
+          '|a:tcpclient' remoteip ipport 'linger 10 reuseaddr',
+                 secureclient tcpid 'deblock sf4',
+          '|c:chop' dasdaddr,     /* Split CCHH/block and hash      */
+          '|  copy',
+          '|' dasddecode,         /* Pick track/block to read       */
+          '|' diskread,           /* Read the track/block           */
+              progresspipe,
+          '|s:spec 1-* 1 select 1 1-* n', /* Track and provided hash*/
+          '|d:digest' digestparm 'verify',/* Pass along if correct  */
+          '|  substr' daddrloc,           /* Just CCHH of the track */
+          '|h:count lines',
+          '|i:faninany',
+          '|  elastic',
+          '|  addrdw sf4',
+          '|f:',
+          e'c:',                  /* Hash value from remote         */
+          '|s:',
+          e'd:',                  /* Tracks with wrong hash         */
+          '|v:count lines',
+          '|  chop -'digestbytes.digestparm, /* Remove hash value   */
+              tracksquish,        /* Maybe make it smaller          */
+              cipherstage1,       /* Maybe encrypt                  */
+          '|i:',                  /* Pass track image to remote     */
+          e'h:',
+          '|  var trkskip',
+          e'v:',
+          '|  var trkwritten',
+          e't:',
+          '|  var bytes',
+          e'a:',
+          '|  strnfind "0"',      /* Ignore normal end              */
+          '|  var clienterr',
+              progresspipe2,
+              cipherstage2
+        end
+        else /* remote, not uptsend */
+         pipe= diskread,
+              progresspipe,
+          '|r:'checkstage,        /* Compute CRC or digest          */
+          '|f:faninany',
+              pack1,
+              cipherstage1,
+          '|  append var eodpad', /* To tell remote we are done     */
+          '|c:count bytes',
+          '|a:tcpclient' remoteip ipport 'linger 10 reuseaddr',
+                 secureclient tcpid 'deblock linend 25',
+          '|t:take 1',              /* Show first line sent back    */
+          '|  console',
+              fullscreen,
+          e'c:',
+          '|  var bytes',
+          e'r:',
+          '|  var tcrc',          /* Save local or digest           */
+          '|f:',                  /*  .. and send to other side     */
+          e't:',                  /* 2nd line is crc or digest      */
+          '|  spec 1-* x2c 1',    /* Convert it back to binary      */
+          '|  append strliteral x00000000', /*binary zero if missing*/
+          '|  var rcrc',          /* Check value from other side    */
+          e'a:',
+          '|  strnfind "0"',      /* Ignore normal end              */
+          '|  var clienterr',
+              ddrcmds,
+              progresspipe2,
+              cipherstage2
+        If debug>1 then
+           say 'PIPE (end' e 'name ipread)' pipe
+        'PIPE (end' e 'name ipread)' pipe
+        prc=RC
+        If symbol('clienterr')='VAR' then do /* Was an error set?   */
+           emsg'215E Error resuming connection to remote side for data.'
+           parse var clienterr errno .
+           If errno < 100 then
+              erc=900+errno
+           else
+              erc=215             /* emsg number for unknown errno  */
+           emsg||erc'E' GetERRNO('ipread' clienterr)
+        end
+        If prc<>0 then do
+           emsg'226E Error from Pipeline ipread, RC='prc
+           If erc=0 then
+              erc=226
+        end
+        If erc+prc=0 then do
+           If tcrc /== rcrc & rcrc /== '00000000'x then do
+              emsg'206E Data verification failure.'
+              If digestopt then
+                 emsg'206E Digests of transmitted and received data',
+                     'do not match.'
+              else
+                 emsg'206E CRCs of transmitted and received data',
+                     'do not match.'
+              erc=206
+           end
+           If bytes>10485760 then /* Over 10 MB                     */
+              emsg'202I' bytes%1048576 'MB transmitted.'
+           else
+              emsg'202I' bytes%1024 'KB transmitted.'
+           If uptsend then
+              emsg'231I' trkskip dasdterm 'skipped,' trkwritten,
+                 dasdterm 'updated.'
+        end
+      end /* When rmtsend then do */
+      When RC=1015 then           /* TCPIP error already shown      */
+        nop                       /* erc already set                */
+      When RC<>0 then do
+        emsg'207E Connection not established with the remote side.'
+        erc=207
+      end
+      Otherwise
+        emsg'209E Remote side rejected the restore request.'
+        If translate(response)<>'ABORT' then
+           emsg'209E Reason:' response
+        erc=209
+    End
+  end
+  Otherwise
+    Call DumpInfo fileloc         /* Show messages about the dump   */
+    If altform then do            /* Use a modified pipeline        */
+       pipe='var fileheader',
+         '|h:fanin',              /* Form header with ASCII data too*/
+         '|  join *',             /* Put all together               */
+         '|  pad 1024 00',        /* Must pad to record length 1024 */
+         '|z:fanin',              /* Bring in 3 parts               */
+         '|' dumpipe,
+        ,
+         e  'var fileheader',     /* Also add header in ASCII       */
+         '|  xlate 1-* from 1047 to 819', /* translate to ASCII     */
+         '|  spec' asciisep '1 1-* next' asciisep 'next',
+         '|h:',
+        ,
+         e   diskread,
+             progresspipe
+       If digestopt & old.0digest=0 then pipe=pipe,
+         '|e:'checkstage,         /* Digest of raw data             */
+         '|y:fanin'               /* ..goes at end of the data.     */
+       pipe=pipe,
+             pack1,
+             cipherstage1
+       If checkstage<>'' then pipe=pipe,
+         '|c:'checkstage,         /* Compute verification after pack*/
+         '|z:',
+        ,
+         e'c:',
+         '|  copy',               /* Prevent stall                  */
+         '|u:if fanout',          /* Make a copy                    */
+         '|u:',
+         '|  spec 1-* c2x 1',     /* Value in readable hex          */
+         '|  xlate 1-* lower from 1047 to 819', /* lower and ascii  */
+         '|u:',
+         '|  join *',             /* Original plus ascii            */
+         '|  pad 1024 00',        /* Must pad to record length 1024 */
+         '|z:'                    /* Add cksum to end               */
+       else pipe=pipe,
+         '|z:'
+       If digestopt & old.0digest=0 then pipe=pipe,
+         e'e:',
+         '|  copy',               /* Prevent stall                  */
+         '|y:'                    /* digest from raw data           */
+       pipe=pipe,
+             ddrcmds,
+             dumpipe2,
+             progresspipe2,
+             cipherstage2
+    end
+    else do
+       pipe= diskread,
+             progresspipe,
+             addcrc,
+             addfileheader,
+             pack1,               /* Maybe pack the data            */
+             cipherstage1,
+         '|' dumpipe,
+             ddrcmds,
+             dumpipe2,
+             progresspipe2,
+             pack2,
+             addcrc2,
+             cipherstage2
+    end
+    If pipecall then
+       Address value AddressPipe
+    If debug>1 then
+       say pipe.pipecall '(end' e 'name dumpdisk)' pipe
+    ''pipe.pipecall '(end' e 'name dumpdisk)' pipe
+    Address Command
+    If RC<>0 then do
+       Select
+         When RC=-20 & cmsddr then /* We know this is from DDR      */
+           emsg'223E Unexpected end of file from DDR'
+         When RC=83 & cmsddr=0 & cyls>nonEAVmax then
+           emsg'223E Pipelines does not support EAV disks,',
+               'you need VM66139' /* Be helpful with APAR info      */
+         Otherwise
+           emsg'223E Pipelines Return Code='RC
+       End
+       erc=223
+    end
+End /* Select */
+ 
+Select
+  When erc<>0 then
+    emsg'203E Dump failed.'
+  When noimsg then
+    nop
+  Otherwise
+    emsg'204I Dump completed.'
+End
+If userid <> '*' then
+   Call diag 8,'DETACH' freevaddr
+Return
+ 
+DumpInfo:
+/*------------------------------------------------------------------*
+ * Show messages that explain the type of dump
+ *------------------------------------------------------------------*/
+If noimsg then                    /* Not showing these messages?    */
+   Return                         /*   Just return                  */
+parse arg dumpwhere
+emsg'200I Dumping disk' username vaddr 'to' dumpwhere
+Select
+  When rmtsend=0 then
+    nop
+  When secureopt then
+    emsg'233I The remote connection is secured using TLS/SSL'
+  Otherwise
+    emsg'235I The remote connection is unsecured',
+        '(no transport encryption)'
+End
+If truncopt then do
+   ctype=word('cylinders blocks',(devtype=9336)+1)
+   emsg'234I Input disk is' cyls ctype', only dumping the first',
+        truncdump+1 ctype'.'
+end
+infomsg='The format is'
+If cmsddr then
+   infomsg=infomsg 'CMS DDR'
+else
+   infomsg=infomsg 'Pipelines'
+Select
+   When comptype='PACK'    then infomsg=infomsg', packed'
+   When comptype='TERSE'   then infomsg=infomsg', terse compression'
+   When comptype='NOPACK'  then infomsg=infomsg', not packed'
+   When comptype='DDRCOMP' then infomsg=infomsg', compacted'
+   When comptype='ZLIB'    then infomsg=infomsg', zlib deflated'
+   Otherwise
+End
+If crcopt then
+   infomsg=infomsg', with CRC'
+If cksumopt then
+   infomsg=infomsg', with CKSUM'
+If digestopt | sdigestopt then
+   infomsg=infomsg', with Digest' digestparm
+If cipher then do
+   infomsg=infomsg', encrypted ('cipherparm')'
+   If nocbcopt=0 then
+      infomsg=infomsg' CBC mode'
+end
+If rawopt then
+   infomsg=infomsg', in RAW format'
+emsg'201I' infomsg
+If notypeopt then
+   emsg'205I Dump progress messages will not be shown.'
+If fset='ON' then
+   'PSCREEN REFRESH'
+Return
+ 
+RestoreDisk:
+/*------------------------------------------------------------------*
+ * Restore a disk.
+ *------------------------------------------------------------------*/
+If cmsfile then
+   If state(afn aft afm)=0 then do
+      emsg'311E Input file' afn aft afm 'not found.'
+      erc=311
+      Return
+   end
+ 
+If stableopt then
+   writelink = 'EW'
+Parse value GetDisk(userid vaddr writelink) with erc freevaddr diskinfo
+If erc<>0 then
+   Return
+Parse var diskinfo ddevtype dcyl .
+ 
+Call CheckRestore                 /* Check that we can restore      */
+If erc=0 then
+   Call ReadHeader                /* Get the first record           */
+If erc=0 then
+   Call DecodeHeader              /* Decode header fields           */
+If erc=0 then
+   Call SetupRestore              /* Create stages for restore      */
+Select
+   When erc<>0 then
+     nop
+   When rmtrecv then
+     Call DoRemoteRecv            /* Receiving via TCPIP            */
+   Otherwise
+     Call DiskRestore             /* From file or server            */
+End
+Select
+  When erc<>0 then
+    emsg'312E Data restore failed.'
+  When noimsg then
+    nop
+  Otherwise
+    emsg'306I Data restored successfully.'
+End
+If userid <> '*' then
+   Call diag 8,'DETACH' freevaddr
+Return
+ 
+CheckRestore:
+/*------------------------------------------------------------------*
+ * Verify that we can restore the disk.
+ *------------------------------------------------------------------*/
+If cmsddr=0 & ddevtype=3390 & trwok=0 & dcyl>trackwritelimit then do
+   emsg'093W Your current level of Pipelines cannot restore a disk',
+       'of' dcyl 'cylinders.'
+   If issueEmsg then
+      say 'Minimum level is' TRWpipelevel
+   erc=93
+end
+If cmsddr=0 & ddevtype=3390 & eavok=0 & dcyl>nonEAVmax then do
+   emsg'093W Your current level of Pipelines cannot restore a disk',
+       'of' dcyl 'cylinders.'
+   If issueEmsg then
+      say 'Minimum level is' EAVpipelevel
+   erc=93
+end
+If ddevtype=9336 & FBAok=0 & cmsddr=0 then do
+   emsg'122E The output device type is FBA, but the current level of'
+   emsg'122E Pipelines does not support FBA disks.'
+   If issueEmsg then
+      say 'Minimum level is' FBApipelevel
+   erc=122
+end
+If noprompt=0 then do          /* Make sure we want to do this   */
+   emsg'300I Any data on' username vaddr 'will be erased.'
+   emsg'021R Continue? (Y/N)'
+   Pull ans .
+   If left(ans,1)<>'Y' then do
+      emsg'307I Disk was not changed.'
+      erc=307
+   end
+end
+Return
+ 
+ReadHeader:
+/*------------------------------------------------------------------*
+ * - Set up pipeline stages for the specified operands and options.
+ * - Read in the first line of the file (the header)
+ *------------------------------------------------------------------*/
+unpkopt=word('? AWS',awsopt+1)    /* Flag if AWS blocked            */
+Parse value '' with cipherstage1 cipherstage2 getcrc1 getcrc2,
+      rexxfilter progresspipe progresspipe2 dgst1 dgst2,
+      cipherchk ciphercbc cipheriv postcipher .
+If cipher then do                 /* Set up for encryption?         */
+   If pipecipher then do
+      cipherstage1 = '|k:cipher' cipherparm 'decrypt'
+      If nocbcopt=0 then do       /* Set up default CBC mode        */
+         ciphercbc = 'cbc iv'     /* Add CBC parms                  */
+         cipheriv = 'x00'         /* IV of zero                     */
+         postcipher = '| drop 1'  /* Drop added record              */
+      end
+   end
+   else
+      cipherstage1 = '|k:rexx ('execn exect') CIPHER' ciphrfunc,
+         kmfunc.cipherparm.keylength 'D' keylength cblocksize.cipherparm
+   cipherstage2 = e'var cipherkey|k:'
+   cipherchk = '| var cipherdecode' /* Check that decrypt worked    */
+end
+ 
+Select
+  When rmtrecv then               /* Receiving disk via TCPIP?      */
+    Call SetupRemoteRecv          /* Go to routine for that         */
+  When oneopt | rawopt then       /* Don't do initial read          */
+    erc=0                         /* Make sure we continue          */
+  When tapeopt then do
+    pipe= respipe,
+          resblk,
+      '|c:count lines',           /* See how many records read      */
+      '|  var firstrecord',
+          cipherstage1 ciphercbc cipheriv postcipher,
+      '|  rexx ('execn exect') UNPACK' unpkopt debug,
+      '|  take 1',
+      '|  strliteral append ""',
+      '|  var fileinfo',
+          respipe2,
+          cipherstage2,
+      e'c:',
+      '|  var recs'
+    If debug>1 then
+       say 'PIPE (end' e 'name readtape)' pipe
+    'PIPE (end' e 'name readtape)' pipe
+    prc=RC
+    If RC<>0 then do
+       emsg'218E Tape read failed, Pipelines Return Code='prc
+       erc=218
+    end
+    If prc=0 then                 /* If this worked, then backspace */
+       'TAPE BSR' recs+1 '(' tapedevs  /* to start of tape file     */
+  end
+  When httpopt then do
+    pipe= respipe,
+          resblk,
+       '| var firstrecord',
+          cipherstage1 ciphercbc cipheriv postcipher,
+       '| rexx ('execn exect') UNPACK' unpkopt debug,
+       '| take 1',
+       '| strliteral append ""',
+       '| var fileinfo',
+      e'a:',
+       '| strnfind "0"',
+       '| var listenerr',
+          respipe2,
+          cipherstage2
+    If debug>1 then
+       say 'PIPE (end' e 'name readhttp)' pipe
+    'PIPE (end' e 'name readhttp)' pipe
+    If RC<>0 then do
+       emsg'219E HTTP decode failed, Pipelines Return Code='RC
+       erc=219
+    end
+    If symbol('listenerr')='VAR' then do
+       parse var listenerr errno .
+       If errno < 100 then
+          erc=900+errno           /* Errno rc is 900+errno          */
+       emsg||erc'E' GetERRNO('readhttp' listenerr)
+    end
+    If httpresp<>'' then do
+       Parse var httpresp . hcode .
+       If datatype(hcode,'W')=0 then
+          hcode=1
+       If hcode<>'200' then do
+          emsg'308E HTTP error response:' httpresp
+          erc=308
+       end
+    end
+  end
+  Otherwise                       /* Read from disk or ftp          */
+    pipe= respipe,
+          resblk,
+       '| var firstrecord',
+          cipherstage1 ciphercbc cipheriv postcipher,
+       '| rexx ('execn exect') UNPACK' unpkopt debug,
+       '| take 1',
+       '| strliteral append ""',
+       '| var fileinfo',
+          respipe2,
+          cipherstage2
+    If debug>1 then
+       say 'PIPE (end' e 'name readname)' pipe
+    'PIPE (end' e 'name readname)' pipe
+    Select
+      When RC<>0 then do
+        emsg'220E Reading failed, Pipelines Return Code='RC
+        erc=220
+      end
+      When symbol('firstrecord')='LIT' then do
+        emsg'229E Reading failed, no data returned'
+        erc=229
+      end
+      Otherwise
+    End
+End
+Return
+ 
+DecodeHeader:
+/*------------------------------------------------------------------*
+ * Read the fields of the header and see if we can restore it.
+ *------------------------------------------------------------------*/
+uptrecv = 0
+If oneopt=0 & rawopt=0 then do
+   If length(fileinfo)=1024 & pos(left(fileinfo,1),'0205'x)>0 then
+      If HaveStage('unterse')=0 then do
+         emsg'053E Input data is TERSED and the unterse Pipeline',
+             'stage is not available.'
+         erc=53
+         Return
+      end
+   If left(fileinfo,1)='78'x then
+      If HaveStage('ZLIB')=0 then do
+         emsg'328E Input data is zlib compressed and the zlib',
+             'Pipeline stage is not available.'
+         erc=328
+         Return
+      end
+   If symbol('firstrecord')='VAR' then
+      If length(fileinfo)>=1024 then do
+         'PIPE (name firstrec)',    /* Assume alt form              */
+              'var firstrecord',    /* Decode the first record      */
+            '| split at' asciisep,  /* Get rid of ASCII part        */
+            '| take 1',
+            '| var fileinfo'
+         altform = 1
+      end
+   If length(fileinfo)>=1024 then do
+      emsg'317E Input data did not decode properly.'
+      Select
+        When (left(firstrecord,2)='0001'x |,          /* Packed?    */
+              pos(left(firstrecord,1),'0205'x)>0 |,   /* Tersed?    */
+              left(firstrecord,1)='78'x) & cipher then /* ZLIB?     */
+          emsg'317E The file is probably not encrypted.'
+        When cipher then
+          emsg'317E Were correct cipher key and options specified?'
+        Otherwise
+          emsg'317E Is the file encrypted?'
+      End
+      erc=317
+      Return
+   end
+   If c2d(left(fileinfo,1)) < 64 then do /* EBCDIC control char?    */
+      emsg'338E Input data did not decode properly.'
+      emsg'338E Is it encrypted or sent using the SECURE option?'
+      erc=338
+      Return
+   end
+   If debug>1 then do
+      say 'Disk info and encoding record:'
+      say fileinfo
+   end
+   useddr=0
+   Parse var fileinfo remowner remvaddr fdevtype fcyl remuser .,
+      remnode remcrc rempack remcipher remdigest dglen,
+      testciph civ .
+   badinfo=1
+   Do 1                           /* Some simple tests on "fileinfo"*/
+      If length(remowner)>9 then leave
+      If length(remvaddr)>4 then leave
+      If wordpos(fdevtype,'3390 3380 9336')=0 then leave
+      If datatype(fcyl,'W')=0 then leave
+      badinfo=0
+   End
+   If badinfo then do
+      emsg'337E Invalid file metadata record received.'
+      erc=337
+      Return
+   end
+   If left(remowner,1)='*' then do /* DDR format dump               */
+      useddr=1
+      remowner=substr(remowner,2)
+   end
+   checkcrc = (remcrc='CRC' | (rmtrecv & remcrc=''))
+   checkcksum = (remcrc='CKSUM')
+   checkddigest=(remcrc='DDIGEST')
+   checksdigest=(remcrc='SDIGEST')
+   checkdigest= (remcrc='DIGEST') | checkddigest
+   checkcipher= (left(remcipher,6)='CIPHER')
+   uptrecv= (dglen='UPDATE')      /* Special use of this field      */
+ 
+   erc=ChkDevs(nosizechk username vaddr ddevtype fdevtype dcyl fcyl)
+   If erc<>0 then
+      Return
+   If matchopt & remowner remvaddr <> username vaddr then do
+      emsg'316E The MATCHDISK option was specified and the target',
+          'disk of' username vaddr
+      emsg'316E does not match the source disk' remowner remvaddr'.'
+      erc=316
+      Return
+   end
+   Select
+     When rempack='TERSE' then
+       If HaveStage('unterse')=0 then do
+          emsg'057E Input data is TERSED and the unterse',
+              'Pipeline stage is not available.'
+          erc=57
+          Return
+       end
+     When rempack='ZLIB' then do
+       If FindZlib()=0 then do
+          emsg'328E Input data is zlib compressed and the ZLIB',
+              'Pipeline stage is not available.'
+          erc=328
+          Return
+       end
+       If checkcipher=0 then
+          resblk=''               /* Doesn't need to be blocked     */
+     end
+     When rempack='NOPACK' then do
+       unpkopt='NOPACK'
+       If cipher=0 then
+          resblk=''               /* Doesn't need to be blocked     */
+     end
+     Otherwise
+   End
+   If checkcipher & cipher=0 then do
+      emsg'054E Input data is encrypted and the CIPHER option was',
+          'not specified.'
+      erc=54
+      Return
+   end
+   If checkcipher=0 & cipher=1 then do
+      emsg'318I NOTE: The CIPHER option was specified, but the data'
+      emsg'318I from the remote system is not encrypted.'
+      parse value '' with cipherstage1 cipherstage2,
+         ciphercbc cipheriv postcipher cipherchk
+   end
+   If (remcipher='CIPHERCBC' & nocbcopt) |, /* data <> options      */
+      (remcipher='CIPHER' & nocbcopt=0) then do
+      If pipecipher then
+         If remcipher='CIPHERCBC' then do
+            ciphercbc = 'cbc iv'
+            cipheriv = 'x00'
+            postcipher = '| drop 1'
+         end
+         else
+            parse value '' with ciphercbc cipheriv postcipher .
+      else do
+         ciphrfunc = SetupCSLcipher(remcipher='CIPHER')
+         cipherstage1 = '|k:rexx ('execn exect') CIPHER' ciphrfunc,
+            kmfunc.cipherparm.keylength 'D' keylength,
+            cblocksize.cipherparm
+      end
+   end
+   If checkcipher & rmtrecv then do
+     /* If we received an IV, adjust for using it instead of iv=x00 */
+      If remcipher='CIPHERCBC' & left(civ,2)='IV' then
+         If pipecipher then do
+            ciphercbc = 'cbc iv'
+            cipheriv = substr(civ,3)
+            postcipher = ''
+         end
+         else
+            cipherstage1 = '|k:rexx ('execn exect') CIPHER KMC',
+               kmfunc.cipherparm.keylength 'D' keylength,
+               cblocksize.cipherparm substr(civ,3)
+      If left(testciph,2)='XT' & rmtresp<>'PROCEED' then do
+         'PIPE (end' e 'name chkciph)', /* Check our test cipher    */
+              'var testciph',
+           '|  spec 4-* x2c 1',
+               cipherstage1 ciphercbc cipheriv,    /* Decrypt       */
+           '|  drop' cblocksize.cipherparm 'bytes',/* Random part   */
+           '|  var testclrtext',
+            e 'var cipherkey',
+           '|k:'
+         If  left(testclrtext,cblocksize.cipherparm%2) /==,
+            right(testclrtext,cblocksize.cipherparm%2) then do
+            emsg'336E The cipher key check failed.  Did you provide',
+                'the correct key?'
+            erc=336
+            Return
+         end
+      end
+      If uptrecv then do
+         postcipher  ='|q:pick anycase 1.3 == "FPL"'
+         cipherstage2=cipherstage2, /* Simple check                 */
+            e'q:| count lines | var badecrypt'
+         If ddevtype<>'9336' then   /* Padding may add zeros        */
+            postcipher='| strip leading 00' postcipher
+      end
+   end
+   If useddr then
+      If FindDDR()=0 then do
+         emsg'055E Input data is in CMS DDR format and the DDR',
+             'Pipeline stage is not available.'
+         If issueEmsg then
+            Say 'Enter HELP PIPEDDR for more information.'
+         erc=55
+         Return
+      end
+   If useddr=0 & PIPEok=0 & cmsddr then do
+      emsg'313E The CMSDDR option was specified, but the input data',
+          'is not in CMS DDR format.'
+      erc=313
+      Return
+   end
+end
+else do                           /* "ONEREAD" option specific      */
+   fcyl = dcyl                    /* Use destination cyls as in size*/
+   useddr = cmsddr                /* Must specify CMSDDR opt        */
+   checkcipher = cipher           /* Need cipher option and key     */
+   checkcrc = crcopt              /* Must specify CRC opt for check */
+   getcrc1 = '| locate 16'        /* Default if no CRC option given */
+   checkcksum = cksumopt          /* Must specify CKSUM for check   */
+   checkdigest= digestopt         /* Must specify DIGEST for check  */
+   checksdigest=sdigestopt        /* Must specify SDIGEST for check */
+   remdigest = digestparm         /* Must enter correct digest type */
+   checkddigest= (digestopt & oldopt=0) /* Default to new format    */
+   If checkcrc+checkcksum+checkdigest+checksdigest>1 then do
+      emsg'128W Too many data verification options specified.'
+      emsg'128W CRC verification will be performed.'
+      Parse value '1 0 0 0' with, /* Use only CRC option            */
+         checkcrc checkcksum checkdigest checksdigest
+   end
+   rempack = 'PACK'               /* Assume it is just packed       */
+   canterse= HaveStage('unterse')
+   canzlib = FindZlib()           /* See if we can inflate zlib     */
+   unpkopt = 'NOPACK'             /* Be less restrictive with unpack*/
+end
+Return
+ 
+SetupRestore:
+/*------------------------------------------------------------------*
+ * Setup everything for the actual restore
+ *------------------------------------------------------------------*/
+If useddr=0 then do               /* For non-DDR we need the label  */
+   parse value LabelDisk(freevaddr ddevtype) with erc label
+   If erc<>0 then do
+      If erc=83 & dcyl>nonEAVmax then do
+         emsg'230E Pipelines does not support EAV disks,',
+             'you need VM66139'   /* Be helpful with APAR info      */
+         erc=230
+      end
+      Return
+   end
+end
+altform=(checkcksum | checkdigest | altform)
+takeinfrec=1                      /* disk info is the 1st record    */
+If altform then
+   takeinfrec='1024 bytes'        /* For this, it is 1024 bytes     */
+ddrcmds=''
+Select
+  When useddr then do
+    diskwrite = 's:ddr'
+    ddrcmds =  e'literal RESTORE ALL',
+             '|  literal OUTPUT' freevaddr 'DASD',
+             '|  literal INPUT PIPE',
+             '|  literal PROMPTS OFF',
+             '|  literal SYSPRINT CONS',
+             '|s:'
+  end
+  When ddevtype=9336 & rawopt then do /* Fixed format records       */
+    diskwrite = 's:drop last 1',  /* Drop excess in last record     */
+               '|y:faninany',
+               '|  fbawrite' freevaddr label '0' dcyl-1
+    ddrcmds =  e's:',             /* reusing an unused variable..   */
+               '|  spec c:13.4 . 1.16 1 17-* (17, 512*c2u(c))',
+               '|y:'
+  end
+  When ddevtype=9336 then do
+    diskwrite = 'fbawrite' freevaddr label '0' dcyl-1
+    If fcyl < dcyl then           /* Smaller source with update     */
+       diskread  = 'fbaread' freevaddr '0' fcyl
+    else
+       diskread  = 'fbaread' freevaddr '0 *'
+    dasdaddr  = 8                 /* 4 byte block num, 4 byte length*/
+    daddrloc  = '9.'dasdaddr      /* Where it is in the record      */
+    dasdterm  = 'blocks'
+    dskblking = fbablocking
+  end
+  Otherwise                       /* ECKD disk                      */
+    diskwrite = 'trackexpand | trackwrite' freevaddr label '0' dcyl-1
+    If fcyl < dcyl then           /* Smaller source with update     */
+       diskread  = 'trackread' freevaddr '0 0' fcyl*15
+    else
+       diskread  = 'trackread' freevaddr '0 0 *'
+    dasdaddr  = 4                 /* CCHH, 4 bytes total            */
+    daddrloc  = '10.'dasdaddr     /* Where it is in the record      */
+    dasdterm  = 'tracks'
+    dskblking = 1
+End
+If notypeopt=0 then
+   Call SetupProgress useddr rempack cmsfile, ddevtype min(fcyl,dcyl)
+ 
+If checkcksum & Pickok=0 then do
+   emsg'120W Your level of Pipelines does not support verifying',
+       'a CKSUM.'
+   emsg'120W No CKSUM verification will be performed.'
+   checkcksum = 0
+end
+If (checkdigest|checksdigest) & wordpos(remdigest,validdigest)=0 then do
+   emsg'134W Unknown digest type' remdigest 'in the file header.'
+   emsg'134W No DIGEST verification will be performed.'
+   Parse value '0 0' with checkdigest checksdigest .
+end
+If (checkdigest|checksdigest) & digok=0 then do
+   emsg'127W Your level of Pipelines does not support verifying',
+       'a DIGEST.'
+   emsg'127W No DIGEST verification will be performed.'
+   Parse value '0 0' with checkdigest checksdigest .
+end
+If checkcrc | checkcksum | checkdigest | checksdigest then do
+   droplast = 1
+   Select
+     When checkcrc then do
+       verifystage = 'crc crc-32'
+       dglen = 4
+     end
+     When checkcksum then do
+       verifystage = 'crc cksum'
+       dglen = 12
+       If rmtrecv=0 then
+          droplast = '1024 bytes'    /* Alternative format          */
+     end
+     When checkdigest | checksdigest then do
+       verifystage = 'digest' remdigest
+       dglen = digestbytes.remdigest
+       If rmtrecv=0 & checksdigest=0 then
+          droplast = '1024 bytes'    /* Alternative format          */
+     end
+     Otherwise
+   End
+   getcrc1=,
+    '|l:drop last' droplast,
+    '|e:fanout'                   /* digest has some quirks for EOF */
+   getcrc2=,
+    e'l:',                        /* Get transmitted CRC            */
+    '|  chop' dglen,              /* Max bytes defined above        */
+    '|  var tcrc',
+    e'e:',                        /* Compute received CRC           */
+    '|' verifystage,              /* Type to compute (CRC, Digest)  */
+    '|  var rcrc'
+   If checkddigest then do
+     dgst1=,
+       '|g:drop last 1',
+       '|i:fanout'                /* Handle digest EOF quirks       */
+     dgst2=,
+       e'g:',
+       '|  chop' dglen,
+       '|  var tdigest',
+       e'i:',
+       '|' verifystage,
+       '|  var rdigest'
+   end
+end
+ 
+Select
+  When oneopt then do             /* Only read disk info once       */
+    fileinfo=''
+    getfirst='| var firstrecord'  /* Save the first rec we get      */
+    infopipe=,
+      '|u:take' takeinfrec,       /* Source disk info record        */
+      '|  take 1024 bytes',       /* Never longer than this         */
+      '|  var fileinfo tracking',
+      '|  strip trailing x00',    /* CKSUM format has this          */
+      '|  nlocate' maxinfoline,       /* Can't be too long          */
+      '|  pick w3 == "'ddevtype'"'    /* Make sure they match       */
+    If nosizechk=0 then infopipe=infopipe,
+      '|  pick w4 == "'dcyl'"'
+    If useddr then infopipe=infopipe,
+      '|  strfind "*"'            /* Must be in DDR format          */
+    else infopipe=infopipe,
+      '|  strnfind "*"'           /* Must not be in DDR format      */
+    If canterse=0 then infopipe=infopipe,
+      '|  pick w9 /== "TERSE"'    /* "TERSE" can't be there         */
+    If canzlib=0 then infopipe=infopipe,
+      '|  pick w9 /== "ZLIB"'     /* "ZLIB" can't be there          */
+    Select
+      When Pickok = 0 then        /* Skip the check                 */
+        nop
+      When checkcksum | checkdigest then /* File in alternate order */
+        infopipe=infopipe,
+          '| pick (w8 /== "CRC" and w8 /== "NOCRC" and w8 /== "SDIGEST")'
+      Otherwise                   /* Check for normal input order   */
+        infopipe=infopipe,
+          '| pick (w8 == "CRC" or w8 == "NOCRC" or w8 == "SDIGEST")'
+    End
+    If checkcipher then infopipe=infopipe,
+      '|  pick w10 /== "-"'       /* Input should be encrypted      */
+    If matchopt then              /* Input disk matches output      */
+       If Pickok then infopipe=infopipe, /* Use better PICK         */
+          '| pick (w1 == "'username'" or',
+                  'w1 == "*'username'") and',
+                  'w2 == "'vaddr'"'
+       else infopipe=infopipe,
+          '| locate w1 "'username'"', /* May not quite work         */
+          '| pick w2 == "'vaddr'"'
+    infopipe=infopipe,
+      '|  var dataok?',           /* Did we pass the tests?         */
+      '|d:dam',                   /* If all is good - allow restore */
+      e'u:',
+      '|d:'
+  End
+  When rawopt then do             /* No disk info to process        */
+    fileinfo=''
+    infopipe=''
+    getfirst=''
+  End
+  Otherwise
+    infopipe='| drop' takeinfrec  /* Already read disk info record  */
+    getfirst=''
+End
+Return
+ 
+DiskRestore:
+/*------------------------------------------------------------------*
+ * Restore a disk from a file.  The file can come from several
+ * different sources.
+ *------------------------------------------------------------------*/
+If noimsg=0 then do
+   emsg'309I Restoring data to' username vaddr 'from' fileloc
+   If fset='ON' then
+      'PSCREEN REFRESH'
+end
+pipe= respipe,                    /* Read file to start restore pipe*/
+      resblk                      /* Any blocking                   */
+If altform then pipe=pipe,        /* Alternate file format          */
+      getfirst,                   /* May save first record          */
+      infopipe,                   /* Get file information first     */
+      getcrc1,                    /* Strip CKSUM off last record    */
+      cipherstage1 ciphercbc cipheriv postcipher, /* Decrypt?       */
+   '| rexx ('execn exect') UNPACK' unpkopt debug, /* Now unpack     */
+      dgst1                       /* Get original digest if present */
+else pipe=pipe,                   /* Format without CKSUM/Digest    */
+      cipherstage1 ciphercbc cipheriv postcipher, /* Decrypt?       */
+      getfirst,                   /* May save first record          */
+   '| rexx ('execn exect') UNPACK' unpkopt debug,
+      infopipe,                   /* info in first rec, CRC in last */
+      getcrc1
+pipe=pipe,
+      progresspipe,
+      cipherchk,
+   '|'diskwrite,
+      ddrcmds,
+      respipe2,
+      getcrc2,
+      progresspipe2,
+      cipherstage2,
+      dgst2
+If pipecall then
+   Address value AddressPipe
+If debug>1 then
+   say pipe.pipecall '(end' e 'name restore)' pipe
+''pipe.pipecall '(end' e 'name restore)' pipe
+Address Command
+prc=RC
+/* Now check if anything went wrong                                 */
+If symbol('cipherdecode')='VAR' then
+   If wordpos(translate(left(cipherdecode,3)),'FPL VHR THR')=0,
+      then do
+      emsg'228E Data did not decrypt correctly, check your key.'
+      erc=228
+      If prc=219 & useddr=0 then  /* Incorrect input format error   */
+         prc=0                    /* Above error will show          */
+   end
+If prc<>0 then                    /* Set erc below if no other error*/
+   Select
+     When prc=-20 & useddr then   /* We know this is from DDR       */
+       emsg'222E Error restoring the disk,',
+           'Unexpected end of file from DDR'
+     When prc=83 & useddr=0 & dcyl>nonEAVmax then
+       emsg'222E Pipelines does not support EAV disks,',
+           'you need VM66139'     /* Be helpful with APAR info      */
+     Otherwise
+       emsg'222E Error restoring the disk,',
+           'Pipelines Return Code='prc
+   End
+If httpopt then do                /* Check for http errors          */
+   Parse var httpresp . hcode .
+   If datatype(hcode,'W')=0 then
+      hcode=1
+   If hcode<>'200' then do
+      emsg'319E HTTP error response:' httpresp
+      fileinfo=''                 /* Ignore any returned data       */
+      erc=319
+   end
+end
+If oneopt & erc=0 then            /* Check for errors w/ONEREAD     */
+   Call OneReadError?
+If erc=0 & prc<>0 then
+   erc=222                        /* emsg already issued            */
+If erc=0 & (checkcrc | checkcksum | checkdigest | checksdigest) then do
+   goodcheck = (symbol('tcrc')='VAR' & symbol('rcrc')='VAR')
+   If goodcheck then              /* If values are valid            */
+      goodcheck = (tcrc == rcrc)  /* .. check for match             */
+   Select
+     When goodcheck then          /* Values are OK                  */
+       nop
+     When checkcrc then do
+       emsg'206E CRC failure:  CRC values of transmitted and',
+           'received data do not match.'
+       erc=206
+     end
+     When checkcksum then do
+       emsg'208E CKSUM failure:  CKSUM values of transmitted',
+           'and received data do not match.'
+       erc=208
+     end
+     When checkdigest | checksdigest then do
+       emsg'225E Digest failure:  Digest values of transmitted',
+           'and received data do not match.'
+       erc=225
+     end
+     Otherwise
+   End
+   If checkddigest then do
+      goodcheck = (symbol('tdigest')='VAR' & symbol('rdigest')='VAR')
+      If goodcheck then
+         goodcheck = (tdigest == rdigest)
+      If goodcheck = 0 then do
+         emsg'227E Digest failure:  Digest values of encoded',
+             'and decoded data do not match.'
+         erc=227
+      end
+   end
+end
+Return
+ 
+OneReadError?:
+/*------------------------------------------------------------------*
+ * If the ONEREAD option is specified or on by default, the file
+ * header is not read in advance.  So, check after the restore if
+ * the correct restore options were specified.
+ *------------------------------------------------------------------*/
+If symbol('firstrecord')='VAR' then do
+   If pos(left(firstrecord,1),'0205'x)>0 & canterse=0 then do
+      emsg'335E Input data is tersed and the unterse',
+          'Pipeline stage is not available.'
+      erc=335
+      fileinfo=''
+   end
+   If left(firstrecord,1)='78'x & canzlib=0 then do /* ZLIB format  */
+      emsg'328E Input data is ZLIB compressed and the ZLIB',
+          'Pipeline stage is not available.'
+      erc=328
+      fileinfo=''
+   end
+end
+If length(fileinfo)>1024 then
+   fileinfo=left(fileinfo,1024) /* Shorten to altform length        */
+If length(strip(fileinfo,'T','00'x)) > maxinfoline |,
+    (erc=0 & fileinfo='') then do
+   emsg'320E Header information unreadable -',
+       'try without ONEREAD option.'
+   fileinfo=''
+   erc=320
+end
+If debug>1 & fileinfo<>'' then do
+   say 'Disk info and encoding record:'
+   If altform then
+      'PIPE (name firstrec)',
+           'var firstrecord',
+         '| strip trailing x00',
+         '| split at' asciisep,
+         '| take 1',
+         '| console'
+   else
+      say strip(fileinfo,'T','00'x)
+end
+Parse var fileinfo remowner remvaddr fdevtype fcyl,
+      . . . fromcrc rempack remcipher .
+remddr=0
+If left(remowner,1)='*' then do    /* DDR format dump               */
+   remddr=1
+   remowner=substr(remowner,2)
+end
+erc=max(abs(erc),,
+  ChkDevs(nosizechk username vaddr ddevtype fdevtype dcyl fcyl))
+Select
+  When useddr   & remddr then
+    nop
+  When useddr=0 & remddr=0 then
+    nop
+  When remddr then do
+    emsg'314E Input data is in CMS DDR format and the CMSDDR',
+        'option was not specified.'
+    erc=314
+  end
+  Otherwise
+    emsg'315E Input data is not in CMS DDR format and the',
+        'CMSDDR option was specified.'
+    erc=315
+End
+If matchopt & remowner remvaddr <> username vaddr then do
+   emsg'327E The MATCHDISK option was specified and the target',
+       'disk of' username vaddr
+   emsg'327E does not match the source disk' remowner,
+        remvaddr'.'
+   erc=327
+end
+If rempack='ZLIB' & canzlib=0 then do
+   emsg'058E Input data is zlib compressed and the zlib',
+       'Pipeline stage is not available.'
+   erc=58
+end
+Select
+  When checkcrc & fromcrc='CRC' then
+    nop
+  When checkcksum & fromcrc='CKSUM' then
+    nop
+  When checkdigest & wordpos(fromcrc,'DIGEST DDIGEST')<>0 then
+    nop
+  When checksdigest & fromcrc='SDIGEST' then
+    nop
+  When checkcrc & fromcrc<>'CRC' then do
+    emsg'321W The CRC option was specified but the CRC',
+        'is not included in the input data.'
+    erc=321
+  end
+  When checkcksum & fromcrc<>'CKSUM' then do
+    emsg'322W The CKSUM option was specified but the CKSUM',
+        'is not included in the input data.'
+    erc=322
+  end
+  When checkdigest & wordpos(fromcrc,'DIGEST DDIGEST')=0 then do
+    emsg'325W The DIGEST option was specified but a DIGEST',
+        'is not included in the input data.'
+    erc=325
+  end
+  When checksdigest & fromcrc<>'SDIGEST' then do
+    emsg'325W The SDIGEST option was specified but an SDIGEST',
+        'is not included in the input data.'
+    erc=325
+  end
+  When fromcrc='CRC' then
+    emsg'323I The input data includes a CRC code, but the CRC',
+        'option was not specified.'
+  When fromcrc='CKSUM' then
+    emsg'324I The input data includes a CKSUM code, but the',
+        'CKSUM option was not specified.'
+  When wordpos(fromcrc,'DIGEST DDIGEST')<>0 then
+    emsg'326I The input data includes a DIGEST code, but the',
+        'DIGEST option was not specified.'
+  When fromcrc='SDIGEST' then
+    emsg'326I The input data includes an SDIGEST code, but the',
+        'SDIGEST option was not specified.'
+  Otherwise
+End
+Select
+  When remcipher='' then
+    nop
+  When cipher & left(remcipher,6)<>'CIPHER' then do
+    emsg'329E The CIPHER option is specified but the input',
+        'data is not encrypted.'
+    erc=329
+  end
+  When cipher=0 & left(remcipher,6)='CIPHER' then do
+    emsg'330E The data is encrypted and the CIPHER option',
+        'was not specified.'
+    erc=330
+  end
+  When remcipher='CIPHER' & nocbcopt=0 then do
+    emsg'331E The input data is encrypted in Cipher ECB mode',
+        'but the NOCBC option was not specified.'
+    erc=331
+  end
+  When left(remcipher,9)='CIPHERCBC' & nocbcopt then do
+    emsg'332E The input data is encrypted in Cipher CBC mode',
+        'but the NOCBC option was specified.'
+    erc=332
+  end
+  Otherwise
+End
+/* Error message of last resort when ONEREAD is specified           */
+If erc=0 & prc=0 & symbol('DATAOK?') = 'LIT' then do
+   emsg'333E The disk could not be restored because one or',
+       'more checks failed.'
+   erc=333
+end
+Return
+ 
+SetupRemoteRecv:
+/*------------------------------------------------------------------*
+ * Set up for a disk to disk transfer over TCPIP. The restore side
+ * listens for a connection and then reads the header record to
+ * find out how the actual disk data will be received and checked.
+ *------------------------------------------------------------------*/
+If ipport=0 then do               /* No specific port specified?    */
+   ''globalv 'GET IPPORT PORTTIME'
+   If datatype(porttime,'W') & datatype(ipport,'W') then
+      If abs(time('S')-porttime) > 90 then /* Port number is too old*/
+         ipport=0
+      else nop
+   else
+      ipport=0
+end
+/* Build stages to check that the restore disk matches the source   */
+/* disk, plus compression, cipher, checksum, etc. also  match.      */
+chkstages1='|c1:pick w3 == "'ddevtype'"'
+chkstages2=e'c1:|spec "Device type mismatch" 1|z:'
+If nosizechk=0 then do
+   chkstages1=chkstages1,
+     '|c2:pick w4 == "'dcyl'"'
+   chkstages2=chkstages2,
+     e'c2:|spec "Disk sizes do not match" 1|z:'
+end
+If matchopt then                  /* Target must match source       */
+   If Pickok then do              /* PICK can use "and" and "or"    */
+      chkstages1=chkstages1,
+        '|c3:pick (w1 == "'username'" or',
+                  'w1 == "*'username'") and',
+                  'w2 == "'vaddr'"'
+      chkstages2=chkstages2,
+        e'c3:|spec "Target user/vdev does not match source" 1|z:'
+   end
+   else do
+      chkstages1=chkstages1,
+        '|c3:locate w1 "'username'"', /* Not as good                */
+        '|c4:pick w2 == "'vaddr'"'
+      chkstages2=chkstages2,
+        e'c3:|spec "Target user does not match source" 1|z:',
+        e'c4:|spec "Target vdev does not match source" 1|z:'
+   end
+If HaveStage('unterse')=0 then do /* Input can't be tersed          */
+   chkstages1=chkstages1,
+     '|c5:pick w9 /== "TERSE"'
+   chkstages2=chkstages2,
+     e'c5:|spec "Unable to accept TERSEd data" 1|z:'
+end
+If cipher then do
+   chkstages1=chkstages1,
+     '|c6:rexx ('execn exect') ciphchk' cipherparm keylength,
+          cblocksize.cipherparm pipecipher debug,
+          kmfunc.cipherparm.keylength
+   chkstages2=chkstages2,
+     e    'var cipherkey',
+     '|c6:|spec "Verification of cipher key failed" 1|z:'
+end
+else do                           /* Input can't be encrypted       */
+   chkstages1=chkstages1,
+     '|c6:pick substr 1.6 of w10 /== "CIPHER"'
+   chkstages2=chkstages2,
+     e'c6:|spec "Unable to accept encrypted data" 1|z:'
+end
+Select
+  When FindDDR() & PIPEok then
+    nop                           /* We can handle everything       */
+  When PIPEok then do             /* Don't have cmsddr support      */
+    chkstages1=chkstages1,
+      '|c7:pick substr 1.1 of w1 /== "*"'
+    chkstages2=chkstages2,
+      e'c7:|spec "Unable to accept DDR format data" 1|z:'
+  end
+  Otherwise                       /* Have cmsddr but not pipe       */
+    chkstages1=chkstages1,
+      '|c7:pick substr 1.1 of w1 == "*"'
+    chkstages2=chkstages2,
+      e'c7:|spec "Unable to accept PIPE trackwrite format data" 1|z:'
+End
+Parse value '' with timeoutstg1 timeoutstg2 timeoutstop .
+If timeoopt then do
+   If PIPEok then                 /* slight lie, need 110B0005      */
+      timeoutstg1='|o:beat once' timeout '"TIMEOUT"'
+   else
+      timeoutstg1='|o:beat' timeout '"TIMEOUT"'
+   timeoutstg2=e'o:|var timeoutstop tracking|h:'
+end
+ 
+emsg'302I Connecting to TCP/IP and listening.',
+    'Enter QUIT to terminate.'
+pipe='immcmd QUIT'                /* In case we need to abort       */
+If Pickok then
+   pipe=pipe 'internal'
+pipe=pipe,
+  '|  take 1',
+  '|h:faninany',                  /* In case TIMEOUT kills us       */
+  '|  pipestop',                  /* Notify pipeline to stop        */
+  '|g:gate',                      /* Terminate other waiting stages */
+  e'a:tcplisten' ipport tcpid 'reuseaddr getsockname',
+  '|  take 2',
+      timeoutstg1,
+  '|t:strfind "pipetcp_"',        /* Get token vs socket info.      */
+  '|f:fanin',
+  '|b:tcpdata' securedata,
+  '|g:',
+  '|  copy',
+  '|  take 1',                    /* File header info               */
+  '|  var fileinfo',
+      chkstages1,                 /* Check for matching disk, etc.  */
+  '|  spec "PROCEED" 1',          /* Good to go if they all match   */
+  '|z:faninany',                  /* Bring in reason for non-match  */
+  '|  var rmtresp',               /* The response sent to remote    */
+  '|f:',
+  e't:',
+  '|  socka2ip',                  /* Get port number                */
+  '|  spec w2 1',
+  '|  var ipport tracking',       /* Save to use it again later     */
+  '|  spec "'emsgmodule'303I Waiting for',
+           word('unsecured secure',secureopt+1),
+          'connection on port" 1 w1 nw',
+          '"to restore' username vaddr'" nw',
+  '|  (nomsg 15) emsg',           /* Show port we're listening on   */
+      fullscreen,                 /* In case fullscreen is on       */
+  e'a:',
+  '|  strnfind "0"',
+  '|  var listenerr',
+  e'b:',
+  '|  strnfind "0"',
+  '|  var dataerr',
+      chkstages2,                 /* Tell reasons why checks failed */
+      timeoutstg2
+If debug>1 then
+   say 'PIPE (end' e 'name ipreadname)' pipe
+'PIPE (end' e 'name ipreadname)' pipe
+prc=RC
+If symbol('listenerr')='VAR' & RC<=0 then do
+   parse var listenerr errno .
+   Select
+     When timeoutstop<>'' then do
+       emsg'224E Pipeline stopped, timeout period reached.'
+       erc=224
+     end
+     When errno = 5001 then do
+       emsg'216E Pipeline stopped, aborted listen for connection.'
+       erc=216
+     end
+     When RC<0 then do
+       emsg'217E Listen failed, Pipelines Return Code='RC
+       erc=217
+     end
+     Otherwise
+       emsg'210E Error listening for initial connection',
+           'from sender.'
+       erc=210
+       If errno < 100 then
+          erc=900+errno           /* errno rc is 900+errno          */
+       emsg||erc'E' GetERRNO('ipreadname' listenerr)
+   End
+end
+If symbol('dataerr')='VAR' then do
+   emsg'212E Error receiving disk information from sender.'
+   parse var dataerr errno .
+   If errno < 100 then
+      erc=900+errno
+   else
+      erc=212                     /* emsg number for unknown errno  */
+   emsg||erc'E' GetERRNO('ipreadname' dataerr)
+end
+If erc=0 & prc<>0 then do
+   emsg'217E Listen failed, Pipelines Return Code='prc
+   erc=217
+end
+If prc=0 & erc=0 then
+   firstrecord=fileinfo
+Return
+ 
+DoRemoteRecv:
+/*------------------------------------------------------------------*
+ * Do the actual receive from the remote side.  This could be the
+ * entire disk or just updated tracks/blocks.
+ *------------------------------------------------------------------*/
+emsg'304I Sending user is' remuser 'at' remnode
+If fset='ON' then
+   'PSCREEN REFRESH'
+'PIPE var remowner',
+   '| append var remvaddr',
+   '| join * " "',
+   '| escape x'c2x('\|'e),        /* Pipe escape, sep, and end      */
+   '| var remdisk'
+pipe=,                            /* The basics of receiving        */
+   'a:tcplisten' ipport tcpid 'reuseaddr',
+  '|  take 1',
+  '|r:fanout',                    /* Tell who is sending data       */
+  '|  spec 65.16 1',
+  '|  socka2ip',
+  '|  spec w3 1',
+  '|h:hostbyaddr',                /* Use host name if we can.       */
+  '|z:faninany',                  /* Or IP if it can't be resolved  */
+  '|  insert "'emsgmodule'305I',
+             word('Receiving Updating',uptrecv+1),
+             'disk from' remdisk 'at " before',
+  '|  (nomsg 15) emsg',
+      fullscreen,
+  e'h:',
+  '|  chop blank',                /* Just keep IP address           */
+  '|z:'
+If uptrecv then pipe=pipe,        /* Receive just updated data      */
+  e'r:',
+  '|f:fanin',
+  '|b:tcpdata deblock sf4 oneresponse' securedata,
+  '|c:count bytes',
+      progresspipe,
+  '|x:locate' dasdaddr+1,         /* Only pass real tracks          */
+      cipherstage1 ciphercbc cipheriv postcipher,
+  '|' diskwrite,
+  '|  count lines',
+  '|  var trkwritten',
+  e'x:',                          /* Skipped tracks (no data sent)  */
+  '|  count lines ',
+  '|  var trkskip',
+  e  diskread,
+  '|  digest' remdigest 'append', /* Compute digest                 */
+  '|  spec' daddrloc '1 -'digestbytes.remdigest';-1 next',
+  '|  addrdw sf4',                /* Add length of CCHH and hash    */
+  '|f:',
+  e'c:',                          /* Get number of bytes, for info  */
+  '|  var bytes',
+  e'a:',
+  '|  strnfind "0"',
+  '|  var listenerr',
+  e'b:',
+  '|  strnfind "0"',
+  '|  var dataerr',
+      progresspipe2,
+      cipherstage2
+else pipe=pipe,                   /* Or, receive the whole disk     */
+  e'r:',
+  '|f:fanin',
+  '|b:tcpdata' securedata,        /* Get the data from remote       */
+  '|c:count bytes',
+  '|  fblock 1024',               /* Will be F 1024 format          */
+  '|  elastic',
+  '|  tolabel' eod ||,            /* Stop at the end                */
+      cipherstage1 ciphercbc cipheriv postcipher,
+  '|  rexx ('execn exect') UNPACK' unpkopt debug,
+      getcrc1,
+      progresspipe,
+  '|' diskwrite,
+  e'c:',                          /* Get number of bytes, for info  */
+  '|  var bytes',
+      ddrcmds,
+      progresspipe2,
+      cipherstage2,
+      getcrc2,                    /* Send our local CRC to sender   */
+  '|  spec "-- All data sent to' ident '--" 1 x25 n 1-* c2x n',
+  '|f:',
+  e'a:',
+  '|  strnfind "0"',
+  '|  var listenerr',
+  e'b:',
+  '|  strnfind "0"',
+  '|  var dataerr'
+If debug>1 then
+   say 'PIPE (end' e 'escape \ name iprestore)' pipe
+'PIPE (end' e 'escape \ name iprestore)' pipe
+prc=RC
+If symbol('listenerr')='VAR' then do
+   emsg'211E Error waiting for data connection from sender.'
+   parse var listenerr errno .
+   If errno < 100 then
+      erc=900+errno
+   else
+      erc=211                     /* emsg number for unknown errno  */
+   emsg||erc'E' GetERRNO('iprestore' listenerr)
+end
+If symbol('dataerr')='VAR' then do
+   emsg'213E Error receiving disk data from sender.'
+   parse var dataerr errno .
+   If errno < 100 then
+      erc=900+errno
+   else
+      erc=213                     /* emsg number for unknown errno  */
+   emsg||erc'E' GetERRNO('iprestore' dataerr)
+end
+If erc=0 & prc<>0 then do
+   If RC=-20 & cmsddr then        /* We know this is from DDR       */
+      emsg'221E Error restoring the disk,',
+          'unexpected end of file from DDR'
+   else
+      emsg'221E Error restoring the disk,',
+          'Pipelines Return Code='prc
+   erc=221
+end
+If erc=0 then do
+   If bytes>10485760 then         /* Over 10 MB                     */
+      emsg'202I' bytes%1048576 'MB received.'
+   else
+      emsg'202I' bytes%1024 'KB received.'
+   If uptrecv then
+      emsg'231I' trkskip*dskblking dasdterm 'skipped,',
+         trkwritten*dskblking dasdterm 'updated.'
+   If uptrecv & checkcipher then
+      If badecrypt > 0 then do
+         emsg'232E Decryption failure: ' badecrypt dasdterm,
+                'did not correctly decrypt.'
+         erc=232
+      end
+   If (checkcrc | checkcksum | checkdigest) & uptrecv=0 &,
+      symbol('tcrc')='VAR' & symbol('rcrc')='VAR' then
+      If tcrc /== rcrc then do
+         If checkdigest then
+            emsg'206E Computed' digestparm 'digests of',
+                'transmitted and received data do not match.'
+         else
+            emsg'206E CRC failure:  CRCs of transmitted and',
+                'received data do not match.'
+         erc=206
+      end
+end
+porttime=time('S')
+''globalv 'PUT IPPORT PORTTIME'
+Return
+ 
+CopyDisk:
+/*------------------------------------------------------------------*
+ * Disk to disk copy using Pipelines or the CMS DDR command
+ * A command of FLASHCOPY attempts to use it or falls back to DDR.
+ *------------------------------------------------------------------*/
+If stableopt then
+   readlink = 'SR'
+Parse value GetDisk(userid vaddr readlink) with erc invaddr ininfo
+If erc<>0 then
+   Return
+Parse var ininfo idevtype icyl
+If truncopt then
+   If truncdump >= icyl-1 then    /* Not less than disk size?       */
+      truncopt=0                  /* then just ignore it            */
+   else
+      icyl = truncdump+1
+outname=afn
+If afn='*' then
+   outname=userid()
+If stableopt then
+   writelink = 'EW'
+Parse value GetDisk(afn aft writelink) with erc outvaddr outinfo
+If erc<>0 then do
+   Call Detach_CopyDisk
+   Return
+end
+Parse var outinfo odevtype ocyl
+erc=ChkDevs(nosizechk outname aft idevtype odevtype ocyl icyl,
+            username vaddr)
+If erc<>0 then do
+   Call Detach_CopyDisk
+   Return
+end
+Parse value '' with rexxfilter progresspipe progresspipe2 .
+Select
+  When cmsddr | FLCopyCmd then
+    nop
+  When idevtype=3390 & trwok=0 & icyl>trackwritelimit then do
+    emsg'092E Your current level of Pipelines cannot copy a disk of',
+        icyl 'cylinders.'
+    If issueEmsg then do
+       say 'Minimum level is' TRWpipelevel
+       say 'Add the CMSDDR option to instead use DDR to do the copy.'
+    end
+    erc=92
+  end
+  When idevtype=3390 & eavok=0 & icyl>nonEAVmax then do
+    emsg'092E Your current level of Pipelines cannot copy a disk of',
+        icyl 'cylinders.'
+    If issueEmsg then do
+       say 'Minimum level is' EAVpipelevel
+       say 'Add the CMSDDR option to instead use DDR to do the copy.'
+    end
+    erc=92
+  end
+  When idevtype=9336 & FBAok=0 then do
+    emsg'123E The device types are FBA, but the current level of'
+    emsg'123E Pipelines does not support FBA disks.'
+    If issueEmsg then do
+       say 'Minimum level is' FBApipelevel
+       say 'Add the CMSDDR option to instead use DDR to do the copy.'
+    end
+    erc=123
+  end
+  When notypeopt=0 then
+    Call SetupProgress cmsddr 'NONE', ininfo
+  Otherwise
+End
+If erc<>0 then do
+   Call Detach_CopyDisk
+   Return
+end
+If noprompt=0 then do          /* Make sure we want to do this   */
+   emsg'400I Any data on' outname aft 'will be erased.'
+   emsg'022R Continue? (Y/N)'
+   Pull ans .
+   If left(ans,1)<>'Y' then do
+      emsg'401I Disk was not changed.'
+      erc=401
+      Call Detach_CopyDisk
+      Return
+   end
+end
+If FLCopyCmd then do
+   parse value diag(8,'QUERY COMMANDS FLASHCOPY') with,
+         'IBMCLASS=' fclass '15'x
+   fclass = translate(fclass,' ',',')
+   If wordpos('B',fclass)=0 then do
+      emsg'406I The CP FLASHCOPY command is not available.',
+          'DDR will be used instead.'
+      Parse value '0 1' with FLCopyCmd cmsddr .
+   end
+end
+If truncopt then do
+   ctype=word('cylinders blocks',(idevtype=9336)+1)
+   emsg'408I Input disk is' word(ininfo,2) ctype',',
+       'only copying the first' icyl ctype'.'
+end
+If FLCopyCmd then do
+   If nosizechk | truncopt then
+      'CP FLASHCOPY' invaddr '0' min(icyl,ocyl)-1,
+         outvaddr '0' min(icyl,ocyl)-1
+   else
+      'CP FLASHCOPY' invaddr '0 END' outvaddr '0 END'
+   If RC<>0 then do
+      emsg'407I The CP FLASHCOPY command did not succeed.',
+          'DDR will be used instead.'
+      Parse value '0 1' with FLCopyCmd cmsddr .
+   end
+end
+Select
+  When FLCopyCmd then
+    nop                           /* Done already                   */
+  When cmsddr then do
+    'MAKEBUF'                     /* Just use DDR directly          */
+    buf=RC
+    queue 'SYSPRINT CONS'
+    queue 'PROMPTS OFF'
+    queue 'IN' invaddr 'DASD'
+    queue 'OUT' outvaddr 'DASD'
+    If nosizechk | truncopt then do
+       queue 'COPY 0 TO' min(icyl,ocyl)-1
+       queue ' '                  /* No more extents to specify     */
+    end
+    else
+       queue 'COPY ALL'
+    queue ' '
+    'DDR'
+    erc=RC
+    'DROPBUF' buf
+  End
+  Otherwise
+    Parse value LabelDisk(outvaddr odevtype) with erc label
+    If erc<>0 then do
+       Call Detach_CopyDisk
+       Return
+    end
+    Select
+      When (truncopt | nosizechk) & idevtype=9336 then do
+        diskread  = 'fbaread' invaddr '0' min(icyl,ocyl)-1
+        diskwrite = 'fbawrite' outvaddr label '0' ocyl-1
+      end
+      When idevtype=9336 then do
+        diskread  = 'fbaread' invaddr '0 *'
+        diskwrite = 'fbawrite' outvaddr label '0' ocyl-1
+      end
+      When truncopt | nosizechk then do
+        diskread  = 'trackread' invaddr '0 0' (min(icyl,ocyl)-1)*15
+        diskwrite = 'trackwrite' outvaddr label '0' ocyl-1
+      end
+      Otherwise
+        diskread  = 'trackread' invaddr '0 0 *'
+        diskwrite = 'trackwrite' outvaddr label '0' ocyl-1
+    End
+    If noimsg=0 then
+       emsg'402I Copying disk' username vaddr 'to' outname aft
+    pipe= diskread,
+          progresspipe,
+      '|' diskwrite,
+          progresspipe2
+    If debug>1 then
+       say 'PIPE (end' e 'name copydisk)' pipe
+    'PIPE (end' e 'name copydisk)' pipe
+    erc=RC
+end
+Select
+  When erc<>0 then do
+    emsg'404E Copy failed.  Return code' erc
+    erc=404
+  end
+  When noimsg then
+    nop
+  Otherwise
+    emsg'403I Copy completed.'
+End
+Call Detach_CopyDisk
+Return
+ 
+Detach_CopyDisk:
+If userid <> '*' then
+   Call diag 8,'DETACH' invaddr
+If afn <> '*' then
+   Call diag 8,'DETACH' outvaddr
+Return
+ 
+ProcSetCmd:
+/*------------------------------------------------------------------*
+ * Process a SET command, to set program defaults
+ *------------------------------------------------------------------*/
+Parse upper arg setcmd setarg .
+Select
+  When setcmd='' | abbrev('QUERY',setcmd,1) then do
+    If dumpformat='' then
+       say 'DUMPFORMAT (Pipelines or CMS DDR) is not set.'
+    else
+       say 'The current DUMPFORMAT default is:' dumpformat
+    If compformat='' | compformat='DEFAULT' then
+       say 'COMPACT (compaction format default) is not set.'
+    else
+       say 'The current COMPACT default is:' compformat
+    If crcoption='YES' | crcoption='NO' | crcoption='CKSUM' |,
+       crcoption='DIGEST' | crcoption='SDIGEST' then
+       say 'CRC (include CRC, CKSUM, or DIGEST) is' crcoption'.'
+    else
+       say 'CRC (include CRC, CKSUM, or DIGEST) is not set.'
+    If digesttype='' | digesttype='NONE' then
+       say 'DIGEST (DIGEST type default) is not set.'
+    else
+       say 'The default DIGEST type is' digesttype
+    If ciphertype='' | ciphertype='NONE' then
+       say 'CIPHER (encrypt output) is not the default.'
+    else
+       say 'CIPHER is the default with format' ciphertype
+    If cbcoption='YES' | cbcoption='NO' then
+       say 'CBC (enable CBC cipher mode) is' cbcoption'.'
+    else
+       say 'CBC (disable CBC cipher mode) is not set.'
+    If progress='YES' | progress='NO' then
+       say 'PROGRESS (show progress messages) is' progress'.'
+    else
+       say 'PROGRESS (show progress messages) is not set.'
+    If secure='YES' | secure='NO' then do
+       say 'SECURE (use TLS/SSL sockets) is' secure'.'
+       If tls_label<>'' then
+          say 'The default TLS Label is:' tls_label
+       else
+          say 'No default TLS Label is set.'
+    end
+    else
+       say 'SECURE (use TLS/SSL sockets) is not set.'
+    If abbrev('EXTENDED',setarg,3) then
+       If keyvalue<>'' then do
+          say 'The stored cipher key value is:'
+          say '(hex): ' keyvalue
+          say '(char): "'x2c(keyvalue)'"'
+       end
+       else
+          say 'No default cipher key is stored.'
+    else
+       If keyvalue<>'' then
+          say 'A default cipher key value is set, but it is not shown.'
+  end
+  When abbrev('DUMPFORMAT',setcmd,3) then do
+    If wordpos(setarg,validformat)=0 then do
+       say 'Invalid dump format:' setarg
+       say 'The valid formats are:' validformat
+       erc=8
+    end
+    else do
+       If dumpformat='' then
+          say 'Dump format set to' setarg
+       else
+          say 'Dump format set to' setarg,
+              '(previous setting was' dumpformat')'
+       dumpformat = setarg
+       ''globalv 'PUTP DUMPFORMAT'
+    end
+  end
+  When abbrev('COMPACT',setcmd,3) then do
+    If wordpos(setarg,'DEFAULT' validcomp)=0 then do
+       say 'Invalid compaction format:' setarg
+       say 'The valid formats are:  DEFAULT' validcomp
+       erc=8
+    end
+    else do
+       If compformat='' then
+          say 'Compaction format set to' setarg
+       else
+          say 'Compaction format set to' setarg,
+              '(previous setting was' compformat')'
+       compformat = setarg
+       ''globalv 'PUTP COMPFORMAT'
+    end
+  end
+  When setcmd='CRC' then do
+    If abbrev('YES',setarg,1) then
+       setarg='YES'
+    If abbrev('NO',setarg,1) then
+       setarg='NO'
+    If wordpos(setarg,'YES NO CKSUM DIGEST SDIGEST')=0 then do
+       say 'Invalid CRC selection:' setarg
+       say 'You must specify YES, NO, CKSUM, DIGEST, or SDIGEST.'
+       erc=8
+    end
+    else do
+       If crcoption='' then
+          say 'CRC preference set to' setarg
+       else
+          say 'CRC preference set to' setarg,
+              '(previous setting was' crcoption')'
+       crcoption = setarg
+       If wordpos(crcoption,'DIGEST SDIGEST')=0 then /* Not a digest*/
+          digesttype=''             /* then clear the digest type.  */
+       ''globalv 'PUTP CRCOPTION DIGESTTYPE'
+    end
+  end
+  When abbrev('DIGEST',setcmd,3) | abbrev('SDIGEST',setcmd,4) then do
+    If wordpos(setarg,'NONE' validdigest)=0 then do
+       say 'Invalid DIGEST type:' setarg
+       say 'The valid formats are: NONE' validdigest
+       erc=8
+    end
+    else do
+       If digesttype='' then
+          say 'Digest type set to' setarg
+       else
+          say 'Digest type set to' setarg,
+              '(previous setting was' digesttype')'
+       digesttype = setarg
+       If digesttype<>'' then     /* If we set one                  */
+          If left(setcmd,1)='S' then do
+             say 'Single Digest mode set.'
+             crcoption='SDIGEST'  /* CRC option is SDIGEST (single) */
+          end
+          else
+             crcoption='DIGEST'   /* CRC option is DIGEST           */
+       ''globalv 'PUTP CRCOPTION DIGESTTYPE'
+    end
+  end
+  When abbrev('CIPHER',setcmd,4) then do
+    If wordpos(setarg,'NONE' validcipher)=0 then do
+       say 'Invalid cipher type:' setarg
+       say 'The valid formats are: NONE' validcipher
+       erc=8
+    end
+    else do
+       If ciphertype='3DES' then  /* Change old term to newer term  */
+          ciphertype='TDES'
+       If ciphertype='' then
+          say 'Cipher type set to' setarg
+       else
+          say 'Cipher type set to' setarg,
+              '(previous setting was' ciphertype')'
+       ciphertype = setarg
+       ''globalv 'PUTP CIPHERTYPE'
+    end
+  end
+  When setcmd='CBC' then do
+    If abbrev('YES',setarg,1) then
+       setarg='YES'
+    If abbrev('NO',setarg,1) then
+       setarg='NO'
+    If wordpos(setarg,'YES NO')=0 then do
+       say 'Invalid CBC option selection:' setarg
+       say 'You must specify YES or NO.'
+       erc=8
+    end
+    else do
+       If cbcoption='' then
+          say 'CBC preference set to' setarg
+       else
+          say 'CBC preference set to' setarg,
+              '(previous setting was' cbcoption')'
+       cbcoption = setarg
+       ''globalv 'PUTP CBCOPTION'
+    end
+  end
+  When setcmd='KEY' & setarg='NONE' then do
+    say 'Stored cipher key has been discarded.'
+    keyvalue = ''
+    ''globalv 'PUTP KEYVALUE'
+  end
+  When setcmd='KEY' | left(setcmd,4)='KEY(' then do 1
+    If left(setcmd,4)='KEY(' then
+       parse var fullmixed +3 inputkey
+    else
+       parse var fullmixed . inputkey
+    inputkey = strip(inputkey)    /* Use quotes to add spaces       */
+    If pos(left(inputkey,1),'"''(')>0 then do
+       odelim = left(inputkey,1)
+       cdelim =translate(odelim,')','(')
+       Parse var inputkey (odelim) clearkey (cdelim)
+    end
+    else
+       clearkey = inputkey
+    If datatype(clearkey,'X') then
+       clearkey = x2c(inputkey)
+    If ciphertype<>'' & wordpos(ciphertype,validcipher)>0 then do
+       If ciphertype='3DES' then  /* Change old term to newer term  */
+          ciphertype='TDES'
+       keylength=length(clearkey)
+       If keycheck.ciphertype.keylength=0 then do
+          say 'Default cipher type of' ciphertype 'requires a key',
+              'of length' keycheck.ciphertype 'bytes.'
+          say 'Your key is' keylength 'bytes.'
+          erc=8
+          Leave
+       end
+    end
+    say 'Default cipher key has been stored.'
+    keyvalue = c2x(clearkey)
+    ''globalv 'PUTP KEYVALUE'
+  end
+  When abbrev('PROGRESS',setcmd,3) then do
+    If abbrev('YES',setarg,1) then
+       setarg='YES'
+    If abbrev('NO',setarg,1) then
+       setarg='NO'
+    If wordpos(setarg,'YES NO')=0 then do
+       say 'Invalid Progress messages selection:' setarg
+       say 'You must specify YES or NO.'
+       erc=8
+    end
+    else do
+       If progress='' then
+          say 'Progress message preference set to' setarg
+       else
+          say 'Progress message preference set to' setarg,
+              '(previous setting was' progress')'
+       progress = setarg
+       ''globalv 'PUTP PROGRESS'
+    end
+  end
+  When abbrev('SECURE',setcmd,3) then do
+    If abbrev('YES',setarg,1) then
+       setarg='YES'
+    If abbrev('NO',setarg,1) then
+       setarg='NO'
+    If wordpos(setarg,'YES NO')=0 then do
+       say 'Invalid Secure (TLS/SSL) selection:' setarg
+       say 'You must specify YES or NO.'
+       erc=8
+    end
+    else do
+       If secure='' then
+          say 'Secure (use TLS/SSL) preference set to' setarg
+       else
+          say 'Secure (use TLS/SSL) preference set to' setarg,
+              '(previous setting was' secure')'
+       secure = setarg
+       ''globalv 'PUTP SECURE'
+    end
+  end
+  When abbrev('TLSLABEL',setcmd,4) then do
+    If (setarg<>'' & datatype(setarg,'A')=0) | length(setarg)>8 then do
+       say 'Invalid TLS Label selection:' setarg
+       say 'It must be 1-8 alphanumeric characters.'
+       erc=8
+    end
+    else do
+       If secure<>'YES' & setarg<>'' then do
+          say 'Secure (use TLS/SSL) preference set to YES'
+          secure = 'YES'          /* Implies secure option          */
+       end
+       If setarg='' then
+          say 'TLS/SSL label setting cleared.'
+       else
+          say 'TLS/SSL label set to' setarg
+       If tls_label<>'' then
+          say '(previous setting was' tls_label')'
+       tls_label = setarg
+       ''globalv 'PUTP TLS_LABEL SECURE'
+    end
+  end
+  Otherwise
+    say 'Unknown subcommand "'setcmd'" for SET command.'
+    erc=8
+End
+Return
+ 
+LabelDisk:
+/*------------------------------------------------------------------*
+ * For FBA, use FORMAT with NOERASE.  For 3390, use CPFMTXA EXEC
+ * (which uses ICKDSF) to put a known label on cyl 0.
+ * If this doesn't work or can't be run, we just fall back to hoping
+ * a correct label can be read.  Then, read the label on the disk
+ * and return it to the caller
+ * Thanks to James Vincent for the CPFMTXA code
+ *------------------------------------------------------------------*/
+Procedure expose execn pickok
+arg vaddr devtype .
+Parse value ReadLabel(vaddr devtype) with RC label /* Read it first */
+If RC<>0 then
+   Return RC
+If label<>'' then                 /* Could we read a valid label?   */
+   Return RC label                /* Then just return it.           */
+ 
+/* No valid label could be read, so put a scratch label on the disk */
+If devtype=9336 then do
+   mode=getmode()
+   'MAKEBUF'
+   buf=RC
+   Queue '1'                      /* 1 for yes, we want to format   */
+   Queue 'SCRTCH'                 /* Disk label                     */
+   'PIPE command FORMAT' vaddr mode '(NOERASE BLKSIZE 512 | hole'
+   'DROPBUF' buf
+   'RELEASE' mode
+end
+else do
+   linkpmaint=0
+   If execstat('CPFMTXA EXEC')=0 & validid('PMAINT') then do
+      'EXEC VMLINK PMAINT 551 (NOTYPE NONAMES PUSH'
+      linkpmaint=(RC=0)
+   end
+   If execstat('CPFMTXA EXEC') & state('ICKDSF MODULE *') then do
+      'MAKEBUF'
+      buf=RC
+      Queue 'YES'                 /* "YES" we want to format        */
+      Queue 'END'                 /* No allocation map              */
+      'PIPE command EXEC CPFMTXA' vaddr 'SCRTCH 0-0 | hole'
+      'DROPBUF' buf
+   end
+   If linkpmaint=1 then
+      'EXEC VMLINK PMAINT 551 (NOTYPE NONAMES POP'
+end
+Return ReadLabel(vaddr devtype)
+ 
+ReadLabel:
+/*------------------------------------------------------------------*
+ * Read the disk label.  Code is from pipelines documentation.
+ *------------------------------------------------------------------*/
+Procedure expose execn pickok
+arg vaddr devtype .
+If devtype=9336 then
+   pipe='fbaread' vaddr '1 1',    /* Label is in block 1            */
+      '| substr 17-*'             /* Remove record header           */
+else
+   pipe='trackread' vaddr '0 0 1', /* Label on cylinder 0, 1st track*/
+      '| trackdeblock',
+      '| drop 4',                 /* Drop address and recs 0-2      */
+      '| take 1',                 /* Record 3                       */
+      '| ckddeblock',
+      '| drop 2'                  /* Drop count and key             */
+pipe=pipe,
+  '|  strliteral ifempty x00',    /* If no record                   */
+  '|  pad 10 00',                 /* or short record                */
+  '|z:if pick 1.10 == x00000000000000000000', /* Brand new disk?    */
+  '|  spec "*" 1',                /* Just need "*" for label        */
+  '|z:'
+If pickok then pipe=pipe,
+  '|  pick 1.4 == "VOL1", "CMS1"' /* Must have valid label prefix   */
+else pipe=pipe,
+  '|  pick 4.1 == "1"'            /* More limited check             */
+pipe=pipe,
+  '|  spec "string x" 1 5.6 c2x next', /* Hide any special chars    */
+  '|z:',
+  '|  strliteral append ""',
+  '|  var label'
+'PIPE (name readlab)' pipe
+Return RC label
+ 
+FindFTP:
+/*------------------------------------------------------------------*
+ * If the FTP pipe stages are not loaded, try to load them from either
+ * INSTPIPE MODULE or DRPC MODULE. INSTPIPE is on the MAINT 2CC or
+ * 193 disks, DRPC is from the DRPC package on the VM download page
+ * or already on the S disk of z/VM 6.2 and later.
+ *------------------------------------------------------------------*/
+Procedure expose execn drpcmodule findfilter pipe.
+arg ftpfilter .
+found=1                           /* Assume we find it              */
+Do 1                              /* Go until we find it.           */
+   If state(drpcmodule 'MODULE *') then do
+      ''drpcmodule
+      If RC=0 & Havestage(ftpfilter) then
+         Leave
+   end
+   If state('INSTPIPE MODULE *') then do /* Already available?      */
+      'INSTPIPE'
+      If RC=0 & Havestage(ftpfilter) then
+         Leave
+   end
+   If validid('$MAINT') then do   /* Used on internal IBM systems   */
+      'EXEC VMLINK $MAINT 193 (NOTYPE NONAMES PUSH'
+      If state('INSTPIPE MODULE *') then /* Now we have the module? */
+         'INSTPIPE'                      /* .. load it              */
+      'EXEC VMLINK $MAINT 193 (NOTYPE NONAMES POP'
+      If Havestage(ftpfilter) then       /* We have stage now?      */
+         Leave                           /* .. then return          */
+   end
+   If validid('MAINT') then do
+      'EXEC VMLINK MAINT 193 (NOTYPE NONAMES PUSH'
+      If state('INSTPIPE MODULE *') then /* Now we have the module? */
+         'INSTPIPE'                      /* .. load it              */
+      'EXEC VMLINK MAINT 193 (NOTYPE NONAMES POP'
+      If Havestage(ftpfilter) then       /* We have stage now?      */
+         Leave                           /* .. then return          */
+   end
+   found=0                        /* We didn't find it.             */
+end
+Return found
+ 
+HaveStage:
+/*------------------------------------------------------------------*
+ * Return 1 or 0 if the pipe stage is loaded
+ *------------------------------------------------------------------*/
+Procedure expose execn findfilter pipe.
+trace o
+arg filtername .
+pipeenv=(address()<>'COMMAND')
+If findfilter=-1 then do
+   ''pipe.pipeenv 'query level|var pipelevel'
+   findfilter=(pipelevel >>= '110B000D'x)
+end
+If findfilter then do
+   ''pipe.pipeenv 'filterpack resolve' filtername,
+      '| locate w2',              /* Must be installed              */
+      '| count lines',
+      '| var filter'
+   Return (filter>0)
+end
+else do
+   If pipeenv then
+      'resolve' filtername
+   else
+      'PIPE literal resolve' filtername '| pipcmd'
+   Return (RC<>0)                 /* RC = 0 means NOT found         */
+end
+ 
+SetupCSLcipher:
+/*------------------------------------------------------------------*
+ * Using the cipher functions in the CSL lib needs some setup.
+ *------------------------------------------------------------------*/
+arg nocbcflag .
+ciphrfunc = word('KMC KM',nocbcflag+1)  /* Default is KMC           */
+'RTNSTATE' ciphrfunc '(SYSTEM'
+If RC<>0 then
+   If state(cipherlib 'CSLLIB *') then do
+      'RTNLOAD KM  (FROM' cipherlib 'NOTYPE SYSTEM'
+      'RTNLOAD KMC (FROM' cipherlib 'NOTYPE SYSTEM'
+   end
+   else do
+      emsg'059E' cipherlib 'CSLLIB not found for' ciphrfunc,
+          'cipher routine.'
+      Exit 59
+   end
+'RTNSTATE' ciphrfunc '(SYSTEM'
+If RC<>0 then do
+   emsg'060E Unable to load' ciphrfunc 'for cipher function.'
+   Exit 60
+end
+Return ciphrfunc
+ 
+Getaddr:
+/*------------------------------------------------------------------*
+ *  This function will determine the first free virtual address
+ *  available in the default range of 400-FFFF.
+ *------------------------------------------------------------------*/
+Procedure expose execn
+Do vad=x2d('3FF')+1 to 65535 while Substr(Diag(24,D2X(vad)),13,1)<>3
+ end
+return d2x(vad)
+ 
+State:
+/*------------------------------------------------------------------*
+ * Function to see if a file exists
+ *------------------------------------------------------------------*/
+Procedure expose execn
+arg sfn sft sfm .
+If address()='COMMAND' then
+   'STATE' sfn sft sfm
+else
+   'callpipe state' sfn sft sfm
+Return (rc=0)
+ 
+Execstat:
+/*------------------------------------------------------------------*
+ * See if an exec exists (in memory or on disk)
+ *------------------------------------------------------------------*/
+Procedure expose execn
+arg sfn sft .
+'EXECSTAT' sfn sft
+Return (rc<=4)
+ 
+Novalue:
+/*------------------------------------------------------------------*
+ * Our standard novalue routine
+ *------------------------------------------------------------------*/
+say 'Novalue raised at line' sigl 'of' execn'.'
+say 'The variable referenced is' condition('D')
+Exit 99
+ 
+Validid:
+/*------------------------------------------------------------------*
+ * See if an id is valid.  Use the RC from CP LINK
+ *------------------------------------------------------------------*/
+Procedure expose execn
+Parse value diagrc(8,'LINK' arg(1)) with RC .
+Return (RC=22)
+ 
+GetCMSLevel:
+/*------------------------------------------------------------------*
+ * Get the CMS level from DMSQEFL.
+ *------------------------------------------------------------------*/
+Procedure expose execn
+Call 'CSL' 'DMSQEFL rc rs cp_prod cp_level cp_sl',
+                   'cms_level cms_sl cms_user'
+If RC=0 then
+   Return cms_level
+else
+   Return 0
+ 
+DecodeFTP:
+/*------------------------------------------------------------------*
+ * Decode the parameter string for FTP or HTTP so that we can test
+ * for options being present.  The values are stored in the stem ftp.
+ *------------------------------------------------------------------*/
+Procedure expose execn ftp. debug
+Parse arg ftpparms
+Do while ftpparms<>''
+   Parse var ftpparms parm ftpparms /* Get each parm in turn        */
+   Select
+     When parm='-debug' then
+       debug=max(debug,1)
+     When ftpparms='' then        /* Nothing follows, stop here     */
+       nop
+     When wordpos(parm,'-h -host -hostname')   <>0 then
+       Parse var ftpparms ftp.0hostname ftpparms
+     When wordpos(parm,'-u -user -userid')     <>0 then
+       Parse var ftpparms ftp.0userid   ftpparms
+     When wordpos(parm,'-f -file -filename')   <>0 then
+       Parse var ftpparms ftp.0filename ftpparms
+     When wordpos(parm,'-d -dir -directory')   <>0 then
+       Parse var ftpparms ftp.0directory ftpparms
+     When parm='-port' then
+       Parse var ftpparms ftp.0port ftpparms
+     When wordpos(parm,'-p -pw -pwd -password')<>0 then do
+       Parse var ftpparms ftp.0password ftpparms
+       ftp.0PWfrom='PARM'
+     end
+     Otherwise                    /* We don't care about other parms*/
+   End
+end
+Return
+ 
+ProcNETRC:
+/*------------------------------------------------------------------*
+ * If a NETRC DATA file exists, process it by supplying a userid
+ * and maybe password for any host listed in that file
+ *------------------------------------------------------------------*/
+Procedure expose execn ftp.
+pipe='< NETRC DATA *',
+   '| strfind anycase "MACHINE_"', /* Must start with this          */
+   '| pick anycase w3 == "LOGIN"', /* Must have this as word 3      */
+   '| pick anycase w2 == "'ftp.0hostname'"'
+If ftp.0userid<>'' then pipe=pipe, /* Do we know userid from parms? */
+   '| pick w4 == "'ftp.0userid'"'  /* if so, find it also           */
+pipe=pipe,
+   '| take 1',
+   '| append literal',
+   '| var netrc'
+'PIPE (name netrc)' pipe
+If RC<>0 then                     /* Just return if failure         */
+   Return
+Parse var netrc . . . userid pwkwd password
+If userid='' then                 /* Incorrect or nothing found     */
+   Return
+If ftp.0userid='' then                /* Was the userid missing?    */
+   ftp.0userid = userid               /* save it in stem            */
+If translate(pwkwd)<>'PASSWORD' then /* Must be correct keyword..or */
+   password=''                       /*   we can't use the value    */
+If password<>'' & ftp.0PWfrom='' then do /* Now have a password?    */
+   If left(password,1)="'" then      /* Starts with a quote?        */
+      'PIPE var password',
+         '| strip both string x7D 1', /* Remove one quote both sides*/
+         '| change x7D7D x7D',        /* Repeated quotes to 1 quote */
+         '| var ftp.0password'
+   else
+      ftp.0password = password
+   ftp.0PWfrom='NETRC'               /* We have pw from netrc       */
+end
+Return
+ 
+GetFTPpw:
+/*------------------------------------------------------------------*
+ * If we don't yet have a password to log in to ftp, get it here
+ * from the user.  Make sure it does not appear on the console.
+ * Return it as part of the ftp parm string
+ *------------------------------------------------------------------*/
+Procedure expose execn ftp. emsg
+trace o
+Parse value diag(8,'QUERY V CONS') with cpout '15'x
+spooled=0
+If pos('TERM START',cpout)<>0 then
+   spooled=1                      /* Our cons is spooled            */
+Do while ftp.0password = ''       /* Wait for a password            */
+   emsg'020R Please enter the password for user' ftp.0userid,
+       'on host' ftp.0hostname
+   emsg'020R (It will not appear when typed.)'
+   If spooled then
+      'CP SPOOL CONS STOP'
+   'PIPE console dark',           /* Read invisible input from con  */
+      '| take 1',                 /* Just 1 line                    */
+      '| append literal',         /* Always give variable a value   */
+      '| var ftp.0password'
+   If spooled then
+      'CP SPOOL CONS START'
+end
+ftp.0PWfrom='CONS'                /* We have pw from the user    */
+Return
+ 
+Lower:
+/* Translate upper case to lower */
+Return translate(arg(1),'abcdefghijklmnopqrstuvwxyz',,
+                        'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+DecodeURL:
+/*------------------------------------------------------------------*
+ * Decode a URL for either FTP or HTTP and set variables.
+ *------------------------------------------------------------------*/
+Procedure expose execn ftp.
+Parse arg server '/' path
+If pos('@',server)<>0 then do     /* Have userid and opt. password? */
+   parse var server login '@' server
+   parse var login ftp.0userid ':' ftp.0password .
+   If ftp.0password<>'' then
+      ftp.0PWfrom='URL'
+end
+Parse var server ftp.0hostname ':' ftp.0port
+Parse value reverse(path) with filename '/' directory
+ftp.0directory = reverse(directory)
+ftp.0filename = reverse(filename)
+Return
+ 
+BuildFTPparm:
+/*------------------------------------------------------------------*
+ * Create the parm string for the old ftp pipe stages.
+ *------------------------------------------------------------------*/
+Procedure expose execn ftp.
+ftpparm=''                        /* Build ftp arg string           */
+If ftp.0hostname <>'' then ftpparm=ftpparm '-hostname'  ftp.0hostname
+If ftp.0userid   <>'' then ftpparm=ftpparm '-userid'    ftp.0userid
+If ftp.0password <>'' then ftpparm=ftpparm '-password'  ftp.0password
+If ftp.0port     <>'' then ftpparm=ftpparm '-port'      ftp.0port
+If ftp.0directory<>'' then ftpparm=ftpparm '-directory' ftp.0directory
+If ftp.0filename <>'' then ftpparm=ftpparm '-filename'  ftp.0filename
+Return ftpparm
+ 
+BuildURL:
+/*------------------------------------------------------------------*
+ * Create a url for the ftp stage, but skip the password
+ *------------------------------------------------------------------*/
+Procedure expose execn ftp.
+arg secure? .
+  /* Start of ftp url   */ url='ftp'copies('s',secure?)'://'
+If ftp.0userid<>'' then    url=url||ftp.0userid'@'  /* Maybe userid */
+  /* Always need host   */ url=url||ftp.0hostname
+If ftp.0port<>'' then      url=url':'ftp.0port      /* If given     */
+If ftp.0directory<>'' then url=url'/'ftp.0directory /* If needed    */
+  /* Must have filename */ url=url'/'ftp.0filename
+Return url
+ 
+FindDDR:
+/*------------------------------------------------------------------*
+ * If the DDR pipe stage is not loaded, try to load it from the
+ * DRPC MODULE. DRPC is from the DRPC package on the VM download page
+ * or already on the S disk of z/VM 6.2 and later.
+ *------------------------------------------------------------------*/
+Procedure expose execn drpcmodule findfilter pipe.
+If HaveStage('DDR') then
+   Return 1
+found=0
+If state(drpcmodule 'MODULE *') then do
+   ''drpcmodule
+   If RC=0 & HaveStage('DDR') then
+      found=1
+end
+Return found
+ 
+FindZlib:
+/*------------------------------------------------------------------*
+ * If the zlib pipe stage is not loaded, try to load it from the
+ * ZLIBSTG MODULE.  See the help and notes for how to get it.
+ *------------------------------------------------------------------*/
+Procedure expose execn zlibmodule findfilter pipe.
+If HaveStage('ZLIB') then
+   Return 1
+trace o
+found=0
+If state(zlibmodule 'MODULE *') then do
+   Address Command zlibmodule
+   If RC=0 & HaveStage('ZLIB') then
+      found=1
+end
+Return found
+ 
+Getmode:
+/*------------------------------------------------------------------*
+ *  Return the first available free filemode letter
+ *------------------------------------------------------------------*/
+Procedure expose execn
+trace o
+modelist = 'ZXWVUTRQPONMLKJIHGFEDCBAY'
+'PIPE command QUERY SEARCH',
+   '| spec w 3 1.1',
+   '| join *',
+   '| var usermodes'
+ 
+p = verify(modelist,usermodes)
+If p=0 then                       /* No filemode available?         */
+   Return 'S'                     /* Return an invalid mode         */
+else
+   Return substr(modelist,p,1)
+ 
+ChkDevs:
+/*------------------------------------------------------------------*
+ * Simple procedure to check if the input and output devices match,
+ * and issue an error message if they don't.  The 'inuser intype'
+ * arguments are only passed when copying a disk.
+ *------------------------------------------------------------------*/
+Procedure expose execn emsg
+arg nocksize? username vaddr ddevtype fdevtype dcyl fcyl inuser intype .
+If fcyl='' then                   /* Incomplete data, can't check   */
+   Return 0                       /* Return, other errors exist.    */
+erc=0
+If ddevtype<>fdevtype | fcyl<>dcyl then do
+   If ddevtype=9336 then
+      emsg'405W Output disk' username vaddr '(type 9336 FB-512,' dcyl,
+          'blocks)'
+   else
+      emsg'405W Output disk' username vaddr '(type' ddevtype',' dcyl,
+          'cylinders)'
+   If fdevtype=9336 then
+      emsg'405W does not match the input disk' strip(inuser intype),
+          '(type 9336 FB-512,' fcyl 'blocks)'
+   else
+      emsg'405W does not match the input disk' strip(inuser intype),
+          '(type' fdevtype',' fcyl 'cylinders)'
+   If nocksize? then              /* Add a blank line on screen     */
+      say
+   If ddevtype<>fdevtype | nocksize?=0 then
+      erc=405
+end
+Return erc
+ 
+GetDisk:
+/*------------------------------------------------------------------*
+ * Link a disk and get the information about the disk.  Used for
+ * dumping, restoring, or copying a disk.
+ *------------------------------------------------------------------*/
+Procedure expose execn emsg issueEmsg stableopt
+arg userid vaddr linkmode .
+If userid <> '*' then do          /* Need to link the disk          */
+   freevaddr=Getaddr()
+   Parse value DiagRC(8,'LINK' userid vaddr freevaddr linkmode),
+         with drc . msg '15'x
+   If stableopt & drc=1155 then do /* Try again without stable/exclu*/
+      linkmode = substr(linkmode,2) /* Single R or W now            */
+      Parse value DiagRC(8,'LINK' userid vaddr freevaddr linkmode),
+            with drc . msg '15'x
+   end
+   If drc<>0 then do
+      If issueEmsg then
+         say strip(msg)
+      If stableopt & (drc=104|drc=105) then /* Another active link  */
+         emsg'334E The STABLE option may have prevented the disk from',
+             'being linked.'
+      Return drc
+   end
+end
+else do
+   freevaddr = vaddr              /* Use the existing disk          */
+   If linkmode<>'RR' then do      /* Check if disk is linked R/W    */
+      Parse value diag(8,'QUERY V' vaddr) with . . typ . stat stat1 .
+      If typ = 'ON' then          /* Attached device                */
+         stat=stat1
+      If stat <> 'R/W' then do
+         emsg'310E Disk' vaddr 'must be linked R/W.'
+         Return 310
+      end
+   end
+end
+ 
+'PIPE CP QUERY MDISK' freevaddr 'LOCATION',
+   '| var msg',
+   '| drop 1',
+   '| spec w5 1 substr w3 of 42-* nw', /* Get device type and size  */
+   '| var diskinfo'
+If RC<>0 then do
+   say msg
+   Return RC
+end
+Return 0 freevaddr diskinfo
+ 
+SetupProgress:
+/*------------------------------------------------------------------*
+ * Set up the Pipeline stages for showing progress messages.
+ * We define variables progresspipe, progresspipe2, and rexxfilter
+ *------------------------------------------------------------------*/
+/* Settings for showing progress messages as work is done           */
+cyltrk=15          /* 15 tracks/cyl for 3380 and 3390 disk          */
+fbablk.0=762       /* Pipelines fba blocks in record (observed)     */
+fbablk.1=115       /* DDR fba blocks in record (about)              */
+minshow.=1500      /* Must process this many records as a minimum   */
+maxshow.=15000     /* Show progress every 1000 cyls or 10%          */
+localmax=4         /* Raise the maximum for local dump/restore      */
+minshow.9336.0=250 /* Smaller rec counts for pipelines fba blocking */
+maxshow.9336.0=2500
+ 
+arg ddr? pack? local?, dtype dsize .
+If local?=0 then
+   localmax=1                     /* Don't raise the max if not loc */
+If dtype='9336' then
+   drecs=dsize%fbablk.ddr?        /* FB-512 blocks in 1 record      */
+else
+   drecs=dsize*cyltrk             /* Each record is a track         */
+show=min(drecs%10+1,maxshow.dtype.ddr?*localmax) /* 10% or max      */
+If pack?='DDRCOMP' & dtype='9336' then  /* Show fewer if compressed */
+   show=show%2
+If drecs < minshow.dtype.ddr? then  /* Skip progress if small disk  */
+   Return
+ 
+rexxfilter=,                      /* Inline Rexx filter used        */
+"/*REXX*/",
+"signal on error;",               /* Run until end of file          */
+"arg c .;",                       /* Message every "c" records      */
+"do forever;",
+  "'peekto';",
+  "'callpipe *..0:|take' c'|*..0:';",
+  "'peekto';",                    /* Check for eof on input stream  */
+  "signal off error;",
+  "'streamstate output 0';",      /* Check for eof on output stream */
+  "If RC=12 then",                /* Looking for severed stream     */
+     "signal error;",
+  "signal on error;"
+If dtype='9336' & ddr?=0 then rexxfilter=rexxfilter,
+  "'callpipe (end ?) *..0:|take 1|a:fanout|*..0:?a:|*..1:';"
+else rexxfilter=rexxfilter,
+  "'select output 1';",
+  "'output' c;"
+rexxfilter=rexxfilter,
+"end;",
+"error: exit RC*(RC<>12)"
+ 
+progresspipe='|m:rexx *.1:' show  /* Display progress messages      */
+progoutput='timestamp string "%T  "', /* Default message with time  */
+         '| console' fullscreen
+If pipecall then do               /* Messages to secondary?         */
+   Address value addresspipe
+   'streamstate output 1'         /* Does stream exist?             */
+   If RC>=0 & RC<=8 then
+      progoutput='*.output.1:'    /* Send to stream, no timestamp.  */
+end
+Select
+  When dtype='9336' & ddr? & pack?='DDRCOMP' then progresspipe2=,
+      e'var rexxfilter',
+    '|m:',
+    '|  spec r:w1 . set #0+=r',   /* Just show num of recs done     */
+          'print #0 strip nw "records completed" nw',
+    '|' progoutput
+  When dtype='9336' & ddr? then progresspipe2=,
+      e'var rexxfilter',
+    '|m:',
+    '|  spec r:w1 . set #0+=r set #1:=#0*'fbablk.ddr?,
+          '"Block" 1 print #1 strip nw "of' dsize 'completed (" nw',
+          'print #1/'dsize'*100 strip next "%)" next',
+    '|' progoutput
+  When dtype='9336' then progresspipe2=,
+      e'var rexxfilter',
+    '|m:',
+    '|m1:if strfind "fplfba01"',  /* Full record with data?         */
+    '|  spec 9.4 c2d 1',          /* Get current recno from data    */
+    '|m1:',                       /* Or just block for update mode? */
+    '|  spec 1.4 c2d 1',
+    '|m1:',
+    '|  spec "Block" 1 b:w1 nw "of' dsize 'completed (" nw',
+          'print b/'dsize'*100 strip next "%)" next',
+    '|' progoutput
+  Otherwise progresspipe2=,
+      e'var rexxfilter',
+    '|m:',
+    '|  spec r:w1 . set #0+=r set #1:=#0/'cyltrk,
+          '"Cylinder" 1 print #1 strip nw "of' dsize 'completed (" nw',
+          'print #1/'dsize'*100 strip next "%)" next',
+    '|' progoutput
+End
+Return
+ 
+GetERRNO:
+/*------------------------------------------------------------------*
+ * If a pipeline gets a TCP socket "errno", return text for the
+ * well known ones and look up others in TCPERRNO H.  If the code
+ * isn't found, just return back the error number and code.
+ *------------------------------------------------------------------*/
+Procedure expose execn linktcp ipport debug
+Parse arg pipename errno errorcode rest
+If debug<>0 then
+   say errno errorcode rest '(Pipeline' pipename')'
+ 
+/* Handle some well know ones first with a better response          */
+If errno=32 then
+   Return 'Connection broken to remote side'
+If errno=61 then
+   Return 'Remote side refused the connection to port' ipport
+If errno=1001 then
+   Return 'The SSL server cannot validate the host name.',
+          'Add the UNSAFE option.'
+If errno=1012 then
+   Return 'The z/VM TCPIP server is not enabled for TLS/SSL.'
+If errno=4008 then
+   Return 'Host name validation via the server certificate failed.'
+If errno>10000 then
+   Return errno errorcode rest '(TLS/SSL error)'
+ 
+/* Look up the code in the header file                              */
+If state('TCPERRNO H *')=0 then   /* Not found?                     */
+   Call GetTCPdisk
+'PIPE disk TCPERRNO H *',         /* On TCPMAINT 592, accessed      */
+   '| joincont trailing xE0',     /* Continued with backslash "\"   */
+   '| strip leading',
+   '| strfind anycase "#define_E"',
+   '| pick w3 == "'errno'"',      /* Find our code                  */
+   '| strip trailing string "*/"',
+   '| spec w5-* 1',
+   '| append literal',
+   '| var errortext'
+If errortext='' then              /* Unknown - simple response then */
+   Return errno errorcode rest '(Pipeline' pipename')'
+Return errorcode errortext
+ 
+GetTCPdisk:
+/*------------------------------------------------------------------*
+ * Link and access the TCPIP code disk, usually TCPMAINT 592.
+ * Try a VMLINK nickname of "TCPIP" first, suppress any error msg.
+ *------------------------------------------------------------------*/
+linktcp = 'TCPIP ('               /* Try TCPIP nickname first       */
+'EXEC VMLINK' linktcp 'NOTYPE PUSH .MSG STEM VMLINK.'
+If RC=0 then
+   Return
+linktcp = 'TCPMAINT 592 (NONAMES'
+'EXEC VMLINK' linktcp 'NOTYPE PUSH'
+If RC<>0 then                     /* Error message will be shown    */
+   linktcp=''                     /* Don't try to POP the disk      */
+Return
+ 
+UnpackStage:
+/*------------------------------------------------------------------*
+ * Pipeline stage which is an improved implementation of unpackx that
+ * automatically selects the compression unpack method based on the
+ * flag bytes at the beginning of the file.
+ *------------------------------------------------------------------*/
+Parse var cmdargs packhint debug .
+If debug>2 then
+   trace Commands                 /* Trace pipeline commands        */
+ 
+'peekto first'
+Select
+  When RC<>0 then
+    Exit (RC * (RC <> 12))        /* RC=0 if at end of file         */
+  When packhint = 'AWS' then      /* Not packed, but blocked        */
+    'callpipe *:',
+           '| deblock awstape',
+           '| *:'
+  When (left(first,1)=='00'x & left(first,3)/=='000140'x &,
+       packhint = 'NOPACK') |,
+       left(first,2)=='0000'x | left(first,4)=='0005F410'x then
+       'callpipe *:',
+              '| deblock cms4',     /* Back to record format        */
+              '| totarget nlocate', /* Stop at zero record (EOF)    */
+              '| *:'
+  When left(first,1)='78'x then   /* ZLIB is 4096 byte records      */
+    If FindZlib() then            /* Inflate if we can or just pass */
+       'callpipe *:',
+              '| zlib inflate',
+              '| deblock sf4',    /* Back to CMS record format      */
+              '| *:'
+    else
+       'short'
+  When length(first)<>1024 then   /* Not correct len for pack/terse */
+    'short'                       /* Just pass through              */
+  When pos(left(first,1),'0205'x)>0 then
+    If HaveStage('unterse') then  /* Decode if we can, or just pass */
+       'callpipe *:',
+              '| unterse',
+              '| *:'
+    else
+       'short'
+  Otherwise                       /* Let unpack decide what to do   */
+    'callpipe *:',
+           '| unpack',
+           '| *:'
+End
+Exit RC
+ 
+CipherStage:
+/*------------------------------------------------------------------*
+ * Call the KMC or KM CSL routines for encryption/decryption.
+ * The code below is called as a pipeline stage
+ *------------------------------------------------------------------*/
+Parse var cmdargs routine func_code direction key_len work_cv_len iiv .
+ 
+signal on failure
+'maxstream input'                 /* Check on input streams avail.  */
+maxin=RC
+signal on error
+If maxin=0 then
+   'issuemsg 366' emsgmodule
+'callpipe *.input.1: | var key'   /* Get key from input stream 1    */
+'eofreport all'
+ 
+csl1=routine 'RC reason_code direction func_code key key_len'
+csl2='work_cv work_cv_len work_cv work_cv_len'  /* For KMC call     */
+csl3='line line_len line line_len'/* Plaintext in, ciphertext out   */
+cslcall = csl1 csl3               /* Set up args for KM routine     */
+ 
+Call Crypto routine               /* Call KM or KMC routine         */
+ 
+failure:                          /* Standard pipe stage exit       */
+error:
+exit (RC * (RC <> 12 & RC <> 8))
+ 
+Crypto:                           /* Branch to correct routine      */
+/*--- Implement Rexx "branch table" to call selected CSL routine ---*/
+signal value arg(1)
+ 
+KMC:                              /* Crypto with CBC                */
+/*--- Cipher message in CBC mode                                 ---*/
+cslcall = csl1 csl2 csl3          /* Set up args for KMC call       */
+If iiv='' | iiv='x00' then        /* No IV provided or zero?        */
+   Call RandomIV                  /* Get random IV from first record*/
+else
+   work_cv = x2c(substr(iiv,2))   /* Hex string starting with "x"   */
+                                  /* Fall though to KM routine      */
+KM:
+/*--- Cipher message in EBC mode                                 ---*/
+Do forever                        /* Normal loop - read, process,   */
+   'peekto line'                  /*   write, until end of file.    */
+   line_len = length(line)        /* Should all be the same, but... */
+   call CSL cslcall               /* Encrypt or decrypt             */
+   if RC<>0 then
+      signal CSLerror
+   'output' line                  /* Pass it to the output       */
+   'readto'                       /* Consume the record          */
+End
+Return
+ 
+CSLerror:
+/*--- If any error occurs, assume it is broken and just return.  ---*/
+erc=RC
+msg='Return Code='RC
+if symbol('reason_code')='VAR' then
+   msg = msg||', Reason='reason_code
+'callpipe var msg',
+       '| insert "'emsgmodule'062E Cipher' routine 'CSL error, " before',
+       '| (nomsg 15) emsg'
+Exit erc
+ 
+RandomIV:
+/*--- Read the IV from the first cipherblock of the input data   ---*/
+'peekto'                          /* Make sure of a record          */
+'callpipe (end / name getiv)',
+         '*.input.0:',            /* Get first record of input      */
+      '|  take 1',
+      '|r:take' work_cv_len 'bytes', /* Get IV at the beginning     */
+      '|  var work_cv',              /* Save for KMC routine        */
+      '/r:',
+      '|  var line'
+line_len = length(line)
+Call CSL cslcall                  /* Encrypt/decrypt to set up chain*/
+if RC<>0 then
+   signal CSLerror
+Return                            /* Actual data is discarded       */
+ 
+CipherCheck:
+/*------------------------------------------------------------------*
+ * For a remote receive of a disk, if encryption is specified, check
+ * if the cipher key is correct. If not, send the error to the sender.
+ *------------------------------------------------------------------*/
+Parse var cmdargs cipherparm keylength cblock pipecipher debug kmfunc .
+If debug>2 then
+   trace Commands                 /* Trace pipeline commands        */
+ 
+signal on failure
+'maxstream input'                 /* Check on input streams avail.  */
+signal on error
+If RC=0 then                      /* Fail if just input stream 0    */
+   'issuemsg 366' emsgmodule
+'eofreport all'
+ 
+'peekto fileinfo'
+Parse var fileinfo . . . . . . . . . remcipher . . testciph civ .
+If left(remcipher,6)<>'CIPHER' | left(testciph,2)<>'XT' then do
+   'short'                        /* Nothing to check, just pass    */
+   Exit
+end
+ 
+If pipecipher then do
+   cipherstage = 'cipher' cipherparm 'decrypt'
+   If remcipher='CIPHERCBC' & left(civ,2)='IV' then
+      cipherstage = cipherstage 'cbc iv' substr(civ,3)
+end
+else do
+   ciphrfunc = word('KMC KM',(remcipher='CIPHER')+1)
+   cipherstage = 'rexx ('execn exect') CIPHER' ciphrfunc,
+      kmfunc 'D' keylength cblock substr(civ,3)
+end
+ 
+'callpipe (end' e 'name chkciph)',
+         'var testciph',
+      '|  spec 4-* x2c 1',        /* In the form of XTxnnnnnn       */
+      '|k:'cipherstage,           /* Decrypt it                     */
+      '|  drop' cblock 'bytes',   /* Drop the random part           */
+      '|  var testclrtext',
+      e'*.input.1:',              /* The key                        */
+      '|k:'
+/* Send the original record out stream 0 or 1 (a selection stage)   */
+ostr=0                            /* Default output stream zero     */
+If left(testclrtext,cblock%2) /== right(testclrtext,cblock%2) then
+   ostr=1                         /* Both block halves not equal    */
+'callpipe *.input.0: | take 1 | *.output.'ostr':' /* Send record    */
+'short'                           /* Pass any remaining             */
+Exit

@@ -1,0 +1,20 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Client part of DM (Poor Mans DirMaint)              |
+|                                                                |
+| File     : DMC      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DMC <dm command>                                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20241114 18:47:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

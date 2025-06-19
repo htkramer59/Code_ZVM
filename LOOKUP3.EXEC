@@ -1,0 +1,23 @@
+/**/
+namelist='DTC SSL QQQ POR YYY PER RSC'           /* List of what we are searching */
+'PIPE (end ?)',
+    'cp QUERY NAMES',                            /* Ask cp these     */
+    '| split at ,',                              /* Split            */
+    '| strip',                                   /* Remove blanks    */
+    '| l: lookup 1.3 1.3 details',               /* Compare these and keep Q N */
+    '| sort',                                    /* Sort on names    */
+    '| specs ~Matching:~ 1 1;* nw',               /* Add identifier   */
+    '| cons',                                    /* Show             */
+    '?',                                         /* 2nd pipe         */
+    'var namelist',                              /* Take the variable */
+    '| split',                                   /* Split it */
+    '| l:',                                      /* Connect to lookup */
+    '| specs ~2~ 1 1;* nw',             /* Add 'Secondary'  */
+    '| preface literal 2 Do NOT match NAMELIST',
+    '| cons',                                    /* Show them        */
+    '? l:',                                      /* Conn 2 lookup    */
+    '| buffer',
+    '| specs ~3:~ 1 1;* nw',              /* Add this         */
+    '| preface literal 3 Do NOT match QUERY NAMES',
+    '| cons'                                     /* Show m           */
+ 

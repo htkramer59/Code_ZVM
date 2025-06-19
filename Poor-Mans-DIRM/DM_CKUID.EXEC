@@ -1,0 +1,41 @@
+/*---------------------------------------------------------------+
+| Function : Check if a userid exists                            |
+|                                                                |
+| File     : MD_CKUID EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : MD_CKUID .                                          |
+|                                                                |
+| Comments : Returns 1 of ok, 0 if not ok                        |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240619 09:49:46                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid .
+Parse Source . . myfn myft .
+DM_CKUID:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CKUID.EXEC:35 END ?)',
+   'cp QUERY MDISK USER 'uid' 0 DIR',
+   '| pick w1.1 == ~HCPQMD040E~',
+   '| count lines',
+   '| var uidok'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Return uidok

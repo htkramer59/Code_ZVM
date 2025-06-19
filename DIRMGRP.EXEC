@@ -1,0 +1,207 @@
+/*---------------------------------------------------------------+
+| Function : Create an overview of DIRMAINT VOLUME GROUPS        |
+|                                                                |
+| File     : DIRMGRP  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files in : EXTENT  CONTROL                                     |
+|       in : <volid> VCONTROL                                    |
+|       out: <grp>   FILE                                        |
+|                                                                |
+|                                                                |
+| Called   : DIRMGRP  <>      Is equal to DISP                   |
+|                     DISP    Only display                       |
+|                     REPORT  Write only a report                |
+|                     ALL     Do DISP & REPORT                   |
+|                     ?       Show some HELP                     |
+|                                                                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190425 15:02:07                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+numeric digits 20  /* So our calculations will not break */
+/*---------------------------------------------------------------+
+| Evaluate arguments                                             |
++---------------------------------------------------------------*/
+display=0
+report=0
+Select
+When what=''       Then display=1
+When what='DISP'   Then display=1
+When what='REPORT' Then report=1
+When what='ALL'    Then Do;display=1;report=1;End
+When what='?'      Then Do;Call Help;Exit;End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Access the disk with EXTENT CONTROL and VCONTROL files         |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Get info on groups and regions (=volumes)                      |
++---------------------------------------------------------------*/
+Call Get_Group_Region
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Do i=1 To grpid.0
+   Say 'Processing : 'grpid.i
+   Call Expand_Grp
+   Say 'Volumes    : 'vollist
+   Call Expand_Volid
+   If display Then Call Display_Summary
+   If report  Then Call Write_Report
+End i
+/*---------------------------------------------------------------+
+| Release the disk                                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF <DET (NONAMES QUIET'
+Exit
+ 
+ 
+Expand_Volid:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'stem volid.',                              /* Take these      */
+    '| specs w1.1 1 ~VCONTROL 'wfm'~ nw',       /* Compose filename*/
+    '| getfiles',                               /* Read files      */
+    '| all ~MAXBLK=~!~ENTRY=~',                 /* Keep these      */
+    '| f: find MAXBLK=',                        /* Select these    */
+    '| specs',                                  /* Summing         */
+        ' printonly eof',                       /* .               */
+        ' a: word 2     .',                     /* .               */
+        '    set #0+=a',                        /* .               */
+        ' eof',                                 /* .               */
+        ' print #0 picture zzzzzzzzzzzzzzz9 1', /* .               */
+    '| var totavail',                           /* Store as        */
+    '? f:',                                     /* Conn 2 find     */
+    '| find ENTRY=',                            /* Select this     */
+    '| specs',                                  /* Do calculus     */
+        ' w2;* 20',                             /* .               */
+        ' b: w2.1     .',                       /* .               */
+        ' c: w3.1     .',                       /* .               */
+        '    set #1:=c-b+1',                    /* .               */
+        ' print #1 picture zzzzzzzzzzzzzzz9 1', /* .               */
+    '| sort 1.16',                              /* Sort on size    */
+    '| specs w1.1 1.15 right',                  /* Adjust layout   */
+            'w2.1 nw.10 right',                 /* .               */
+            'w3.1 nw.10 right',                 /* .               */
+            'w4.1 nw.8',                        /* .               */
+            'w5.1 nw',                          /* .               */
+    '| stem res.',                              /* Store here      */
+    '| specs',                                  /* Summing         */
+        ' printonly eof',                       /* .               */
+        ' d: word 1     .',                     /* .               */
+        '    set #2+=d',                        /* .               */
+        ' eof',                                 /* .               */
+        ' print #2 picture zzzzzzzzzzzzzzz9 1', /* .               */
+    '| var totused'                             /* Store as        */
+/*---------------------------------------------------------------+
+| Calculate percentages/                                         |
++---------------------------------------------------------------*/
+percused=Right(Format((totused/totavail)*100,,2),15)
+percavail=right(100-percused,15)
+Return
+ 
+ 
+Display_Summary:
+/*---------------------------------------------------------------+
+| Display some of the results                                    |
++---------------------------------------------------------------*/
+Say 'Total available:'Right(totavail,15)
+Say 'Perc. available:'percavail
+Say 'Total in use   :'Right(totused,15)
+Say 'Perc. in use   :'percused
+Say
+Return
+ 
+ 
+Write_Report:
+/*---------------------------------------------------------------+
+| Write the report files                                         |
++---------------------------------------------------------------*/
+'PIPE (name DD.EXEC:54)',
+   'stem res. ',
+   '| preface literal No of Blocks   + Start blk + End blk + Userid + Mdisk',
+   '| preface literal ',
+   '| preface literal Volumes       : 'vollist,
+   '| preface literal Dirmaint Group: 'grpid.i,
+   '| append literal ',
+   '| append literal Total available:'totavail,
+   '| append literal Perc. available:'percavail,
+   '| append literal Total in use   :'totused,
+   '| append literal Perc. in use   :'percused,
+   '| > 'grpid.i' FILE A'
+Return
+ 
+ 
+Expand_Grp:
+/*---------------------------------------------------------------+
+| Expand the groups to regions and finally to volumes            |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'literal 'group.i,                          /* Take this       */
+    '| f: fanout',                              /* Duplicate recs  */
+    '| specs w1.1 1.9',                         /* Adjust 4 juxtap */
+    '| j: juxtapose',                           /* Lay side by side*/
+    '| specs w2.1 1 w1.1 nw',                   /* Switch colums   */
+    '| append stem region.',                    /* Add these...    */
+    '| sort',                                   /* Sort on region  */
+    '| join keylen 6',                          /* Make 1 rec/regio*/
+    '| pick w6.1 \== ~~',                       /* Remove empties  */
+    '| specs w2.1',                             /* Keep these      */
+    '| stem volid.',                            /* Store as        */
+    '| join * x40',
+    '| var vollist',
+    '? f:',                                     /* Conn 2 fanout   */
+    '| specs w2;* 1',                           /* Keep this part  */
+    '| split',                                  /* Split into recs */
+    '| strip',                                  /* Remove spaces   */
+    '| j:'                                      /* Conn 2 juxtapose*/
+Return
+ 
+ 
+Get_Group_Region:
+/*---------------------------------------------------------------+
+| Extract the groups and regions from EXTENT CONTROL             |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    '< EXTENT CONTROL 'wfm,                     /* Read this file  */
+    '| i: inside ~:GROUPS.~ ~:END.~',           /* Get this section*/
+    '| strip',                                  /* Remove spaces   */
+    '| pick 1.1 \== ~*~',                       /* Remove comments */
+    '| join keylen 8',                          /* Make 1 rec/grp  */
+    '| specs w1.1 1  w4;* nw',                  /* Adjust layout   */
+    '| stem group.',                            /* Store as        */
+    '| specs w1.1',                             /* Keep this       */
+    '| stem grpid.',                            /* Store as        */
+    '? i:',                                     /* Conn 2 inside   */
+    '| inside ~:REGIONS.~ ~:END.~',             /* Get this section*/
+    '| strip',                                  /* Remove spaces   */
+    '| pick 1.1 \== ~*~',                       /* Remove comments */
+    '| pick w1.1 \== ~DUMMY~',                  /* Remove dummy    */
+    '| stem region.'                            /* Store as        */
+Return
+ 
+ 
+Help:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+'PIPE (end ?)',
+    '< 'myfn myft' *',
+    '| totarget pick w1.1 == ~Parse~',
+    '| cons'
+Return

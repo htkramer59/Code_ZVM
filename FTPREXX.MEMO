@@ -1,0 +1,85 @@
+FTPREXX Package
+ 
+This package has been available on the Pipelines downloads page for several
+years. Recently, I started using it and I wanted to fix a few things. So, with
+Steve Hayes' permission (the original author) this package is available on the
+VM downloads page. Updates are listed below.
+ 
+A PDF formatted file of usage documentation is included in this package. A
+HELP file, named FTPREXX HELPCMS, is also included. Enter HELP FTPREXX to read
+this file.
+ 
+This package remains as beta code. There are no guarantees that it works with
+all FTP servers or that it properly follows all of the RFCs. It does not
+support secure connections. Not all options have been tested and it is likely
+that some parts may not work with modern networks and ftp servers.
+ 
+Note: CMS Pipelines in z/VM 7.1 with APAR VM66365 and 7.2 or later includes a
+built in ftp stage, which is supported and includes secure ftp support. You
+must specify "rexx ftp" explicitly to bypass the built-in program to use FTP
+REXX. Enter HELP PIPE FTP or see the CMS Pipelines User's Guide and Reference
+to learn about the built in ftp stage.
+ 
+Incompatible changes from the original version:
+ 
+  * A url specification accepted ";TYPE=B" to indicate that the data should
+    not be translated (binary mode.) However, RFC 1738 does not list "B" as a
+    valid code for the TYPE; the correct code is "I". FTP REXX now only
+    accepts the correct specification of ";TYPE=I" to indicate an image mode
+    transfer with no translation.
+ 
+  * When PASSIVE option was specified, FTP REXX would always send a PORT
+    command to the remote server before sending the PASV (passive mode)
+    command. At least one tested FTP server would not accept the PORT command
+    and would immediately close the connection. Now, if an FTP proxy is not
+    being used, only the PASV command is sent. Comments in the code indicated
+    that the PORT command was sent first to support proxy connections, so
+    without a proxy, no PORT command is sent.
+ 
+The contents of this package:
+ 
+  * ftprexx.pdf
+    The documentation, in PDF format. This file is contained in the
+    ftprexx.zip file.
+ 
+  * FTPREXX MEMO
+    This description file.
+ 
+  * FTPREXX HELPCMS
+    Documentation in help format.
+ 
+  * FTP REXX
+    The Pipelines FTP client stage. This is the only file needed to interface
+    an FTP server to a pipeline.
+ 
+  * TCPIPIPE ANNOUNCE
+    The original announcement of the ftp and sockisfied tcpclient stages.
+ 
+  * TCPIPIPE PACKAGE
+    The package file of the original code.
+ 
+  * SOCKSCFG REXX
+    Converts a hostname or IP address to the name or address of a socks
+    server.
+ 
+  * TCPCLIEN REXX
+    This is TCPCLIENT with versatile Socks v4 support.
+ 
+------------------------------------------------------------------------------
+Feedback: Bruce Hayden IBM Z Washington Systems Center
+------------------------------------------------------------------------------
+ 
+Versions:
+ 
+  * 0.99.1 - Fix parsing bugs and typos. Change ";TYPE=B" to ";TYPE=I".
+  * 0.99.2 - With PASSIVE option, don't send PORT command unless using proxy.
+  * 0.99.3 - Fix deblocking of record structure (from mailing list.)
+  * 0.99.4 - Implement extended passive (EPSV).
+  * 0.99.5 - Avoid message when TCPIP DATA not available.
+  * 0.99.6 - Option to supply password via variable.
+  * 0.99.7 - Allow 14 digit byte counts (about 90 TB) in messages.
+  * 0.99.8 - Remove the documentation comments that duplicated the help file
+    and the document.
+  * 0.99.9 - Encoded ASCII characters in the url did not work.
+ 
+ 

@@ -1,0 +1,135 @@
+/*---------------------------------------------------------------+
+| Function : Add or remove a LINK stament                        |
+|                                                                |
+| File     : DM_LINK  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_LINK  <tuid> <suid> <scuu> <tcuu> <mode>         |
+|          : LINK     <tuid> <suid> <scuu> <tcuu> <mode>         |
+|                                                                |
+|           <tuid> = Target uid, if specified as = it will       |
+|                                be equal to suid                |
+|           <suid> = Source uid, if specified as = it will       |
+|                                be equal to tuid                |
+|           <scuu> = Source cuu                                  |
+|           <tcuu> = Target cuu                                  |
+|           <mode> = any valid link mode, defaults to RR.        |
+|                    If specified as DEL the LINK will be        |
+|                    deleted                                     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240703 11:17:11                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg tuid suid scuu tcuu mode .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Set available linkmode content                                 |
++---------------------------------------------------------------*/
+linkmodes='R RR W WR M MR MW SR SW WM ER EW DEL'
+/*---------------------------------------------------------------+
+| Some basic checks                                              |
++---------------------------------------------------------------*/
+If \DM_CKUID(suid)           Then Call Exit 260
+If \DM_CKMDK(suid scuu)      Then Call Exit 261
+If mode<>'DEL' Then If DM_CKMDK(tuid tcuu) Then Call Exit 262
+If mode=''                   Then mode='RR'
+If Wordpos(mode,linkmodes)=0 Then Call Exit 263
+If cuu2=''                   Then cuu2=cuu1
+/*---------------------------------------------------------------+
+| Get the id and act on the mode                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'tuid
+If mode='DEL' Then Call DelLink
+              Else Call AddLink
+/*---------------------------------------------------------------+
+| Write direct to file                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LINK.EXEC:64 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| specs 7.72 1.80',                          /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online                                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+DelLink:
+/*---------------------------------------------------------------+
+| Find the stmt to delete                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LINK.EXEC:89 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~LINK~ and',          /* Select..         */
+                  'w3.1 == ~'suid'~ and',        /* .                */
+                 '(w4.1 == ~'scuu'~ or',         /* .                */
+                  'w4.1 == ~'Right(scuu,4,0)'~ or',   /* .                */
+                  'w4.1 == ~'Strip(scuu,L,0)'~) and', /* .                */
+                 '(w5.1 == ~'tcuu'~ or',              /* .                */
+                  'w5.1 == ~'Right(tcuu,4,0)'~ or',   /* .                */
+                  'w5.1 == ~'Strip(tcuu,L,0)'~)',     /* .                */
+   '| var remstmt'                                    /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Compose new stem                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LINK.EXEC:103 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| nlocate ~'remstmt'~',                      /* Remove this      */
+   '| stem direct.'                              /* Hand 2 rexx      */
+Return
+ 
+ 
+AddLink:
+/*---------------------------------------------------------------+
+| Add a LINK stmt                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LINK.EXEC:115 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~MDISK~',             /* Select this      */
+   '| take first 1',                             /* Keep one         */
+   '| specs w1.1 1',                             /* Keep recno       */
+   '| var count'                                 /* Hand 2 rexx      */
+count=Right(count-1,5,0)
+newstmt=Copies(' ',8)'LINK 'suid scuu tcuu mode
+/*---------------------------------------------------------------+
+| Compose new stem                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LINK.EXEC:126 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| t: totarget pick w1.1 == ~'count'~',       /* Take to here     */
+   '| append var newstmt',                       /* Add this         */
+   '| fi: fanin',                                /* Take in rest     */
+   '| stem direct.',                             /* Hand 2 rexx      */
+   '? t:',                                       /* Conn 2 totarget  */
+   '| fi:'                                       /* Conn 2 fanin     */
+Return

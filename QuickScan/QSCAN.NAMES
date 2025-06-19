@@ -1,0 +1,176 @@
+*Loading additional code..
+:nick.loadcode :files.QN EXEC * = REXX;RSCS EXEC * = REXX
+ 
+* Define the output file
+:nick.output   :file.QSCAN <node> A
+ 
+* Suppress VMLINK output...
+:nick.quiet    :switch.yes
+ 
+* reportstyle can be single for one large report or individual for a report per check/test
+:nick.reportstyle :style.single
+ 
+* :switch. can be yes,no, 1 or 0
+* :exec.   the name of the code you want to execute for this test/report
+* :cmds.   can be any CP or CMS command prefixed with either CP or CMS or specified in :env.
+* :env.    can be cp,cms or empty, related to :cmds.
+* :header  can be any string you like
+* :type    type of information/security/performance
+*
+:check.hardware :switch.yes
+                :exec.QSHARDWA
+                :cmds.q cpuid;
+                      q lpar;
+                      q storage;
+                      q process;
+                      q process topo;
+                      q srm;
+                      q mt;
+                      ind mt;
+                      q crypto;
+                      q crypto domains;
+                      q crypto domains users
+                :env.cp
+                :header.Overview of hardware
+                :type.info
+ 
+:check.dasd     :switch.yes
+                :exec.QSDASD
+                :header.Check of DASD
+                :type.performance
+ 
+:check.levels   :switch.yes
+                :exec.QSLEVELS
+                :cmds.cp Q CPLEVEL;
+                      cp Q EXITS ALL;
+                      cp Q ENCRYPT;
+                      cms Q CMSLEVEL;
+                      cp Q PRODUCT
+                :header.CP & CMS Level information
+                :type.info
+ 
+:check.memory   :switch.yes
+                :exec.QSMEMORY
+                :header.Checking Memory & paging information
+                :type.performance
+ 
+:check.qnames   :switch.yes
+                :exec.QSNAMES
+                :header.All users currently running on the system
+                :type.info
+ 
+:check.spool    :switch.yes
+                :exec.QSSPOOL
+                :header.Spool space usage
+                :type.info
+ 
+:check.filepool :switch.yes
+                :exec.QSFPS
+                :header.Checking filepool ADMINs, USERs and space usage
+                :type.security
+* Additional settings for filepool checking, filling limits
+:nick.storgrp1  :limit.50
+:nick.storgrp2  :limit.50
+:nick.logspace  :limit.50
+ 
+:check.nodirm   :switch.no
+                :exec.QSNODIRM
+                :header.Directory check
+                :fn.USER BACKUP
+                :type.security
+ 
+:check.dirmaint :switch.yes
+                :exec.QSDIRM
+                :header.Dirmaint status & checks
+                :type.security
+ 
+* Additional passwords on top of RPWLIST data!!
+:nick.rpw_list  :list.WD5JU8QP READ WRITE MULTI RREAD WWRITE MMULTI ALL
+* Sizes for label-areas and xlink-areas
+:nick.labxlink  :lxvalues.FBA 1200;CKD 12 :ignore.$ALLOC$ $SPOOL$ .SPOOL. $PAGE$ .PAGE.
+ 
+:check.nss      :switch.yes
+                :exec.QSNSS
+                :header.NSS/DCCS overview
+                :type.performance
+ 
+:check.vswitch  :switch.yes
+                :exec.QSVSWITC
+                :type.performance/security
+ 
+:check.racfvm   :switch.no
+                :exec.QSRACF
+                :type.security
+ 
+:check.tcp      :switch.yes
+                :exec.QSTCPIP
+                :cmds.vmlink tcpcode (only(qscan) quiet invoke netstat config all;
+                      vmlink tcpcode (only(qscan) quiet invoke netstat config ssl;
+                      vmlink tcpcode (only(qscan) quiet invoke netstat config port;
+                      vmlink tcpcode (only(qscan) quiet invoke netstat config dos;
+                      vmlink tcpcode (only(qscan) quiet invoke netstat devlink details;
+                      vmlink tcpcode (only(qscan) quiet invoke netstat poolsize
+                :env.cms
+                :header.TCPIP information
+                :type.info
+ 
+:check.rscs     :switch.yes
+                :exec.QSRSCS
+                :cmds.vmlink tcpmaint 198 (only(qscan)s
+                :env.cms
+                :header.RSCS information
+                :type.security
+ 
+:check.telnet   :switch.no
+                :exec.QSTELNET
+                :cmds.vmlink tcpmaint 198 (only(qscan)s
+                :env.cms
+                :header.Telnet information
+                :type.security
+ 
+:check.ftp      :switch.no
+                :exec.QSFTP
+                :header.
+                :type.security
+ 
+:check.ssl      :switch.no
+                :exec.QSSSL
+                :header.
+                :type.security
+ 
+:check.ldap     :switch.no
+                :exec.QSLDAP
+                :header.
+                :type.security
+ 
+:check.smtp     :switch.no
+                :exec.QSSMTP
+                :header.
+                :type.security
+ 
+:check.snmpd    :switch.no
+                :exec.QSSNMPD
+                :header.
+                :type.security
+ 
+:check.nfs      :switch.no
+                :exec.QSNFS
+                :header.
+                :type.security
+ 
+:check.erep     :switch.no
+                :exec.QSEREP
+                :header.
+                :type.info
+ 
+:check.monitor  :switch.yes
+                :exec.QSMONITO
+                :header.Checking MONITOR settings and tools
+                :type.info
+ 
+* Nicks below are used in QSxxxx EXECs
+:nick.DIRM1DF   :product.DIRMAINT 1DF :title.Dirmaint 1DF disk, EXTENT CONTROL, etc.
+:nick.RPWLIST   :product.MAINT 2CC    :title.Access RPWLIST DATA
+:nick.TCPCODE   :product.TCPMAINT 592 :title.Access the TCPIP Netstat code, etc.
+:nick.TCPFILES  :product.TCPMAINT 198 :title.TCPIP related control files
+:nick.USERDIR   :product.DIRMAINT 1DB :title.Monolithic USER DIRECTORY not using DIRMAINT!

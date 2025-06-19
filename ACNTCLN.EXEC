@@ -1,0 +1,41 @@
+/*---------------------------------------------------------------+
+| Function : Clean up accounting files                           |
+|                                                                |
+| File     : ACNTCLN  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : ACNTCLN  <run>                                      |
+|                     YES                                        |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190403 06:00:03                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg run .
+Parse Source . how myfn myft .
+/*---------------------------------------------------------------+
+| How many to keep                                               |
++---------------------------------------------------------------*/
+keep=15
+If run='YES' Then run='| cms | cons'
+             Else run=''
+timestamp=Date('S') Time()
+Say timestamp myfn 'Keeping last 'keep' files'
+/*---------------------------------------------------------------+
+| Remove some files....                                          |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   ' cms LISTFILE ACCOUNT * * (NOH ISODATE',
+   '| all /$A/',
+   '| drop last 'keep,
+   '| specs ~ERASE~ 1 w1.3 nw',
+   '| cons',
+   run,
+   '| count lines',
+   '| specs ~'timestamp myfn' Files removed:~ 1 w1;* nw',
+   '| cons'

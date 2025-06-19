@@ -1,0 +1,119 @@
+/*---------------------------------------------------------------+
+| Function : Calculate sizes of the edevices                     |
+|                                                                |
+| File     : EDEVSIZE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SICONV   REXX                                       |
+|                                                                |
+| Called   : EDEVSIZE <all>       ALL                            |
+|                     <range>     200-205                        |
+|                     <set>       200,202,D000                   |
+|                     <single>    200                            |
+|                     <?>         Show a help screen             |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20221220 14:52:51                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg rdevno
+'VMFCLEAR'
+Parse Source . . myfn myft .
+If rdevno='?' Then Do
+            'PIPE (NAME EDEVSIZE.EXEC:27 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Exit
+             End
+/*---------------------------------------------------------------+
+| Determine what to do                                           |
++---------------------------------------------------------------*/
+Select
+When rdevno='ALL'       Then Call GetAll
+When Pos('-',rdevno)<>0 Then Call GetRange
+When Pos(',',rdevno)<>0 Then Call GetSet
+Otherwise Call GetSingle
+End
+/*---------------------------------------------------------------+
+| Get the info per device                                        |
++---------------------------------------------------------------*/
+Do r=1 To rdevno.0
+   'PIPE (NAME EDEVSIZE.EXEC:46 END ?)',
+       'cp QUERY EDEV 'rdevno.r' DETAILS',       /* Ask CP details   */
+       '| pick w1.1 == ~BLOCKSIZE:~',            /* We need this line*/
+       '| specs w2.1 1 w6.1 nw',                 /* Keep this        */
+       '| specs pad 0 ~'rdevno.r'~ 1.4 right',   /* Add devno        */
+               'w1.1 nw',                        /* Adjust rest      */
+               'pad space',                      /* .                */
+               'w2.1 nw.12 right',               /* .                */
+               'a: w1.1 .',                      /* Calculate        */
+               'b: w2.1 .',                      /* .total no        */
+               'set #0:=a*b',                    /* ..of             */
+               'print #0 pict zzzzzzzzzzz9 nw',  /* ...bytes         */
+       '| specs w1;* 1 w-1;-1 nw',               /* Add total        */
+       '| siconv w5.1 b2g 8 G',                  /* Rework 2 GB      */
+       '| var temp'                              /* Store as         */
+    If temp<>'TEMP' Then rdevno.r=temp
+                    Else rdevno.r=rdevno.r '--- Missing device ---'
+End r
+'PIPE (NAME EDEVSIZE.EXEC:64 END ?)',
+   'stem rdevno.',                               /* Take these       */
+   '| preface literal Rdev Siz Blocks         Bytes      Gbyte',   /* Add header       */
+   '| cons'                                      /* Show             */
+Exit
+ 
+ 
+GetAll:
+/*---------------------------------------------------------------+
+| Get all the edevices on the system                             |
++---------------------------------------------------------------*/
+'PIPE (NAME EDEVSIZE.EXEC:75 END ?)',
+   'cp QUERY EDEV ALL',                          /* Ask CP           */
+   '| specs w2.1 1',                             /* Keep this        */
+   '| stem rdevno.'                              /* Store as         */
+Return
+ 
+ 
+GetSingle:
+/*---------------------------------------------------------------+
+| Put the single device in a stem                                |
++---------------------------------------------------------------*/
+'PIPE (NAME EDEVSIZE.EXEC:86 END ?)',
+    'var rdevno',                                /* Take this        */
+    '| stem rdevno.'                             /* Store as         */
+Return
+ 
+ 
+GetSet:
+/*---------------------------------------------------------------+
+| Put the set of edevices in a stem                              |
++---------------------------------------------------------------*/
+'PIPE (NAME EDEVSIZE.EXEC:96 END ?)',
+   'var rdevno',                                 /* Take this        */
+   '| split at ,',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| stem rdevno.'                              /* Hand 2 rexx      */
+Return
+ 
+ 
+GetRange:
+/*---------------------------------------------------------------+
+| Get all individuals in the range and put them in a stem        |
++---------------------------------------------------------------*/
+Parse Value rdevno With start '-' max .
+start=x2d(start)
+max=x2d(max)
+items=max-start
+'PIPE (NAME EDEVSIZE.EXEC:112 END ?)',
+   'literal .',                                  /* Make 1 record    */
+   '| dup 'items,                                /* Duplicate it     */
+   '| specs pad 0 recno from 'start' 1.4 right', /* Add numbers      */
+   '| specs 1;* d2x 1',                          /* Convert 2 hex    */
+   '| strip leading ~0~',                        /* Remove zeros     */
+   '| stem rdevno.'                              /* Hand to rexx     */
+Return

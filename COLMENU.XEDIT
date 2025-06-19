@@ -1,0 +1,81 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*                                                              */
+/*    Alternate demonstration menu if REXXCUA is not available  */
+/*--------------------------------------------------------------*/
+'COMMAND SET CMDLINE OFF'
+'COMMAND SET PREFIX OFF'
+'COMMAND SET SCALE OFF'
+'COMMAND SET TOFEOF OFF'
+ 
+'COMMAND SET RESERVED -1 B N PF3 = EXIT   PF7 = Back PF8 = Forward'
+ reserved_line = 3
+ cmd.0 = 0
+ i = 0
+ 
+Do Queued()
+  Parse Pull line
+  Select
+    When Substr(Translate(line),1,11) = '%G MENUHEAD' Then
+      Do
+        'COMMAND SET RESERVED 1 T N' Center(Substr(line,13),80)
+      End
+    When Substr(line,1,2) = '%(' Then
+      Do
+       'COMMAND SET RESERVED' reserved_line 'B N' Substr(line,4)
+        reserved_line = reserved_line + 1
+      End
+    When Substr(Translate(line),1,2) = '%G' Then
+      Do
+        i = i + 1
+        cmd.0 = i
+        Parse Var line . . cmd.i
+      End
+    Otherwise Do
+     'COMMAND INPUT' line
+    End
+  End
+End
+ 
+'COMMAND SET CURLINE ON' reserved_line
+ reserved_line = reserved_line + 1
+'COMMAND TOP'
+'COMMAND CURSOR SCREEN' reserved_line '1'
+ 
+ Do Forever
+  'COMMAND READ CMDLINE TAG'
+ 
+   Do Queued()
+     Pull line
+     Parse Var line tag key line
+     Select
+       When tag = 'PFK' Then
+         Select
+           When key = 3 | key = 15 Then Do
+            "QQUIT"
+             Exit
+           End
+           When key = 8 | key = 20 Then Do
+            'COMMAND FORWARD'
+             If rc = 1 Then 'COMMAND MSG EOF Reached'
+           End
+           When key = 7 | key = 19 Then Do
+            'COMMAND BACKWARD'
+             If rc = 1 Then 'COMMAND MSG TOF Reached'
+           End
+           Otherwise NOP
+         End
+       When tag = 'ETK' Then Do
+        'COMMAND EXTRACT /CURSOR'
+         i = cursor.3
+         cmd.i                    /* Execute the selected routine */
+        'COMMAND CURSOR FILE' i
+         If rc ^= 0 Then 'COMMAND CURSOR SCREEN' reserved_line '1'
+         End
+       Otherwise NOP
+     End
+   End
+ End

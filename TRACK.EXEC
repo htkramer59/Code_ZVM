@@ -1,0 +1,9 @@
+/* Start the TRACKVxx module fitting with CP LEVEL */
+Parse Upper Arg uid options
+If options='' Then options='CONS'
+'PIPE (end ?)',
+    'cp QUERY CPLEVEL',
+    '| take first 1',
+    '| spec w3.1 1 substr 1.1 of w5.1 n',
+    '| var sfx'
+Address CMS 'TRACKV'sfx uid options

@@ -1,0 +1,91 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    S    S    Does a sort based on the values between the positions of
+ or SSSSSS    the "S" characters.  The columns as defined by the ZONE (Z)
+              setting are actually rearranged.  Text outside of the zone
+              setting is not moved.  The zone setting is restored to its
+              original value following the sort command.  If no "Z" is
+              specified, then the current setting of the zone is used.
+              This is normally columns 1 through the end of the file.  In
+              this case the file is sorted and all text in the remaining
+              columns is carried along as in "normal" sorts.
+ 
+    G    G    Same as sort (S) except sorts in descendinG order.
+ or GGGGGG
+ 
+              Optional numeric sort specifications may be entered
+              as follows:
+ 
+              EXAMPLE:  ????s2sssssss???????s1sssssss?????g3ggggggg??????
+ 
+              Sorts based on the column marked 1 first, the column marked
+              2 second, and in descendinG order the column marked 3.  The
+              number may be anywhere within the string of S's or G's or
+              trailing the string.  When trailing, the number is part of
+              the column width specification.  Leading numbers are not
+              part of the width.  Valid numbers are 0-9.  When no numbers
+              are specified or when two or more columns have the same
+              number, then the order is left to right.
+ 
+              To sort data within a column you may enter the following:
+ 
+ 
+              EXAMPLE:  ???????z???sssssssssssss???z??????????????????????
+                        1      B.  Vaser                 B. Smith
+                        2      R.  Adams                 J. Jones
+                        3      H.  Bare                  K. Thomas
+                        4      A.  Adams                 S. Man
+ 
+              yields:
+                        1      R.  Adams                 B. Smith
+                        2      A.  Adams                 J. Jones
+                        3      H.  Bare                  K. Thomas
+                        4      B.  Vaser                 S. Man
+                               |<----------------->|
+                               data sorted in column
+                                   |<--------->|
+                                   sort specs.
+ 
+              EXAMPLE:  ???z???ss2?s1sssssssssss???z??????????????????????
+                        1      B.  Vaser                 B. Smith
+                        2      R.  Adams                 J. Jones
+                        3      H.  Bare                  K. Thomas
+                        4      A.  Adams                 S. Man
+ 
+              yields:
+                        1      A.  Adams                 B. Smith
+                        2      R.  Adams                 J. Jones
+                        3      H.  Bare                  K. Thomas
+                        4      B.  Vaser                 S. Man
+                                   |<--------->|
+                                      1st sort
+                               |-|
+                            2nd sort
+ 
+ NOTE: The COL sort command honors excluded lines.  The normal XEDIT
+       SORT does not.
+ 
+.cs 7 on
+                     COLumn Edit Column Commands
+ 
+Place the cursor under any character of the task you are interested in
+and press PF1 or the ENTER key.
+ 
+ 
+COL COLMCMD5 (ALL       Y,^    Exclude columns from XEDIT PREFIX commands
+COL COLMCMDS (ALL       +      Add or sum numbers in a column
+COL COLMCMD2 (ALL       N      Place sequence numbers in a column
+COL COLMCMD3 (ALL       E      Emulate (copy forward) data down a column
+COL COLMCMD3 (ALL       _      Blank duplicate or redundant data ("de-emulate")
+COL COLMCMD3 (ALL       !      Insert blank separator lines when data changes
+COL COLMCMD4 (ALL       S,G    Sort data within a column
+COL COLMCMD6 (ALL       \      Reverse the command or swap column end for end
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

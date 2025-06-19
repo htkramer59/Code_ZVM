@@ -1,0 +1,313 @@
+/* DIRBAC EXEC was processed by REXIFY 2.5 at 11:45:13 on 13 Dec 1993.
+This exec creates the 'DDR'-statements needed to backup selected MDISK's
+  Input:  - the MDISKMAP created by DIRMAP MODULE (IPF or VM/ESA CUF)
+          - a control file, default DIRBAC CONTROL
+  Output: DDR statements and files with control info (such as Mdisks
+          not included in the DDR statements)
+ 
+  +--------+-------------------------------------+
+  | format |  DIRBAC  filename  <( CTL ctlfid >  |
+  +--------+-------------------------------------+
+ 
+Process (with other words: "what will prepared to backup"):
+ - First, all the GAP's are removed from the MDISKMAP,
+ - If at least 1 INCLUDE statement exist in the control file, only what
+   is INCLUDED will be taken
+ - Else everything is taken, except what is EXCLUDED.
+ 
+ In the INCLUDE/EXCLUDE processing, normal "priority" applies:
+ (an INCLUDE has higher priority than EXCLUDE, ....)
+  e.g. if asking INCLUDE DISK VMSRES ; EXCLUDE MDISK $PAGE$
+       a DDR for only VMSRES is prepared without $PAGE$ Mdisks or GAPs
+  e.g. if asking EXCLUDE MDISK KRIS ; INCLUDE MDISK KRIS 191
+       Only MDISK 191 of user KRIS will be backed up
+ 
+Format of the Control file: (starting in col1)
+        *Comment records
+        INCLUDE MDISK userid <cuu>
+        INCLUDE DISK volser
+        EXCLUDE MDISK userid <cuu>
+        EXCLUDE DISK volser
+  Example:
+        Include Mdisk MAINT
+        EXclude Mdisk KRIS
+        Include Mdisk KRIS 191
+        Exclude Disk  PGPAK1
+        Exclude Disk  PGPAK2
+        Exclude MDisk MAINTEST  05C2
+        Exclude MDisk MAINTEST  4456
+        *Include MDisk VM00      0999
+        *Include MDisk VM00       99A
+        *Exclude Disk V1ESA1
+ 
+Change History
+--------------
+ 5 MAR 92 Updated: Rewritten from EXEC2 into REXX and CMS/Pipelines to:
+                   - adapt to new MDISKMAP layout, allow INCLUDEs too
+                   and rewritten to use CMS/Pipelines
+ 
+Small -information- problem:
+   Some "Exclude" stuff can be reported as "not Found", when this
+   stuff has been found -and handled- with an Include statement.
+   This is no real problem.  Example:
+       INCLUDE MDISK KRIS 191; EXCLUDE MDISK KRIS
+       will report user KRIS as "not Found Exclude": as all KRIS's Mdisks
+       where handled by the Inclusion processor, the exclude processor
+       won't find any card for KRIS anymore.
+   But, I do miss the time required to improve the reported msgs.
+ 
+15 Nov 2001: MDISKMAP layout change caused DIRBAC to signal overlaps
+             for area's that are GAPs.
+26 Jun 2008: Support MDISKMAP layout of z/VM 5.1 and up
+*/
+/* DDR Defaults: */
+Sysprint='SYSPRINT CONS'
+tape    ='OUTPUT 181 TAPE (COMPACT LEAVE'
+ 
+address command
+parse upper source . . filename .
+parse upper arg fn . '(' options '' cfn cft cfm
+If fn = '' then call errexit 5,,
+   "1 parameter required : Filename of the MDISKMAP created by 'DIRMAP'"
+do while options<>''
+   parse var options opt options
+   if opt='CTL' then
+      parse var options cfn cft cfm options
+   else call errexit 5,'Invalid option:' opt
+end
+ctlfid=cfn cft cfm
+ctlfid=subword(ctlfid subword('DIRBAC CONTROL A',words(ctlfid)+1),1,3)
+ 
+'CMDCALL ESTATE' fn 'MDISKMAP A'
+if rc<>0 then call errexit rc,'Minidisk map not found on A-disk.'
+ 
+'CMDCALL ESTATE' ctlfid
+if rc<>0 then call errexit rc,'I need my control file,',
+          'listing Excludes etc.'
+'PIPE (END ? Name RdCtlFil) <' ctlfid,
+       '|      Nfind *|Strip Trailing|Xlate', /* General cleanup*/
+       '|EX:   Nfind EXCLUDE_',    /* route EXCLUDEs to other stream */
+       '|IN:   Nfind INCLUDE_',    /* route INCLUDEs to other stream */
+       '|      VAR Invalid',
+   '?EX:|      SPEC W2-* 1',
+       '|D:    FIND DISK_| SPEC W2   1         |JOIN * / /|VAR ExVols',
+       '?D:|M: FIND MDISK_|SPEC W2 1 w3 11.4',
+       '|U:    LOCATE 10.4 /    /|STRIP        |JOIN * / /|VAR ExUser',
+       '?U:|   SPEC w1 1.10 pad 0 w2 11.4 right|JOIN * / /|VAR ExMdsk',
+       '?M:|   SPEC W1 1|VAR Invalidex',
+   '?IN:|      SPEC W2-* 1',
+       '|D2:   FIND DISK_| SPEC W2   1         |JOIN * / /|VAR InVols',
+       '?D2:|M2: FIND MDISK_|SPEC W2 1 w3 11.4',
+       '|U2:   LOCATE 10.4 /    /|STRIP        |JOIN * / /|VAR InUser',
+       '?U2:|  SPEC w1 1.10 pad 0 w2 11.4 right|JOIN * / /|VAR InMdsk',
+       '?M2:|  SPEC W1 1|VAR Invalidin'
+if rc<0 then exit rc
+if symbol('invalid')='VAR' then call errexit 5,,
+   'Card "'invalid'" is invalid in' ctlfid
+if symbol('invalidin')='VAR' then call errexit 5,,
+   'Operands "'invalidin'" invalid for INCLUDE in' ctlfid
+if symbol('invalidex')='VAR' then call errexit 5,,
+   'Operands "'invalidex'" invalid for EXCLUDE in' ctlfid
+parse value '' with ExcludeVolser ExcludeUsers ExcludeMdisks ,
+                    IncludeVolser IncludeUsers IncludeMdisks
+if symbol('ExVols')='VAR' then ExcludeVolser=ExVols
+if symbol('ExUser')='VAR' then ExcludeUsers =ExUser
+if symbol('ExMdsk')='VAR' then ExcludeMdisks=ExMdsk
+if symbol('InVols')='VAR' then IncludeVolser=InVols
+if symbol('InUser')='VAR' then IncludeUsers =InUser
+if symbol('InMdsk')='VAR' then IncludeMdisks=InMdsk
+ 
+'PIPE (end ? Name DupCheck)', /*check for duplicates INCLUDE/EXCLUDE*/
+    'I:   FANINANY',
+   '|     SORT 3.20',
+   '|     UNIQUE 3.20 Mult',
+   '|O:   FANOUT',
+   '|     TAKE 1|SPEC /Conflicting Include & Exclude cards:/ 1',
+   '|B:   FANIN 0 1',
+   '|     CONSOLE|VAR Bad',
+   '?O:|  SPEC 1-* 2|B:',
+   '?VAR ExcludeVolser|Locate 1.1|Split     |SPEC /ExDisk/ 1 1-* nw|I:',
+   '?VAR IncludeVolser|Locate 1.1|Split     |SPEC /InDisk/ 1 1-* nw|I:',
+   '?VAR ExcludeUsers |Locate 1.1|Split     |SPEC /ExUser/ 1 1-* nw|I:',
+   '?VAR IncludeUsers |Locate 1.1|Split     |SPEC /InUser/ 1 1-* nw|I:',
+   '?VAR ExcludeMdisks|Locate 1.1|Deblock 15|SPEC /ExMdisk/ 1 1-* nw|I:',
+   '?VAR IncludeMdisks|Locate 1.1|Deblock 15|SPEC /ExMdisk/ 1 1-* nw|I:'
+if rc<0 then exit rc
+if symbol('Bad')='VAR' then call errexit 5
+ 
+ address.='????'
+ 'PIPE (name QDasdAdr) CP Q DASD',
+    '|SPEC /$ADDRESS./ 1  w5 next  /$/ next w2 Next',
+    '|VARLOAD'
+ 
+ 
+ 
+if IncludeUsers IncludeMDisks IncludeVolser <> ''
+   then PipeFilterInOrEx=MakeFilterInclude()
+   else PipeFilterInOrEx=MakeFilterExclude()
+ 
+MdiskMap:
+'PIPE (END ? NAME MdiskMap)',
+ '<      'fn 'MDISKMAP A',
+ '|      Outside /1/ 5',    /* Remove page-headers */
+ '|      Nfind _------'||,  /* Remove separators */
+ '|C:    CHOP 17',          /* Fill in volser & devtype in cols 1-17 */
+ '|      NFIND  ____'||,    /*    using Juxtapose  */
+ '|J:    JUXTAPOSE',
+ '|      Pad 80',           /* Pad to be sure having trailing blanks */
+ '|      Nlocate 60-80 / Gap /',  /* No Gaps */
+/* Pre and post z/VM 5.1 mdiskmap layouts:
+ VCTBKP 3390     FULLPACK  0124  RR123  12000     13338     13339     old
+ VCTBKP 3390     FULLPACK  0124 RR125 12345678   12345678    1234568  new
+*/,
+ '|      SPEC 1-38 1',                   /* Volser, devt, uid, lmode */
+         'SUBSTR W1 OF 39-* 39.8 Right',
+         'SUBSTR W2 OF 39-* 50.8 Right',
+         'SUBSTR W3 OF 39-* 62.8 Right',
+ '|      CHOP 70',
+ '|START: FANOUT',
+ '? C:|J:',                              /* Juxtapose routing */
+ '?OK:   FANINANY',                      /* these cards are good */
+ '|      SORT 2.6 39.8 62.8',            /* sort on Volser, Start, end */
+ '|      > DIRBAC TOCOPY A',
+ '|      STEM TOCOPY.',
+ '|      Count lines|SPEC /Mdisks to copy:/ 1 1-* nw|CONSOLE',
+ '?EXC:  FANINANY|SORT UNIQUE',           /* these cards are excluded*/
+ '|      > DIRBAC EXCL-DSK A',
+ '|      Count lines|SPEC /Mdisks excluded:/ 1 1-* nw|CONSOLE',
+ '?NOT:  FANINANY|SORT UNIQUE',           /* INC/EXC, not found */
+ '|      STRIP Trailing|LOCATE 15',           /* ignore empty cards */
+ '|      > DIRBAC INEX-ERR A',
+ '|      Count lines|SPEC $In/Excludes not found:$ 1 1-* nw|CONSOLE',
+ '?START:',
+ PipeFilterInOrEx     /* Process Includes or Excludes */
+if rc<0 then exit rc
+Call MakeDDR
+exit
+ 
+ 
+MakeFilterInclude:
+ return,
+,/* ------ Block 1: Process INCLUDE uid_cuu -------------------------*/
+ '|LIM:  LOOKUP 18.14 1.14 DETAIL',   /* Lookup INcluded Mdisks */
+ '|OK:',                                 /* these cards are good */
+ '?      VAR IncludeMdisks|Deblock 15', /* INcluded Mdisk ? */
+ '|LIM:',                                /*  Feed to Lookup */
+,/* --------- Not specially included cards go down here -------------*/
+,/* ------ Block 2: Process INCLUDE uid & EXCLUDE uid_cuu -----------*/
+ '|LIU:  LOOKUP 18.8 1.8 DETAIL',     /* Lookup INcluded Users */
+,                                        /*  Yes, Included User */
+ '|LEM:  LOOKUP 18.14 1.14 DETAIL',      /* remove EXcluded User Mdisks*/
+ '|      SPEC /ExcMdisk/ 1 1-* nw',      /* msg to ..*/
+ '|EXC:',                                /* info file */
+'?       VAR ExcludeMdisks|Deblock 15', /*  Excluded Mdisk ? */
+ '|LEM:',                                 /*  Feed to Lookup */
+ '|OK:',                                  /*  Not Ex ==> to good cards */
+ '?      VAR IncludeUsers |Split |Pad 8',/* Included User ? */
+ '|LIU:',                                 /* Not specialy INcluded User*/
+,/* --------- Not specially included users go down here -------------*/
+,/* ------ Block 3: Process INCLUDE volser --------------------------*/
+,/* --------------- But for Included volsers, process EXCL uid-------*/
+ '|LIV:  LOOKUP 2.6 1.6 DETAIL',      /* Lookup INcluded Volsers */
+,                                        /*  Yes, Included Volser */
+ '|LEM2: LOOKUP 18.14 1.14 DETAIL',      /* remove EXcluded User Mdisks*/
+ '|      SPEC /ExcMdisk/ 1 1-* nw',      /* msg to ..*/
+ '|EXC:',                                /* info file */
+'?       VAR ExcludeMdisks|Deblock 15', /*  Excluded Mdisk ? */
+ '|LEM2:',                                /*  Feed to Lookup */
+ '|LEU2: LOOKUP 18.8  1.8  DETAIL',      /* Remove Excluded Users  */
+ '|      SPEC /ExcUser / 1 1-* nw',      /* msg to ..*/
+ '|EXC:',                                /* info file */
+ '?      VAR ExcludeUsers |Split |Pad 8',/* excluded User ? */
+ '|LEU2:',                                /*  Feed to Lookup */
+ '|OK:',                                  /*  Not Ex ==> to good cards */
+ '?      VAR IncludeVolser|Split |Pad 6',/* Included Volser ? */
+ '|LIV:',
+ '|      SPEC /NotInc  / 1 1-* nw',  /* msg to ..*/
+ '|EXC:',                                /* info file */
+ '?LIM: | SPEC /IncMdiskNotFnd/ 1 1-* nw |NOT:',
+ '?LIU: | SPEC /IncUserNotFnd / 1 1-* nw |NOT:',
+ '?LEM: | SPEC /ExcMdiskNotFnd/ 1 1-* nw |NOT:',
+ '?LIV: | SPEC /IncVolsNotFnd / 1 1-* nw |NOT:',
+ '?LEM2:| SPEC /ExcMdiskNotFnd/ 1 1-* nw |NOT:',
+ '?LEU2:| SPEC /ExcUserNotFnd / 1 1-* nw |NOT:'
+ 
+MakeFilterExclude:  /* To exclude not wanted cards */
+return,
+ '|LEM2: LOOKUP 18.14 1.14 DETAIL',      /* Remove Excluded Mdisks */
+ '|      SPEC /ExcMdisk/ 1 1-* nw',      /* msg to ..*/
+ '|EXC:',                                /* info file */
+ '?       VAR ExcludeMdisks|Deblock 15',  /*  Excluded Mdisk ? */
+ '|LEM2:',                                /*  Feed to Lookup */
+ '|LEU2: LOOKUP 18.8  1.8  DETAIL',      /* Remove Excluded Users  */
+ '|      SPEC /ExcUser / 1 1-* nw',      /* msg to ..*/
+ '|EXC:',                                /* info file */
+ '?      VAR ExcludeUsers |Split |Pad 8',/* excluded User ? */
+ '|LEU2:',                                /*  Feed to Lookup */
+ '|LEV2: LOOKUP 2.6 1.6  DETAIL',        /* Remove Excluded Volsers */
+ '|      SPEC /ExcDisk / 1 1-* nw',      /* msg to ..*/
+ '|EXC:',                                /* info file */
+ '?      VAR ExcludeVolser|Split |Pad 6',/* excluded User ? */
+ '|LEV2:',                                /*  Feed to Lookup */
+ '|OK:',
+ '?LEM2:| SPEC /ExcMdiskNotFnd/ 1 1-* nw |NOT:',
+ '?LEU2:| SPEC /IncUserNotFnd / 1 1-* nw |NOT:',
+ '?LEV2:| SPEC /IncVolsNotFnd / 1 1-* nw |NOT:'
+ 
+ 
+MakeDDR: /* Build DDR statements */
+ volid='';  totdump=0
+ Do i=1 to tocopy.0
+/*  ii=i+1
+    Parse var tocopy.ii . . uuu aaa .
+    if uuu aaa= 'RACFVM 0200' then trace ?r*/
+    Parse var tocopy.i nvolid ndevtype nuser naddr . nstart nend . ngap .
+    If nvolid <> volid then do
+       if volid<>'' then CALL SaveOldVol extents end
+       Parse var tocopy.i volid devtype . . . start end .
+       extents=start
+    end
+    else do
+       If ngap = 'OVERLAP' | nstart <= end  then do
+          Say 'Mdisk overlap:' tocopy.i
+          Say '    included in backup'
+       End
+       Select
+        when nend<end     then nop      /* included in overlap */
+        when nstart<end+1 then end=nend /* Overlap but not included */
+        when nstart=end+1 then end=nend /* Adjacent Mdisk */
+        otherwise
+           extents=extents end nstart
+           end=nend
+       End
+    end
+ End i
+ if volid<>'' then CALL SaveOldVol extents end
+ Say 'Total nb Cyls/Blks to dump:' totdump
+return
+ 
+SaveOldVol:
+ parse arg extents
+ w='EXECIO 1 DISKW' volid 'DDR A 0 F 80 (STRING'
+ 'ERASE' volid 'DDR A'
+ w sysprint
+ w tape
+ w 'INPUT' address.volid 'DASD' volid
+ ftr = 'FTR'
+ totvol=0
+ do while extents<>''
+    parse var extents s e extents
+    w 'DUMP' ftr s e
+    totvol=totvol + (e-s+1)
+    ftr=''
+ end
+ 'FINIS' volid 'DDR A'
+ Say '---> volid' volid',' totvol 'cyls/blks to dump to tape'
+ totdump=totdump+totvol
+Return
+ 
+Errexit:
+  do i=2 to arg()
+     say filename':' arg(i)
+  end
+exit arg(1)

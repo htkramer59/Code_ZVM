@@ -1,0 +1,189 @@
+/*---------------------------------------------------------------+
+| Function : Check MDISK usage for several ids                   |
+|                                                                |
+| File     : ALLMDU   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : ALLMDU   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220222 14:14:55                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Added check for RMCMD EXEC and|
+|                     its output                                 |
+|            20220609 H.T.Kramer : Changed checking for packed   |
+|                     items                                      |
+|            20220506 H.T.Kramer : Implemented QUIET option      |
+|            20220301 H.T.Kramer : Added VMLINK to store all     |
+|                     data in a different place                  |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' dryrun .
+Parse Source . . myfn myft myfm .
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+If what='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME ALLMDU.EXEC:32 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show             */
+             Call Exit
+             End
+'PIPE (NAME MANY.XEDIT:195 END ?)',
+   'CP QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce to this   */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cms LISTFILE RMCMD EXEC * (NOH',             /* Ask this         */
+   '| count lines',                              /* How many         */
+   '| var rmc'                                   /* Store as boolean */
+If rmc=0 Then Call Exit '28 Can not run: RMCMD EXEC is missing'
+If what='DATA' Then Call Collect_Data
+               Else Call Process_Data
+Exit:
+/*---------------------------------------------------------------+
+| Single point of exit                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Process_Data:
+/*---------------------------------------------------------------+
+| Collect and gather the data                                    |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+Address CMS 'RMCMD cms ALLMDU DATA , , ,FILE, 'myfn' ALLNODES 'wfm
+If rc<>0 Then Call Exit '128 Can not execute RMCMD'
+'PIPE (NAME ALLMDU.EXEC:64 END ?)',
+    '< 'myfn' ALLNODES 'wfm,                     /* Read file        */
+    '| pick w13.1 == ~****~ or',                 /* Only keep these  */
+           'w15.1 == ~****~',                    /* .                */
+    '| specs a: 1.2 .',                          /* Add breaks       */
+            '4;* 5',                             /* .                */
+            'break a',                           /* .                */
+            'id a 1',                            /* .                */
+    '| stem find.'                               /* Write 2 stem     */
+If find.0<>0 Then Do
+  'PIPE (NAME ALLMDU.EXEC:74 END ?)',
+     'stem find.',                               /* Take these       */
+     '| if: if pick 1.2 \== ~  ~',               /* Add empty line   */
+     '|    specs ~; ;~ 1 1;* n',                 /* .before break    */
+     '|    split at ;',                          /* .                */
+     '| if:',                                    /* .                */
+     '| > 'myfn' ALLNODES 'wfm                   /* Write 2 file     */
+  Address CMS 'XEDIT 'myfn' ALLNODES 'wfm
+  End
+  Else Do
+  Queue 'SET MSGMODE OFF'
+  Queue 'DELETE *'
+  Queue 'INPUT *** 'myfn' No warnings'
+  Address CMS 'XEDIT 'myfn' ALLNODES 'wfm
+  End
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+Collect_Data:
+/*---------------------------------------------------------------+
+| Collect the required data                                      |
++---------------------------------------------------------------*/
+Call Read_Names
+If \quiet Then Say 'Checking usage'
+'PIPE (NAME ALLMDU.EXEC:105 END ?)',
+    'var listusage',                             /* Take the list    */
+    '| split at ;',                              /* Split here       */
+    '| strip',                                   /* Remove spaces    */
+    '| sort w1.1',                               /* Sort on id       */
+    '| stem check.'                              /* Hand 2 rexx      */
+Do c=1 To check.0
+   Address CMS 'VMLINK 'check.c' (NONAMES QUIET  .fm'
+   If rc=0 Then Parse Pull . . wfm
+           Else Do
+           Say 'Problem accessing 'check.c
+           Iterate
+           End
+   'PIPE (end ?)',
+       'cms QUERY DISK 'wfm,                     /* Ask cms          */
+       '| pick w1.1 \== ~LABEL~',                /* Ignore these     */
+       '| specs fs - substr w1.1 of f2 1',       /* Keep this        */
+       '| var usage',                            /* Hand 2 rexx      */
+       '?',                                      /* 2nd pipe         */
+       'cms LISTFILE * * 'wfm' (NOH ISO',        /* Ask cms          */
+       '| specs w1;* 1.80',                      /* Rework           */
+               'a: w7.1 .',                      /* .                */
+               'print a pict 999999 nw.8',       /* .                */
+       '| sort w10.1 d',                         /* Sort             */
+       '| specs 1.80 1',                         /* Remove added item*/
+       '| take first 10',                        /* Take top ten     */
+       '| stem large.'                           /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If around high water mark...start screaming                    |
++---------------------------------------------------------------*/
+   If usage >= limit Then Do
+            Say node '**** Usage on 'check.c' is higher than 'limit'%'
+            'PIPE (NAME MANY.XEDIT:472 END ?)',
+               'stem large.',                    /* .                */
+               '| preface literal *** Top ten largest files',   /* .                */
+               '| cons'                          /* .                */
+            End
+   Address CMS 'VMLINK 'check.c' <DET (NONAMES QUIET'
+End c
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \quiet Then Say 'Checking for packed files'
+'PIPE (NAME ALLMDU.EXEC:125 END ?)',
+   'var listpacked',                             /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| specs w1.1 1.8 w2.1 nw',                   /* Adjust layout    */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs 1;* 1 x40 n',                        /* Add a space      */
+   '| j: juxtapose',                             /* Join records     */
+   '| if: if pick w6.1 == ~F~ and',              /* If this          */
+                 'w7.1 == ~1024~',               /* = packed file    */
+   '|     specs 1;* 1 ~**** Packed file~ nw',    /* Add a marker     */
+   '| if:',                                      /* Conn 2 if        */
+   '| pick anycase w-2;-2 == ~PACKED~',          /* Select packd item*/
+   '| cons',                                     /* Show             */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~VMLINK~ 1 w1.2 nw ~(NON NOTYPE INVOKE LISTFILE * * .fm (NOH ISO~ nw',   /* Compose cmd      */
+   '| cms',                                      /* Run cmds         */
+   '| j:'                                        /* Conn 2 juxtapose */
+Return
+ 
+ 
+Read_Names:
+/*---------------------------------------------------------------+
+| Read the input file                                            |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    '< 'myfn' NAMES *',                          /* Read file        */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~ and',                    /* Ignore comments  */
+           '1.1 \== ~~',                         /* .and empty lines */
+    '| join * x40',                              /* Make 1 record    */
+    '| change ~; ~;~',                           /* Compress this    */
+    '| split before string ~:~',                 /* Split here       */
+    '| xlate upper',                             /* Upper 4 varload  */
+    '| change ~:~/~ 1',                          /* Prep 4 varload   */
+    '| change ~.~/~ 1',                          /* .                */
+    '| varload'                                  /* Hand 2 rexx      */
+limit=Right(limit,2,'0')
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

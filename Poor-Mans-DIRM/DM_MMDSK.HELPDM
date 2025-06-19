@@ -1,0 +1,23 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Copy MDISK statement to an other user               |
+|                                                                |
+| File     : DM_MMDSK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|                                                                |
+|                                                                |
+| Called   : DM_MMDSK <uid1> <cuu1> <uid2> <cuu2>                |
+|          : MMDISK   <uid1> <cuu1> <uid2> <cuu2>                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240708 09:29:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

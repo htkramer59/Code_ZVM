@@ -1,0 +1,138 @@
+/*---------------------------------------------------------------+
+| Function : Add a minidisk to a user                            |
+|                                                                |
+| File     : DM_AMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_MAP   EXEC   Find free space                     |
+|            DM_VMLNK EXEC   Link disks                          |
+|            DM_CKUID EXEC   Check userid                        |
+|            DM_CKMDK EXEC   Check minidisk                      |
+|            DM_ONLIN EXEC   Check & put directory online        |
+|                                                                |
+| Called   : DM_AMD   <uid> <size> <location> <linkmode> <pws>   |
+|          : AMD      <uid> <size> <location> <linkmode> <pws>   |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240619 13:32:29                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu size location linkmode rpw wpw mpw .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Basic checks                                                   |
++---------------------------------------------------------------*/
+If uid=''      Then Call Exit '58'
+If cuu=''      Then cuu='191'
+If size=''     Then size='1'
+If location='' Then location='AUTO'
+If linkmode='' Then linkmode='M'
+/*---------------------------------------------------------------+
+| More extensive checks                                          |
++---------------------------------------------------------------*/
+uidok=DM_CKUID(uid)
+If \uidok Then Call Exit '48' uid
+If x2d(cuu)<1 | x2d(cuu)>x2d(FFFF) Then Call Exit '68' cuu
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If DM_CKMDK(uid cuu) Then Call Exit '78'
+Call Generate_Mdisk
+Call Create_Directory
+Address CMS 'DM_ONLIN'
+If format_new_disk Then Address CMS 'DM_FORMT 'uid cuu' DUMMY'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+Create_Directory:
+/*---------------------------------------------------------------+
+| Add the mdisk and write the directory file                     |
++---------------------------------------------------------------*/
+details=DM_INDEX('GET 'uid)
+part1=Right(Word(details,2),5,0)
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_AMD.EXEC:78 END ?)',
+   '< 'dirfnft wfm,                              /* Read this        */
+   '| specs pad 0 recno 1.5 right 1.72 nw',      /* Add recno        */
+   '| t: tolabel 'part1,                         /* To here          */
+   '| append var mdisk',                         /* Add new record   */
+   '| fi: fanin',                                /* Take in rest     */
+   '| specs 7;*  1.80',                          /* Remove recno     */
+   '| > 'dirfnft ws' FIXED 80',                  /* Write 2 file     */
+   '? t:',                                       /* Conn 2 tolabel   */
+   '| fi:'                                       /* Conn 2 fanin     */
+wfm=DM_VMLNK('SOURCEDIR DET')
+Return
+ 
+ 
+Check_Dasd:
+/*---------------------------------------------------------------+
+| Check if the location of the new mdisk exists                  |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_AMD.EXEC:96 END ?)',
+   'cp QUERY DASD 'location,                     /* Ask cp           */
+   '| nlocate anycase ~NOT FOUND~',              /* Ignore this      */
+   '| specs ~QUERY DASD DETAILS~ 1 w2.1 nw',     /* Compose cmds     */
+   '| cp',                                       /* Issue them       */
+   '| take first 1',                             /* Take this        */
+   '| specs w-1;-1',                             /* Keep this        */
+   '| var maxsize',                              /* Store as         */
+   '| count lines',                              /* How many         */
+   '| var dasdok'                                /* Store as boolean */
+If \dasdok Then Call Exit '88' location
+           Else maxsize=maxsize-1
+Return
+ 
+ 
+Generate_Mdisk:
+/*---------------------------------------------------------------+
+| Here we create the MDISK statement                             |
++---------------------------------------------------------------*/
+If location<>'AUTO' Then Do
+                         Call Check_Dasd
+                         select='| pick anycase w1.1 == ~'location'~ and w4.1 >>= ~'size'~'
+                         define='| spec ~MDISK 'cuu'~ 9 w2.2 nw ~'size location linkmode rpw wpw mpw'~ nw'
+                         End
+                    Else Do
+                         select='| pick anycase w4.1 >>= ~'size'~'
+                         define='| spec ~MDISK 'cuu'~ 9 w2.2 nw ~'size'~ nw w1.1 nw ~'linkmode rpw wpw mpw'~ nw'
+                         End
+Address CMS 'EXECLOAD DM_MAP EXEC * = REXX'
+mdisk=''
+size=Right(size,5,0)
+'PIPE (NAME DM_AMD.EXEC:127 END ?)',
+   'DM_MAP FREE',                                /* Find free space  */
+   '| pick w-1;-1 == ~**GAP**~',                 /* Select this      */
+   select,                                       /* Do selection     */
+   '| sort w4.1',                                /* Sort on size     */
+   '| take first 1',                             /* Take 1st one     */
+   define,                                       /* Compose MDISK    */
+   '| specs 1;* 1 x40 n',                        /* Add a space      */
+   '| var mdisk tracking'                        /* Hand 2 rexx      */
+Address CMS 'EXECDROP DM_MAP REXX'
+If mdisk='' Then Call Exit 199
+Return

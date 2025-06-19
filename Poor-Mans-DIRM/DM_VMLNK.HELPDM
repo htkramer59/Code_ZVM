@@ -1,0 +1,21 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Routine for LINK/DETACH of disk                     |
+|                                                                |
+| File     : DM_VMLNK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_VMLNK <nickname> <det> ( <write>                 |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240619 16:10:09                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+DM_VML:

@@ -1,0 +1,26 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change STORAGE or MAXSTORAGE                        |
+|                                                                |
+| File     : DM_STOR  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_STOR  <uid> <storage>                            |
+|                           MAX <storage>                        |
+|            MAX      <uid> <storage>   for max storage          |
+|            STOR     <uid> <storage>   for min storage          |
+|            MAX      <uid> QRY         examine storage          |
+|            STOR     <uid> QRY         examine storage          |
+|                                                                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 16:21:34                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

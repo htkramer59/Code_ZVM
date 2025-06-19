@@ -1,0 +1,23 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Delete a USER from the DIRECTORY                    |
+|                                                                |
+| File     : DM_PURGE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_PURGE <uid>                                      |
+|          : PURGE    <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 18:41:29                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

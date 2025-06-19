@@ -1,0 +1,88 @@
+/*---------------------------------------------------------------+
+| Function : Collect CLIENT data and send it to the XYMON        |
+|            network monitor                                     |
+|                                                                |
+| File     : HOBVMCD  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : HOBVMxxx CLIENT                                     |
+|                                                                |
+| Called   : HOBVMCD  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220125 10:56:26                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMCD.EXEC:27 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+ 
+If test Then Do
+             output='| cons'
+             tcpout='| cons'
+             End
+        Else Do
+             output='| > HOBVM002 CLIENT A'
+             tcpout='| tcpclient . 'bbport' userid 'tcpsrv' | hole'
+             End
+ 
+'PIPE (NAME HOBVMCD.EXEC:41 END ?)',
+   'literal [date]',                             /* Take this        */
+   '| append literal 'TimeStamp('TZ'),           /* Add this         */
+   output,                                       /* Show or write?   */
+   '?',                                          /* 2nd pipe         */
+   'var bbdisplay',                              /* Take this        */
+   '| split',                                    /* Split into recs  */
+   '| stem srvr.'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Now read all client files including HOBVM002                   |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMCD.EXEC:52 END ?)',
+   'cms LISTFILE HOBVM* CLIENT A (NOHEADER',     /* Search files     */
+   '| sort',                                     /* Sort them        */
+   '| getfiles',                                 /* Read them        */
+   '| xlate from 1047 to 819',                   /* Conv EBCDIC 2 ASC*/
+   '| stem line.'                                /* Store as         */
+/*---------------------------------------------------------------+
+| Loop thru all the servers in bbdisplay                         |
++---------------------------------------------------------------*/
+Do s=1 To srvr.0
+   If \test Then tcpout=Subword(tcpout,1,2) srvr.s Subword(tcpout,4)
+   'PIPE (NAME HOBVMCD.EXEC:63 END ?)',
+      'stem line.',                              /* Take these       */
+      tcpout                                     /* Show or send     */
+End s
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   Parse Var now yyyy +4 mm +2  dd +2 .
+   'PIPE (NAME HOBVMCD.EXEC:81 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

@@ -1,0 +1,51 @@
+/*---------------------------------------------------------------+
+| Function : Personal profile exec                               |
+|                                                                |
+| File     : PROFILE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PROFILE  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180220 09:43:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET EMSG ON'
+Address COMMAND 'CP SET DATEFORM ISODATE USER'
+Address COMMAND 'CP SET PF1  SUBSTITU IMMED PIPE (END \) &*'
+Address COMMAND 'CP SET PF11 RETRIEVE FORWARD'
+Address COMMAND 'CP SET PF12 RETRIEVE BACKWARD'
+Address COMMAND 'CP SPOOL CONS * START EOF NAME 'Userid()' CONSLOG'
+Address COMMAND 'CP SCREEN OUT YELLOW STAT  GREEN'
+Address COMMAND 'CP TERM MORE 10 10'
+Address CMS 'SYNONYM 'Userid()' SYNONYM'
+'PIPE (end ? name PROFILE.EXEC:27)',
+   'cms IDENTIFY ',
+   '| specs w3.1 ',
+   '| spec -2;-1 ',
+   '| var node',
+   '?',
+   'cp QUERY 'Userid(),
+   '| specs fs - f2',
+   '| locate ~DSC~',
+   '| count lines',
+   '| var dsc'
+Address CMS 'SET FILEPOOL VMUSERS:'
+Address CMS 'VMLINK .DIR VMUSERS:TOOLS. <* Q (NONAMES'
+Address CMS 'VMLINK .dir VMUSERS:HERMAN.CODE. <* K (NONAMES'
+Address CMS 'VMLINK .dir VMUSERS:HERMAN.CODE_SERVER. <* N (NONAMES'
+If dsc Then Address CMS 'CODE'
+       Else Do
+       'VMFCLEAR'
+       SAY 'To start CODE Server ENTER:'
+       Say '    CODE'
+       Say '    and then'
+       Say '    #CP DISC'
+       End
+Exit

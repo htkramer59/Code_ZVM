@@ -1,0 +1,231 @@
+/*---------------------------------------------------------------+
+| Function : Perform CPU test and report results                 |
+|                                                                |
+| File     : HOBVMCPU EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : TOPTEN   EXEC loaded as PIPE stage                  |
+|                                                                |
+| Called   : HOBVMCPU .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211223 14:12:50                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get variables from caller                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMCPU.EXEC:27 END ?)',
+   'rexxvars 1 toload',                          /* Get variables    */
+   '| varload'                                   /* Load them        */
+ 
+If cfgmode='CLIENT' Then Parse Var cpu yellow red .
+                    Else yellow=80
+ 
+Call Collect_Info          /*  Execute the test                */
+If cfgmode='CLIENT' Then Do
+  If \test Then Do
+                Call Init_Open_Socket    /*  Initialize and Open the socket  */
+                Call Send status         /*  Send the result in status to bb */
+                Call Close_Term_Socket   /*  Close and terminate the socket  */
+                End
+           Else Do
+                'PIPE (NAME HOBVMCPU.EXEC:42 END ?)',
+                   '< HOBVM180 CLIENT A',
+                   '| fi1: fanin',
+                   '| fi2: fanin',
+                   '| cons',
+                   '?',
+                   '< HOBVM200 CLIENT A',
+                   '| fi1:',
+                   '?',
+                   'var status',
+                   '| split at x15',
+                   '| strip',
+                   '| fi2:'
+                End
+  End
+exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMCPU.EXEC:62 END ?)',
+    'cp QUERY CPLEVEL',                          /* Ask cp           */
+    '| f1: fanout',                              /* Duplicate recs   */
+    '| pick anycase w1.1 == ~IPL~',              /* Select this      */
+    '| specs ~/IPLDATE/~ 1 w3.1 n ~/IPLTIME/~ nw w4.1 n',   /* Keep this        */
+    '| split',                                   /* Split            */
+    '| varload',                                 /* and load         */
+    '? f1:',                                     /* Conn 2 fanout    */
+    '| join * x15',                              /* Make 1 record    */
+    '| append literal 'cr cr,
+    '| var cplevel',                             /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cp IND',                                    /* Ask CP           */
+    '| f2: fanout',                              /* Duplicate records*/
+    '| preface literal [cpu]',                   /* Add this         */
+    '| append literal ',                         /* and empty lines  */
+    '| > HOBVM200 CLIENT A',                     /* Store as         */
+    '? f2:',                                     /* Conn 2 fanout    */
+    '| take first 1',                            /* Keep 1 record    */
+    '| specs fs - f2',                           /* Keep this        */
+    '| specs ~/AVG_CPU/~ 1 w1.1 n ~/NUMPROC/~ nw w2.1 n',   /* Prep vars        */
+    '| split',                                   /* Split them       */
+    '| varload',                                 /* Hand 2 rexx      */
+    '?',                                         /* 3rd pipe         */
+    'vmc 'perfsvm' CP QUERY PROC',               /* Ask PERFKIT      */
+    '| drop first 3',                            /* Ignore these     */
+    '| locate anycase ~PROCESSOR~',              /* Take this        */
+    '| join * x15',                              /* Make 1 record    */
+    '| var procs'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Var ipltime hh ':' mm ':' ss
+/* numdays=Date('B',ipldate,'U') */
+'PIPE (NAME HOBVMCPU.EXEC:95 END ?)',
+    'var ipldate',
+    '| dateconv iso rb',
+    '| var numdays'
+numsecs=(hh*3600)+(mm*60)+ss
+daysup=Date('B')-numdays
+cdsecs=Time('S')
+If cdsecs >= numsecs Then secsup=cdsecs-numsecs
+If cdsecs < numsecs Then Do
+  secsup=(86400-numsecs)+cdsecs
+  daysup=daysup-1
+  End
+hrsup=format(secsup%3600,2,0)
+minup=format((secsup-(hrsup*3600))/60,2,0)
+uptime='Uptime: 'daysup' Days, 'hrsup' Hours, 'minup' Minutes'
+parse var cpresp.1 . 'AVGPROC-' avg_cpu'%' numproc .
+avg_cpu=strip(avg_cpu,'L','0')
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If cfgmode='SERVER' Then Do
+  If avg_cpu > yellow Then Call TopTen
+                      Else topten.0=0
+  'PIPE (NAME HOBVMCPU.EXEC:118 END ?)',
+     'var uptime',                               /* Take this        */
+     '| preface literal [uptime]',               /* Add this         */
+     '| append literal ',                        /* and empty line   */
+     '| > HOBVM180 CLIENT A'                     /* Store as         */
+  If topten.0>0 Then apptop='| append stem topten.'
+                Else apptop=''
+    'PIPE (NAME HOBVMCPU.EXEC:125 END ?)',
+       'cp IND',                                 /* Ask CP           */
+       '| f: fanout',                            /* Dupl. records    */
+       '| preface literal [cpu]',                /* Add this         */
+       '| append literal 'cr cr,                 /* and 2 empty lines*/
+       apptop,                                   /* Add topten if... */
+       '| append literal 'cr cr,                 /* Add 2 empty lines*/
+       '| > HOBVM200 CLIENT A',                  /* Store as         */
+       '? f:',                                   /* Conn 2 fanout    */
+       '| take first 1',                         /* Take this        */
+       '| specs fs - f2',                        /* Keep this        */
+       '| specs ~/AVG_CPU/~ 1 w1.1 n ~/NUMPROC/~ nw w2.1 n',   /* Prep 2 vars      */
+       '| split',                                /* Split them       */
+       '| varload'                               /* Hand 2 rexx      */
+  End
+  Else Do
+  select
+    When avg_cpu > red Then color='red'
+    When avg_cpu > yellow Then color='yellow'
+    Otherwise color='green'
+    End
+  status='status 'machine'.cpu' color TimeStamp('TZ'),
+         ' CPU Utilization ' avg_cpu'%' cr cplevel,
+         uptime cr cr procs cr
+End
+return
+ 
+ 
+TopTen:
+/*---------------------------------------------------------------+
+| Ask perfkit for the top ten users                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMCPU.EXEC:157 END ?)',
+    'topten',                                    /* Ask for topten   */
+    '| stem topten.'                             /* Store as stem    */
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,hobbitvm'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBVMCPU.EXEC:221 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

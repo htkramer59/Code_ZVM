@@ -1,0 +1,18 @@
+/**/
+'PIPE (NAME CHKME.EXEC:2 END ?)',
+   'CP QUERY USERID',
+   '| specs w3.1',
+   '| var node',
+   '| specs -2;-1',
+   '| var shortnode'
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+'PIPE (NAME CHKME.EXEC:9 END ?)',
+    'rscs all CP QUERY 'Userid(),
+    '| nlocate w1.1 ~'shortnode'~',
+    '| p: pick anycase w-3;-1 == ~not logged on~',
+    '? p:',
+    '| cons',
+    '| count lines',
+    '| var exrc'
+Address CMS 'EXECDROP RSCS REXX'
+Exit exrc

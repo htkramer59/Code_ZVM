@@ -1,0 +1,121 @@
+/*---------------------------------------------------------------+
+| Function : Change STORAGE or MAXSTORAGE                        |
+|                                                                |
+| File     : DM_STOR  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_STOR  <uid> <storage>                            |
+|                           MAX <storage>                        |
+|            MAX      <uid> <storage>   for max storage          |
+|            STOR     <uid> <storage>   for min storage          |
+|            MAX      <uid> QRY         examine storage          |
+|            STOR     <uid> QRY         examine storage          |
+|                                                                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 16:21:34                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid input
+Parse Source . . myfn myft . .
+switch=0
+If uid='MAX' Then Do
+                  switch=1
+                  Parse Value input With uid . input
+                  End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Find the user stmt where the storage values reside             |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_STOR.EXEC:46 END ?)',
+  'stem uid.',                                   /* Take these       */
+  '| take first 1',                              /* Keep this        */
+  '| cons',
+  '| var user',                                  /* Hand 2 rexx      */
+  '| specs w5.2 1',                              /* Reduce 2 this    */
+  '| var curstor'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Act on input and set some stuff and do some checks             |
++---------------------------------------------------------------*/
+Say user
+Say curstor
+Select
+When input='QRY' Then ShowStor()
+When switch      Then Do
+                        minstor=Word(curstor,1)
+                        curstor=Word(curstor,2)
+                        chpos='w6.1'
+                        newstor=Strip(input)
+                        If newstor<minstor Then Call Exit 701
+                        Call ChangeStor
+                        End
+Otherwise Do
+          maxstor=Word(curstor,2)
+          curstor=Word(curstor,1)
+          chpos='w5.1'
+          newstor=Strip(input)
+          If newstor>maxstor Then Call Exit 700
+          Call ChangeStor
+          End
+End
+/*---------------------------------------------------------------+
+| Create the new directory and put it online                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_STOR.EXEC:80 END ?)',
+  'stem direct.',
+  '| change anycase ~'user'~ ~'newuser'~',
+  '| specs 7;* 1.80',
+  '| > 'dirfnft ws' FIXED 80'
+If rc<>0 Then Call Exit 98
+ 
+Address CMS 'DM_ONLIN'
+ 
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowStor:
+/*---------------------------------------------------------------+
+| Show the values found                                          |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft 'STORAGE and MAXSTORAGE for 'uid' is: 'curstor
+Call Exit
+Return
+ 
+ 
+ChangeStor:
+/*---------------------------------------------------------------+
+| Finally change the storage                                     |
++---------------------------------------------------------------*/
+unit=Substr(Reverse(newstor),1,1)
+units='KMGTPE'
+If Pos(unit,units)=0 Then Call Exit 703
+'PIPE (NAME DM_STOR.EXEC:117 END ?)',
+   'var user',                                        /* Take this        */
+   '| change anycase 'chpos' ~'curstor'~ ~'newstor'~',  /* Replace this     */
+   '| var newuser'                                    /* Hand 2 rexx      */
+Return

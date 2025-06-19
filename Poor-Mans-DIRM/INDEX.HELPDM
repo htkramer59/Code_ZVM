@@ -1,0 +1,22 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Create or get info from the index                   |
+|                                                                |
+| File     : DM_INDEX EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_VMLNK EXEC                                       |
+|            REPLACE  EXEC                                       |
+|                                                                |
+| Called   : DM_INDEX                                            |
+|          : INDEX                                               |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 15:27:52                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

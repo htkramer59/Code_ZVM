@@ -1,0 +1,163 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*----------------------------------------------------------------------/
+/-  This exec will create a Xymon client-data section                  -/
+/-  for the system logfile. It will be sent to the Xymon server        -/
+/-  as logfile: and msgs:                                              -/
+/-                                                                     -/
+/-  Thomas Kern - 20061110 - initial version                           -/
+/-                20061117 - Use DATEFMT to get current fn/ft          -/
+/-  Rich Smrcina- 20090210 - Changed project name to Xymon             -/
+/-                                                                     -/
+/----------------------------------------------------------------------*/
+   trace off
+   parse arg argstring
+   badrc = 0
+   lb = 'AD'x; rb = 'BD'x;
+   outfile = 'HOBVM701 CLIENT A'
+   write = 'EXECIO 1 DISKW' outfile '( STRING'
+   'ERASE' outfile
+   'globalv get msgs'
+   'globalv get msgspipe'
+   if substr(msgs,1,6)='MDISK:' then do         /* user minidisk file */
+      parse value msgs with . ':' tuser '.' taddr tfn tft .
+      tfileid = tfn || '.' || tft
+      'EXEC VMLINK' tuser taddr '<5FF Z> ( QUIET PUSH'
+      if rc ^= 0 then do
+         badrc = rc
+         'EXEC VMLINK' tuser taddr '<5FF Z> ( QUIET POP'
+         exit badrc
+      end
+      if pos('%',tfn) > 0 then do
+         tfn = DATEFMT(tfn)
+         tfileid = 'CURRENT.' || tft
+      end
+      if pos('%',tft) > 0 then do
+         tft = DATEFMT(tft)
+         tfileid = tfn || '.CURRENT'
+      end
+      msgs_id=lb||'msgs:/'||tuser||'/'||right(taddr,4,'0')||'/'||tfileid||rb
+      'SET CMSTYPE HT'
+      'STATE' tfn tft 'Z'
+      staterc = rc
+      'SET CMSTYPE RT'
+      if staterc = 0 then do
+         'PIPE CMS LISTFILE' tfn tft 'Z ( ALLDATES ISODATE' ,
+           '| take last 1' ,
+           '| specs w7 1 write w8 1 write w7 1 write w8 1' ,
+           '| stem file_dt.'
+         'PIPE (endchar ?) <' tfn tft 'Z' ,
+           '| a: fanout' ,
+           '| rexx FILE_MD5' ,
+           '| var file_md5' ,
+           '?' ,
+           'a:' ,
+           msgspipe        ,
+           '| preface literal' msgs_id ,
+           '| > HOBVM701 CLIENT A' ,
+           '?' ,
+           'a:' ,
+           '| count bytes' ,
+           '| var file_size'
+         file_id=lb||'file:/'||tuser||'/'||right(taddr,4,'0')||'/'||tfileid||rb
+         call OUTPUT_FILE_STATUS
+      end
+      else do
+         write file_id
+         write 'ERROR: No such file or directory'
+         'FINIS' outfile
+      end
+      'EXEC VMLINK' tuser taddr '<5FF Z> ( QUIET POP'
+   end
+   else do                                                /* sfs file */
+      parse value msgs with sfsdir tfn tft .
+      parse value sfsdir with filepool ':' rest
+      tfileid = tfn || '.' || tft
+      'EXEC VMLINK .DIR' sfsdir '<5FF Z> ( QUIET PUSH'
+      if rc ^= 0 then do
+         badrc = rc
+         'EXEC VMLINK .DIR' sfsdir '<5FF Z> ( QUIET POP'
+         exit badrc
+      end
+      if pos('%',tfn) > 0 then do
+         tfn = DATEFMT(tfn)
+         tfileid = 'CURRENT.' || tft
+      end
+      if pos('%',tft) > 0 then do
+         tft = DATEFMT(tft)
+         tfileid = tfn || '.CURRENT'
+      end
+      rest = strip(rest,,'.')
+      msgs_id=lb||'msgs:/'||filepool||'/'||rest||'/'||tfileid||rb
+      'SET CMSTYPE HT'
+      'STATE' tfn tft 'Z'
+      staterc = rc
+      'SET CMSTYPE RT'
+      if staterc = 0 then do
+         'PIPE CMS LISTFILE' tfn tft 'Z ( ALLDATES ISODATE' ,
+           '| take last 1' ,
+           '| specs w7 1 write w8 1 write w4 1 write w5 1' ,
+           '| stem file_dt.'
+         'PIPE (endchar ?) <' tfn tft 'Z' ,
+           '| a: fanout' ,
+           '| rexx FILE_MD5' ,
+           '| var file_md5' ,
+           '?' ,
+           'a:' ,
+           msgspipe        ,
+           '| preface literal' msgs_id ,
+           '| > HOBVM701 CLIENT A' ,
+           '?' ,
+           'a:' ,
+           '| count bytes' ,
+           '| var file_size'
+         file_id = lb||'file:/'||filepool||'/'||rest||'/'||tfileid||rb
+         call OUTPUT_FILE_STATUS
+      end
+      else do
+         write file_id
+         write 'ERROR: No such file or directory'
+         'FINIS' outfile
+      end
+      'EXEC VMLINK .DIR' sfsdir '<5FF Z> ( QUIET POP'
+   end
+   exit
+ 
+/*----------------------------------------------------------------------/
+/-    Write a file status section into HOBVM700 CLIENT A               -/
+/----------------------------------------------------------------------*/
+OUTPUT_FILE_STATUS:
+   write file_id
+   write 'type:100000 (file)'
+   write 'mode:640 (-rw-r-----)'
+   write 'linkcount:1'
+   write 'owner:0 (root)'
+   write 'group:3 (sys)'
+   write 'size:' || file_size
+   write 'clock:'||LNXTS(date('S',,,'-'),time())
+   write 'atime:'||LNXTS(file_dt.1,file_dt.2)
+   write 'ctime:'||LNXTS(file_dt.3,file_dt.4)
+   write 'mtime:'||LNXTS(file_dt.1,file_dt.2)
+   write 'md5:' || LOWER(c2x(file_md5))
+   'FINIS' outfile
+   return
+ 
+ 
+/*  Convert parameter to lower case.  */
+LOWER:
+   arg string
+   lc_chars='abcdefghijklmnopqrstuvwxyz'
+   uc_chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+   string=translate(string,lc_chars,uc_chars)
+   return string

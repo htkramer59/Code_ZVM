@@ -1,0 +1,222 @@
+/*---------------------------------------------------------------+
+| Function : Check if the EDEVs are running over multiple        |
+|            FCP paths...and try to correct                      |
+|                                                                |
+| File     : CHKEDEV  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SYSTEM CONFIG                                       |
+|          : VMLINK EXEC                                         |
+|                                                                |
+| Called   : CHKEDEV  <edevice> ( run                            |
+|                                                                |
+| Comments : Need enough authorisation                           |
+|                                                                |
+| Notes    : Active devices and ignored devices need             |
+|            special attention/manual intervention!!             |
+|                                                                |
+|            Can be run for a single device or active ones       |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190207 12:47:49                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg edev '(' run .
+Parse Source . how myfn myft .
+Say TimeStamp()
+config='PMAINT CF0' /* Where do we find SYSTEM CONFIG */
+/*---------------------------------------------------------------+
+| Display some help...                                           |
++---------------------------------------------------------------*/
+If edev='?' Then Do
+                 'VMFCLEAR'
+                 Say TimeStamp()
+                 'PIPE (NAME CHKEDEV.EXEC:36 END ?)',
+                    '< 'myfn myft' * ',
+                    '| totarget pick w1.1 == ~Parse~',
+                    '| cons'
+                 Exit
+                 End
+/*---------------------------------------------------------------+
+| Check if we are asking for a specific device                   |
++---------------------------------------------------------------*/
+If edev<>''  Then Do
+             edev=Right(edev,4,'0')
+             Say TimeStamp() 'Running for single device 'edev
+             filter='| locate w2.1 ~'edev'~'
+             End
+             Else Do
+             Say TimeStamp() 'Running auto-detect for devices'
+             filter=''
+             End
+/*---------------------------------------------------------------+
+| Do we run the commands or not                                  |
++---------------------------------------------------------------*/
+If run<>'' Then out='| cp | cons'
+           Else out=''
+/*---------------------------------------------------------------+
+| Main                                                           |
++---------------------------------------------------------------*/
+Call Get_Config_Edev
+Call Get_Active_Edev
+Call Compare
+/*---------------------------------------------------------------+
+| Run commands...                                                |
++---------------------------------------------------------------*/
+If missing.0<>0 Then Call Prepare_Cmd
+                Else Say TimeStamp() 'No changes needed'
+Exit
+ 
+ 
+Prepare_Cmd:
+/*---------------------------------------------------------------+
+| Prepare the commands                                           |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Issuing SET EDEV command(s)'
+'PIPE (NAME CHKEDEV.EXEC:78 END ?)',
+   'stem missing. ',                            /* Take these       */
+   '| specs ~SET~ 1 w1.6 nw ~ADD PATH~ nw w7;-2 nw', /* Compose cmds */
+   '| cons',                                    /* Show             */
+   out                                          /* Depends...       */
+Return
+ 
+ 
+Compare:
+/*---------------------------------------------------------------+
+| Compare actual against config                                  |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Comparing config with active devices'
+'PIPE (NAME CHKEDEV.EXEC:91 END ?)',
+   'stem con_edev.',                            /* Take these       */
+   '| l: lookup w1;-2 w1;-2',                   /* Compare          */
+   '?',                                         /* 2d pipe          */
+   'stem act_edev.',                            /* and take these   */
+   '| l:',                                      /* Conn 2 lookup    */
+   '| stem missing.',                           /* New list         */
+   '? l:',                                      /* Conn 2 lookup    */
+   '| stem active.'                             /* Store these      */
+If active.0<>0 Then Call Clean_Missing
+Return
+ 
+ 
+Clean_Missing:
+/*---------------------------------------------------------------+
+| Remove deviations...                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKEDEV.EXEC:108 END ?)',
+   'stem active.',                              /* Take these       */
+   '| specs  w10.1 1 w12.1 nw',                 /* Keep wwpn & lun  */
+   '| stem filter.'                             /* Store here       */
+'PIPE (NAME CHKEDEV.EXEC:112 END ?)',
+   'stem missing. ',                            /* Take these       */
+   '| buffer ',                                 /* Prevent stall    */
+   '| specs w10.1 1 w12.1 nw ~!~ nw w1;* nw',   /* Add key....      */
+   '| l: lookup w1.2 w1.2 detail',              /* Compare          */
+   '| specs fs ! f2',                           /* Remove key       */
+   '| specs w1;-2',                             /* Remove appendix  */
+   '| stem removed.',                           /* Store here       */
+   '?',                                         /* 2nd pipe         */
+   'stem filter.',                              /* Add these        */
+   '| l:',                                      /* Conn 2 lookup    */
+   '| specs fs ! f2',                           /* Remove key       */
+   '| specs w1;-2',                             /* Remove appendix  */
+   '| stem missing.'                            /* Fill again       */
+/*---------------------------------------------------------------+
+| These require attention                                        |
++---------------------------------------------------------------*/
+If active.0<>0 Then Do
+     Say TimeStamp()
+     Say TimeStamp() 'The following devices found active'
+     'PIPE (NAME CHKEDEV.EXEC:132 END ?)  stem active. | specs w1;-2 | cons'
+     Say
+     End
+/*---------------------------------------------------------------+
+| These are skipped because of the previous                      |
++---------------------------------------------------------------*/
+If remove.0<>0 Then Do
+     Say TimeStamp()
+     Say TimeStamp() 'The following devices will be ignored'
+     'PIPE (NAME CHKEDEV.EXEC:141 END ?)  stem removed. | cons'
+     Say
+     End
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Make sure we get a prefix in the displays                      |
++---------------------------------------------------------------*/
+label=Date('S') Time() myfn
+Return label
+ 
+ 
+Get_Config_Edev:
+/*---------------------------------------------------------------+
+| Read the SYSTEM CONFIG                                         |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Reading config file'
+Address CMS 'VMLINK 'config' <* W> (NOTYPE NONAMES .fm'
+If rc<>0 Then Do
+         Say TimeStamp() rc 'Problem linking PMAINT CF0'
+         Exit
+         End
+         Else Parse Pull . . wfm .
+/*---------------------------------------------------------------+
+| Actual reading/filtering                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKEDEV.EXEC:169 END ?)',
+     '< SYSTEM CONFIG 'wfm,                     /* Read it..        */
+     '| pick 1.2 \== ~/*~',                     /* Remove comments  */
+     '| xlate upper',                           /* Uppercase the lot*/
+     '| all ~EDEV~!~FCP~',                      /* Take these       */
+     '| strip',                                 /* Remove spaces    */
+     '| join * x40',                            /* Make 1 record    */
+     '| split before string ~EDEVICE ~',        /* Split here       */
+     '| specs fs , f1.2 1 ~!~ n f1 n f3 nw',    /* Duplicate some   */
+     '| change ~,~~',                           /* Remove these     */
+     '| change ~EDEVICE~EDEV~',                 /* Shorten this     */
+     '| split at !',                            /* Split here       */
+     '| change ~  ~ ~',                         /* Remove spaces    */
+     '| strip',                                 /* ...more spaces   */
+     '| specs w1;* 1 ~C~ nw',                   /* Add suffix       */
+     filter,                                    /* ..or not         */
+     '| stem con_edev.'                         /* Store here       */
+Address CMS 'VMLINK 'config' <DET> (NOTYPE NONAMES'
+Return
+ 
+ 
+Get_Active_Edev:
+/*---------------------------------------------------------------+
+| Which DASD do we have                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKEDEV.EXEC:194 END ?)',
+   'CP QUERY DASD',                             /* Ask CP           */
+   filter,                                      /* ..1 or more      */
+   '| specs w2.1',                              /* Keep these       */
+   '| stem dasd.'                               /* Store here       */
+/*---------------------------------------------------------------+
+| Get details for the EDEVices                                   |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Checking active devices'
+act_edev.0=0
+/*---------------------------------------------------------------+
+| Loop thru the devices found                                    |
++---------------------------------------------------------------*/
+Do d=1 To dasd.0
+  'PIPE (NAME CHKEDEV.EXEC:208 END ?)',
+      'CP QUERY EDEV 'dasd.d' DETAILS',         /* Ask CP           */
+      '| all ~EDEV~!~FCP~',                     /* Extract this     */
+      '| strip',                                /* Remove spaces    */
+      '| join * x40',                           /* Make 1 record    */
+      '| change ~:~~',                          /* Replace this     */
+      '| change ~ATTRIBUTES~ATTR~',             /* Shorten this     */
+      '| strip',                                /* Remove spaces    */
+      '| specs w1.12 1 ~!~ nw w1.6 nw w13;* nw', /* Make new layout */
+      '| split at !',                           /* Split here       */
+      '| all /FCP_DEV/',                        /* Keep these...    */
+      '| specs w1;* 1 ~A~ nw',                  /* Add suffix       */
+      '| stem act_edev. append'                 /* Store here       */
+End d
+Return

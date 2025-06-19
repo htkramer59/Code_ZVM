@@ -1,0 +1,193 @@
+/*---------------------------------------------------------------+
+| Function : Filepool ADD admins...and add SPOOL CONS...         |
+|            To make sure all Filepools are the same..           |
+|                                                                |
+| File     : FPAADM   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : various  DMSPARMS  files, output                    |
+|            PROFILE  EXEC      output                           |
+|            FPAADM   CONTROL   control file, input              |
+|                                                                |
+| Called   : FPAADM   .                                          |
+|                                                                |
+| Comments : Need to be admin...                                 |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200506 15:08:27                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . '(' run .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Are we good to GO...                                           |
++---------------------------------------------------------------*/
+If run='GO' Then Do
+              test=0
+              linkmode='MW'
+              pipout='| cons | cms | cons'
+            End
+            Else Do
+              test=1
+              linkmode='RR'
+              pipout='| cons'
+            End
+/*---------------------------------------------------------------+
+| Read the control file...                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME FPAADM.EXEC:40 END ?)',
+    '< 'myfn' CONTROL *',                       /* Read this        */
+    '| pick 1.1 \== ~*~ and 1.1 \== ~~ ',       /* Ignore these     */
+    '| xlate upper',                            /* ...U know        */
+    '| change ~=~/~ 1',                         /* Replace this     */
+    '| specs ~/~ 1 1;* n',                      /* Add this         */
+    '| varload'                                 /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Get some items and prepare for the work                        |
++---------------------------------------------------------------*/
+'PIPE (NAME FPAADM.EXEC:50 END ?)',
+    'cp QUERY USERID',                          /* Ask this         */
+    '| specs w3.1',                             /* Keep this        */
+    '| var node',                               /* Store as         */
+    '| specs -2;-1',                            /* Reduce to this   */
+    '| var shortnode',                          /* Store as         */
+    '?',                                        /* 2nd pipe         */
+    'var fpservers',                            /* Take this        */
+    '| split',                                  /* .                */
+    '| stem server.',                           /* Hand 2 rexx      */
+    '?',                                        /* 3rd pipe         */
+    'var filepools',                            /* Take this        */
+    '| split',                                  /* .                */
+    '| stem fp.',                               /* Hand 2 rexx      */
+    '?',                                        /* 4th pipe         */
+    'var admins',                               /* Take this        */
+    '| split',                                  /* .                */
+    '| stem admin.'                             /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Loop thru the servers                                          |
++---------------------------------------------------------------*/
+Do s=1 To server.0
+   Say '*** 'server.s
+   Address COMMAND 'CP LINK 'server.s' 191 1 'linkmode
+   Address CMS 'ACCESS 1 K'
+   Call Check_Profile
+   Call Check_DMSPARMS
+   Address CMS 'REL K (DET'
+   Call CheckAdmins
+End s
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+Check_DMSPARMS:
+/*---------------------------------------------------------------+
+| Check ADMIN in DMSPARMS and add new ones if needed             |
++---------------------------------------------------------------*/
+'PIPE (NAME FPAADM.EXEC:90 END ?)',
+    '< 'server.s' DMSPARMS K',                  /* Read this        */
+    '| find ADMIN',                             /* Select these     */
+    '| specs w2;*',                             /* Keep this        */
+    '| split',                                  /* Split into..     */
+    '| stem curadmin.',                         /* Store as         */
+    '| l: lookup w1.1 w1.1',                    /* Compare          */
+    '?',                                        /* 2nd pipe         */
+    'stem admin.',                              /* Take these       */
+    '| l:',                                     /* Conn 2 lookup    */
+    '? l:',                                     /* Conn 2 lookup    */
+    '| stem newadmin.'                          /* Store as         */
+If newadmin.0<>0 Then Do
+          'PIPE (NAME FPAADM.EXEC:103 END ?)',
+              'stem curadmin.',                 /* Take these       */
+              '| append stem newadmin.',        /* Add these        */
+              '| sort',                         /* .                */
+              '| specs w1.1 1.10',              /* Adjust           */
+              '| snake 8 ',                     /* Make 8 columns   */
+              '| specs ~ADMIN~ 1 1;* nw',       /* Compose lines    */
+              '| stem adm_line.'                /* Store as         */
+          If amd_line.0<>0 Then Do
+          Say '*** Saving DMSPARMS'
+          Call DoCmd 'COPYFILE 'server.s' DMSPARMS K = OLDPARMS = (OLDD REPL'
+          Say '*** Updating DMSPARMS'
+          If \test Then pipparms='| cons | > 'server.s' DMSPARMS K'
+                   Else pipparms='| cons'
+          'PIPE (NAME FPAADM.EXEC:117 END ?)',
+               '< 'server.s' DMSPARMS K',       /* Read this        */
+               '| p: pick 1.1 == ~*~ or 1.1 == ~ ~',  /* Skip these       */
+               '| fi: faninany',                /* Take in          */
+               pipparms,                        /* What to do       */
+               '? p:',                          /* Conn 2 pick      */
+               '| nfind ADMIN',                 /* Remove these     */
+               '| preface stem adm_line.',      /* Add these        */
+               '| fi:'                          /* Conn 2 faninany  */
+          Say
+          End
+          End
+          Else Say 'ADMINs already present in DMSPARMS'
+Return
+ 
+ 
+Check_Profile:
+/*---------------------------------------------------------------+
+| Change the PROFILE EXEC so the CONSOLE is SPOOLED              |
++---------------------------------------------------------------*/
+'PIPE (NAME FPAADM.EXEC:137 END ?)',
+    '< PROFILE EXEC K',                         /* Read this        */
+    '| locate anycase ~CONPARK~',               /* Is this present  */
+    '| count lines',                            /* How many         */
+    '| var conp_ok'                             /* Hand 2 rexx      */
+If conp_ok Then Say '*** CONSOLE already spooled to CONPARK'
+           Else Do
+                Say '*** Saving PROFILE'
+                Call DoCmd 'COPYFILE PROFILE EXEC K = OLDEXEC = (OLDD REPL'
+                If test Then out='| cons'
+                        Else out='| cons | > PROFILE EXEC K'
+                Say '*** Updating PROFILE'
+                'PIPE (NAME FPAADM.EXEC:149 END ?)',
+                   '< PROFILE EXEC K',          /* Read this        */
+                   '| t: take first 1',         /* Keep this        */
+                   '| append literal 'console,  /* Add this         */
+                   '| change ~$~ x7D',          /* Replace this     */
+                   '| fi: faninany',            /* Take in others   */
+                   out,                         /* What do we do??  */
+                   '? t:',                      /* Conn 2 take      */
+                   '| fi:'                      /* Conn 2 faninany  */
+                Say
+                End
+Return
+ 
+ 
+DoCmd:
+/*---------------------------------------------------------------+
+| Show the commands to be issued or execute them                 |
++---------------------------------------------------------------*/
+Parse Arg cmdline
+Say cmdline
+If \test Then cmdline
+Return
+ 
+ 
+CheckAdmins:
+/*---------------------------------------------------------------+
+| Check the ADMINs currently enrolled                            |
++---------------------------------------------------------------*/
+'PIPE (NAME FPAADM.EXEC:177 END ?)',
+    'literal 'fp.s,                             /* Take this        */
+    '| change anycase ~<shortnode>~'shortnode'~',  /* Replace this     */
+    '| var fp'                                  /* Store as         */
+Say '*** ENROLLing admins if needed'
+'PIPE (NAME FPAADM.EXEC:182 END ?)',
+    'cms Q ENROLL ADMIN FOR ALL 'fp,            /* Ask filepool     */
+    '| drop first 1',                           /* Loose header     */
+    '| l: lookup w1.1 w1.1',                    /* Compare          */
+    '?',                                        /* 2nd pipe         */
+    'stem admin.',                              /* Take these       */
+    '| l:',                                     /* Conn 2 lookup    */
+    '? l:',                                     /* Conn 2 lookup    */
+    '| specs ~ENROLL ADMIN~ 1 1;* nw ~'fp'~ nw', /* Compose cmds     */
+    pipout                                      /* What to do??     */
+Say Copies('-',80)
+Return

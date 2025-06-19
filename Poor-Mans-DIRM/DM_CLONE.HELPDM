@@ -1,0 +1,27 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Clone an MDISK                                      |
+|                                                                |
+| File     : DM_CLONE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_CKUID EXEC                                       |
+|            DM_CHMDK EXEC                                       |
+|            DM_INDEX EXEC                                       |
+|            DM-VMLNK EXEC                                       |
+|            DM_AMD   EXEC                                       |
+|            PIPEDDR  EXEC                                       |
+|                                                                |
+| Called   : DM_CLONE <suid> <scuu> <tuid> <tcuu> <location>     |
+|          : CLONE    <suid> <scuu> <tuid> <tcuu> <location>     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 10:16:34                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

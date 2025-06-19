@@ -1,0 +1,183 @@
+/*---------------------------------------------------------------+
+| Function : Show, Add, Del, Repl CP Classes for a user          |
+|                                                                |
+| File     : DM_CLASS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_INDEX                                            |
+|            DM_VMLNK                                            |
+|            DM_ONLIN                                            |
+|                                                                |
+|                                                                |
+| Called   : DM_CLASS  <uid>                                     |
+|          : CLASS     <uid> QRY                                 |
+|                            ADD <valid cp classes>              |
+|                            DEL <valid cp classes>              |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240629 11:45:17                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid classinfo
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Find out what to do                                            |
++---------------------------------------------------------------*/
+Select
+When classinfo='' Then Call Exit '505'
+When Word(classinfo,1)='QRY' Then Call DisplClass
+When Word(classinfo,1)='ADD' Then Call AddClass
+When Word(classinfo,1)='DEL' Then Call DelClass
+Otherwise Call ReplClass
+End
+/*---------------------------------------------------------------+
+| Add the new classes to the user                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CLASS.EXEC:51 END ?)',
+    'var user',                                  /* Take this        */
+    '| specs w1.6 1 ~'newclass'~ nw w8;* nw',    /* Compose new      */
+    '| var newuser'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR DET (WRITE')
+'PIPE (NAME DM_CLASS.EXEC:59 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'user'~ ~'newuser'~',              /* Replace old w new*/
+   '| specs 7;*  1.80',
+   '| > temp file 'ws' FIXED 80',
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+piprc=rc
+If piprc=0 Then Address CMS 'DM_ONLIN'
+           Else Call Exit '128'
+wfm=DM_VMLNK('SOURCEDIR DET (WRITE')
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+DisplClass:
+/*---------------------------------------------------------------+
+| Display the CP CLASSes for this user                           |
++---------------------------------------------------------------*/
+Call Get_Class_Info
+Say Date('S') Time() myfn myft' Userid 'uid' has CP CLASSES: 'curclass
+Call Exit
+Return
+ 
+ 
+AddCLass:
+/*---------------------------------------------------------------+
+| Add the classes to the list                                    |
++---------------------------------------------------------------*/
+Call Get_Class_Info
+Parse Value classinfo With . classinfo
+If \ValidClass() Then Call Exit '520'
+'PIPE (NAME DM_CLASS.EXEC:97 END ?)',
+  'var curclass',                                /* Take this        */
+  '| append var classinfo',                      /* Add these        */
+  '| deblock 1',                                 /* Split into recs  */
+  '| sort unique',                               /* Remove dups      */
+  '| join *',                                    /* Make 1 record    */
+  '| var newclass'                               /* Hand 2 rexx      */
+Return
+ 
+ 
+DelCLass:
+/*---------------------------------------------------------------+
+| Delete classes from the user                                   |
++---------------------------------------------------------------*/
+Call Get_Class_Info
+Parse Value classinfo With . classinfo
+If Pos(classinfo,'G')<>0 Then Call Exit '521'
+If \ValidClass() Then Call Exit '520'
+'PIPE (NAME DM_CLASS.EXEC:115 END ?)',
+   'var curclass',                               /* Take this        */
+   '| deblock 1',                                /* Split into recs  */
+   '| l: lookup w1.1 w1.1',                      /* Compare          */
+   '?',                                          /* 2nd pipe         */
+   'var classinfo',                              /* Take this        */
+   '| deblock 1',                                /* Split into recs  */
+   '| l:',                                       /* Conn 2 lookup    */
+   '| sort',                                     /* Order records    */
+   '| join *',                                   /* Make 1 record    */
+   '| var newclass'                              /* Hand 2 rexx      */
+Return
+ 
+ 
+ReplCLass:
+/*---------------------------------------------------------------+
+| Replace classes with the new list of classes                   |
++---------------------------------------------------------------*/
+Call Get_Class_Info
+If Pos('G',classinfo)=0 Then Call Exit '521'
+If \ValidClass() Then Call Exit '520'
+newclass=classinfo
+Return
+ 
+ 
+ValidClass:
+/*---------------------------------------------------------------+
+| Check if the new classes are valid one                         |
++---------------------------------------------------------------*/
+valclass=''
+'PIPE (NAME DM_CLASS.EXEC:145 END ?)',
+   'literal ABCDEFG',                            /* Valid classes    */
+   '| deblock 1',                                /* Split into recs  */
+   '| l: lookup w1.1 w1.1',                      /* Compare          */
+   '?',                                          /* 2nd pipe         */
+   'var classinfo',                              /* Take this        */
+   '| deblock 1',                                /* Split into recs  */
+   '| sort',                                     /* Sort             */
+   '| l:',                                       /* Conn 2 lookup    */
+   '? l:',                                       /* Conn 2 lookup    */
+   '| sort',                                     /* Order recs       */
+   '| join *',                                   /* Make 1 record    */
+   '| var valclass tracking'                     /* Hand 2 rexx      */
+If valclass<>'' Then valclass=0
+                Else valclass=1
+Return valclass
+ 
+ 
+Get_Class_Info:
+/*---------------------------------------------------------------+
+| Get the CP CLASS info for this user                            |
++---------------------------------------------------------------*/
+details=DM_INDEX('GET 'uid)
+Parse Value details With lim1 lim2 .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_CLASS.EXEC:174 END ?)',
+   '< 'dirfnft wfm,                              /* Read the file    */
+   '| specs pad 0 recno 1.5 right 1.72 nw',      /* Add recnos       */
+   '| stem direct.',                             /* Hand 2 rexx      */
+   '| pick w1.1 == ~'lim1'~',                    /* Select this rec  */
+   '| var user',                                 /* Hand 2 rexx      */
+   '| specs w7.1 1',                             /* Extract classes  */
+   '| var curclass'                              /* Hand 2 rexx      */
+wfm=DM_VMLNK('SOURCEDIR DET')
+Return

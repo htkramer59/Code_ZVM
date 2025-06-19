@@ -1,0 +1,226 @@
+/*---------------------------------------------------------------+
+| Function : Report dasd usage                                   |
+|                                                                |
+| File     : DASDUSG  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DASDUSG  INPUT, defines which you want 2 report     |
+|                                                                |
+| Called   : DASDUSG  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250513 14:04:50                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC' Then Call RunExec
+When myft='REXX' Then Call RunRexx
+Otherwise Exit 28
+End
+Exit
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| Load myself as pipestage                                       |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+Address CMS 'EXECLOAD 'myfn myft' * = REXX'
+/*---------------------------------------------------------------+
+| Start processing                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME DASDUSG.EXEC:39 END ?)',
+   'cp QUERY DASD ALL',                          /* Get all CUUs     */
+   '| nlocate anycase ~OFFLINE~',                /* Remove these     */
+   '| nlocate anycase ~FREE~',                   /* .and these       */
+   '| specs ~QUERY DASD DETAILS~ 1 w2.1 nw',     /* Compose cmds     */
+   '| cp',                                       /* Issue cmds       */
+   '| change ~ ~_~',                             /* Replace spaces   */
+   '| if1: if pick 1.1 \== ~_~',                 /* Change a         */
+   '|     specs ~;~ 1 1;* n',                    /* .select no recs  */
+   '| if1:',                                     /* Conn 2 if        */
+   '| join * x40',                               /* Make 1 record    */
+   '| split at ;',                               /* Split here       */
+   '| change ~_~ ~',                             /* Revert to spaces */
+   '| change ~,~~',                              /* Remove comma's   */
+   '| space 1',                                  /* Reduce spacing   */
+   '| specs w1.1 1.4 w10.1 nw.6 right w7.1 nw w13.1 nw w16.1 nw',   /* Keep these itmes */
+   '| if2: if pick substr 1.4 of w3.1 == ~3390~',   /* If 3390          */
+   '|     specs w1.4 1',                         /* Convert          */
+   '            a: w4.1 .',                      /* . Cyls           */
+   '            set #0:=a*150*4096',             /* .  to            */
+   '            print #0 pict 999999999999 nw',  /* .   Bytes        */
+   '|     siconv w5.1 b2g',                      /* Convrt 2 GB      */
+   '| specs w1.3 1 ~Cyls  ~ nw w4.1 nw.10 right w5.1 nw.10 right',   /* Add a label      */
+   '| if2:',                                     /* Conn 2 if        */
+   '| if3: if pick substr 1.4 of w3.1 == ~9336~',   /* If FBA/9336      */
+   '|     specs w1.3 1 w5.1 nw',                 /* Convert          */
+   '            a: w5.1 .',                      /* . Blocks         */
+   '            set #0:=a*512',                  /* .  to            */
+   '            print #0 pict 999999999999 nw',  /* .   Bytes        */
+   '|     siconv w5.1 b2g',                      /* Convrt 2 GB      */
+   '| specs w1.3 1 ~Blocks~ nw w4.1 nw.10 right w5.1 nw.10 right',   /* Add label        */
+   '| if3:',                                     /* Conn 2 if        */
+   '| dasdusg',                                  /* Call pipestage   */
+   '| stem result.',                             /* 4 later use      */
+   '| fo: fanout',                               /* Send away        */
+   '| preface literal ---- ------ ------- ------ ---------- ---------- ----------- -----',   /* Add heading      */
+   '| preface literal CUU  Label  CU-type Type   No Cyl/Blk Size in GB Cyl/Blk usd %Used',   /* .                */
+   '| append  literal ---- ------ ------- ------ ---------- ---------- ----------- -----',   /* Add end          */
+   '| buffer',                                   /* Prevent stall    */
+   '| fi1: fanin',                               /* Take in total    */
+   '| fi2: fanin',                               /* Take total 4 cyls*/
+   '| fi3: fanin',                               /* Take total 4 blks*/
+   '| cons',                                     /* Show results     */
+   '? fo:',                                      /* Conn 2 fanout    */
+   '| specs',                                    /* .                */
+           'printonly eof',                      /* Add up the sizes */
+           'a: w6.1 .',                          /* .                */
+           'set (#0+=a)',                        /* .                */
+           'eof',                                /* .                */
+           'print #0 pict -----9.99999 nw',      /* .                */
+   '| specs',                                    /* Adjust output    */
+           '~Total capacity:~ 1',                /* .                */
+           'w1.1 41.8 right',                    /* .                */
+   '| fi1:',                                     /* Conn 2 fanin     */
+   '? fo:',                                      /* Conn 2 fanout    */
+   '| p: pick anycase w4.1 == ~Cyls~',           /* .                */
+   '| specs',                                    /* .                */
+           'printonly eof',                      /* Add up the sizes */
+           'a: w5.1 .',                          /* ..               */
+           'b: w6.1 .',                          /* .                */
+           'set (#0+=a;#1+=b)',                  /* .                */
+           'eof',                                /* .                */
+           'print #0 1',                         /* .                */
+           'print #1 pict -----9.99999 nw',      /* .                */
+   '| specs',                                    /* Adjust output    */
+           '~Total CKD Cyls:~ 1',                /* .                */
+           'w1.1 26.12 RIGHT',                   /* .                */
+           'w2.1 41.8 RIGHT',                    /* .                */
+   '| fi2:',                                     /* Conn 2 fanin     */
+   '? p:',                                       /* Conn 2 pick      */
+   '| specs',                                    /* .                */
+           'printonly eof',                      /* Add up the sizes */
+           'a: w5.1 .',                          /* .                */
+           'b: w6.1 .',                          /* .                */
+           'set (#0+=a;#1+=b)',                  /* .                */
+           'eof',                                /* .                */
+           'print #0 1',                         /* .                */
+           'print #1 pict -----9.99999 nw',      /* .                */
+   '| specs',                                    /* Adjust output    */
+           '~Total FBA Blocks:~ 1',              /* .                */
+           'w1.1 26.12 RIGHT',                   /* .                */
+           'w2.1 41.8 RIGHT',                    /* .                */
+   '| fi3:'                                      /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Show per identified item                                       |
++---------------------------------------------------------------*/
+Say
+'PIPE (NAME DASDUSG.EXEC:127 END ?)',
+   '< 'myfn' INPUT *',                           /* Read this        */
+   '| pick 1.2 \== ~/*~',                        /* Ignore this      */
+   '| sort w2.1',                                /* Sort on label    */
+   '| stem input.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Loop thru the input                                            |
++---------------------------------------------------------------*/
+Do i=1 To input.0
+  Say '---- ------ ------- ------ ---------- ---------- ----------- -----'
+  Parse Value input.i With wildc label
+  'PIPE (NAME DASDUSG.EXEC:138 END ?)',
+     'stem result.',                             /* Take these       */
+     '| wildcard anycase w2.1 ~'wildc'~',        /* Select these     */
+     '| cons',                                   /* Display          */
+     '| specs',                                  /* .                */
+             'printonly eof',                    /* Add up the sizes */
+             'a: w5.1 .',                        /* .                */
+             'b: w7.1 .',                        /* .                */
+             'set (#0+=a;#1+=b)',                /* .                */
+             'eof',                              /* .                */
+             'print #0 nw',                      /* .                */
+             'print #1 nw',                      /* .                */
+     '| specs',                                  /* Adjust output    */
+           '~Total 'Strip(label)' space:~ 1',    /* .                */
+           'w1.1 41.8 right',                    /* .                */
+           'w2.1 53.8 right',                    /* .                */
+     '| if: if pick w-1;-1 \== ~0~',             /* If this          */
+     '|    specs',                               /* .                */
+              'w1;* 1',                          /* .                */
+              'a: w-2;-2 .',                     /* .                */
+              'b: w-1;-1 .',                     /* .                */
+              'print (b/a)*100 pict 99.99 nw',   /* .                */
+     '| if:',                                    /* Conn 2 if        */
+     '|    spec w1;* 1 ~    -~ nw',              /* Else this        */
+     '| if:',                                    /* Conn 2 if        */
+     '| cons'                                    /* Display          */
+  Say
+End i
+/*---------------------------------------------------------------+
+| Unload myself                                                  |
++---------------------------------------------------------------*/
+Address CMS 'EXECDROP 'myfn 'REXX'
+Return
+ 
+ 
+RunRexx:
+/*---------------------------------------------------------------+
+| Function : Collect info per volume on usage                    |
+|                                                                |
+| File     : DASDUSG  REXX                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DASDUSG .                                           |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250513 15:37:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+'CALLPIPE (NAME DASDUSG.EXEC:192 END ?)',
+   '*:',                                         /* Take from caller */
+   '| stem disk.'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Process all the records                                        |
++---------------------------------------------------------------*/
+Do d=1 To disk.0
+  Parse Value disk.d With cuu . . . size .
+  'CALLPIPE (NAME DASDUSG.EXEC:200 END ?)',
+      'CP QUERY SYSTEM 'cuu,                     /* Ask info         */
+      '| drop first 2',                          /* Ignore these     */
+      '| nlocate anycase ~NOT FOUND~',           /* .and these       */
+      '| nlocate anycase ~SYSTEM~',              /* ..and these      */
+      '| split at ,',                            /* Split here       */
+      '| strip',                                 /* Remove spaces    */
+      '| specs ~QUERY MDISK USER~ 1 w1.2 nw ~DIR LOC~ nw',   /* Compose cmds     */
+      '| cp',                                    /* Hand 2 cp        */
+      '| pick anycase w1.1  \== ~Targetid~',     /* Loose these      */
+      '| sort unique w-2;-1',                    /* Ignore overlaps  */
+      '| specs',                                 /* .                */
+              'printonly eof',                   /* Add up the sizes */
+              'a: w9.1 .',                       /* .                */
+              'set (#0+=a)',                     /* .                */
+              'eof',                             /* .                */
+              'print #0 nw',                     /* .                */
+      '| var inuse'                              /* Hand 2 rexx      */
+    disk.d=Strip(disk.d) inuse Format((inuse/size)*100,2,2)
+End d
+/*---------------------------------------------------------------+
+| Hand updated records back                                      |
++---------------------------------------------------------------*/
+'CALLPIPE (NAME DASDUSG.EXEC:222 END ?)',
+    'stem disk.',                                /* Take these       */
+    '| *:'                                       /* Hand 2 caller    */
+Return

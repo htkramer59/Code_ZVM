@@ -1,0 +1,18 @@
+*****************************                                                   
+* VMUSERS POOLDEF (VMUSERS) *                                                   
+*****************************                                                   
+                                                                                
+MAXUSERS=1000                                                                   
+MAXDISKS=500                                                                    
+DDNAME=CONTROL        VDEV=200                                                  
+DDNAME=LOG1           VDEV=300                                                  
+DDNAME=LOG2           VDEV=301                                                  
+DDNAME=BACKUP   DISK  FN=FILEPOOL  FT=BACKUP   FM=*                             
+DDNAME=MDK00001       VDEV=400     GROUP=1  BLOCKS=28763                        
+DDNAME=MDK00002       VDEV=500     GROUP=2  BLOCKS=89898                        
+DDNAME=MDK00003       VDEV=501     GROUP=2  BLOCKS=89898                        
+DDNAME=MDK00004       VDEV=502     GROUP=2  BLOCKS=89898                        
+DDNAME=MDK00005       VDEV=503     GROUP=2  BLOCKS=89898                        
+DDNAME=MDK00006       VDEV=504     GROUP=2  BLOCKS=89898                        
+DDNAME=MDK00007       VDEV=505     GROUP=2  BLOCKS=89898                        
+DDNAME=MDK00008       VDEV=506     GROUP=2  BLOCKS=89898                        

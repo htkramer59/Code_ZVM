@@ -1,0 +1,176 @@
+/*---------------------------------------------------------------+
+| Function : Show info on the spool area                         |
+|                                                                |
+| File     : HOBSPOOL EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBSPOOL .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220120 10:54:08                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBSPOOL.EXEC:29 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+ 
+If \test Then Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Collect_Info          /*  Execute the test                */
+If \test Then Do
+              Call send status           /*  Send the result in status to bb */
+              Call close_term_socket     /*  Close and terminate the socket  */
+              End
+         Else Do
+              'PIPE (NAME HOBSPOOL.EXEC:40 END ?)',
+                 'var status',
+                 '| split at x15',
+                 '| strip',
+                 '| cons'
+              End
+Exit
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Numeric Digits 64
+/*---------------------------------------------------------------+
+| Collect the spool info                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBSPOOL.EXEC:56 END ?)',
+   'cp QUERY ALLOC SPOOL',                       /* Ask cp           */
+   '| inside ~------~ ~       ~',                /* Take all within  */
+   '| specs a: w4.1 .',                          /* Calculate        */
+           'b: w3.1 .',                          /* ...no of         */
+           'set #0:=a-b',                        /* ....blocks       */
+           'print #0 1',                         /* .                */
+           'w6.1 nw',                            /* .                */
+   '| siconv w2.1 k2b 10.0',                     /* Convert 2 bytes  */
+   '| siconv w2.1 m2b 10.0',                     /* .                */
+   '| specs printonly eof',                      /* Summ the         */
+           'c: w1.1 .',                          /* ...blocks        */
+           'd: w2.1 .',                          /* .                */
+           'set (#1+=c;#2+=d)',                  /* .                */
+           'eof',                                /* .                */
+           'print #1 1',                         /* .                */
+           'print #2 nw',                        /* .                */
+   '| specs e: w1.1 .',                          /* Convert to       */
+           'f: w2.1 .',                          /* .      1K        */
+           'set (#3:=e*4;#4:=f*4)',              /* .                */
+           'print #3 1',                         /* .                */
+           'print #4 nw',                        /* .                */
+   '| specs w1.2 1',                             /* Calculate        */
+           'g: w1.1 .',                          /* ...percentage    */
+           'h: w2.1 .',                          /* .                */
+           'set #5:=(h/g)*100',                  /* .                */
+           'print #5 pict --9.99 nw',            /* .                */
+   '| specs i: w1.1 .',                          /* .                */
+           'j: w2.1 .',                          /* Rework to GB     */
+           'set (#6:=i/1024/1024;#7:=j/1024/1024)',   /* .                */
+           'print #6 pict zzzz9.99 1',           /* .                */
+           'print #7 pict zzzz9.99 nw',          /* .                */
+           'w3.1 nw',                            /* .                */
+   '| f: fanout',                                /* Dupl records     */
+   '| round w1.2',                               /* Round up/down    */
+   '| specs ~; ;Spool:~ 1.22' ,                     /* Rework           */
+           'w3.1 nw',                            /* .                */
+           '~%~ n',                              /* .                */
+           '~;Used spool:~ nw.23',               /* .                */
+           'w2.1 nw.3 right',                    /* .                */
+           '~GB~ nw',                            /* .                */
+           '~;Available spool space:~ nw',       /* .                */
+           'w1.1 nw.3 right',                    /* .                */
+           '~GB~ nw',                            /* .                */
+   '| change ~;~ x15',
+   '| var status',                               /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2.1',                               /* Keep this        */
+   '| var usedspool'                             /* Store as         */
+color='GREEN'
+if usedspool>50 then do
+  color='RED'
+end
+status = 'status' machine||'.zvmspooling' color TimeStamp('TZ') status
+Return
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg sockinput
+ret=Socket(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp('TZ')' : 'sockinput' rc=' ret
+Return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Initialize,SOCSPOOL'
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Setsockopt,'sid',SOL_SOCKET,SO_ASCII,On'
+name='AF_INET' bbport bbdisplay
+Call DoSock 'Connect,'sid','name
+Call DoSock 'Gethostname'
+Parse Var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret . Domainame .
+fullname=hostname||'.'||domainame
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+Return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DoSock 'Close,'sid
+Call DoSock 'Terminate'
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+parse arg out_data
+Call DoSock 'SEND,'sid','out_data
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with TZ switch a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBSPOOL.EXEC:171 END ? END.SKELETON:55)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

@@ -1,0 +1,89 @@
+************************************************************************        
+*                                                                      *        
+*  NOTE THAT THERE ARE 4 FIELDS IN THIS FILE:                          *        
+*                                                                      *        
+*  FIELD 1:  COLUMNS 01 TO 03  --  DAYS OF THE WEEK                    *        
+*  FIELD 2:  COLUMNS 10 TO 17  --  TIME OF DAY                         *        
+*  FIELD 3:  COLUMNS 19 TO 26  --  LAST DATE THAT LINE WAS EXECUTED    *        
+*  FIELD 4:  COLUMNS 28 TO 80  --  ANY CP/CMS/EXEC COMMAND             *        
+*                                                                      *        
+*  VALID PARAMETERS:                                                   *        
+*                                                                      *        
+*  FIELD 1:                                                            *        
+*           'ALL'  -- EXECUTE THIS LINE EVERY DAY OF THE WEEK          *        
+*           'MON'  -- EXECUTE THIS LINE ONLY ON MONDAYS                *        
+*           'TUE'  -- EXECUTE THIS LINE ONLY ON TUESDAYS               *        
+*           'WED'  -- EXECUTE THIS LINE ONLY ON WEDNESDAYS             *        
+*           'THU'  -- EXECUTE THIS LINE ONLY ON THURSDAYS              *        
+*           'FRI'  -- EXECUTE THIS LINE ONLY ON FRIDAYS                *        
+*           'SAT'  -- EXECUTE THIS LINE ONLY ON SATURDAYS              *        
+*           'SUN'  -- EXECUTE THIS LINE ONLY ON SUNDAYS                *        
+*           'M-F'  -- EXECUTE THIS LINE ONLY MONDAY THRU FRIDAY        *        
+*           'S-S'  -- EXECUTE THIS LINE ONLY SATURDAYS AND SUNDAYS     *        
+*                                                                      *        
+*  FIELD 2:                                                            *        
+*                                                                      *        
+*           HH:MM:SS  -- THIS FIELD CONTAINS THE TIME THAT             *        
+*                        YOU WANT THE COMMAND TO BE EXECUTED           *        
+*                        NOTE: DO NOT EXPECT ACTUAL SECONDS            *        
+*                        ACCURACY, WILL VARY ACCORDING TO SYSTEM       *        
+*                        LOAD.                                         *        
+*                                                                      *        
+*  FIELD 3:                                                            *        
+*                                                                      *        
+*           MM/DD/YY  -- THIS FIELD CONTAINS THE LAST DATE THAT        *        
+*                        THE COMMAND WAS EXECUTED.  THIS IS TO         *        
+*                        INSURE THAT IF IT WAS EXECUTED ONCE ON        *        
+*                        THAT DAY, IT WONT BE EXECUTED AGAIN INCASE    *        
+*                        'VMUTIL' MUST BE RE-STARTED.                  *        
+*                        THIS FIELD IS UPDATED BY 'VMUTIL' AFTER THE   *        
+*                        COMMAND LINE IS EXECUTED.                     *        
+*                                                                      *        
+*  FIELD 4:                                                            *        
+*                                                                      *        
+*          CP/CMS/EXEC COMMAND                                         *        
+*                     -- PLACE ANY COMMAND TO BE EXECUTED IN THIS      *        
+*                        FIELD.                                        *        
+*                                                                      *        
+*          NOTE:  IF THE KEY ENTRY 'MSG01' IS ENTERED IN FIELD 4       *        
+*                 WHERE THE COMMAND LINE IS ENTERED, A MESSAGE         *        
+*                 TO THE OPERATOR WILL BE SENT STATING THE CURRENT     *        
+*                 DATE AND TIME.                                       *        
+*                                                                      *        
+*                 IF THE COMMAND BEING ISSUED IS A CMS COMMAND,        *        
+*                 THE COMMAND MUST BE PREFIXED WITH 'CMS'              *        
+*                                                                      *        
+*                 IF THE COMMAND BEING ISSUED IS A CP COMMAND,         *        
+*                 THE COMMAND MUST BE PREFIXED WITH 'CP'               *        
+*                                                                      *        
+*                 IF THE COMMAND BEING ISSUED IS AN EXEC,              *        
+*                 THE COMMAND MUST BE PREFIXED WITH 'EXEC'             *        
+*                                                                      *        
+*                 IF THERE IS AN '*' IN COLUMN 1 OF THIS FILE, THE     *        
+*                 LINE IS TREATED AS A COMMENT AND IS NOT EXECUTED.    *        
+*                                                                      *        
+************************************************************************        
+ALL      00:01:00 04/03/20    CP CLOSE CONS                                     
+ALL      00:01:01 04/03/20    CP SP CONS CONPARK START EOF NAME VMUTIL CONSLOG  
+ALL      00:05:00 04/03/20    EXEC SRVCONS (RUN                                 
+ALL      06:00:00 04/03/20    EXEC RSCSLNKS                                     
+ALL      06:00:00 04/03/20    EXEC LUNLIST FILE                                 
+ALL      08:00:00 04/03/20    EXEC SYSSUM                                       
+ALL      09:00:00 04/03/20    CP MSG HERALD   still alive                       
+ALL      10:00:00 04/03/20    CP MSG HERMAN   still alive                       
+ALL      12:00:00 04/03/20    EXEC RSCSLNKS                                     
+ALL      12:00:00 04/03/20    EXEC LUNLIST FILE                                 
+ALL      16:00:00 04/02/20    EXEC SYSSUM                                       
+* ALL      16:01:00 06/11/19    EXEC CHKEDEV                                    
+ALL      18:00:00 04/02/20    EXEC RSCSLNKS                                     
+ALL      18:00:00 04/02/20    EXEC LUNLIST FILE                                 
+ALL      18:58:00 04/02/20    CMS ERASE SFPURGER LOG* A                         
+ALL      18:58:00 04/02/20    CMS ERASE SFPURGER RUN* A                         
+ALL      19:00:00 04/02/20    CMS SFPURGER RUN                                  
+ALL      22:00:00 04/02/20    EXEC SRVSTAT                                      
+ALL      19:01:00 04/02/20    CP SP CONS CONPARK START EOF NAME VMUTIL CONSLOG  
+ALL      23:00:00 04/02/20    EXEC RSCSLNKS                                     
+ALL      23:00:00 04/02/20    EXEC LUNLIST FILE                                 
+ALL      23:00:00 04/02/20    CP XAUTOLOG EREPRPT                               
+ALL      23:58:00 04/02/20    CP MSG OPERATOR still awake                       
+ALL      23:59:00 04/02/20    EXEC SYSSUM                                       

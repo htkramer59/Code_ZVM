@@ -1,0 +1,265 @@
+/**/
+12:
+/* QN version with wildcard, smartened & improved */
+Parse Upper Arg search .
+pipestmt=''
+If Pos('*',search)<>0 Then pipestmt='| wildcard w1.1 /'search'/'
+                      Else pipestmt='| locate w1.1 /'search'/'
+/* If search='' Then pipestmt='' */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   pipestmt,                                   /* Content decided above */
+   '| fo: fanout',                             /* Send the records to label fo:  */
+   '| count lines',                            /* Count the ids    */
+   '| specs /User ids on the system matching 'search'/ 1 w1.1 nw', /* Add some text    */
+   '| fi1: faninany',                          /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                    /* Take records from fanout */
+   '| fi2: faninany',                          /* Take in stuff from fi2: */
+   '| sort',                                   /* Sort them        */
+   '| if: if pick w3.1 == ~*~',                /* If word 3 equals *   */
+   '|    specs w3.1 1 w1.2 nw.18',                /* ...we rework the record  */
+   '| if:',                                       /* Else section of if  */
+   '|    specs pad space 1;* 3.18',               /* Pad each record upto 22 chars */
+   '| if:',                                       /* End of if  */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                 /* Prevent stall/loop */
+   '| fi1:',                                   /* Send to faninany  */
+   '? fo:',                                    /* Take records from fanout    */
+   '| specs 1.1 1 1;* nw',                     /* Add 1st char as separate word */
+   '| sort count 1.1',                         /* Count them */
+   '| specs 11.1 1 1.10 nw',                   /* Rework the output */
+   '| specs w1.1 1.1 w2.1 nw.2 right ~*~ nw',  /* Adjust numbers */
+   '| fi2:'                                    /* Send to faninany w label fi2: */
+Exit
+11:
+/* QN version with wildcard, smartened & improved */
+Parse Upper Arg search .
+pipestmt=''
+If Pos('*',search)<>0 Then pipestmt='| wildcard w1.1 /'search'/'
+                      Else pipestmt='| locate w1.1 /'search'/'
+/* If search='' Then pipestmt='' */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   pipestmt,                                   /* Content decided above */
+   '| fo: fanout',                             /* Send the records to label fo:  */
+   '| count lines',                            /* Count the ids    */
+   '| specs /User ids on the system matching 'search'/ 1 w1.1 nw', /* Add some text    */
+   '| fi1: faninany',                          /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                    /* Take records from fanout */
+   '| fi2: faninany',                          /* Take in stuff from fi2: */
+   '| sort',                                   /* Sort them        */
+   '| if: if pick w3.1 == ~*~',                  /* If word 3 equals *   */
+   '|    specs w3.1 1 w1.2 nw',                  /* ...we rework the record  */
+   '| if:',                                      /* End of if  */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                 /* Prevent stall/loop */
+   '| fi1:',                                   /* Send to faninany  */
+   '? fo:',                                    /* Take records from fanout    */
+   '| specs 1.1 1 1;* nw',                     /* Add 1st char as separate word */
+   '| sort count 1.1',                         /* Count them */
+   '| specs 11.1 1 1.10 nw',                   /* Rework the output */
+   '| specs w1.1 1.1 w2.1 nw.2 right ~*~ nw',     /* Adjust numbers */
+   '| fi2:'                                    /* Send to faninany w label fi2: */
+Exit
+10:
+/* QN version with wildcard, smartened */
+Parse Upper Arg search .
+pipestmt=''
+If Pos('*',search)<>0 Then pipestmt='| wildcard w1.1 /'search'/'
+                      Else pipestmt='| locate w1.1 /'search'/'
+/* If search='' Then pipestmt='' */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   pipestmt,                                   /* Content decided above */
+   '| fo: fanout',                             /* Send the records to label fo:  */
+   '| count lines',                            /* Count the ids    */
+   '| specs /User ids on the system matching 'search'/ 1 w1.1 nw', /* Add some text    */
+   '| fi1: faninany',                          /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                    /* Take records from fanout */
+   '| fi2: faninany',                            /* Take in stuff from fi2: */
+   '| sort',                                     /* Sort them        */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                 /* Prevent stall/loop */
+   '| fi1:',                                   /* Send to faninany  */
+   '? fo:',                                      /* Take records from fanout    */
+   '| specs 1.1 1 1;* nw',                       /* Add 1st char as separate word */
+   '| sort count 1.1',                           /* Count them */
+   '| specs 11.1 1 1.10 nw',                     /* Rework the output */
+   '| specs w1.1 1.1 w2.1 nw.2 right',           /* Adjust numbers */
+   '| fi2:'                                      /* Send to faninany w label fi2: */
+Exit
+9:
+/* QN version with wildcard */
+Parse Upper Arg search .
+pipestmt=''
+If Pos('*',search)<>0 Then pipestmt='| wildcard w1.1 /'search'/'
+                      Else pipestmt='| locate w1.1 /'search'/'
+/* If search='' Then pipestmt='' */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   pipestmt,                                      /* Content decided above */
+   '| fo: fanout',                             /* Send the records to label fo:  */
+   '| count lines',                            /* Count the ids    */
+   '| specs /User ids on the system matching 'search'/ 1 w1.1 nw', /* Add some text    */
+   '| fi: faninany',                           /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                    /* Take records from fanout */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                 /* Prevent stall/loop */
+   '| fi:'                                     /* Send to faninany  */
+Exit
+8:
+/* QN version with search */
+Parse Upper Arg search .
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   '| locate w1.1 /'search'/',                   /* Locate the string we are searching */
+   '| fo: fanout',                             /* Send the records to label fo:  */
+   '| count lines',                            /* Count the ids    */
+   '| specs /User ids on the system/ 1 w1.1 nw', /* Add some text    */
+   '| fi: faninany',                           /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                    /* Take records from fanout */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                 /* Prevent stall/loop */
+   '| fi:'                                     /* Send to faninany  */
+Exit
+7:
+/* QN version with search */
+Parse Upper Arg search .
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   '| locate /'search'/',                           /* Locate the string we are searching */
+   '| fo: fanout',                             /* Send the records to label fo:  */
+   '| count lines',                            /* Count the ids    */
+   '| specs /User ids on the system/ 1 w1.1 nw', /* Add some text    */
+   '| fi: faninany',                           /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                    /* Take records from fanout */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                 /* Prevent stall/loop */
+   '| fi:'                                     /* Send to faninany  */
+Exit
+6:
+/* QN EXEC, query names sorted, in 4 columns, aligned, cleaned & counted */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to.*/
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   '| fo: fanout',                                 /* Send the records to label fo:  */
+   '| count lines',                                /* Count the ids    */
+   '| specs /User ids on the system/ 1 w1.1 nw',   /* Add some text    */
+   '| fi: faninany',                               /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                        /* Take records from fanout */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| buffer',                                     /* Prevent stall/loop   */
+   '| fi:'                                         /* Send to faninany  */
+Exit
+5:
+/* QN EXEC, query names sorted, in 4 columns, aligned, cleaned & counted */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                /* Select records were word 1 is not equal to... */
+          'w3.1 \== /TCPIP/',                  /* ...and word 3 is not equal to... */
+   '| fo: fanout',                                 /* Send the records to label fo:  */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| fi: faninany',                               /*  Take in from label fi: */
+   '| cons',                                   /* Put the results on the console */
+   '? fo:',                                        /* Take records from fanout */
+   '| count lines',                                /* Count the ids    */
+   '| specs /User ids on the system/ 1 w1.1 nw',   /* Add some text    */
+   '| fi:'                                         /* Send to faninany */
+Exit
+ 
+4:
+/* QN EXEC, query names sorted, in 4 columns, aligned and cleaned */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| pick w1.1 \== /VSM/ and',                  /* Select records were word 1 is not equal to..*/
+          'w3.1 \== /TCPIP/',                    /* ...and word 3 is not equal to... */
+   '| specs pad space 1;* 1.22',               /* Pad each record upto 22 chars */
+   '| snake 4',                                /* Create 4 columns */
+   '| cons'                                    /* Put the results on the console */
+Exit
+ 
+3:
+/* QN EXEC, query names sorted, in 4 columns  and aligned */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| specs pad space 1;* 1.22',                  /* Pad each record upto 22 chars with blanks */
+   '| snake 4',                                /* Create 4 columns */
+   '| cons'                                    /* Put the results on the console */
+Exit
+ 
+2:
+/* QN EXEC, query names sorted and in 4 columns */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| sort 1.8',                               /* Sort on user name */
+   '| snake 4',                                   /* Create 4 columns */
+   '| cons'                                    /* Put the results on the console */
+Exit
+ 
+1:
+/* QN EXEC, query names sorted */
+'PIPE (end ?)',
+   'cp QUERY NAMES',                           /* Ask CP who is logged on */
+   '| split at ,',                             /* Split the records at the comma */
+   '| strip',                                  /* Remove spaces on both ends */
+   '| sort 1.8',                               /* Sort on user name */
+   '| cons'                                    /* Put the results on the console */
+Exit

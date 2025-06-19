@@ -1,0 +1,22 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Get a copy of a directory of a user id              |
+|                                                                |
+| File     : DM_GET   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_GETID EXEC                                       |
+|            <dirfnft>                                           |
+|                                                                |
+| Called   : DM_GET   <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 15:23:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

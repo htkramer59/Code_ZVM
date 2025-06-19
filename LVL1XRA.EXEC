@@ -1,0 +1,8 @@
+/* Tool to test DVHXRA */
+Address CMS 'VMLINK DIRMAINT 1DF <* E (NONAMES QUIET'
+orignode='*'
+asnode='*'
+cmd_string='ADD SLDX555 LIKE AAAAA'
+log_string='ADD SLDX555 LIKE AAAAA'
+Address CMS 'LVL2XRA'
+Address CMS 'VMLINK DIRMAINT 1DF <DET (NONAMES QUIET'

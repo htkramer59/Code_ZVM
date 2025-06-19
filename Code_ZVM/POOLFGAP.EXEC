@@ -1,0 +1,235 @@
+/*---------------------------------------------------------------+
+| Function : Find gaps for the new userid disk to fit in         |
+|                                                                |
+| File     : POOLFGAP EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : EXTENT   CONTROL                                    |
+|            *        VCONTROL                                   |
+|            BLK2SIZE EXEC                                       |
+|            SIZE2BLK EXEC                                       |
+|                                                                |
+| Called   : POOLFGAP <poolnames> <gapsize>    ( <map y or n>    |
+|                                                                |
+|                     <poolnames> DIRMAINT disk pool names       |
+|                                 separated by one of ; , .      |
+|                                 Defaults to CMSDISKS           |
+|                     <gapsize>   Size of the gap your are       |
+|                                 looking for                    |
+|                                 Defaults to 100000 FBA blocks  |
+|                     <map>       Show a map                     |
+|                                                                |
+|                                                                |
+| Comments : Returns the number of fitting gaps as rc if         |
+|            only 1 pool specified                               |
+|            Needs access to DIRMAINT 1DF                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220112 10:25:44                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg poolnames gapsize '(' map .
+Parse Source . calltype  myfn myft .
+gaps=0
+map.0=0
+If poolnames=''  Then poolnames='CMSDISKS'
+If poolnames='?' Then Do
+                     'PIPE (NAME POOLFGAP.EXEC:39 END ?)',
+                         '< 'myfn myft' *',
+                         '| tolabel Parse',
+                         '| cons'
+                     Exit
+                     End
+If gapsize=''  Then gapsize=1000000
+siunit=Substr(Reverse(Strip(gapsize)),1,1)
+If Pos(siunit,'KMGTPEZY')=0 Then size=Blk2Size(gapsize 'M')
+                            Else Do
+                                 size=gapsize
+                                 gapsize=Size2Blk(gapsize)
+                                 End
+If map<>''       Then map='1'
+                 Else map='0'
+/*---------------------------------------------------------------+
+| Access disk with EXTENT CONTROL                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Do
+        Say 'VMLINK ERROR 'rc
+        Exit 0
+        End
+/*---------------------------------------------------------------+
+| Start processing                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLFGAP.EXEC:66 END ?)',
+    'var poolnames',                             /* Take this        */
+    '| split at anyof ~;,.~',                    /* Split into       */
+    '| sort',                                    /* Sort them        */
+    '| stem pool.'                               /* Hand 2 rexx      */
+If pool.0=1 Then exitrc=1
+            Else exitrc=0
+Call Read_Extent_Control
+Do p=1 To pool.0
+   totgaps=0
+/*---------------------------------------------------------------+
+| Find the next group/pool                                       |
++---------------------------------------------------------------*/
+   'PIPE (NAME POOLFGAP.EXEC:79 END ?)',
+      'stem group.',                             /* Take pools       */
+      '| pick anycase w1.1 == ~'pool.p'~',       /* Select this      */
+      '| specs w2;* 1',                          /* Keep volsers     */
+      '| split',                                 /* Split into recs  */
+      '| sort',                                  /* Sort them        */
+      '| stem volser.'                           /* Store as         */
+/*---------------------------------------------------------------+
+| Process all the volsers found                                  |
++---------------------------------------------------------------*/
+   Do v=1 To volser.0
+      Call Find_Gaps
+   End v
+   If exitrc & \map Then exrc=totgaps
+             Else Do
+                  exrc=0
+                  pool.p='Pool id: 'Left(pool.p,10)' Gaps: 'Right(totgaps,4)' x 'gapsize' blocks or 'size
+                  If \map Then Say pool.p
+                  End
+End p
+/*---------------------------------------------------------------+
+| Release the disk                                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF <RELEASE (NONAMES QUIET'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If map Then Do
+            'PIPE (NAME POOLFGAP.EXEC:107 END ?)',
+               'stem map.',                      /* Take these       */
+               '| preface stem pool.',
+               '| preface literal 'TimeStamp(),
+               '| split at !',                   /* Split records    */
+               '| > 'myfn' OUTPUT A'             /* Show...          */
+             Address CMS 'XEDIT 'myfn' OUTPUT A'
+             End
+Exit exrc
+ 
+ 
+Find_Gaps:
+/*---------------------------------------------------------------+
+| Find the gaps in the volsers                                   |
++---------------------------------------------------------------*/
+If map Then addvol='| preface literal ! !Pool id: 'pool.p' Volume: 'volser.v,
+                     '!Start      End        Size       Userid   VCUU Gaps       Gapsize'
+       Else addvol=''
+'PIPE (NAME POOLFGAP.EXEC:125 END ?)',
+   '< 'volser.v' VCONTROL 'wfm,                  /* Read this file   */
+   '| pick anycase w1.1 == ~MAXBLK=~ or',        /* Select these     */
+                  'w1.1 == ~ENTRY=~',            /* ...records       */
+   '| l: locate anycase ~MAXBLK=~',              /* Keep this        */
+   '| specs pad 0 w2.1 1.10 right',              /* Adjust           */
+   '| var maxblk',                               /* Store as         */
+   '? l:',                                       /* Conn 2 locate    */
+   '| stem entry.'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Work on the content of the entries                             |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLFGAP.EXEC:137 END ?)',
+   'stem entry.',                                /* Take these       */
+   '| specs pad 0 w2.1 1.10 right',              /* Adjust numbers   */
+                 'w3.1 nw.10 right',             /* .                */
+           'pad space w4.1 nw.8',                /* .                */
+                 'w5.1 nw.4',                    /* .                */
+   '| sort unique w1.1',                         /* Remove duplicates*/
+   '| specs w1.2 1',                             /* Add 1 to the     */
+           'a: w2.1 .',                          /* .endnumber       */
+           'set #0:=a+1',                        /* .so we know      */
+           'print #0 pict 9999999999 nw',        /* .the next extent */
+           'w3.2 nw',                            /* .                */
+           '~;~ nw',                             /* .                */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs pad 0 recno 1.4 right 1;* nw',       /* Add record no    */
+   '| fi: faninany',                             /* Take in others   */
+   '| sort 1.4',                                 /* Sort on recno    */
+   '| join keylen 4',                            /* Join on recno    */
+   '| specs w2;*',                               /* Remove recno     */
+   '| if1: if pick w7.1 == ~~',                  /* If this is empty */
+   '|      specs w1;* 1',                        /* Adjust           */
+                '~'maxblk' ..........~ nw',      /* Add endblock     */
+   '| if1:',                                     /* Conn 2 if        */
+   '| if2: if pick w3.1 \== w7.1',               /* If a gap         */
+   '|         specs 1;* 1 ~GAP~ nw',             /* Add a marker     */
+   '| if2:',                                     /* Conn 2 if        */
+   '| if3: if pick w-1;-1 == ~GAP~',             /* If lastword is.. */
+   '|         specs w1;* 1',                     /* Calculate the    */
+                   'w3.1 nw w7.1 nw',            /* .size            */
+                   'b: w3.1 .',                  /* ..of the         */
+                   'c: w7.1 .',                  /* ....gaps         */
+                   'set #1:=c-b',                /* .                */
+                   'print #1 pict 9999999999 nw', /* .                */
+   '|         specs w1;* 1',                     /* Check how many   */
+                   'd: w-1;-1 .',                /* .guests          */
+                   'set #2:=d%'gapsize,          /* ..fit in the     */
+                   'print #2 nw',                /* ...gaps          */
+   '| if3:',                                     /* Conn 2 if        */
+   '| split before string ~GAP~',                /* Split here       */
+   '| if4: if pick w1.1 == ~GAP~',               /* Rework           */
+   '|      specs w2.3 1',                        /* .these           */
+                'w1.1 nw.8',                     /* ....records      */
+                '~....~ nw',                     /* .                */
+                'w5.1 nw.8 right',               /* .                */
+                '~x 'gapsize' blocks or 'size'~ nw', /* .                */
+   '| if4:',                                     /* Conn 2 if        */
+   '| specs fs ; f1',                            /* Loose 2nd part   */
+   '| if5: if pick w4.1 == ~GAP~ and',           /* Remove the       */
+                  'w6.1 == ~0~',                 /* ..gaps with no   */
+   '|      specs w1.5',                          /* ...fits          */
+   '| if5:',                                     /* Conn 2 if        */
+   '| specs w1.2 1',                             /* Calculate        */
+           'e: w2.1 .',                          /* .mdisk           */
+           'f: w1.1 .',                          /* ..and            */
+           'set #3:=(e-f)+1',                    /* ...gap           */
+           'print #3 pict 9999999999 nw',        /* ....sizes        */
+           'w4;* nw',                            /* .                */
+   '| specs a: w1.1 .',
+           'b: w2.1 .',
+           'c: w3.1 .',
+           'print a pict ---------9 1',
+           'print b pict ---------9 nw',
+           'print c pict ---------9 nw',
+           'w4;* nw',
+   addvol,                                       /* Header or not... */
+   '| stem map. append',                         /* Add to stem      */
+   '| pick anycase w4.1 ==  ~GAP~',              /* Select the gaps  */
+   '| specs printonly eof',                      /* Add up the gaps  */
+           'g: w6.1 .',                          /* .                */
+           'set #4+=g',                          /* .                */
+           'eof',                                /* .                */
+           'print #4 nw',                        /* .                */
+   '| var gaps',                                 /* Store ass        */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| drop first 1',                             /* Loose this one   */
+   '| specs w1.2 1',                             /* Keep this        */
+   '| specs pad 0 recno 1.4 right 1;* nw',       /* Add record no    */
+   '| fi:'                                       /* Conn 2 faninany  */
+   totgaps=totgaps+gaps                          /* Summing...       */
+Return
+ 
+ 
+Read_Extent_Control:
+/*---------------------------------------------------------------+
+| Get the volume labels from EXTENT CONTROL                      |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLFGAP.EXEC:223 END ?)',
+   '< EXTENT CONTROL 'wfm,                       /* Read this file   */
+   '| inside anycase ~:GROUPS.~ ~:END.~',        /* Select this part */
+   '| nlocate anycase ~(ALLOCATE~',              /* Remove this      */
+   '| strip',                                    /* Remove spaces    */
+   '| specs w1.1 1.12 w2;* nw',                  /* Adjust layout    */
+   '| join keylen 12',                           /* Join on poolname */
+   '| stem group.'                               /* Store as         */
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

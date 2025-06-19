@@ -1,0 +1,127 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*    Xedit routine to setup a users profile for using          */
+/*      COL PREFIX commands                                     */
+/*--------------------------------------------------------------*/
+ 
+'SET CASE M I'
+'SET MSGLINE ON 1 2 OVERLAY'
+ 
+'LOCATE :1'
+'COMMAND EXTRACT /CURLINE/VERIFY'
+ 
+If Substr(STRIP(curline.3),1,2) = "/*" Then rexx = 1
+  Else rexx = 0
+ 
+'SET MSGMODE OFF'
+ col_prefix_on = 'NO'
+  'COMMAND EXTRACT /PRE S *'
+   Do i = 1 To prefix.0
+     If Substr(Word(prefix.i,2),1,7) = 'PREFIXH'
+       Then col_prefix_on = 'YES'
+   End
+'1 LOCATE /prefixh/'
+If rc = 0 Then Do            /* profile has key word */
+  'SET MSGMODE ON'
+  'COMMAND EMSG Your profile already contains COL PREFIXH synonyms as shown, update or Quit.'
+   If col_prefix_on = 'NO'
+     Then 'COMMAND EMSG  However the synonym is not active!  Make sure that it is not commented out.'
+End
+Else Do
+  If col_prefix_on = 'YES'           /* must be set on elsewhere */
+    Then Do
+     'SET MSGMODE ON'
+     'COMMAND EMSG  The synonym for COL cannot be found in your profile, but it is active!'
+     'COMMAND EMSG   It might be set up for you in another routine.'
+    End
+Else Do
+/* find a good spot to input the prefix symonyms */
+ 'SET RANGE :0 / exit /'
+ '* LOCATE -/set pre/'
+  If rc = 0 Then NOP
+    Else '* LOCATE -/ prefix /'
+    If rc = 0 Then NOP
+      Else '* LOCATE -/ pre /'
+      If rc = 0 Then NOP
+        Else '* LOCATE -/set syn/'
+        If rc = 0 Then NOP
+          Else '* LOCATE -/ syn /'
+          If rc = 0 Then NOP
+            Else '* LOCATE -/ set /'
+            If rc = 0 Then NOP
+              Else ':1 LOCATE / exit / -1'
+              If rc = 0 Then NOP
+                Else 'LOCATE * -1'
+ 'SET RANGE :0 *'
+ 'SET MSGMODE ON'
+ 
+ 'COMMAND EXTRACT /CMDLINE'
+  If cmdline.1 = 'TOP' Then Do
+   'SET MSGLINE ON -1 10 Overlay'
+  End
+  Else Do
+   'SET MSGLINE ON 2 10 Overlay'
+  End
+ 
+ 'EXTRACT /FMODE/'
+  If Substr(fmode.1,1,1) = 'A' Then Do
+   'SAVE PROFILE XEBACKUP A'
+    If rc = 0 Then 'MSG A backup copy your XEDIT profile has been saved as PROFILE XEBACKUP A'
+  End
+  Else Do      /* user does not have a XEDIT profile on their A disk */
+    'SET FMODE A'
+    'EMSG A copy of PROFILE XEDIT' fmode.1 'is being set up for your A disk.'
+  End
+ 
+ 'COMMAND MSG Prefix synonyms for COL using "H" have been placed in your profile as shown:'
+ 'COMMAND MSG FILE if acceptable or QQuit.'
+ 
+  prf1 = 'SET PREFIX SYNONYM H  PREFIXH'
+  prf2 = 'SET PREFIX SYNONYM HH PREFIXH'
+  prf3 = 'SET VERIFY 1 73'
+ 
+ 'COMMAND EXTRACT /CURLINE'
+  If curline.1 ^= 'M' Then Do
+    prf1 = prf1||'2'
+    prf2 = prf2||'2'
+  End
+ 
+/* Does the user use COMMAND? */
+  If Index(Translate(curline.3),'COMMAND') > 0 Then Do
+    prf1 = 'COMMAND '||prf1
+    prf2 = 'COMMAND '||prf2
+    prf3 = 'COMMAND '||prf3
+  End
+ 
+  If rexx Then Do
+    prf1 = "'"prf1"'"
+    prf2 = "'"prf2"'"
+    prf3 = "'"prf3"'"
+  End
+ 
+/* indent as the user has in the profile */
+  indent = Verify(curline.3,' ')
+  If indent > 1 Then Do
+    prf1 = Copies(' ',indent-1)||prf1
+    prf2 = Copies(' ',indent-1)||prf2
+    prf3 = Copies(' ',indent-1)||prf3
+  End
+ 
+  If rexx Then "INPUT /* PREFIX synonyms for COL */"
+          Else "INPUT * PREFIX synonyms for COL"
+ 'INPUT' prf1
+ 'INPUT' prf2
+  If Word(verify.2,2) > 73 Then Do
+   'INPUT' prf3
+   'LOCATE -1'
+  End
+ 'LOCATE -2'
+ 
+End
+End
+ 
+'SET MSGMODE ON'
+Exit

@@ -1,0 +1,49 @@
+/*---------------------------------------------------------------+
+| Function : Send files to an other system using RSCS or FTP     |
+|                                                                |
+| File     : PUT      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : PUTRSCS  EXEC transfer files using RSCS             |
+|            PUTFTP   EXEC transfer files using FTP              |
+|                                                                |
+| Called   : PUT      <fn> <ft> <fm> <to> <target> ( <options    |
+|                                                                |
+| Comments : RSCS is the prefered method                         |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220121 09:57:27                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm where target '(' quiet .
+Parse Source . how myfn myft .
+ 
+'PIPE (NAME PUT.EXEC:23 END ?)',
+   'cp QUERY RSCS',                              /* Ask if running   */
+   '| pick w3.1 ==  ~DSC~',                      /* Look for this    */
+   '| count lines',                              /* How many?        */
+   '| var rscs',                                 /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY FTPSERVE',                          /* Ask if running   */
+   '| pick w3.1 ==  ~DSC~',                      /* Look for this    */
+   '| count lines',                              /* How many?        */
+   '| var ftp'                                   /* Store as         */
+ 
+Select
+When rscs  & ftp   Then Address CMS PUTRSCS fn ft fm where target '(' quiet .
+When rscs  & \ftp  Then Address CMS PUTRSCS fn ft fm where target '(' quiet .
+When \rscs & ftp   Then Address CMS PUTFTP fn ft fm where target '(' quiet .
+Otherwise Address CMS Exit '1128 No RSCS or FTPSERVE found'
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmgs
+If Datatype(exec,'NUM') Then Say errmsg
+                        Else exrc=0
+Exit exrc

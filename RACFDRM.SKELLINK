@@ -1,0 +1,8 @@
+PERMIT &OWNER.&ADDRESS CLASS(VMMDISK) ID(&USERID) ACCESS(&ACCESS)               
+* ACCESS AUTHORITY  ===>    DELETE  - TO REMOVE ACCESS AUTHORITY                
+*                           NONE    - TO PREVENT A USER FROM ACCESSING          
+*                           READ    - TO ALLOW READ/ONLY ACCESS                 
+*                           UPDATE  - TO ALLOW WRITE ACCESS                     
+*                           CONTROL - TO ALLOW MULTI-READ ACCESS                
+*                           ALTER   - TO ALLOW MULTI-WRITE ACCESS  (also        
+*                                       allows user to assign authority)        

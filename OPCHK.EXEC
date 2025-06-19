@@ -1,0 +1,170 @@
+/*---------------------------------------------------------------+
+| Function : Check if OPERATOR is running and SYSOPER            |
+|                                                                |
+| File     : OPCHK    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : OPCHK    .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180907 13:18:56                                   |
+| Changes  : .                                                   |
+|            20210419 H.T.Kramer : Replaced GLOBALV cms cmds     |
+|                        with Rexx statements                    |
+|            20200312 H.T.Kramer : Changed group LVLS to node    |
+|                     name so it works on sfs over nodes         |
+|            20190919 H.T.Kramer : Added location check          |
+|                                                                |
++---------------------------------------------------------------*/
+uid=OPERATOR
+maxtry=5
+sleep=5
+/*---------------------------------------------------------------+
+| Check if operator is running if not retry...                   |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+Call ChkOperator
+If \running Then Do t=1 To maxtry Until running
+      Address COMMAND 'CP XAUTOLOG 'uid
+      'CP SLEEP 'sleep' SEC'
+      Call ChkOperator
+      If t=maxtry Then Say 'Maximum retries of XAUTOLOG for 'uid' reached'
+      End t
+/*---------------------------------------------------------------+
+| Check if OPERATOR is SYSOPER....                               |
++---------------------------------------------------------------*/
+'PIPE (NAME OPCHK.EXEC:41 END ?)',
+      'CP QUERY SYSOPER',                       /* Ask CP          */
+      '| specs w-1;-1',                         /* Take last word  */
+      '| strip ~.~',                            /* Remove dots     */
+      '| pick w1.1 == ~'uid'~',                 /* Search id       */
+      '| count lines',                          /* How many        */
+      '| var sysoperok',                        /* Store here      */
+      '?',
+      'CP QUERY USERID 'Userid(),
+      '| specs w3.1',
+      '| var node'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If running & \sysoperok Then Do
+/*---------------------------------------------------------------+
+| It is running but not as operator                              |
++---------------------------------------------------------------*/
+             Adress COMMAND 'CP SET SYSOPER 'uid
+             End
+             Else Say Center('User 'uid' is running and SYSOPER',80)
+Call CheckOSLevels
+Call CheckLocation
+Exit
+ 
+ 
+ChkOperator:
+/*---------------------------------------------------------------+
+| Check if operator is running                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME OPCHK.EXEC:71 END ?)',
+     'CP QUERY 'uid,                            /* Ask CP          */
+     '| pick w1.1 == ~'uid'~',                  /* Locate this     */
+     '| count lines',                           /* How many        */
+     '| var running'                            /* Store here      */
+If \running Then Say 'User 'uid' NOT AVAILABLE as SYSOPER'
+Return
+ 
+ 
+CheckOSLevels:
+/*---------------------------------------------------------------+
+| CP Level handling                                              |
++---------------------------------------------------------------*/
+cplvl=Value('CPLVL',,'LASTING' node)
+If cplvl=''| cplvl='CPLVL' Then Do
+   Call QCPLVL
+   Call SetCPLVL
+   End
+   Else Do
+        Call QCPLVL
+        If curcplvl<>cplvl Then Do
+            Say 'CHANGES in CP level'
+            Say 'Prev: 'cplvl
+            Say 'Curr: 'curcplvl
+            Call SetCPLVL
+            End
+            Else 'PIPE (NAME OPCHK.EXEC:97 END ?)',
+            'var cplvl ',
+            '| split at ;',
+            '| specs 1;* 1.80 center',
+            '| cons'
+        End
+/*---------------------------------------------------------------+
+| CMS Level handling                                             |
++---------------------------------------------------------------*/
+cmslvl=Value('CMSLVL',,'LASTING' node)
+If cmslvl=''| cmslvl='CMSLVL' Then Do
+   Call QCMSLVL
+   Call SetCMSLVL
+   End
+   Else Do
+        Call QCMSLVL
+        If curcmslvl<>cmslvl Then Do
+            Say 'CHANGES in CMS level'
+            Say 'Prev: 'cmslvl
+            Say 'Curr: 'curcmslvl
+            Call SetCMSLVL
+            End
+            Else 'PIPE (NAME OPCHK.EXEC:119 END ?)',
+            'var cmslvl ',
+            '| specs 1;* 1.80 center',
+            '| cons'
+        End
+Return
+ 
+ 
+SetCPLVL:
+z=Value('CPLVL',curcplvl,'LASTING' node)
+Return
+ 
+ 
+SetCMSLVL:
+z=Value('CMSLVL',curcmslvl,'LASTING' node)
+Return
+ 
+ 
+QCPLVL:
+   'PIPE (NAME OPCHK.EXEC:138 END ?)',
+      'CP QUERY CPLEVEL ',
+      '| join * ~;~ ',
+      '| xlate upper ',
+      '| var curcplvl'
+Return
+ 
+ 
+QCMSLVL:
+   'PIPE (NAME OPCHK.EXEC:147 END ?)',
+      'CMS QUERY CMSLEVEL ',
+      '| join * ~;~ ',
+      '| xlate upper ',
+      '| var curcmslvl'
+Return
+ 
+ 
+CheckLocation:
+'PIPE (NAME OPCHK.EXEC:156 END ?) CP SCREEN VMOUT YELLOW REVV |HOLE'
+/*---------------------------------------------------------------+
+| The keys are on pos 15.2 of QUERY CPUID                        |
++---------------------------------------------------------------*/
+'PIPE (NAME OPCHK.EXEC:160 END ?)',
+    'cp QUERY CPUID',
+    '| specs w3.1',
+    '| deblock 2',
+    '| all /A8/!/98/',
+    '| change ~A8~*** Oude Meer 'node' ***~',
+    '| change ~98~*** Den Haag  'node' ***~',
+    '| specs pad _ 1;* 1.80 center',
+    '| cons'
+'PIPE (NAME OPCHK.EXEC:169 END ?) CP SCREEN VMOUT YELLOW NONE |HOLE'
+Return

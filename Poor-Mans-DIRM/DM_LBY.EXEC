@@ -1,0 +1,147 @@
+/*---------------------------------------------------------------+
+| Function : Add, Change or Remove LOGONBY statement             |
+|                                                                |
+| File     : DM_LBY   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_CKUID EXEC                                       |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_LBY   <uid> <action> <lbyid> (can be multiple)   |
+|          : LOGONBY  <uid> <action> <lbyid> (can be multiple)   |
+|                           QRY                                  |
+|                           ADD                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : No of users is limited to what CP allows            |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240702 12:51:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid action lbyid
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check if the ids exist                                         |
++---------------------------------------------------------------*/
+Do l=1 To Words(lbyid)
+   temp=Word(lbyid,l)
+   If \DM_CKUID(temp) Then Call Exit rc
+End l
+/*---------------------------------------------------------------+
+| Get the target id definitions                                  |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LBY.EXEC:52 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~LOGONBY~ or',        /* Select these     */
+                  'w2.1 == ~IPL~ or',            /* .                */
+                  'w2.1 == ~INCLUDE~',           /* .                */
+   '| p: pick anycase w2.1 == ~LOGONBY~',        /* Select this 1    */
+   '| var curlby',                               /* Store as         */
+   '| count lines',                              /* Count them       */
+   '| var lby',                                  /* Store as boolean */
+   '? p:',                                       /* Conn 2 pick      */
+   '| take first 1',                             /* Take only 1      */
+   '| var iplincl'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Act on the input actions                                       |
++---------------------------------------------------------------*/
+Select
+When action='QRY' Then Call ShowLby
+When action='DEL' Then Call DelLby
+When action='ADD' Then Call AddLby
+When \lby         Then Call NewLby
+Otherwise Call Exit 250
+End
+/*---------------------------------------------------------------+
+| Apply the change and write the file                            |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_LBY.EXEC:77 END ?)',
+   'stem direct.',                               /* .                */
+   changestmt,                                   /* .                */
+   '| specs 7;* 1.80',                           /* .                */
+   '| > 'dirfnft ws' FIXED 80'                   /* .                */
+/*---------------------------------------------------------------+
+| Check directory and put it online                              |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowLby:
+/*---------------------------------------------------------------+
+| Show the current entries in LOGONBY                            |
++---------------------------------------------------------------*/
+lbyids=Subword(curlby,3)
+Say Date('S') Time() myfn myft 'Logonby granted to: 'lbyids
+Call Exit
+Return
+ 
+ 
+AddLby:
+/*---------------------------------------------------------------+
+| Add a user(s) to the LOGONBY statement                         |
++---------------------------------------------------------------*/
+Do l=1 To Words(lbyid)
+   temp=Word(lbyid,l)
+   If Wordpos(temp,curlby)<>0 Then Call Exit 251
+End l
+newlby=Strip(curlby)' 'Strip(lbyid)
+changestmt='| change anycase /'curlby'/ /'newlby'/'
+Return
+ 
+ 
+DelLby:
+/*---------------------------------------------------------------+
+| Delete a user from LOGONBY stmt                                |
++---------------------------------------------------------------*/
+Do l=1 To Words(lbyid)
+   temp=Word(lbyid,l)
+   If Wordpos(temp,curlby)=0 Then Call Exit 252
+End l
+'PIPE (NAME DM_LBY.EXEC:130 END ?)',
+   'var curlby',
+   '| change ~'lbyid'~~',
+   '| space 1',
+   '| specs w1.1 1 w2;* 10',
+   '| var newlby'
+If Words(newlby)<=2 Then changestmt='| nlocate ~'curlby'~'
+                    Else changestmt='| change anycase /'curlby'/ /'newlby'/'
+Return
+ 
+ 
+NewLby:
+/*---------------------------------------------------------------+
+| No LOGONBY found adding one                                    |
++---------------------------------------------------------------*/
+newlby=';'Copies(' ',8)'LOGONBY 'action
+changestmt='| change anycase ~'iplincl'~ ~'iplincl';'newlby'~ | split at ;'
+Return

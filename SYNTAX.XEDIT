@@ -1,0 +1,405 @@
+/*---------------------------------------------------------------+
+| Function : Rexx syntax highlighter                             |
+|                                                                |
+| File     : SYNTAX   XEDIT                                      |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SYNTAX   RULES    where colors and so on are        |
+|                              defined                           |
+|                                                                |
+| Called   : SYNTAX   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20240409 17:32:16                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg .
+Parse Source . . myfn myft .
+Call Settings
+Call Main
+/*---------------------------------------------------------------+
+| Infinite loop                                                  |
++---------------------------------------------------------------*/
+Do x=1
+   'READ ALL NUMBER'
+   Address CMS 'PIPE (NAME SYNTAX.XEDIT:30 END ?)',
+        'stack',
+        '| var cmd'
+   Select
+   When cmd=''         Then Nop
+   When cmd='QUIT' |,
+        cmd='QQUIT'    Then Do
+                              Queue 'QQUIT'
+                              Leave x
+                            End
+   When cmd='BACKWARD' Then Call UpOrDown '-'maxlines
+   When cmd='FORWARD'  Then Call UpOrDown '+'maxlines
+   Otherwise Exit 23
+   End
+End x
+Exit
+ 
+ 
+UpOrDown:
+/*---------------------------------------------------------------+
+| Scrolling routine                                              |
++---------------------------------------------------------------*/
+Parse Upper Arg upordown .
+direction=Substr(upordown,1,1)
+size=Substr(upordown,2)
+oldfr=frline
+Select
+When direction='-' Then frline=frline-size
+When direction='+' Then frline=frline+size
+Otherwise Nop
+End
+If frline<=0 Then Do
+                  dropvar=''
+                  frline=0
+                  End
+             Else dropvar='| drop first 'frline
+If frline>filesize Then Do
+                    takevar='| take first 'Abs(filesize-oldfr)
+                    End
+               Else takevar='| take first 'maxlines
+/*---------------------------------------------------------------+
+| Clear the screen                                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (End ?)',
+        'literal .',
+        '| dup 'maxlines-1,
+        '| specs recno from 'start' 1 ~SET RESERVED NON NOH~ nw x40 nw',
+        '| specs w2.2 1 w1.1 nw w4;* nw',
+        '| subcom xedit'
+/*---------------------------------------------------------------+
+| Do the movement                                                |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:71 END ?)',
+    'stem line.',
+    dropvar,
+    takevar,
+    '| specs recno from 'frline' 1.4 12;* nw',
+    '| specs recno from 'start' 1 1;* nw',
+    '| specs ~SET RESERVED~ 1 w1.1 strip nw ~NON NOH 'prfcolor'~ nw w2.1 nw.5 right ~'escape||defcolor'~ n 17;* nw',
+    '| change anycase ~'defcolor||escape'~'escape'~',
+    '| change anycase ~'escape||escape'~'escape'~',
+    '| subcom xedit'
+Return
+ 
+ 
+Main:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+x=Time('R')
+'EXTRACT /SIZE/RECFM/TRUNC/LRECL/FNAME/FTYPE/FMODE/SCREEN/CURLINE/LINE/COLOR *'
+'SET TOFEOF OFF'
+changecmd=''
+fs='FF'x
+start=curline.1
+frline=line.1
+filesize=size.1
+/* Test comment */
+If frline=0 Then Do
+                 ':1',
+                 frline=1
+                 End
+maxscrn=Word(screen.1,2)
+maxlines=maxscrn-start
+/*---------------------------------------------------------------+
+| Substr(avc,1,2)  test comment                                  |
++---------------------------------------------------------------*/
+':1'
+Call Get_Settings
+Call Get_File_Content
+Call Mark_Quotes
+Call Mark_Comments
+Call Mark_Calls
+Call Mark_Others
+Call Display
+Say 'Elapsed: 'Time('E')
+Return
+ 
+ 
+ 
+ 
+Mark_Quotes:
+/*---------------------------------------------------------------+
+| Make some settings                                             |
++---------------------------------------------------------------*/
+scolor1='x'||c2x(quotcolor)||'7D0000'
+scolor2='x'||c2x(quotcolor)||'7F0000'
+ecolor1='x00007D'||c2x(defcolor)
+ecolor2='x00007F'||c2x(defcolor)
+/*---------------------------------------------------------------+
+| Add 2 lowvalues around each quote                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:131 END ?)',
+    'stem line.',
+    '| all x7D ! x7F',
+    '| change x7D x00007D0000 *',
+    '| change x7F x00007F0000 *',
+    '| stem work.'
+/*---------------------------------------------------------------+
+| Locate the quotes in the record                                |
++---------------------------------------------------------------*/
+Do w=1 To work.0
+   work=Substr(work.w,12)
+   no=Word(work.w,1)
+   Address CMS 'PIPE (NAME SYNTAX.XEDIT:143 END ?)',
+      'var work',
+      '| deblock 1',
+      '| specs pad 0 recno 1.5 right 1;* nw',
+      '| all x7D ! x7F',
+      '| specs w1.1 1',
+      '| join * x40',
+      '| var quot'
+    work2=work
+    Do q=1 To Words(quot) By 2
+       strt_q=Word(quot,q)-2'.5'
+       end_q=Word(quot,q+1)-2'.5'
+       Address CMS 'PIPE (NAME SYNTAX.XEDIT:155 END ?)',
+           'var work2',
+           '| buffer',
+           '| change 'strt_q' x00007D0000 'scolor1,
+           '| change 'strt_q' x00007F0000 'scolor2,
+           '| change 'end_q'  x00007D0000 'ecolor1,
+           '| change 'end_q'  x00007F0000 'ecolor2,
+           '| var work2'
+    End q
+    work.w=Right(no,10)' 'work2
+End w
+/*---------------------------------------------------------------+
+| Move the changed values into the stem                          |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:169 END ?)',
+      'stem work.',
+      '| specs ~/LINE.~ 1 1.10 strip n ~/~ n 1;* n',
+      '| change x0000 ~~',
+      '| change x00 ~~',
+      '| varload'
+Return
+ 
+ 
+Mark_Comments:
+/*---------------------------------------------------------------+
+| Select the single line comments and the larger than 1 line ones|
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:182 END ?)',
+   'stem line.',
+   '| a: all x615C & x5C61',
+   '| stem single.',
+   '? a:',
+   '| all x615C ! x5C61',
+   '| specs w1.1',
+   '| join 1 x40',
+   '| stem range.'
+/*---------------------------------------------------------------+
+| Change the comments on a single line                           |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:194 END ?)',
+    'stem single.',
+    '| change x615C x'||c2x(commentcolor)||'615C',
+    '| change x5C61 x5C61'||c2x(defcolor),
+    '| specs ~/LINE.~ 1 1.10 strip n ~/~ n 1;* n',
+    '| varload'
+/*---------------------------------------------------------------+
+| Change comments over multiple lines                            |
++---------------------------------------------------------------*/
+Do r=1 To range.0
+   fline=Word(range.r,1)
+   If fline>1 Then fline='| drop first 'Word(range.r,1)-1
+              Else fline=''
+   eline='| take first 'Word(range.r,2)-Word(range.r,1)+1
+   Address CMS 'PIPE (NAME SYNTAX.XEDIT:208 END ?)',
+          'stem line.',
+          fline,
+          eline,
+          '| specs 1.10 1.10  ~'commentcolor'~ nw 12;* n ~'defcolor'~ n',   /* Test comment     */
+          '| specs ~/LINE.~ 1 w1.1 strip n ~/~ n 1;* n',
+          '| varload'
+End r
+Return
+ 
+ 
+Mark_Calls:
+/*---------------------------------------------------------------+
+| Color the C A L L s and the labels that are C A L L ed         |
++---------------------------------------------------------------*/
+changecmd=''
+/*---------------------------------------------------------------+
+| Get the color code for  C a l l  and update rule.               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:227 END ?)',
+   'stem rule.',
+   '| buffer',
+   '| l: locate anycase ~Call_~',
+   '| var syntax',
+   '| specs ~'escape'~ 1 w1.1 n',
+   '| var callcolor',
+   '? l:',
+   '| change anycase ~Call_~~',
+   '| change ~ ;~ ~',
+   '| change ~; ~ ~',
+   '| stem rule.'
+syntax=Translate(Subword(syntax,2),'  ','_;')
+Do s=1 To Words(syntax)
+/*---------------------------------------------------------------+
+| Locate the  C a l l  stmts and prepare a change for them       |
++---------------------------------------------------------------*/
+procsyn=Strip(Word(syntax,s))
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:241 END ?)',
+   'stem line.',
+   '| locate anycase ~'procsyn' ~',
+   '| fo: fanout',
+   '| specs x4F 1 ~change anycase 'fs'~ nw w2;* n ~'fs' 'fs||callcolor'~ n w2;* n ~'defcolor||fs'~ n',
+   '| fi: faninany',
+   '| nlocate x7D',
+   '| nlocate x7F',
+   '| unique',
+   '| change /'defcolor||defcolor'/'defcolor'/',
+   '| join * x40',
+   '| var changecmd',
+   '? fo:',
+   '| specs x4F 1 ~change anycase /~ nw  w3.1 n ~:/ /'callcolor'~ n w3.1 n ~:'defcolor'/~ n',
+   '| fi:'
+If changecmd='CHANGECMD' Then changecmd=''
+/*---------------------------------------------------------------+
+| Issue the change cmd and hand back the results                 |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:260 END ?)',
+   'stem line.',
+   '| buffer',
+   changecmd,
+   '| stem line.'
+End s
+Return
+ 
+ 
+Mark_Others:
+/*---------------------------------------------------------------+
+| Mark all others we want marked                                 |
++---------------------------------------------------------------*/
+Do r=1 To rule.0
+   changecmd=''
+   color=escape||Word(rule.r,1)
+   syntax=Word(rule.r,2)
+   Address CMS 'PIPE (NAME SYNTAX.XEDIT:276 END ?)',
+      'var syntax',
+      '| split at ;',
+      '| specs x4F 1 ~change anycase !~ nw w1.1 n ~!'color'~ n w1.1 n ~'defcolor'!~ n',
+      '| change ~_~ ~',
+      '| unique',
+      '| join * x40',
+      '| var changecmd'
+   If changecmd<>'' Then Call Apply_Rule
+End r
+Return
+ 
+ 
+Apply_Rule:
+/*---------------------------------------------------------------+
+| Aply a rule to the stem                                        |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:293 END ?)',
+    'stem line.',
+    '| buffer',
+    changecmd,
+    '| stem line.'
+Return
+ 
+ 
+Get_Settings:
+/*---------------------------------------------------------------+
+| Get the settings from the RULES file                           |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:305 END ?)',
+    '< 'myfn' RULES *',
+    '| pick 1.1 \== ~*~ and 1.1 \== ~ ~',
+    '| join * ~@~',
+    '| split before string ~:~',
+    '| p: pick anycase fs . f1 == ~:REXX~',
+    '| split at ~@~',
+    '| drop first 1',
+    '| n1: nlocate x7D',
+    '| n2: nlocate x615C',
+    '| stem rule.',
+    '? n1:',
+    '| specs w1.1',
+    '| var quotcolor',
+    '? n2:',
+    '| specs w1.1',
+    '| var commentcolor',
+    '? p:',
+    '| specs fs . f2;*',
+    '| split at ~@~',
+    '| strip',
+    '| split at ;',
+    '| pick 1.1 \== ~~',
+    '| fo: fanout',
+    '| specs ~SET CTLCHAR~ 1 1;* nw',
+    '| subcom xedit',
+    '? fo:',
+    '| pick anycase w2.1 == ~ESCAPE~',
+    '| spec w1.1',
+    '| var escape'
+defcolor=escape||Substr(Word(color.4,2),1,1)
+prfcolor=escape||Substr(Word(color.8,2),1,1)
+quotcolor=escape||quotcolor
+commentcolor=escape||commentcolor
+Return
+ 
+ 
+Get_File_Content:
+/*---------------------------------------------------------------+
+| Get the file content                                           |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:346 END ?)',
+    'XEDIT',
+    '| specs pad 0 recno 1.10 1;* nw x40 n',
+    '| stem line.'        /*    */
+extra=maxlines-(line.0//maxlines)
+If extra>0 Then Do n=line.0+1 To line.0+extra
+                     line.n=Right(n,10)'  '
+                     line.0=n
+                End n
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Prepare the display                                            |
++---------------------------------------------------------------*/
+If frline=0 Then frline=1
+Address CMS 'PIPE (NAME SYNTAX.XEDIT:358 END ?)',
+    'stem line.',
+    '| buffer',
+    '| drop first 'frline-1,
+    '| take first 'maxlines,
+    '| specs recno from 'frline' 1.4 12;* nw',
+    '| specs recno from 'start' 1 1;* nw',
+    '| specs ~SET RESERVED~ 1 w1.1 strip nw ~NON NOH 'prfcolor'~ nw w2.1 nw.5 right ~'escape||defcolor'~ n 17;* nw',
+    '| change anycase ~'defcolor||escape'~'escape'~',
+    '| change anycase ~'escape||escape'~'escape'~',
+    '| subcom xedit'
+Return
+ 
+ 
+Settings:
+/*---------------------------------------------------------------+
+| Do some XEDIT settings and EXTRACTS                            |
++---------------------------------------------------------------*/
+'SET LINEND OFF'
+'SET PF3 QQUIT'
+'SET PF15 QQUIT'
+'SET PF12 QQUIT'
+'SET PF24 QQUIT'
+'SET PF7 BACKWARD'
+'SET PF12 BACKWARD'
+'SET PF8 FORWARD'
+'SET PF20 FORWARD'
+Return

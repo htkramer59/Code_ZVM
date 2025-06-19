@@ -1,0 +1,418 @@
+/*---------------------------------------------------------------+
+| Function : HOBVMDSK...emulates df output (linux)               |
+|                                                                |
+| File     : HOBVMDSK       EXEC                                 |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : EXTENT   CONTROL    Input (dirmaint)                |
+|            *        VCONTROL   Input (dirmaint)                |
+|            HOBVM100 CLIENT     Output                          |
+|                                                                |
+| Called   : HOBVMDSK <filepool1 ; filepool2 ;....; filepooln>   |
+|                                                                |
+| Comments :                                                     |
+|            Shows output for filepools, dirmaint, etc.          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190215 15:29:40                                   |
+| Changes  :                                                     |
+|            20220112 H.T.Kramer : Adapted to new HOBVARS concept|
+|            20210909 H.T.Kramer : .                             |
+|                     Rewrite of the DIRM group info             |
+|                     Rewrite of the CP Details                  |
+|            20190228 Adjusted DF EXEC                           |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fpin '(' dryrun
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMDSK.EXEC:34 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Init
+Call Check_Input
+Call Get_CP_Details
+Do f=1 To fp.0
+  Call Check_Admin fp.f
+  Call Get_FP_Storage fp.f
+  Call Get_FP_UserDetails fp.f
+End f
+Call Get_Dirm_Storage_Groups
+Call Write_Details
+If test Then Do
+             'PIPE (NAME HOBVMDSK.EXEC:51 END ?)',
+                '< 'outfile,
+                '| cons'
+             End
+Exit
+ 
+ 
+Init:
+/*---------------------------------------------------------------+
+| Some inits                                                     |
++---------------------------------------------------------------*/
+outfile='HOBVM100 CLIENT A'
+strgrps='CMSDISKS;ICUDISKS;LINUXOS;ORACLE'
+out.0=0
+Return
+ 
+ 
+Check_Input:
+/*---------------------------------------------------------------+
+| Set a default...and split into an array                        |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMDSK.EXEC:72 END ?)',
+    'cp QUERY USERID',                           /* Ask cp           */
+    '| specs w3.1',                              /* Keep this        */
+    '| var node',                                /* Store as         */
+    '| specs -2;-1',                             /* Reduce to this   */
+    '| var shortnode'                            /* Store as         */
+If fpin='' Then fpin=filepools
+'PIPE (NAME HOBVMDSK.EXEC:79 END ?)',
+    'var fpin',                                  /* Take input       */
+    '| strip',                                   /* Remove spaces    */
+    '| split at ;',                              /* Split            */
+    '| stem fp.'                                 /* Hand 2 rexx      */
+Return
+ 
+ 
+Check_Admin:
+/*---------------------------------------------------------------+
+| Are we admin???                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fp .
+'PIPE (NAME HOBVMDSK.EXEC:92 END ?)',
+      'cms QUERY ENROLL ADMIN FOR 'Userid() fp, /* ASk filepool    */
+      '| locate ~'Userid()'~',                  /* Search for me   */
+      '| pick w2.1 == ~YES~',                   /* Is it yes       */
+      '| count lines',                          /* How many        */
+      '| var admin'                             /* Store here      */
+If \admin Then Do
+               Say 'Need ADMIN rights for 'fp
+               Say 'Skipping filepool'
+               Iterate
+               End
+Drop fp
+Return
+ 
+ 
+Get_CP_Details:
+/*---------------------------------------------------------------+
+| Ask cp for details                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMDSK.EXEC:111 END ?)',
+   'cp QUERY ALLOC MAP',                         /* Ask cp           */
+   '| drop first 3',                             /* Ignore header    */
+   '| specs w4.1 1 w3.1 nw w6.1 nw w9.1 nw',     /* Keep these values*/
+   '| specs 1;* 1',                              /* Calculate        */
+           'a: w1.1 .',                          /* ...available     */
+           'b: w2.1 .',                          /* .....space       */
+           'set #0:=a-b+1',                      /* .                */
+           'print #0 nw',                        /* .                */
+   '| specs w4.1 1.8 w5.1 nw w3.1 nw ~;~ nw',    /* Rework records   */
+   '| join keylen 8',                            /* Join on label    */
+   '| stem line.'                                /* Store as         */
+/*---------------------------------------------------------------+
+| Do some calculations                                           |
++---------------------------------------------------------------*/
+Do l=1 To line.0
+   lbl=Word(line.l,1)
+   work=Subword(line.l,2)
+   'PIPE (NAME HOBVMDSK.EXEC:129 END ?)',
+       'var work',                               /* Take this        */
+       '| split at ;',                           /* Split here       */
+       '| specs printonly eof',                  /* Calculate the    */
+               'a: w1.1 .',                      /* ....totals for   */
+               'b: w2.1 .',                      /* .....available   */
+               'set ((#0+=a ; #1+=b))',          /* ....and used     */
+               'eof',                            /* .                */
+               'print #0 nw',                    /* .                */
+               'print #1 nw',                    /* .                */
+       '| specs ~/CP/'lbl'/~ 1 1;* nw',          /* Add label        */
+       '| specs 1;* 1',                          /* Calculate        */
+               'a: w2.1 .',                      /* ....free         */
+               'b: w3.1 .',                      /* ......space      */
+               'set #0:=a-b',                    /* .                */
+               'print #0 nw',                    /* .                */
+       '| specs w1.1 1',                         /* Rework values    */
+               'a: w2.1 .',                      /* ....to kb        */
+               'b: w3.1 .',                      /* .                */
+               'c: w4.1 .',                      /* .                */
+               'set ((#0:=a*4;#1:=b*4;#2:=c*4))',  /* .                */
+               'print #0 nw.10 right',           /* .                */
+               'print #1 nw.10 right',           /* .                */
+               'print #2 nw.10 right',           /* .                */
+               'w5.1 nw',                        /* .                */
+       '| specs w1.1 1.12',                      /* Calculate        */
+               'w2.1 nw.10 right',               /* ...percentages   */
+               'w3.1 nw.10 right',               /* .                */
+               'w4.1 nw.10 right',               /* .#0=used         */
+               'w5.1 nw',                        /* .#1=free/availabl*/
+               'a: w2.1 .',                      /* .                */
+               'b: w3.1 .',                      /* .                */
+               'c: w4.1 .',                      /* .                */
+               'set ((#0:=((c+1)/a)*100;#1:=((b+1)/a)*100))', /* .                */
+               'print #1 pic 999 nw',            /* .                */
+               '~%~ n',                          /* .                */
+       '| specs w1;* 1 ~/CP/'lbl'/~ nw',         /* Add  label       */
+       '| stem out. append'                      /* Append 2 stem    */
+End l
+Drop line.
+Return
+ 
+ 
+Get_FP_Storage:
+/*---------------------------------------------------------------+
+| How much storage on the filepool                               |
++---------------------------------------------------------------*/
+Parse Upper Arg fp .
+'PIPE (NAME HOBVMDSK.EXEC:177 END ?)',
+   'cms QUERY FILEPOOL STORGRP 'fp,             /* ASK FILEPOOL    */
+   '| n: nfind DMS',                            /* Filter errors   */
+   '| frtarget pick w1.1 == ~Group~',           /* Drop hdr        */
+   '| drop first 1',                            /* .               */
+   '| pick 1.1 \== ~=~',                        /* Remove these   */
+   '| specs',                                   /* Calculate &     */
+        '~/'fp'/Group~ 1',                      /*  make layout    */
+        'w1.1 n',                               /* .               */
+        'u: w2.1 .',                            /* .               */
+        'f: w5.1 .',                            /* .               */
+        'set (#0:=u*4;#1:=f*4;#2:=(u+f)*4)',    /* Conv 2 KB       */
+        'print #2 nw ',                         /* .               */
+        'print #0 nw ',                         /* .               */
+        'print #1 nw ',                         /* .               */
+        'w4.1 nw',                              /* .               */
+        '~/SFS/~ nw ~'fp'/Group~ n w1.1 n',     /* .               */
+   '| stem out. append',                        /* Add to stem     */
+   '? n: ',
+   '| cons'
+Drop fp
+Return
+ 
+ 
+Get_FP_UserDetails:
+/*---------------------------------------------------------------+
+| Get the user details from this filepool                        |
++---------------------------------------------------------------*/
+Parse Upper Arg fp .
+'PIPE (NAME HOBVMDSK.EXEC:206 END ?)',
+   'cms QUERY ENROLL USER FOR ALL 'fp,          /* Ask filepool    */
+   '| n: nfind DMS',                            /* Remove errors    */
+   '| pick w1.1 \== ~Number~',                  /* Remove some     */
+   '| pick w1.1 \== ~<PUBLIC>~',                /*       stuff     */
+   '| specs ~QUERY LIMITS FOR ~ 1',
+           'w1.1 nw',
+           '~'fp'~ nw',
+   '| cms',                                     /* Ask             */
+   '| pick w1.1 \== ~Userid~',                  /* Remove this     */
+   '| f: fanout',                               /* Duplicate finds */
+   '| specs ~/'fp'/~ 1',
+           'w1.1 n',
+           'w3.1 nw',
+           'w4.1 nw',
+           'w2.1 nw',
+   '| specs fs - f1 1 f2 59',                   /* Adjust layout   */
+   '| specs w1.1 1',                            /* Calculate &     */
+        'm: w2.1 .',                            /*   Adjust        */
+        'u: w3.1 .',                            /*    Layout       */
+        'set (#0:=u*4;#1:=m*4;#2:=(m-u)*4)',    /* .               */
+        'print #1 nw ',                         /* .               */
+        'print #0 nw ',                         /* .               */
+        'print #2 nw ',                         /* .               */
+        'w4.1 nw',                              /* .               */
+        'w5;* nw',                              /* .               */
+   '| j: juxtapose',                            /* Side by side    */
+   '| specs w1;-3 1',
+           '~/~ nw',
+           'w-1;-1 n',
+           'w1.1 n ',
+           'w-2;-2 nw',
+   '| specs w1.1 nw w2.1 nw w3.1 nw ',
+           'w4.1 nw w5.1 nw w6;* nw',
+   '| stem out. append',                        /* Add 2 stem      */
+   '? f:',                                      /* Conn 2 fanout   */
+   '| specs ~QUERY MDISK USER~ 1',
+           'w1.1 nw',
+           '~0 DIR~ nw',
+   '| cp',                                      /* Ask cp          */
+   '| if: if pick w1.1 == ~HCPQMD053E~',        /* If....          */
+   '|     specs ~ BFS ~ 1',                     /*  then it is...  */
+   '| if:',                                     /* Conn 2 if       */
+   '|     specs ~ SFS ~ 1',                     /*  else it is...  */
+   '| if:',                                     /* End if          */
+   '| j:',                                      /* CONN 2 JUXTAPOSE*/
+   '? n:',
+   '| cons'
+Drop fp
+Return
+ 
+ 
+Get_Dirm_Storage_Groups:
+numeric digits 64
+/*---------------------------------------------------------------+
+| If not filled...do a default                                   |
++---------------------------------------------------------------*/
+If storagerps<>'' Then Do
+                   'PIPE (NAME HOBVMDSK.EXEC:264 END ?)',
+                       'var storagerps',             /* Take this        */
+                       '| split at ;',           /* Split here       */
+                       '| stem group.'           /* Hand 2 rexx      */
+                   End
+                   Else storagerps='CMSDISKS'
+/*---------------------------------------------------------------+
+| Some settings and access the info                              |
++---------------------------------------------------------------*/
+fs='FF'x
+Address CMS 'VMLINK * 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Read some files and check some details                         |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMDSK.EXEC:280 END ?)',
+    '< EXTENT CONTROL 'wfm,                      /* Read this file   */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~~ and 1.1 \== ~*~',         /* Ignore these     */
+    '| i: inside anycase ~:REGIONS.~ ~:END.~',   /* Select this part */
+    '| stem reg.',                               /* Store as         */
+    '? i:',                                      /* Conn 2 inside    */
+    '| join * xFF',                              /* Make 1 record    */
+    '| split anycase before string ~:GROUPS.~',  /* Split here       */
+    '| split anycase after  string ~:END.~',     /* ...and here      */
+    '| pick anycase fs 'fs' f1 ==  ~:GROUPS.~',  /* Select this      */
+    '| split at 'fs,                             /* Split here       */
+    '| nlocate anycase ~(ALLOCATE~',             /* Ignore this      */
+    '| drop first 1',                            /* Remove heading   */
+    '| drop last 1',                             /* ...and trailer   */
+    '| specs w1.1 1.8 w2;* nw',                  /* Rework layout    */
+    '| join keylen 8',                           /* Join on groupname*/
+    '| stem grp.',                               /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'cms LISTFILE * VCONTROL 'wfm' (NOH',        /* Ask cms          */
+    '| stem vctrl.'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Loop thru the requested groups                                 |
++---------------------------------------------------------------*/
+Do g=1 To group.0
+   'PIPE (NAME HOBVMDSK.EXEC:305 END ?)',
+       'stem grp.',                              /* Take this        */
+       '| locate anycase ~'group.g'~',           /* Find this group  */
+       '| specs w2;* strip 1',                   /* Remove groupname */
+       '| split',                                /* Split            */
+       '| specs ~/~ 1 w1.1 n ~/~ n',             /* Add /'s          */
+       '| join * ~!~',                           /* Make 1 record    */
+       '| specs x4F 1 ~ALL~ nw 1;* nw',          /* Conv 2 pipe stmt */
+       '| var selreg'                            /* Store as         */
+   If selreg='' | selreg='SELREG' Then Iterate   /* Iterate w. empty */
+   'PIPE (NAME HOBVMDSK.EXEC:315 END ?)',
+       'stem reg.',                              /* Take these       */
+       selreg,                                   /* Select these     */
+       '| specs ~/~ 1 w2.1 n ~/~ n',             /* Add /'s          */
+       '| join * ~!~',                           /* Make 1 record    */
+       '| specs x4F 1 ~ALL~ nw 1;* nw',          /* Conv 2 pipe stmt */
+       '| var selvol'                            /* Store as         */
+   Call Get_Dirm_Group_Data
+End g
+Address CMS 'VMLINK * 1DF <DET (NONAMES QUIET'
+Drop group. grp. reg. vctrl. selreg selvol
+Return
+ 
+ 
+Get_Dirm_Group_Data:
+/*---------------------------------------------------------------+
+| Get all the group data, start,end  and sizes and calculate     |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMDSK.EXEC:333 END ?)',
+    'stem vctrl.',                               /* Take these       */
+    selvol,                                      /* Select volumes   */
+    '| getfiles',                                /* Read the files   */
+    '| n: nlocate anycase 1.3 ~MAX~',            /* Filter out these */
+    '| pick anycase w1.1 == ~ENTRY=~',           /* Select these     */
+    '| specs a: w3.1 . ',                        /* Calculate        */
+            'b: w2.1 .',                         /* ...the sizes     */
+            'set #0:=(a-b)+1',                   /* .                */
+            'print #0 pic -------------9 1',     /* .                */
+    '| specs printonly eof',                     /* Summ the sizes   */
+            'c: w1.1 .',                         /* .                */
+            'set #1+=c',                         /* .                */
+            'eof',                               /* .                */
+            'print #1 pic -------------9 1',     /* .                */
+    '| specs ~2~ 1 w1.1 nw',                     /* Add indicator    */
+    '| fi: faninany',                            /* Take in others   */
+    '| sort w1.1',                               /* Sort 4 right ordr*/
+    '| specs w2.1',                              /* Remove indicator */
+    '| join * x40',                              /* Make 1 record    */
+    '| specs 1;* 1',                             /* Calculate        */
+            'e: w1.1 .',                         /* ...the used space*/
+            'f: w2.1 .',                         /* .                */
+            'set #3:=e-f',                       /* .                */
+            'print #3 pic -------------9 nw',    /* .                */
+    '| specs 1;* 1',                             /* Add a percentage */
+            'g: w1.1 .',                         /* .                */
+            'h: w2.1 .',                         /* .                */
+            'set #4:=(h/g)*100',                 /* .                */
+            'print #4 pic zz9.99 nw',            /* .                */
+    '| if: if pick fs . substr w1.1 of f2 >> ~50~',   /* If value after   */
+    '|     specs fs . f1',                       /* dec. point is    */
+    '|     specs w1.3 1 ',                       /* ...higher        */
+                'm: w4.1 .',                     /* ....than 50      */
+                'set #8:=m+1',                   /* Increment 1      */
+                'print #8 nw',                   /* .                */
+    '| if:',                                     /* Conn 2 if        */
+    '|     specs fs . f1',                       /* Remove aft dec.p */
+    '| if:',                                     /* Conn 2 if        */
+    '| specs ~/DIRMAINT/'group.g'/~ 1',          /* Prep 4 output    */
+            'i: w1.1 .',                         /* .                */
+            'j: w2.1 .',                         /* .                */
+            'k: w3.1 .',                         /* .                */
+            'set #5:=i/2',                       /* .                */
+            'set #6:=j/2',                       /* .                */
+            'set #7:=k/2',                       /* .                */
+            'print #5 nw',                       /* .                */
+            'print #6 nw',                       /* .                */
+            'print #7 nw',                       /* .                */
+            'w4.1 nw',                           /* .                */
+            '~% /DIRMAINT/'group.g'/~ n',        /* .                */
+    '| stem out. append',                        /* Append 2 stem    */
+    '? n:',                                      /* Conn 2 nlocate   */
+    '| specs printonly eof',                     /* Calculate        */
+            'd: w2.1 .',                         /* ...total         */
+            'set #2+=d',                         /* ....amount of    */
+            'eof',                               /* .....space       */
+            'print #2 pic -------------9 1',     /* .                */
+    '| specs ~1~ 1 w1.1 nw',                     /* Add indicator    */
+    '| fi:'                                      /* Conn 2 faninany  */
+Return
+ 
+ 
+Write_Details:
+/*---------------------------------------------------------------+
+| Write to the file, take out. and add headers                   |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMDSK.EXEC:400 END ?)',
+   'stem out. ',                                 /* Take these       */
+   '| pick w2.1 \== ~0~',                        /* Ignore these     */
+   '| specs  w1.1 1.18 left w2.1 nw.10 right',   /* Rework layout    */
+            'w3.1 nw.10 right w4.1 nw.10 right', /* .                */
+            'w5.1 nw.3 right w6.1 nw',           /* .                */
+            'pad 0 substr 1;-2 of w5 nw.3 right',   /* .                */
+   '| sort w-1;-1 desc',                         /* Sort highest 1st */
+   '| specs w1.4 1',                             /* Adjust percentage*/
+           'a: substr 1;-2 of w5.1 .',           /* .                */
+           'set #0:=a',                          /* .                */
+           'print #0 pict zz9 nw',               /* .                */
+           '~%~ n',                              /* .                */
+           'w6;* nw',                            /* .                */
+   '| specs w1;-2',                              /* Keep this        */
+   '| preface literal Filesystem             kbytes       Used      Avail Capacity Mounted as',
+   '| preface literal [df] ',                    /* Add hdr          */
+   '| > 'outfile                                 /* Store as         */
+Return

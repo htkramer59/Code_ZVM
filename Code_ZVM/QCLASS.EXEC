@@ -1,0 +1,86 @@
+/*---------------------------------------------------------------+
+| Function : Ask DIRMAINT which CP classes we have...            |
+|                                                                |
+| File     : QCLASS   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SAPI     EXEC                                       |
+|                                                                |
+| Called   : QCLASS   <user id> <classes>                        |
+|                                                                |
+| Comments : If called as function it returns 1 if the classes   |
+|            are found, 0 when one or more classes is missing.   |
+|            When not called as a function it will return        |
+|            standard rc's and a message                         |
+|            Need DIRMAINT admin                                 |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220819 15:17:06                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid qclasses .
+Parse Source . how myfn myft .
+If how='FUNCTION' Then func=1
+                  Else func=0
+/*---------------------------------------------------------------+
+| Asses the input                                                |
++---------------------------------------------------------------*/
+If arg1='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME QCLASS.EXEC:32 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+If uid=''    Then Do
+                  If func Then Call Exit '0'
+                          Else Call Exit '28 No uid specified'
+                  End
+If qclasses='' Then Do
+                  If func Then Call Exit '0'
+                          Else Call Exit '128 No CLASSES to query'
+                  End
+/*---------------------------------------------------------------+
+| Check if the user id exists                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME QCLASS.EXEC:49 END ?)',
+    'cp QUERY MDISK USER 'uid' 0 DIR',
+    '| hole'
+If rc='53' Then Do
+                If func Then Call Exit '0'
+                        Else Call Exit rc' Id 'uid' does not exist'
+                End
+/*---------------------------------------------------------------+
+| Load the SAPI code                                             |
++---------------------------------------------------------------*/
+Address CMS 'EXECLOAD SAPI EXEC * = REXX'
+'PIPE (NAME QCLASS.EXEC:60 END \)',
+   'sapi for 'uid' class ?',                     /* Ask dirmaint     */
+   '| specs w2.1',                               /* Keep this        */
+   '| deblock 1',                                /* Split into chars */
+   '| l: lookup 1.1 1.1 master',                 /* Compare          */
+   '| count lines',                              /* How many         */
+   '| var fndcnt',                               /* Hand 2 rexx      */
+   '\',                                          /* .                */
+   'var qclasses',                               /* Take this        */
+   '| deblock 1',                                /* Split into chars */
+   '| f: fanout',                                /* Dupl. records    */
+   '| l:',                                       /* Conn 2 lookup    */
+   '\ f:',                                       /* Conn 2 fanout    */
+   '| count lines',                              /* How many         */
+   '| var askcnt'                                /* Hand 2 rexx      */
+exrc=fndcnt%askcnt                               /* Set rc 2 1/0     */
+If \func & \exrc Then Call Exit '228 One or more CLASSES missing: 'qclasses
+                 Else Call Exit exrc
+Exit:
+/*---------------------------------------------------------------+
+| Unload the sapi code                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+'PIPE (NAME QCLASS.EXEC:83 END ?) CMS EXECDROP SAPI REXX | hole'
+If Datatype(exrc,'NUM') & \func & errmsg<>'' Then Say errmsg' reasoncode: 'exrc
+If exrc>1 Then exrc=0
+Exit exrc

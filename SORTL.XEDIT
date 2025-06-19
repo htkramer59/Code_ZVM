@@ -1,0 +1,111 @@
+/* ======================================================================
+ SORTL XEDIT uses the COL MACRO to sort lists and all the text
+ associated with each list item.  Such tags may include:
+             :dt        :h2
+             :li        :row.:c.
+             :gt        :nick
+ 
+ Example:    <<->>                                   <<->>
+             SORTL ?????????????                     ===== ?????????????
+             ===== :li.Item 2                        ===== :li.Item 1
+             ===== :p.This item     would sort as:   ===== :p.OK item.
+             ===== is very good.                     ===== :li.Item 2
+             ===== :li.Item 1                        ===== :p.This item
+             ===== :p.OK item.                       ===== is very good.
+             <<->>                                   <<->>
+ 
+ SYNTAX:  While in a COL session, enter in the COL prefix area:
+          SORTL ????????????????????????????????????
+    or enter in the XEDIT command line:
+          ====> SORTL
+    or for a step by step demonstration enter in the XEDIT command line:
+          ====> SORTL DEMO
+ 
+ SYNTAX:  If not in a COL session, enter in the XEDIT command line:
+          ====> SORTL target
+ 
+ The first column line or current line must contain the tag being sorted.
+ 
+ The range specified must NOT contain the starting or ending tags such as
+     :ol, :eol, :dl, or :edl
+ which may already be entered above or below the list.
+ 
+ All tags must be identical.
+     :li.         and
+     :li id=xxxx. mixture is not supported.
+ 
+ NOTE: Nested lists with the same tag, such as nested definition lists
+       using :dt or nested simple, ordered, or unordered lists all using
+       :li must first be isolated as follows:
+ 
+    1)  The nested list must be removed from the text by PUTing it into a
+        separate file.  Replace with some kind of "place holder" line
+        within the file then GET back the nested list after the sort.
+ 
+ or 2)  Alternately within the nested list you could insert a prefix
+        character in column 1 such as an asterisk using COL /i*?????????
+        so that the nested list would no longer be:
+ 
+            :ol.                                    *:ol.
+            :li.         but rather would be:       *:li.
+            :etc.                                   *:etc.
+            ::ol.                                   *::ol.
+ 
+       After the sort, the prefix character could be deleted.
+ 
+ Gary Vair 11/92    (Thanks to John Darrow for asking for such a routine)
+====================================================================== */
+ 
+ Parse Source . . fn ft .                 /* Who am I?                 */
+ If Arg(1) = '?' Then Do                  /* Help request?             */
+    'PIPE <' fn ft,
+     '| between ?/* ====? ?=====?',
+     '| drop first',
+     '| drop last',
+     '| console'
+   Exit
+   End
+ 
+ Parse Arg target .
+ If Translate(target) = 'DEMO' Then Do    /* Demonstration request?    */
+     step = 'STEP'
+     target = ''
+   End
+   Else step = ''
+ 
+ 
+ char = 20                               /* lenth of sorted characters */
+'COMMAND SET ZONE 1 *'                   /* Make sure we use max avail */
+'COMMAND SET TRUNC  *'                   /* Make sure we use max avail */
+                                         /* When no target is entered  */
+ If target = '' Then Do                  /*  then this must be a call  */
+                                         /*  while in a COL session.   */
+  'COMMAND LOCATE .COLEND'               /*  COL range targets will be */
+   If rc > 1 Then Do                     /*  used.  Error if not found */
+    'EMSG Must enter "'fn 'target" when invoked outside of a COL session.'
+     Exit
+   End
+  'COMMAND EXTRACT /LINE'
+   target = ':'line.1                     /* COL ending target         */
+  'COMMAND LOCATE .COLSTRT +1'            /* start at top of column    */
+ End
+ 
+'COMMAND EXTRACT /CURLINE/TRUNC/ZONE'
+ Parse var curline.3 tag '.' .            /* Get the tag and text      */
+ ltag = Length(tag)+1
+ 
+ Queue 'COLPCM X 'tag                /* Exclude the tag being sorted   */
+ Queue 'COLCMD /A'ltag+char          /* Move remaining text to right   */
+ Queue 'COLXED ALL'                  /* Show all lines                 */
+ Queue 'COLCMD' Copies('@',ltag)'E'char /* Emulate the tag text        */
+ Queue 'COLCMD' Copies('?',ltag)||Copies('S',char)  /* Sort the list   */
+ Queue 'COLPCM X 'tag                /* Exclude the tag being sorted   */
+ Queue 'COLCMD D'ltag+char           /* Delete inserted fields         */
+ Queue 'COLXED ALL'                  /* Show all lines                 */
+ Queue 'COLXED TOP'                  /* Move back to top of column     */
+                                     /*  exclude line movement         */
+ Queue 'ECOL'                        /* Exit this COL session          */
+'MACRO COL' target '? @ NOEXIT' step
+ 
+'COMMAND SET ZONE' zone.1 zone.2     /* Restore user settings          */
+'COMMAND SET TRUNC' trunc.1

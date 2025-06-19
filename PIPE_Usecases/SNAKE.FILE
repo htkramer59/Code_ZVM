@@ -1,0 +1,16 @@
+CLDCONB1 - DSC      ICUFTP   - DSC      SSL00001 - DSC      VSM     - TCPIP     
+CONPARK  - DSC      ICUTEST  - DSC      SSL00002 - DSC      VSMEVSRV - DSC      
+DATAMOVE - DSC      IPGATE   - DSC      SSL00003 - DSC      VSMGUARD - DSC      
+DATAMOV2 - DSC      LOHCOST  - DSC      SSL00004 - DSC      VSMREQIN - DSC      
+DIRMAINT - DSC      MONWRITE - DSC      SSL00005 - DSC      VSMREQIU - DSC      
+DISKACNT - DSC      OPERATNS - DSC      SUSE12   - DSC      VSMREQI6 - DSC      
+DTCSMAPI - DSC      OPERATOR - DSC      SUSE15   - DSC      VSMWORK1 - DSC      
+DTCVSW1  - DSC      OPERSYMP - DSC      TCPIP    - DSC      VSMWORK2 - DSC      
+DTCVSW2  - DSC      OPNCLOUD - DSC      TEST5    - DSC      VSMWORK3 - DSC      
+DTCVSW3  - DSC      PERFSVM  - DSC      TEST6    - DSC      WAVESRV  - DSC      
+DTCVSW4  - DSC      PERSMAPI - DSC      VMNFS    - DSC      WAVEWRKC - DSC      
+EREP     - DSC      PORTMAP  - DSC      VMSERVP  - DSC      WAVEWRKL - DSC      
+FTPSERVE - DSC      RSCS     - DSC      VMSERVR  - DSC      WAVEWRKS - DSC      
+GCS      - DSC      RSCSAUTH - DSC      VMSERVS  - DSC      XYMONSRV - DSC      
+HERALD   - DSC      RSCSDNS  - DSC      VMSERVU  - DSC      XYMONVM  - DSC      
+HERMAN   -L0006     SSLDCSSM - DSC      VMUTIL   - DSC      

@@ -1,0 +1,562 @@
+/*---------------------------------------------------------------+
+| Function : Client code for the CODE versioning tool            |
+|                                                                |
+| File     : CODE_C   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : TALK2    EXEC   communicate with a server           |
+|                                                                |
+| Called   : CODE_C   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220321 09:29:56                                   |
+| Changes  : .                                                   |
+|            20220415 H.T.Kramer : fixed problem with EDIT,      |
+|                     Project & languages                        |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg details
+Parse Source . . myfn myft .
+ 
+'PIPE (NAME CODE_C.EXEC:25 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var node',                          /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+ 
+/*---------------------------------------------------------------+
+| Decide what to do                                              |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC'  Then Call Run_Exec
+When myft='XEDIT' Then Call Run_Xedit
+Otherwise Call Exit '99 Can not handle 'myfn myft
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Run_Exec:
+/*---------------------------------------------------------------+
+| Run as EXEC                                                    |
++---------------------------------------------------------------*/
+Call GetVars '2'
+/*---------------------------------------------------------------+
+| Shift some of the variables                                    |
++---------------------------------------------------------------*/
+If lang='' Then Do
+           lang=code
+           code=cmd
+           End
+'PIPE (NAME CODE_C.EXEC:64 END ?)',
+   'cms VMLINK SERVER (QUERY ONLY(CODE)',        /* Ask VMLINK       */
+   '| pick 1.1 == ~:~',                          /* Select these     */
+   '| pick anycase w1.1 == ~:USERID~',           /* Select this one  */
+   '| specs w2.1',                               /* Reduce to this   */
+   '| var server',                               /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cms VMLINK DEF_LANG (ONLY(CODE) QUERY',      /* Get some defaults*/
+   '| drop first 2',                             /* .                */
+   '| take first 1',                             /* .                */
+   '| specs ~/DEF_LANG/~ 1 w2.1 n',              /* .                */
+   '| fi: faninany',                             /* .                */
+   '| varload',                                  /* .                */
+   '?',                                          /* .                */
+   'cms VMLINK DEF_PROJ (ONLY(CODE) QUERY',      /* Ans some more    */
+   '| drop first 2',                             /* .                */
+   '| take first 1',                             /* .                */
+   '| specs ~/DEF_PROJ/~ 1 w2.1 n',              /* .                */
+   '| fi:'                                       /* .                */
+If cmd='ADMIN' Then Do
+               Address CMS 'CODE_A'
+               Call Exit
+               End
+If code='' Then code='*'
+If lang='' Then lang=def_lang
+If proj='' Then proj=def_proj
+exldd=0
+Parse Source . . myfn myft .
+'PIPE (NAME CODE_C.EXEC:92 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',                   /* Is this loaded   */
+   '| nfind DMS',                                /* Ignore this      */
+   '| drop first 1',                             /* Ignore header    */
+   '| count lines',                              /* Count lines      */
+   '| var exldd'                                 /* Store as boolean */
+If \exldd Then Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+/*---------------------------------------------------------------+
+| Access the target                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'proj' (ONLY(CODE) NOTYPE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc' Problem accessing repository'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+outfile=proj' INVENTRY A'
+local.0=0
+'PIPE (NAME CODE_C.EXEC:110 END ?)',
+   'cms LISTFILE 'code lang'* 'wfm'(NOH ISO',    /* Ask cms          */
+   '| pick substr 1.1 of w2.1 \== ~-~',          /* .                */
+   '| sort count w1.1',                          /* Sort and count   */
+   '| specs 11;* 1 1.10 strip nw.4 right',       /* Move count 2 back*/
+   '| specs w1.2 1.18 w4;* nw',                  /* Adjust           */
+   '| append disk code status 'wfm,              /* Add this         */
+   '| fi: fanin',                                /* Take in others   */
+   '| pick 1.1 \== ~*~',                         /* Ignore these     */
+   '| sort w1.1',                                /* Sort on names    */
+   '| join keylen 17',                           /* Join on fn & ft  */
+   '| pad right 140',                            /* Adjust reclen    */
+   '| pick w7.1 \== ~~',                         /* Take these       */
+   '| > 'outfile,                                /* Write to file    */
+   '?',                                          /* 2nd pipe         */
+   'cms LISTFILE 'code lang' A (NOH ISO',        /* Ask cms          */
+   '| specs w1.3 1 w-2;-1 nw',                   /* Keep this        */
+   '| specs w1.2 1.18 substr 1.1 of w3.1 nw w4;* nw',   /* Add to this      */
+   '| fi:'                                       /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Release the target                                             |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) NOTYPE'
+/*---------------------------------------------------------------+
+| Start XEDIT session                                            |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'outfile' (PROFILE 'myfn
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+Address CMS 'ERASE 'outfile
+If \exldd Then Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+Run_Xedit:
+/*---------------------------------------------------------------+
+| Run as XEDIT macro                                             |
++---------------------------------------------------------------*/
+Select
+When details='GET'  Then Call Get_Code
+When details='REPL' Then Call Replace_Code
+When details='ADD'  Then Call Add_Code
+When details='EDIT' Then Call Edit_Code
+When details='UNDO' Then Call Undo_Code
+When details='SYNC' Then Call Sync_Code
+When details='DEPL' Then Call Deploy_Code
+Otherwise Call Display
+End
+Return
+ 
+ 
+Get_Code:
+/*---------------------------------------------------------------+
+| Get a copy of the code and place it on the A-disk              |
++---------------------------------------------------------------*/
+Call GetVars '1'
+Call Get_Info
+If Wordpos('Locked',curline.3)=0 Then Do
+filetime=Subword(curline.3,7,2)
+lock=0
+Address CMS 'TALK2 'server' LOCK 'fnft '(' proj
+lock=rc
+If lock Then Do
+   Address CMS 'VMLINK 'proj' (ONLY(CODE) NOTYPE INVOKE COPYFILE 'fnft' .fm = = A (OLDDATE'
+   If rc=0 Then Do
+             'CLOCATE :80'
+             'COVERLAY Locked 'Date('S') Time() Userid()' A 'filetime
+             Call Error 'File 'fnft' copied to A-disk'
+             End
+        Else Call Error 'Problem copying 'fnft  rc' from COPYFILE'
+   End
+   End
+   Else Call Error'Can not obtain 'fnft' status is LOCKED'
+':'oldpos
+Return
+ 
+ 
+Replace_Code:
+/*---------------------------------------------------------------+
+| Move the copy of the code from the A-disk to the repository    |
++---------------------------------------------------------------*/
+Call GetVars '1'
+Call Get_Info
+If Wordpos('Locked',curline.3)<>0  Then locked=1
+                                  Else locked=0
+If Wordpos(Userid(),curline.3)<>0 Then owner=1
+                                  Else owner=0
+rpl=0
+unl=0
+If locked & owner Then Do
+    Address CMS 'SENDFILE 'fnft' A 'server' (NOLOG NOTYPE'
+    If rc=0 Then sf=1
+            Else sf=0
+    If sf Then Do
+          Address CMS 'TALK2 'server' REPLACE 'fnft '(' proj
+          rpl=rc
+          End
+    If rpl Then Do
+           Address CMS 'TALK2 'server' UNLOCK 'fnft '(' proj
+           unl=rc
+           End
+    If rpl & unl Then Do
+           Address CMS 'ERASE 'fnft' A'
+           'CLOCATE :80'
+           'COVERLAY 'Copies('_',55)
+           End
+    End
+    Else Call Error' Can not obtain 'fnft' status is LOCKED but not by 'Userid()
+':'oldpos
+Return
+ 
+ 
+Add_Code:
+/*---------------------------------------------------------------+
+| Add new code to the repository/code holder                     |
++---------------------------------------------------------------*/
+Call GetVars '1'
+':1'
+line='%W>>>>%WFilename:%g________%WFiletype:%g________%WReceiving server:%g'server'%W--> Press ENTER to Confirm'
+'SET RESERVED 4 non noh 'line
+'CURSOR SCREEN 4 17'
+Call Read_Update
+If pfk.0<>0 Then Do
+            If pfk.1='QQUIT' Then Do
+                             Call Error 'Add aborted'
+                             'SET RESERVED 4 OFF'
+                             ':1'
+                             Return
+                             End
+                             Else Address XEDIT pfk.1
+            End
+            Else Do
+            If res.0<>0 Then fnft=res.1 res.2
+            Address CMS 'PIPE (NAME CODE_C.EXEC:244 END ?)',
+                'cms LISTFILE 'fnft' A (NOH ISODATE',        /* Ask this         */
+                '| specs w1.2 1 w4;* 20 ~   1 File added~ nw',   /* Add text         */
+                '| p: pick 1.3 \== ~DMS~',                   /* Ignore these     */
+                '| var newfile',                             /* Hand 2 rexx      */
+                '? p:',                                      /* Conn 2 pick      */
+                '| count lines',                             /* Count them       */
+                '| var error'                                /* Hand 2 rexx      */
+            If \error Then Do
+                           lock=0;sf=0;add=0;unl=0
+                           Address CMS 'TALK2 'server' LOCK 'fnft '(' proj
+                           lock=rc
+                           If lock Then Do
+                               Address CMS 'SENDFILE 'fnft' A 'server' (NOLOG NOTYPE'
+                               If rc=0 Then sf=1
+                                       Else sf=0
+                           If sf Then Do
+                               Address CMS 'TALK2 'server' ADD 'fnft '(' proj
+                               add=rc
+                               End
+                           If lock Then Do
+                              Address CMS 'TALK2 'server' UNLOCK 'fnft '(' proj
+                              unl=rc
+                              End
+                           If add & unl Then Do
+                              Address CMS 'ERASE 'fnft' A'
+                              'INPUT 'newfile Subword(TimeStamp(),1,2)
+                              ':1'
+                              'SORT * a 1 8'
+                              End
+                           End
+                      Else Call Error 'Can not add 'fnft', file does not exist'
+            ':1'
+            End
+'SET RESERVED 4 OFF'
+Return
+ 
+ 
+Undo_Code:
+/*---------------------------------------------------------------+
+| Go back 1 version                                              |
++---------------------------------------------------------------*/
+Call GetVars '1'
+Call Get_Info
+If Word(curline.3,10)<>'' Then Call Error 'Can not UNDO code from A-disk or locked code'
+Else Do
+lock=0;undo=0;unl=0
+Address CMS 'TALK2 'server' LOCK 'fnft '(' proj
+lock=rc
+If lock Then Do
+        Address CMS 'TALK2 'server' UNDO 'fnft '(' proj
+        undo=rc
+        End
+If lock & undo Then Do
+        Address CMS 'TALK2 'server' UNLOCK 'fnft '(' proj
+        unl=rc
+        End
+If \unl Then 'EMSG UNDO operation failed for 'fnft proj
+End
+':'oldpos
+Return
+ 
+ 
+Sync_Code:
+/*---------------------------------------------------------------+
+| Synchronise the code over all the repositories                 |
++---------------------------------------------------------------*/
+Call GetVars '1'
+Call Get_Info
+If Word(curline.3,10)<>'' Then Call Error 'Can not SYNC code from A-disk or locked code'
+Else Do
+  Call Get_DistList
+  line1='%W>>>>%WSynching code:%G'Substr(fnft,1,17)'%Wto:%g'distlist'%W'
+  line2='%W>>>>%WPress ENTER to start SYNC'
+  'SET RESERVED 4 NON NOH 'line1
+  'SET RESERVED 5 NON NOH 'line2
+  'CURSOR SCREEN 4 44'
+  Call Read_Update
+  If pfk.0<>0 Then Do
+            If pfk.1='QQUIT' Then Do
+                             Call Error 'SYNC action aborted'
+                             'SET RESERVED 4 OFF'
+                             'SET RESERVED 5 OFF'
+                             ':1'
+                             Return
+                             End
+                             Else Address XEDIT pfk.1
+            End
+            Else Do
+            If res.0=0 Then nodes=Translate(distlist)
+                       Else nodes=res.1
+            Address CMS 'TALK2 'server' LOCK 'fnft '(' proj
+            Address CMS 'TALK2 'server' SYNC 'fnft '(' proj
+            Address CMS 'TALK2 'server' UNLOCK 'fnft '(' proj
+            Address CMS 'CODEFTP 'fnft proj nodes
+            Address CMS 'TALK2 'server' CLEAN 'Word(fnft,1) proj' (OUT'
+            End
+  End
+'SET RESERVED 4 OFF'
+'SET RESERVED 5 OFF'
+':'oldpos
+Return
+ 
+ 
+Deploy_Code:
+/*---------------------------------------------------------------+
+| Deploy the code to its final destination                       |
++---------------------------------------------------------------*/
+Call GetVars '1'
+Call Get_Info
+If Word(curline.3,10)<>'' Then Call Error 'Can not DEPLoy code from A-disk or locked code'
+     Else Do
+     Call Get_DistList
+     line1='%W>>>>%WDeploy code:%G'Substr(fnft,1,17)'%Wto:%g'distlist'%W'
+     line2='%W>>>>%WPress ENTER to DEPLoy code'
+     'SET RESERVED 4 NON NOH 'line1
+     'SET RESERVED 5 NON NOH 'line2
+     'CURSOR SCREEN 4 42'
+     Call Read_Update
+     If pfk.0<>0 Then Do
+                 If pfk.1='QQUIT' Then Do
+                                  Call Error 'DEPLoy action aborted'
+                                  'SET RESERVED 4 OFF'
+                                  'SET RESERVED 5 OFF'
+                                  ':1'
+                                  Return
+                                  End
+                                  Else Address XEDIT pfk.1
+                 End
+                 Else Do
+                 nodes=''
+                 Do c=1 To col.0
+                    Select
+                    When col.c='42' Then nodes=res.c
+                    When col.c='68' Then targ_id=res.c
+                    When col.c='78' Then targ_cuu=res.c
+                    Otherwise Nop
+                    End
+                 End c
+                 If res.0=0 Then nodes=Translate(distlist)
+                            Else nodes=res.1
+                   Address CMS 'TALK2 'server' DEPL 'fnft proj Userid() node nodes
+                   depfile=rc
+                   If depfile Then Do
+                      Address CMS 'CODEFTP 'Word(fnft,1)' DEPL* 'proj nodes
+                      Address CMS 'TALK2 'server' CLEAN 'Word(fnft,1)' DEPL* (OUT'
+ 
+                   End
+            End
+     End
+'SET RESERVED 5 OFF'
+'SET RESERVED 4 OFF'
+':'oldpos
+Return
+ 
+ 
+Edit_Code:
+/*---------------------------------------------------------------+
+| Edit the code on the A-disk, if present                        |
++---------------------------------------------------------------*/
+Call Get_Info
+filetime=Subword(curline.3,7,2)
+'PIPE (NAME CODE_C.EXEC:406 END ?)',
+   'statew 'fnft' A',                            /* Check if exist  */
+   '| count lines',                              /* How many         */
+   '| var edok'                                  /* Store as boolean */
+If edok Then fm='A'
+        Else fm='.'
+If fm='A' Then Do
+    Address CMS 'XEDIT 'fnft fm
+    Address CMS 'PIPE (NAME CODE_C.EXEC:414 END ?)',
+       'literal 'fnft' A',                       /* Add this         */
+       '| statew iso',                           /* Get timestamp    */
+       '| specs w-2;-1 1',                       /* Keep this        */
+       '| var newtime'                           /* Store as         */
+    If newtime<>filetime Then Do
+                              'CLOCATE :54'
+                              'COVERLAY *'newtime'*'
+                              Call Error 'File 'fnft fm' has changed'
+                               End
+                         Else Call Error fnft fm' remains unchanged'
+    End
+    Else Call Error 'Can not edit 'fnft
+':'oldpos
+Return
+ 
+ 
+Read_Update:
+/*---------------------------------------------------------------+
+| Read updates from the screen...                                |
++---------------------------------------------------------------*/
+pfk.0=0
+res.0=0
+'READ ALL TAG'
+Address CMS 'PIPE (NAME CODE_C.EXEC:438 END ?)',
+    'stack',                                     /* Take from stack  */
+    '| p: pick w1.1 == ~PFK~',                   /* Select these     */
+    '| specs w3;* 1',                            /* Keep this        */
+    '| stem pfk.',                               /* Hand 2 rexx      */
+    '? p:',                                      /* Conn 2 pick      */
+    '| pick w1.1 == ~RES~',                      /* Select these     */
+    '| f: fanout',                               /* Duplicate recs   */
+    '| specs w4;* 1',                            /* Keep this        */
+    '| strip trailing ~_~',                      /* Remove underscore*/
+    '| xlate upper',                             /* Uppercase        */
+    '| stem res.',                               /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs w3.1',                              /* Keep this        */
+    '| stem col.'                                /* Hand 2 rexx      */
+Return
+ 
+ 
+Error:
+/*---------------------------------------------------------------+
+| Show the error message                                         |
++---------------------------------------------------------------*/
+Parse Arg emsgline
+'EMSG 'Copies(' ',6)'>>>> 'emsgline
+Return
+ 
+ 
+Get_Info:
+/*---------------------------------------------------------------+
+| Get info                                                       |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE'
+oldpos=line.1
+':'cursor.3
+'EXTRACT /CURLINE'
+fnft=Subword(curline.3,1,2)
+fm=Word(curline.3,10)
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Start of the display here                                      |
++---------------------------------------------------------------*/
+ctlchars='% ESCAPE;',
+         'Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;',
+         'W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;',
+         'B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;',
+         'G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;',
+         'R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;',
+         '$ OFF'
+hdr='%WFileName FileType  Recfm  LRecl    Records     Blocks Date       Time     Gens  Status'
+pfkeys='Help Code;',
+       'Macro Code_C Get;',
+       'QQUIT;',
+       'Macro Code_C Undo;',
+       'Macro Code_C Sync;',
+       'Macro Code_C Depl;',
+       'Backward;',
+       'Forward;',
+       'Macro Code_C Add;',
+       'Macro Code_C Repl;',
+       'Macro Code_C Edit;',
+       'QQUIT'
+pfline='1=Help;2=Get;3=Quit;4=Undo;5=Sync;6=Deploy;7=Back;8=Forw;9=Add;10=Replace;11=Edit;12=Quit'
+Call GetVars '1'
+Address CMS 'PIPE (NAME CODE_C.EXEC:504 END ?)',
+   'var ctlchars',                               /* Take this        */
+   '| split at ;',                               /* Split            */
+   '| specs ~SET CTLCHAR~ 1 1;* nw',             /* Compose cmds     */
+   '| fi: fanin',                                /* Take in others   */
+   '| subcom xedit',                             /* Hand 2 xedit     */
+   '?',                                          /* 2nd pipe         */
+   'var pfkeys',                                 /* Take this var    */
+   '| dup 1',                                    /* Duplicate        */
+   '| split at ;',                               /* Split            */
+   '| specs ~SET PF~ 1 recno n 1;* nw',          /* Add recno        */
+   '| fi:',                                      /* Conn 2 fanin     */
+   '?',                                          /* 3rd pipe         */
+   'var pfline',                                 /* Take this var    */
+   '| split at ;',                               /* Split here       */
+   '| specs ~%W~ 1 1;* n',                       /* Add ctlchar      */
+   '| change ~=~=%G~',                           /* Add another      */
+   '| join * x40',                               /* Make 1 record    */
+   '| var pfline'                                /* Hand 2 rexx      */
+ 
+'CMDLINE TOP'
+'CURLINE ON 3'
+'SCALE ON 4'
+'SET RESERVED  3 NON NOH      'hdr
+'SET RESERVED -1 NON NOH      'pfline
+':1'
+Return
+ 
+ 
+GetVars:
+/*---------------------------------------------------------------+
+| Get the variables from a caller                                |
++---------------------------------------------------------------*/
+Parse Arg lvl .
+If lvl='' Then lvl=1
+Address CMS 'PIPE (NAME CODE_C.EXEC:539 END ?)',
+   'rexxvars 'lvl' toload',                      /* Take from caller */
+   '| varload'                                   /* Load them        */
+Return
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Get_DistList:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME CODE_C.EXEC:552 END ?)',
+  '< CODE NAMES *',                              /* Read this        */
+  '| pick 1.1 \== ~*~ and 1.1 \== ~~',           /* Ignore these     */
+  '| join * x40',                                /* Make 1 record    */
+  '| split anycase before string ~:NICK.DISTLIST~',   /* Split here       */
+  '| split anycase before string ~:USERS.~',     /* and here         */
+  '| pick anycase 1.6 == ~:NICK.~ and w-1;-1 == ~:NODE.'node'~',   /* Select this      */
+  '| specs fs . f3;* 1',                         /* Adjust           */
+  '| specs w1;-2 1',                             /* More adjusting   */
+  '| var distlist'                               /* Store as         */
+Return

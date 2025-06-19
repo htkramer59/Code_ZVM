@@ -1,0 +1,78 @@
+/*---------------------------------------------------------------+
+| Function : Show a topten of the users CPU usage                |
+|                                                                |
+| File     : TOPTEN   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TOPTEN   <loop>                                     |
+|                                                                |
+|                     If <loop> is empty it will display only    |
+|                     once  else it will display 20 times with   |
+|                     a wait times of 1 minute                   |
+|                                                                |
+| Comments : If this file is EXECLOADED as TOPTEN REXX it will   |
+|            function as a PIPE stage                            |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220624 16:00:15                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg loop .
+Parse Source . . myfn myft .
+Parse Source . . myfn myft .
+If loop='?' Then Do
+            'VMFCLEAR'
+             'PIPE (NAME TOPTEN.EXEC:29 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+Select
+When myft='EXEC' then Do
+                      pipcmd='PIPE'
+                      outstage='cons'
+                      End
+When myft='REXX' then Do
+                      pipcmd='CALLPIPE'
+                      outstage='*:'
+                      End
+Otherwise Exit 28
+End
+If loop<>'' Then Do
+            max=20
+            wake='WAKEUP +00:01:00 (CC CONS'
+            End
+            Else Do
+            max=1
+            wake=''
+            End
+Do m=1 To max
+     'VMFCLEAR'
+     pipcmd' (End ?)',
+         'vmc perfsvm user (3000',
+         '| drop first 4',
+         '| t: take first 2',
+         '| buffer',
+         '| fi: faninany',
+         '| 'outstage,
+         '? t:',
+         '| specs fs .',
+         '        w1.1 1.8',
+         '        pad 0',
+         '        substr w2.1 of f1 nw.3 right',
+         '        ~.~ n',
+         '        substr w1.1 of f2 n.2 left',
+         '        pad space',
+         '        w3;* nw.63 right',
+         '| sort w2.1 d',
+         '| take first 10',
+         '| fi:'
+     If wake<>'' Then Address CMS wake
+End m
+Exit:
+Exit

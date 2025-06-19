@@ -1,0 +1,25 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+PIPELINE commands may be applied to columns using the COL command "^" to
+exclude columns or the COL command "Y" to indicate which columns are to
+be included.  AFTER column exclude or include mode has been established
+you may enter your PIPELINE command.
+ 
+Example:  ===== YYYYYYYYYYYYYYYYYYYYYYYYYYY?????????????????????
+          ===== Trahern, (RS) Steve         3123 3493 841 001 3
+          ===== Vacek, (D) Doug             4151 4389 849 001 3
+          ===== Vair, (GG) Gary             9122      844 001 3
+          ===== Vela, (HA) Helen            6773 4940 A73 001 3
+          ===== Webb, (G) George            7184 6884 A73 001 3
+          ====> COLPIPE spec w 3.1 1 w 1.1 nextword | xlate , 40
+ 
+Yields:   ===== Steve Trahern               3123 3493 841 001 3
+          ===== Doug Vacek                  4151 4389 849 001 3
+          ===== Gary Vair                   9122      844 001 3
+          ===== Helen Vela                  6773 4940 A73 001 3
+          ===== George Webb                 7184 6884 A73 001 3

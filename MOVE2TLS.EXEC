@@ -1,0 +1,9 @@
+/*---------------------------------------------------------------+
+| Move files to tools directory, need ADMIN or permissions       |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm '(' options
+Parse Source . . myfn myft .
+If fn='' Then Exit 128
+If ft='' Then Exit 228
+If fm='' Then Exit 328
+Address CMS 'VMLINK TOOLS (QUIET WRITE INVOKE REPLACE 'fn ft fm .fm '(' options

@@ -1,0 +1,232 @@
+/*---------------------------------------------------------------+
+| Function : Query Names re-formatted                            |
+|                                                                |
+| File     : QN       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.1                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : QN       search ( ssipartner                        |
+|                     empty       All output of QUERY NAMES      |
+|                     <string>    example: WORK                  |
+|                                 shows all items werk WORK is   |
+|                                 found                          |
+|                     <wildcard>  example: VMSE*                 |
+|                                 shows all items starting       |
+|                                 with VMSE                      |
+|                     ?           Show HELP                      |
+|                     ssipartner  SSI node name                  |
+|                                 Defaults to current node       |
+|                                                                |
+| Output   : <userid> - <status> <uptime>                        |
+|                       <uptime>=<days> <hh:mm:ss>               |
+|                                                                |
+| Comments : Multiple arguments allowed                          |
+|            Issue EXECLOAD QN EXEC * = REXX and this is usable  |
+|            as a pipe stage                                     |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180220 09:43:03                                   |
+| Changes  : .                                                   |
+|            20220224 H.T.Kramer : Adjusted INDICATE query so    |
+|                    we have the uptime of the ids as well       |
+|            20211207 H.T.Kramer : Small fix for running on a    |
+|                    DSC user                                    |
+|            20201007 H.T.Kramer : Changed the nos of columns    |
+|                    so it fits automagically on screen          |
+|            20200508 H.T.Kramer : Remove VSM -TCPIP, added      |
+|                    counters per break                          |
+|            20200423 H.T.Kramer : Made usable as a PIPE stage   |
+|            20200317 H.T.Kramer : Changed so we can look at the |
+|                    other ssi nodes.                            |
+|            20200219 H.T.Kramer : Added wildcard options,       |
+|                    changed the layout of the output so it is   |
+|                    grouped alphabetically.                     |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg srch '(' ssipartner .
+Parse Source . . myfn myft .
+colsize=32
+Select
+When myft='REXX' Then Do
+              pipecmd='CALLPIPE'
+              output='*:'
+              End
+When myft='EXEC'  Then Do
+              'VMFCLEAR'
+              pipecmd='PIPE'
+              output='CONS'
+              End
+Otherwise Do
+      Say 'Can not run as 'myft
+      Exit 99
+      End
+End
+/*---------------------------------------------------------------+
+| Show HELP if required                                          |
++---------------------------------------------------------------*/
+If srch='?' Then Do
+     pipecmd' (NAME QN.EXEC:71 END ?)',
+        '< 'myfn myft' *',                      /* Read myself      */
+        '| tolabel Parse',                      /* Up to here       */
+        '| cons'                                /* Display          */
+     Exit
+     End
+If ssipartner='' Then Do
+                      ssipref=''
+                      pipecmd' (NAME QN.EXEC:79 END ?)',
+                          'cp QUERY USERID',     /* Ask cp           */
+                          '| specs w3.1 1',      /* Keep this        */
+                          '| var ssipartner'     /* Hand 2 rexx      */
+                      End
+                 Else ssipref='AT 'ssipartner' CMD '
+lines='';cols=''
+pipecmd' (NAME QN.EXEC:86 END ?)',
+    'cp QUERY SSI',                              /* Ask this         */
+    '| drop first 5',                            /* Remove hdr       */
+    '| pick substr 1.1 of w2.1 \== ~-~',         /* Remove these     */
+    '| l: lookup w2.1 w1.1',                     /* Compare data     */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY USERID',                           /* Asking my name   */
+    '| specs w3.1',                              /* Keep this        */
+    '| l:',                                      /* Conn 2 lookup    */
+    '| specs w2.1',                              /* Keep this        */
+    '| var sister',                              /* Store as         */
+    '?',                                         /* 3rd pipe         */
+    'cms QUERY DISPLAY',                         /* Ask cms          */
+    '| specs ~/LINES/~ 1 w2.1 n',                /* Rework 4 varload */
+            '~;/COLS/~ n w3.1 n',                /* .                */
+    '| split at ;',                              /* Split here       */
+    '| verify fs / f3 ~012345679~',              /* Verify numbers   */
+    '| varload'                                  /* Hand 2 rexx      */
+If lines='' Then lines=48
+If cols=''  Then cols=160
+pipecmd' (NAME QN.EXEC:106 END ?)',
+    'var srch',                                  /* Take this        */
+    '| strip',                                   /* Remove blanks    */
+    '| split',                                   /* Split            */
+    '| stem srch.',                              /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'CP 'ssipref' QUERY NAMES',                  /* Ask CP           */
+    '| split at ,',                              /* Split into recs  */
+    '| strip',                                   /* Remove spaces    */
+    '| pick w1.1 \== ~VSM~ and',                 /* Ignore this      */
+           'w3.1 \== ~TCPIP~',                   /* .                */
+    '| if1: if pick w3.1 \== ~DSC~',             /* Rework logged ons*/
+    '|     specs fs - f1 1.8 ~-~ nw f2 nw',      /* .                */
+    '| if1:',                                    /* Conn 2 if        */
+    '| fo: fanout',                              /* Dupl. records    */
+    '| specs w1.1 1.8 ~1~ nw w2;* nw',           /* Adjust layout    */
+    '| fi: faninany',                            /* Take in others   */
+    '| sort w1.1 a',                             /* Sort...          */
+    '| join keylen 8',                           /* Gather by name   */
+    '| change w5.1 ~2~ ~',                       /* Replace this     */
+    '| change w2.1 ~1~ ~',                       /* ....and this     */
+    '| specs w1.1 1.8',                          /* Adjust layout    */
+            'w2.1 nw',                           /* .                */
+            'w3.1 nw.5',                         /* .                */
+            'w4.1 nw.3 right',                   /* .                */
+            'w5.1 nw',                           /* .                */
+    '| stem qn.',                                /* Store as         */
+    '? fo:',                                     /* Conn 2 fanout    */
+    '| if2: if pick w3.1 == ~SSI~',              /* If this          */
+    '|    specs ~AT 'sister' CMD IND USER~ 1',   /* Compose cmd      */
+                'w1.1 nw',                       /* .                */
+                '~EXPANDED~ nw',                 /* .                */
+    '| if2:',                                    /* Conn 2 if        */
+    '|    specs ~IND USER~ 1',                   /* Compose cmd      */
+               'w1.1 nw',                        /* .                */
+               '~EXPANDED~ nw',                  /* .                */
+    '| if2:',                                    /* Conn 2 if        */
+    '| cp',                                      /* Hand 2 cp        */
+    '| pick anycase fs = f1.1 == ~USERID~ or',   /* Select these     */
+                        'w1.2 == ~CPU 00:~',     /* .                */
+    '| join * x40',                              /* Make 1 record    */
+    '| split anycase before string ~USERID~',    /* .                */
+    '| specs w1.1 1 w8.2 nw',                    /* Re-shuffle recs  */
+    '| change anycase ~USERID=~~',               /* Replace this     */
+    '| change anycase ~CTIME=~~',                /* .....and this    */
+    '| specs w1.1 1.8',                          /* Adjust layout    */
+            '~2~ nw',                            /* .                */
+            'w2.1 nw.3 right',                   /* .                */
+            'w3.1 nw',                           /* .                */
+    '| change ~:~.~',                            /* Add a comma      */
+    '| fi:'                                      /* Conn 2 faninany  */
+If myft='EXEC' Then Do
+Say Date('S') Time() myfn' at 'ssipartner
+Say
+End
+/*---------------------------------------------------------------+
+| Loop through all the search arguments                          |
++---------------------------------------------------------------*/
+Do s=1 To srch.0
+/*---------------------------------------------------------------+
+| Determine how to search                                        |
++---------------------------------------------------------------*/
+     Select
+     When srch.s=''          Then Do
+                                  search=''
+                                  srch.s='ALL'
+                                  End
+     When Pos('*',srch.s)<>0 Then search='| wildcard anycase w1.1 /'srch.s'/'
+     Otherwise search='| locate ~'srch.s'~'
+     End
+/*---------------------------------------------------------------+
+| Select the stuff and display                                   |
++---------------------------------------------------------------*/
+     snake=cols%colsize
+     pipecmd' (NAME QN.EXEC:180 END ?)',
+        'stem qn.',                              /* Take these       */
+        search,                                  /* Search if present*/
+        '| specs 1;* 1.'colsize,                 /* Adjust layout    */
+        '| sort',                                /* Sort them        */
+        '| f: fanout',                           /* Dupl. records    */
+        '| count lines',                         /* How many         */
+        '| specs ~Results for 'srch.s'~ 1',      /* Compose output   */
+                ' w1.1 nw',                      /* .                */
+        '| preface literal ',                    /* Add blank record */
+        '| buffer',                              /* .                */
+        '| fi: faninany',                        /* Collect results  */
+        '| 'output,                              /* Show             */
+        '? f:',                                  /* Conn 2 fanout    */
+        '| specs 1;* 1 ~:~ n',                   /* Add to layout    */
+        '| specs select second',                 /* Count the        */
+        '        a: 1.1   1',                    /*  1st chars       */
+        '        b: 1;*   3',                    /*   so we get      */
+        '        set #0:=#0+1',                  /*     a            */
+        '        break a',                       /*    sub           */
+        '        write',                         /*   total          */
+        '        print (#0;#0:=0) picture zzz9 4 ~;~ nw',
+        '| join * x40',                          /* Make 1 rec       */
+        '| split at ~;~',                        /* Split here       */
+        '| specs w1;-2 1',                       /* Rework layout    */
+        '        w1.1 nw',                       /* .                */
+        '        ~*~ nw',                        /* .                */
+        '        w-1;-1 nw.5 right',             /* .                */
+        '| split at ~:~',                        /* Split here       */
+        '| strip',                               /* Remove spaces    */
+        '| sort',                                /* Sort numbers top */
+        '| specs 1;* 1 ~:~ nw',                  /* Add to layout    */
+        '| join keylen 1',                       /* Join on label    */
+        '| specs w2.1 1',                        /* Get label        */
+        '        w1.1 nw',                       /* in front of      */
+        '        w3.1 nw.5 right ',              /* count            */
+        '        w4;* nw',                       /* .                */
+        '| split at ~:~',                        /* Split here       */
+        '| specs 1;* 1.'colsize,                 /* Adjust 4 snake   */
+        '| snake 'snake,                         /* Make 4 columns   */
+        '| buffer',                              /* .                */
+        '| fi:'                                  /* Conn 2 faninany  */
+    If srch.0>1 & s<srch.0 & myft='EXEC' Then Do
+                           Say Copies('-',80)
+                           Say Date('S') Time() myfn
+                           Say
+                           End
+End s
+/*---------------------------------------------------------------+
+| End of this show                                               |
++---------------------------------------------------------------*/
+Exit
+ 

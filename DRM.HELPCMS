@@ -1,0 +1,152 @@
+ 
+DRM is build around DIRMAP (a CUF utility) and XEDIT. It is an exec that will
+help you maintaining the CP directory:
+  -finding space for (new) minidisks
+  -finding users; listing users with certain options
+  -checking for overlaps (the directory is not placed online when
+   overlaps exist)
+  -defragmenting your disks (DIRMAINT & DFSMS are recommended)
+      +--------------------------------------------+
+      | Beware: currently, the FREEMAP is not      |
+      | supported for FBA devices: the map becomes |
+      | too big: one character per FBA block.      |
+      +--------------------------------------------+
+ 
+DRM cannot replace DIRMAINT or similar products.  For example, DRM allows only
+one user working with the CP Directory at the same time.  And, when a user
+has access to the directory, he can change everything, whereas with DIRMAINT
+users can be granted access to a limited part of the directory (for example
+end-users can change most items of their own definition).
+ 
+But, even with DIRMAINT, the DRM tool remains useful as it hosts a few
+functions not available with DIRMAINT or not as nice in DIRMAINT.
+ 
+ 
+Command format:
+ +------------------------------------------------------------------+
+ | DRMAC                                                            |
+ |or                                                                |
+ | DRM    <fileid-of-CP-directory> <(direct-Command >               |
+ +------------------------------------------------------------------+
+ 
+  DRMAC differs from DRM in that DRMAC LINKs and ACCESSes the required
+  minidisks before calling DRM.  When DRM ends, DRMAC detaches the minidisks
+  it linked.  This makes it possible that more than 1 CMS user maintains the
+  directory, not concurrently, but sequentially.
+ 
+ 
+Section 1: An Overview
+========================
+ 
+ 
+Topic 1: Adding new minidisks
+-------------------------------
+ I'm always surprized to see people adding minidisks by hand when their
+ installation has no DIRMAINT or a similar product.  DRM is here to help you.
+ With DRM:
+  - issue DRM to start XEDITing your Directory
+  - type the userid in XEDIT's cmdline and press PF2 to find him
+  - add a new MDISK card, probably by duplicating an existing one; fill in the
+    virtual address, and fill in the wanted size
+  - write GET in the prefix area and press enter
+  - a list of gaps is shown, select the one you prefer and press PF11
+ If you want to format it:
+  - press PF24 to Save the file, and set the directory online
+  - type FRMT in the prefix area and press enter (confirmation is asked)
+ 
+Topic 2: Viewing the Minidisk Map  (MDISKMAP)
+-----------------------------------------------
+ DIRMAP makes a nice minidisk map -better than DISKMAP- listing gaps and
+ overlaps (unlike DISKMAP, DIRMAP does not flag fullpack minidisks as overlap).
+ 
+ In DRM, press PF4 to refresh the MDISKMAP, and PF16 to XEDIT the MDISKMAP
+ 
+ In the MDISKmap a few special PFkeys are available
+   - PF4 -CLEANUP- makes the map better for usage in XEDIT (the standard map
+     is layed out for printing)
+   - PF9 -FREEMAP- edits DRM's FREEMAP: this map is suited to find which disks
+     are fragmented.  See next topic.
+     The first time you press PF9, the FREEMAP is built by DRM.
+ 
+ The cleaned map looks like
+ 
+ VMSRES 3390     FULLPACK  50A4  RR       000      3338      3339
+ VMSRES 3390     $ALLOC$   50A4  R        000       000       001
+ VMSRES 3390     RACFVM    0591  MR       001       009       009
+ VMSRES 3390     RACFVM    0505  RR       010       077       068
+ .....
+ VMSRES 3390     OPERATOR  0191  MR       231       234       004
+ VMSRES 3390                              235       239       005     Gap
+ 
+ 
+Topic 3: Using the FREEMAP      (More info in "related" help section)
+---------------------------
+ In the MDISKMAP -made by DIRMAP-  each minidisk is listed on a line, this
+ makes it less suited to see where gaps are located, how fragmented disks are,
+ In the FREEMAP -made by DRM from the MDISKMAP- each cylinder of a minidisk is
+ represented by a character, we list 50 cylinders on a line; gaps are blanks:
+ 
+VMSRES 3390 Size 3339 Free: total -828- (25%) max -426-  avg/gap -52-
+       |0....+....1....+....2....+....3....+....4....+....| Gap sizes
+     0 |:CCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD|
+    50 |DDDDDDDDDDDDDDDDDDDDDDDDDDDDefghijkllmnopqrstuvvvv|
+   100 |vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv|
+   150 |vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv|
+   200 |vvvvvvvvvvvvvvvvvvvvvvvvXXXwyzabbbb     aaaaBBBBBB|  5
+   250 |bbbb           AAAAAAAAAAAAAAAAAAAAAAAAA   aaaaaab|  11 3
+ 
+ In the FreeMap, you can use PFkeys:
+  - PF9 to "query" an Mdisk: place the cursor in the map area.  For example on
+    a C in the first map row: DRM will tell that the cursor points to mdisk 591
+    of RACFVM (in our example shown above that is)
+    Alternatively: you can write "userid cuu" in FREEMAP's cmdline and press
+    PF9: then DRM will find "userid cuu" in the freemap.
+ 
+  - PF11 does the same as PF9, except that it also tries to FILELIST the given
+    mdisk.
+ 
+  - PF10 can be used to find a gap which fits exactly for the just queried
+    mdisk.
+ 
+  - PF5 requests a DFSMS MOVE of the queried minidisk to the gap indicated by
+    the cursor.  PF4 is silimar but prepares a DIRMAINT CMDISK request
+ 
+  - PF12 sets you back on the last queried minidisk.
+ 
+ An alternative use of PF9: place the cursor before the map area for example
+ on the "200" and press PF9: DRM will XEDIT the MDISKMAP and located on the
+ minidisk which includes cylinder 200.  When you are in the MDISKMAP and place
+ the cursor on a minidisk and hit PF9 again, DRM XEDIT's the FREEMAP again and
+ places the cursor on the indicated minidisk.  DRMGUI is a CMS/GUI
+ alternative to defragment your disks, available on VM's download lib.
+ 
+ 
+Topic 4: Specials, Small Items
+--------------------------------
+ - With the LK prefix command, one can easily link to minidisks
+   and start a FILELIST session
+ - The RA prefix command enables to 'translate' Directory statements in
+   RACF commands
+ - With PF5 and PF17, it becomes easy to find which user definitions contain
+   a given string.  For example, which users include a given Profile.
+ 
+ 
+ 
+**** For more details, refer to the "RELATED" section (press PF11) ***
+.cs 7 on
+(c) Copyright International Business Machines Corporation 1985, 2012.
+    All Rights Reserved.
+ 
+For detailed DRM information:
+   place the cursor under the topic of your choice and press ENTER
+ 
+ 
+DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips, README
+.cs 7 off

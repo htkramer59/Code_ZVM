@@ -1,0 +1,6 @@
+* See CONPARK  NAMES for the meaning of the various tags/fields                 
+* Rename this filetype to the 3rd word of CP QUERY USERID                       
+* Mandatary entry:                                                              
+*:users.                                                                        
+* Sample nick for a userid                                                      
+*:nick.<sample>   :keep.60  :compress.7  :frequency.H :method.STORE             

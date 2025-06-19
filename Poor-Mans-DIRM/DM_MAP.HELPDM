@@ -1,0 +1,37 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Create a MDISKMAP                                   |
+|                                                                |
+| File     : MAP      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : USER     DIRECT    input                            |
+|            USER     MDISKMAP  output, depends on arguments     |
+|            USER     FREEXT    output, depends on arguments     |
+|            USER     USEDXT    output, depends on arguments     |
+|            DM_VMLNK EXEC                                       |
+|                                                                |
+|                                                                |
+| Called   : DM_MAP   <switch> ( <userfn> <userft>               |
+|                     .         Creates USER MDISKMAP            |
+|                     FREE      Creates USER FREEXT              |
+|                     USED      Creates USER USEDXT              |
+|                     ?         Shows helpd                      |
+|           <userfn> <userft>   filename of DIRECTORY            |
+|                                                                |
+| Enduser calls: MAP, FREE or USED                               |
+|                                                                |
+| Comments : Usable with a monolithic user directory             |
+|            VMLINK DIRECT requires an entry in VMLINK NAMES     |
+|            Assumes 3390 devices                                |
+|            Usable as PIPE stage when EXECLOADed with           |
+|            filetype REXX                                       |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240618 18:25:19                                   |
+| Changes  : .                                                   |
+|            20250601 H.T.Kramer : Rewrite to fix some errors    |
+|                                                                |
++---------------------------------------------------------------*/

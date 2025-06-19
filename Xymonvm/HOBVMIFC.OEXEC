@@ -1,0 +1,97 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This exec will get the response from IFCONFIG and sent it to
+    the Xymon network monitor.
+ 
+    Rich Smrcina 02/25/2007  original V1.3
+    Rich Smrcina 02/10/2009  Changed project name to Xymon
+    Herald ten Dam 03/27/2019 Addition of Vswitches
+                                                                      */
+call do_the_test           /*  Execute the test                    */
+exit
+ 
+do_the_test:
+fn='HOBVM090 CLIENT A'
+'erase 'fn
+J=1
+out.j='[ifstat]'
+'pipe cms ifconfig | stem ifc.'
+do i=1 to ifc.0
+  select
+    when pos('inet',ifc.i) > 0 then do
+      parse var ifc.i ifname therest
+      ifname=lower(ifname)
+      j=j+1
+      out.J=IFNAME THEREST
+    end
+    when pos('RX',ifc.i) > 0 then do
+      parse var ifc.i first ':' rxbytes second ':' txbytes .
+      rxmb=strip(format((rxbytes/1048576),8,1))
+      txmb=strip(format((txbytes/1048576),8,1))
+      j=j+1
+      out.j=FIRST':'RXBYTES '('RXMB' MB)' SECOND':'TXBYTES '('TXMB' MB)'
+    end
+    otherwise
+      j=j+1
+      out.j = ifc.i
+    end
+end
+ 
+'PIPE CP Q VSWITCH ALL DETAILS | STEM IFK.'
+do i=1 to ifk.0
+  select
+   when pos('VSWITCH SYSTEM',ifk.i) > 0 then do
+     j=j+1
+    out.j= ''
+    j = j +1
+    point = pos('.',subword(ifk.i,3,1))
+    if point > 0 then
+      out.j = substr(SUBWORD(IFK.I,3,1),point+1)'  'SUBWORD(IFK.I,4)
+    else
+      out.j = subword(ifk.i,3,1)'  'subword(ifk.i,4)
+  end
+   when pos('VSWITCH ',ifk.i) > 0 then do
+     j=j+1
+    out.j= ''
+    j = j +1
+    point = pos('.',subword(ifk.i,2,1))
+    if point > 0 then
+      out.j = substr(SUBWORD(IFK.I,2,1),point+1)'  'subword(ifk.i,3)
+    else
+      out.j = subword(ifk.i,2,1)'  'subword(ifk.i,3)
+  end
+  when pos('RX Bytes',ifk.i) > 0 then do
+    parse var ifk.i first ':' rxbytes second ':' txbytes .
+    rxmb=strip(format((rxbytes/1048576),8,1))
+    txmb=strip(format((txbytes/1048576),8,1))
+    j=j+1
+    out.j=first':'RXBYTES '('RXMB' MB)' second':'TXBYTES '('TXMB' MB)'
+  end
+  otherwise
+    j=j+1
+    out.j=ifk.i
+  end
+end
+/* 'EXECIO * DISKW 'FN' ' */
+out.0=j
+'EXECIO 'OUT.0' DISKW 'FN' (STEM OUT. FINI'
+return
+ 
+/*  Convert parameter to lower case.  */
+lower:
+arg string
+lc_chars='abcdefghijklmnopqrstuvwxyz'
+uc_chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+string=translate(string,lc_chars,uc_chars)
+return string

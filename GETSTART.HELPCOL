@@ -1,0 +1,52 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+.cs 4 on
+                              Getting Started
+                              ---------------
+     To work with a column, make the top of the column your current line
+     in XEDIT and then enter the following:
+ 
+     COL target
+ 
+     The target is any standard XEDIT target such as * to indicate
+     that the column goes to the end of the file, or :10 to indicate
+     that the column goes to, but not including, line 10.
+ 
+     You may setup prefix synonyms to invoke COL for you.
+     Enter the following two commands into your PROFILE XEDIT file.
+ 
+              SET PREFIX SYNONYM H  PREFIXH
+              SET PREFIX SYNONYM HH PREFIXH
+ 
+     This prefix synonym will move the top of the column to your
+     current line and the current line becomes the COL command line
+     which will now contain a row of question marks (?).
+ 
+     Once this has been accomplished, you may enter HH or H in your
+     XEDIT prefix area as follows:
+ 
+             HH       (from here
+                       .
+                       .
+                       .
+             HH        to here)
+ 
+        or   H        (one line)
+        or   H99      (99 lines)
+        or   99H      (   "    )
+        or   H*       from here to the end of the file
+ 
+        Two prefix synonym routines are included in the COL package.
+        The second prefix synonym (PREFIXH2) is designed to place the COL
+        command line on the line where "H" or the first "HH" was entered
+        leaving the text in place.  If this setup is more attractive to
+        you enter the following rather than the previous setup into your
+        PROFILE XEDIT file.
+ 
+              SET PREFIX SYNONYM H  PREFIXH2
+              SET PREFIX SYNONYM HH PREFIXH2

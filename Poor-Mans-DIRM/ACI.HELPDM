@@ -1,0 +1,26 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Change the acigroup info                            |
+|                                                                |
+| File     : DM_ACI   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_ACI   <uid> <acigroup>                           |
+|          : ACI      <uid> <acigroup>                           |
+|            If <acigroup> is set to DEL the acigroup will       |
+|            be removed otherwise it will be set.                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240627 10:42:23                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

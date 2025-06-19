@@ -1,0 +1,11 @@
+/**/
+Parse Upper Arg uid mdisk .
+If uid='RDEV' Then Address COMMAND 'CP ATT 'mdisk' * F00F'
+              Else Address COMMAND 'CP LINK 'uid mdisk' F00F M'
+Address CMS 'ACCES F00F F'
+'PIPE (End ?)',
+    'literal Created: 'Date('S') Time() Userid(),
+    '| append literal To have at least 1 file on the disk so it can be accessed',
+    '| > DUMMY FILE F'
+Address CMS 'REL F (DET'
+ 

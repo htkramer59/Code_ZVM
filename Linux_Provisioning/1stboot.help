@@ -1,0 +1,7 @@
+Hints of where you can find stuff on firstboot
+
+man systemd-firstboot
+
+firstboot.service: /usr/lib/systemd/system/systemd-firstboot.service
+
+https://docs.fedoraproject.org/en-US/fedora-coreos/tutorial-services

@@ -1,0 +1,90 @@
+/*---------------------------------------------------------------+
+| Function : Graphic of cpu usage per ifl                        |
+|                                                                |
+| File     : ALLCPUG  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : ALLCPUG  <nodes>   Defaults to ALL                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211028 11:08:03                                   |
+| Changes  : .                                                   |
+|            20220301 H.T.Kramer : Now using VMLINK to use       |
+|                     something other than A-disk                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg nodes
+Parse Source . . myfn myft .
+If nodes='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME ALLCPUG.EXEC:25 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Upto here        */
+               '| cons'                          /* Show             */
+             Call Exit
+             End
+If nodes='' Then nodes='A1 A2 B1 B2 O1 P1 P2'
+Address CMS 'VMLINK STATUS (QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+'VMFCLEAR'
+out.0=0
+'PIPE (NAME ALLCPUG.EXEC:37 END ?)',
+    'cms EXECMAP RSCS REXX',                     /* Ask cms          */
+    '| drop first 1',                            /* Ignore header    */
+    '| count lines',                             /* Count findings   */
+    '| var exldd'                                /* Hand 2 rexx      */
+If exldd Then Address CMS 'EXECDROP RSCS REXX'
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+Do s=1 To Words(nodes)
+  node=Word(nodes,s)
+  'PIPE (NAME ALLCPUG.EXEC:46 END ?)',
+      'rscs 'node' cp INDICATE LOAD',
+      '| specs w2;* 1',
+      '| p: pick fs - f1.1 \== ~AVGPROC~',
+      '| split before string ~PROC~',
+      '| pick w1.1 == ~PROC~',
+      '| specs w2.1',
+      '| change ~%~~',
+      '| stem proc.',
+      '? p:',
+      '| specs fs - f2',
+      '| specs w1.1',
+      '| change ~%~~',
+      '| strip leading ~0~',
+      '| var avg'
+  Do p=1 To proc.0
+     Parse Value proc.p With procid '-' procval .
+     procval=Strip(procval,'L',0)
+     proclbl=procval'%'
+     If proclbl='%' Then proc.p=procid '0%'
+                    Else proc.p=procid Copies('=',procval) proclbl
+  End p
+  IF avg='' Then avg=0
+  avg='AVG  'Copies('*',avg) avg'%'
+  'PIPE (NAME ALLCPUG.EXEC:70 END ?)',
+      'stem proc.',
+      '| preface var avg',
+      '| scale 6',
+      '| if: if pick 1.1 == ~ ~',
+      '|    spec ~'node'~ 1 3;* n',
+      '| if:',
+      '| stem out. append'
+End s
+  Address CMS 'EXECDROP RSCS REXX'
+'PIPE (NAME ALLCPUG.EXEC:80 END ?)',
+    'stem out.',
+    '| > 'myfn' OVERVIEW 'wfm
+Queue 'PREFIX OFF'
+Queue 'SCALE  OFF'
+Queue 'VERIFY 1 159'
+Queue 'CURLINE ON 3'
+Queue ':1'
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET'

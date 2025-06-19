@@ -1,0 +1,112 @@
+/**/
+'PIPE (end ?) CP QUERY USERID | specs w3.1 | var fullnode | specs -2;-1 | var shortnode'
+Say fullnode shortnode
+numeric digits 20
+'PIPE (end ?)',
+    '< BACKUP NAMES *',
+    '| strip',
+    '| pick 1.1 \== ~*~ and 1.1 \== ~~',
+    '| join * x40',
+    '| split anycase before string ~:NICK.~',
+    '| nlocate ~.STORAGE~',
+    '| nlocate ~.CATALOG~',
+    '| nlocate ~.OTHER~',
+    '| n1: nlocate anycase ~.GENERAT~',
+    '| n2: nlocate anycase ~:NODE.~',
+    '| fi: faninany',
+    '| n3: nlocate anycase ~.SEGMENTS~',
+    '| n4: nlocate anycase ~VMBFS~',
+    '| n5: nlocate anycase ~..DIR~',
+    '| specs fs . substr w1.2 of f3',
+    '| specs ~QUERY MDISK USER~ 1 w1.2 nw ~DIR LOC~ nw',
+    '| cp',
+    '| nlocate anycase ~Targetid~',
+    '| specs',
+       'printonly eof',
+       'a: word -1;-1     .',
+       'set #0+=a',
+       'eof',
+       'print #0  1',
+    '| var mdblocks',
+    '? n1:',
+    '| specs fs . f3',
+    '| var gen',
+    '? n2:',
+    '| locate anycase ~'fullnode'~',
+    '| fi:',
+    '? n3:',
+    '| count lines',
+    '| var doseg',
+    '? n4:',
+    '| specs fs / f3',
+    '| specs fs : ~QUERY BLOCKS * *~ 1 f2;* nw  ~.~ n',
+    '| cms',
+    '| f2: fanin',
+    '| nlocate anycase ~Filename~',
+    '| nlocate anycase ~Directory~',
+    '| pick w-1;-1 \== ~-~',
+    '| specs',
+       'printonly eof',
+       'b: word -2;-2     .',
+       'c: word -1;-1     .',
+       'set #1+=b',
+       'set #2+=c',
+       'eof',
+       'print #1  1 ',
+       'print #2  nw ',
+    '| var sfsblocks',
+    '? n5:',
+    '| specs fs : f3;*',
+    '| split anycase before string ~:FILES.~',
+    '| nlocate anycase ~:FILES.~',
+    '| specs ~QUERY BLOCKS * *~ 1 w-1;-1 nw',
+    '| cms',
+    '| buffer',
+    '| f2:'
+Call NSS_Space_Used
+Parse Value sfsblocks With fblocks sblocks
+sfsblocks=Format((fblocks+sblocks*4)/1024,,2)
+mdblocks=Format((mdblocks/2)/1024,,2)
+subtot=(mdblocks+sfsblocks+nsspagesmb)
+total=subtot*gen
+Say 'MDISK : 'Right(mdblocks'Mb',10)
+Say 'SFS   : 'Right(sfsblocks'Mb',10)
+Say 'NSS   : 'Right(nsspagesmb'Mb',10)
+Say 'Sub   : 'Right(subtot'Mb',10)
+Say
+Say 'Gens  : 'gen
+Say
+Say 'Total : 'Right(total'Mb',10) Right((Format(total/1024,,2))'Gb',10)
+ 
+ 
+NSS_Space_Used:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'CP QUERY NSS ALL MAP',
+    '| drop first 1',
+    '| specs 6.8 1 pad 0 33.5 nw.6 right 40.5 nw.6 right',
+    '| specs 1.8 1 10.6 nw 17.6 nw 10.6 x2d nw 17.6 x2d nw',
+    '| f: fanout',
+    '| specs 1.8',
+    '| stem nss.',
+    '? f:',
+    '| specs 10-22',
+    '| stem hxcnt.',
+    '? f:',
+    '| specs w-2;-1',
+    '| stem cnt.'
+nsspages=0
+Do n=1 To nss.0
+    If nss.n='' Then Do
+                 m=n-1
+                 nss.n=nss.m
+                 End
+    Parse Value cnt.n With spage epage
+    pages=epage-spage+1
+    nsspages=nsspages+pages
+End n
+nsspagesmb=Format(nsspages*4/1024,,2)
+Return
+ 

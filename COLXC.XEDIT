@@ -1,0 +1,43 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1991                  */
+/*--------------------------------------------------------------*/
+/* XCOL internal routine to execute an Xedit command when text  */
+/* is entered into the COL command line and an text is entered  */
+/* on the Xedit commmand line                                   */
+/*--------------------------------------------------------------*/
+trace 'o'
+Address command 'GLOBALV GET COLXCMD'
+If rc ^=0 then Signal error3
+Address command 'GLOBALV GET COLLINE'
+Address command 'GLOBALV GET COLMSGM'
+Arg pref func pline op extra
+parse source . . . . . name .
+prf = name || space(op extra)
+'COMMAND PRESERVE'
+'COMMAND SET LINEND' colline
+'COMMAND SET MSGMODE' colmsgm
+If pref ^= 'PREFIX' then call error1,
+  "8 646E 'COLXC' must be invoked from the prefix area by COL."
+If func = 'CLEAR' then exit
+'COMMAND EXTRACT /SCOPE/'
+If func = 'SHADOW' & scope.1 = 'DISPLAY' Then call error,
+  "0 661E Prefix '"name"' is invalid for the line on",
+  "which it was entered."
+If func ^= 'SET' & func ^= 'SHADOW' then call error1,
+  "8 646E 'PREFIXP' must be invoked from the prefix area by COL."
+'COMMAND :'pline
+If rc < 2 Then colxcmd
+'COMMAND RESTORE'
+Exit
+/*  Error routines  */
+error:  'COMMAND SET SCOPE ALL'
+        'COMMAND :'pline 'COMMAND SET PENDING ERROR' left(prf,5)
+error1: parse arg err msg
+        'COMMAND RESTORE'
+        If msg ^= '' then 'COMMAND EMSG PXU' || strip(msg,'L')
+        Exit err
+error3: 'COMMAND EMSG Routine must be invoked by COL'
+        Exit

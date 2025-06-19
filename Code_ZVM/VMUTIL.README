@@ -1,0 +1,33 @@
+VMUTIL
+ 
+VMUTIL is a service machine that can execute timed events.
+This is especially useful for house-keeping and some monitoring.
+ 
+There is a VMUTIL CONFIG file in which the configurable items are set.
+If the configurable item is not present a default from the code will be used.
+ 
+Configurable item  ;  Values   ; function
+debug                 0 or 1     Switch debug mode (1=on, 0=off)
+test_modus            0 or 1     Switch test_modus (1=on, 0=0ff)
+interval              1 to 999   Sets wakeup interval, default 5mins, See HELP WAKEUP
+reload                1 to 999   Reloads after n cycles of wakeup, default 60
+wakeup_options        .          See HELP WAKEUP
+admin                 .          Identifies administrators
+valid_commands        .          Identifies commands that may be given by admins
+valid_files           .          Tells which files can be replaced by admins
+backup_no             1 to 99    How many versions to keep for the config files
+ 
+ 
+These events are recorded in the file VMUTIL TIMES.
+See sample below and for more details see HELP WAKEUP.
+ 
+*
+ALL    23:58:00 01/01/01    CP M OPERATOR I am still alive
+S-S    15:00:00 02/07/19    CP M * Weekend
+M-F    16:00:00 02/07/19    CHKEDEV
+ 
+ 
+Note:
+For extending valid_commands the code and the config file need to be adapted.
+ 
+ 

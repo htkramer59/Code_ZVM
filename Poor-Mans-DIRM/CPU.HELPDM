@@ -1,0 +1,28 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add or delete CPU statements                        |
+|                                                                |
+| File     : DM_CPU   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+|                                                                |
+| Called   : DM_CPU   <uid> <action>  <cpuaddr> <parms>          |
+|          : CPU      <uid> <action>  <cpuaddr> <parms>          |
+|                           ADD    BASE/CPUID                    |
+|                           MOD    BASE/CPUID                    |
+|                           DEL                                  |
+|                           QRY    Display current CPU stmts     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240704 15:31:03                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

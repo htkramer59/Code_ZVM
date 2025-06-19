@@ -1,0 +1,80 @@
+***********************************************************************
+* :nick.DRM             :sec.Unclassified
+* :title.An XEDIT based interface to manage the CP Directory
+* :version.5.2          :date.2021-03-11
+* :oname.Buelens Kris                    :onode.BEVM :ouser.BUELENSC
+* :aname.Buelens Kris                    :anode.BEVM :auser.BUELENSC
+* :support.NA           :doc.Built-in help    :lang.REXX, XEDIT
+* :sw.VM/SP R5 & up or VM/ESA, DIRMAP (of CMS Utilities feature)
+* :abs.This package provides a simple interface to manage the CP directory
+*    - Helps with finding free space for new minidisks (automatic or manual)
+*    - Checks for overlaps before placing the directory online
+*    - Can be used to see only users with certain options
+*    - Helps to defragment disks (DIRMAINT and/or DFSMS is required then)
+*    In general: a poor man's DIRMAINT alternative
+*    If you have DIRMAINT: enhances DIRMAINT a little bit,
+*    If you have RACFVM: makes it easier to enter RACF commands
+* :lic.By placing material on this conference, I agree to grant
+* IBM a non-exclusive, royalty-free license for the material
+* as set forth in the LICENSE AGREEMNT file on this conference.
+***********************************************************************
+*   For easy handling use: FILEL DRM FILELIST (FILEL
+***********************************************************************
+* Tailoring:
+*  1.  Major defintions: Xedit the DRM NAMESAMP and file into DRM NAMES
+*  2.  Your XEDIT settings: PROFDRM XEDIT
+*  3.  Create "GAPFILE VOLSERS" if not all disks available for CMS       mdisk
+*                   (type HELP DRM or HELP DIRMAP for more info)
+*  4.  If using RACF, tailor the skeletons: RACFDRM SKEL*                TXA'
+      DRMAC    EXEC     *   LINK to directory mdisks & start DRM
+      DRM      EXEC     *   Xedit the Directory if you have the LINKs
+      $DRM$    XEDIT    *   The real core of DRM
+      RA       XEDIT    *   Front-end to easily execute RACF cmds
+      DRM      NAMESAMP *   Tailorable parameters
+      PROFDRM  XEDIT    *   XEDIT Profile
+      FULLPACK DEFINES  *   Tells size of non-std sized packs
+      DRMGUI   PACKAGE  *   The package file itself
+*---- If you have RACF
+      RACFDRM  SKELUSER *   RACF Interface
+      RACFDRM  SKELMDSK *
+      RACFDRM  SKELLINK *
+*---- Required, part of CMS Utilities feature or native with z/VM
+*     DIRMAP   MODULE   *   Required, part of CMS Utilities feature
+*---- Help Files
+      GENERAL  HELPDRM  *  Help files
+      DRM      HELPDRM  *  Help files
+      DRM      HELPCMS  *  Help files
+      FINDUSER HELPDRM  *  Help files
+      MDISKMAP HELPDRM  *  Help files
+      FREEMAP  HELPDRM  *  Help files
+      DYNFLTR  HELPDRM  *  Help files
+      GAPFLTR  HELPDRM  *  Help files
+      GAPFLTR2 HELPDRM  *  Help files
+      GETGAP   HELPDRM  *  Help files
+      RACFDRM  HELPDRM  *  Help files
+      DRM      PACKAGE  *  List DRM(related) parts
+      DRM      DESCRIPT *  List DRM(related) parts
+*---- Move lots of minidisks
+      MVMDISKS XEDIT    *   Helps to move lost of mdisks
+      MVMDISKS README   *   "user's guide" of MVMDISKS
+      CLSTDDR  EXEC     *   -Copy a list of mdisks with DDR
+      CLSTSMS  EXEC     *   -Copy a list of CMS mdisks with DFSMS COPY
+      CLSTCMS  EXEC     *   -Copy a list of CMS mdisks using COPYFILE
+*---- Prepare DDR statements to backup your mdisks
+      DIRBAC   EXEC     *   Reads MDISKMAP, creates DDR statements
+*---- Extra items
+      DIRFLAT  EXEC     *   Makes Flat file of your directory
+      GDYVERS  EXEC     *   Shows change history
+      CHKSMS   EXEC     *   Check the messages in DFSMS result RDR files
+      MDSK     EXEC     *   Get an MDISK as defined in another CP directory
+      MDSK     HELPCMS  *   Get an MDISK as defined in another CP directory
+      DIRME    EXEC     *   If DIRMAINT: edit user entries; or ctrl filesry
+      QDSK     EXEC     *   Give much info about an Mdisk
+* DIRMW: list/check/cleanup DIRMAINT workunits
+      DIRMW    EXEC     *   Lists DIRMAINT's workunit files
+      SELFS    EXEC     *   prereq for DIRMW
+      QDTMOVEL EXEC     *   For DIRMW: to be stored on DATAMOVE
+*---- Additional package: DRMGUI, a CMS/GUI interface to defragment
+*     DRMGUI   PACKAGE  *   Allows to defragment your directory (CMS/GUI)
+*---- Additional package: COMPARE to compare two MDISKS
+*     COMPARE  PACKAGE  *   Compares two MDISKS/SFS dirs

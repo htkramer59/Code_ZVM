@@ -1,0 +1,58 @@
+/*---------------------------------------------------------------+
+| Function : Receive a LINUX disk from an other system           |
+|                                                                |
+| File     : LNXRECV  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : PIPEDDR EXEC                                        |
+|                                                                |
+| Called   : LNXRECV  <uid> <vdev>                               |
+|                                                                |
+| Comments : Works only with LNXSEND started on an other system  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181123 09:10:30                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid vdev .
+/*---------------------------------------------------------------+
+| Check inputs...                                                |
++---------------------------------------------------------------*/
+If uid=''  Then Exit 128
+If vdev='' Then Exit 228
+/*---------------------------------------------------------------+
+| Save terminal setting and check if id/vdev combo exists         |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'CP QUERY TERM',
+   '| split at ,',
+   '| all HOLD ! MORE',
+   '| join * x40',
+   '| var termholdmore',
+   '?',
+   'CP QUERY MDISK USER 'uid vdev' DIR',
+   '| drop first 1',
+   '| count lines',
+   '| var exists'
+If \exists Then Do
+          Say uid vdev' do NOT exist'
+          Exit 428
+          End
+/*---------------------------------------------------------------+
+| Make sure we scroll on                                         |
++---------------------------------------------------------------*/
+Address COMMAND 'CP TERM HOLD OFF MORE 0 0'
+/*---------------------------------------------------------------+
+| Reset timer                                                    |
++---------------------------------------------------------------*/
+nix=Time('R')
+'PIPEDDR RESTORE 'uid vdev' (LISTEN PORT 2080 NOPROMPT'
+/*---------------------------------------------------------------+
+| How long did this take                                         |
++---------------------------------------------------------------*/
+seconds=Time('E')
+Say 'Elapsed time in seconds: 'Format(seconds,,4)' in Minutes: 'Format(seconds/60,,4)
+Address COMMAND 'CP TERM 'termholdmore
+Exit

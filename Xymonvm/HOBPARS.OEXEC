@@ -1,0 +1,183 @@
+/*---------------------------------------------------------------+
+| Function : Show some indicators ...                            |
+|                                                                |
+| File     : HOBPARS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : POOLGAP  EXEC      routine                          |
+|            LINUXOS  DISKMAP   input                            |
+|                                                                |
+| Called   : HOBPARS  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210910 12:50:00                                   |
+| Changes  : .                                                   |
+|            20210910 H.T.Kramer : Rewrite...                    |
+|   H.T.Kramer 20200608 Removed GLOBALV PUT because it is        |
+|              filling the A-disk unneeded                       |
+|   Herald ten Dam 10/04/2019                                    |
+|       Indicators for performance issues                        |
+|       Indication of possible guest spaces                      |
+|                                                                |
++---------------------------------------------------------------*/
+Trace "O"
+Parse Source . call_type myname .
+/*---------------------------------------------------------------+
+| Initialise some stuff                                          |
++---------------------------------------------------------------*/
+cr='15'x                               /*  Carriage return   */
+stgrps='LINUXOS'                       /* Dirm group we need */
+guestsize=25165824                     /* size in blocks */
+emsgstart=Date('U') Time() myname':'   /* Start of error message line  */
+/*---------------------------------------------------------------+
+| Obtain values from GLOBAL                                      |
++---------------------------------------------------------------*/
+bbdisplay=Value('BBDISPLAY',,'GLOBAL')
+bbport=Value('BBPORT',,'GLOBAL')
+fqdn=Value('FQDN',,'GLOBAL')
+vmptk=Value('VMPTK',,'GLOBAL')
+ptksvm=Value('PTKSVM',,'GLOBAL')
+/* stgrps=Value('STGRPS',,'GLOBAL') */
+minguests=Value('MINGUESTS',,'GLOBAL')
+fullname=Value('FULLNAME',,'GLOBAL')
+hostname=Value('HOSTNAME',,'GLOBAL')
+If fqdn='Y' Then machine=fullname
+            Else machine=hostname
+If vmptk <> 1 Then Exit 4
+/*---------------------------------------------------------------+
+| Check if ptksvm is available                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBPARS.EXEC:53 END ?)',
+    'CP QUERY USER 'ptksvm,                      /* Ask cp           */
+    '| specs w3.1',                              /* Keep this        */
+    '| locate ~DSC~',                            /* Find this        */
+    '| count lines',                             /* How many         */
+    '| var loggedon'                             /* Store as boolean */
+Call Init_Open_Socket      /*  Initialize and Open the socket  */
+Call Do_The_Test           /*  Execute the test                */
+Call Send status           /*  Send the result in status to bb */
+Call Close_Term_Socket     /*  Close and terminate the socket  */
+exit
+ 
+Do_The_Test:
+/*---------------------------------------------------------------+
+| Check logged on boolean, if true send yellow icon w message    |
++---------------------------------------------------------------*/
+If \loggedon Then Do
+       status = 'status' machine||'.indicators',
+                'yellow' TimeStamp() cr,
+                ptksvm 'Not logged on'
+       Return
+       End
+/*---------------------------------------------------------------+
+| Ask details from perfkit                                       |
++---------------------------------------------------------------*/
+ptksvm='PERFSVM'
+"PIPE (NAME HOBPARS.EXEC:79 END ?)",
+    "VMC "ptksvm" 4",                            /* Ask perfkit      */
+    "| strip",                                   /* Remove spaces    */
+    "| split anycase before string ~Diagnose~",  /* Split here       */
+    "| pick w2.1 == ~X'44'~ or w2.1 == ~X'9C'~", /* Select these     */
+    "| specs w2.1 1 w4.1 n",                     /* Keep these values*/
+    "| change ~X'~/DIAG~",                       /* Prep 4 varload   */
+    "| change ~'~/~",                            /* ...idem          */
+    "| varload"                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Change the colors when too high                                |
++---------------------------------------------------------------*/
+msg   = 'Indicators'cr
+color='green'
+If diag44>50000 Then color = 'red'
+If diag9c>5000  Then color = 'red'
+/*---------------------------------------------------------------+
+| Check how many guests we can accomodate on LINUXOS             |
++---------------------------------------------------------------*/
+guests=0                                         /* Initialise       */
+Address CMS 'POOLGAP 'stgrps' 1'
+ 
+'PIPE (NAME HOBPARS.EXEC:100 END ?)',
+   'disk 'stgrps' DISKMAP A',                    /* Read this        */
+   '| drop first 1',                             /* Remove header    */
+   '| specs 1.57',                               /* Clean records    */
+   '| locate anycase ~-GAP-~',                   /* Select these     */
+   '| specs w-1;-1',                             /* Keep this        */
+   '| stem gap.'                                 /* Hand 2 rexx      */
+Do g=1 To gap.0
+   guests=guests+(gap.g%guestsize)
+End g
+If guests < minguests Then color = 'red'
+status='status' machine||'.indicators' color TimeStamp() cr,
+       'Below are indicators servers might be very busy' cr,
+       'Diagnose X-44(<50000): 'diag44 cr,
+       'Diagnose X-9C(<5000): 'diag9c cr,
+       guests 'guests of 'guestsize' blocks possible on 'stgrps
+return
+ 
+ 
+Init_Open_Socket:
+/*---------------------------------------------------------------+
+| Initialise the socket                                          |
++---------------------------------------------------------------*/
+ret=Socket('Initialize','SOCPARS')
+parse var ret rc .
+if rc<>0 Then say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 Then say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 Then say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 Then say emsgstart 'Connect rc=' ret
+ret=Socket('Gethostname')
+parse var ret rc hostname .
+if rc<>0 Then say 'Gethostname:' ret
+ret=Socket('Getdomainname')
+parse var ret rc domainame .
+if rc<>0 Then say 'Getdomainname:' ret
+bbdate=date('U')
+'globalv put bbdate'
+return
+ 
+ 
+Close_Term_Socket:
+/*---------------------------------------------------------------+
+| Close the socket                                               |
++---------------------------------------------------------------*/
+ret=Socket('Close',sid)
+Parse Var ret rc .
+If rc<>0 Then Say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+Parse Var ret rc .
+If rc<>0 Then Say emsgstart 'Terminate rc=' ret
+Return
+ 
+ 
+Send:
+/*---------------------------------------------------------------+
+| Send the data over the socket                                  |
++---------------------------------------------------------------*/
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+Parse Var ret rc .
+If rc<>0 Then Say emsgstart 'Send rc=' ret
+return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp                                             |
++---------------------------------------------------------------*/
+Parse Value Date('S') with yyyy +4 mm +2 dd +2 .
+'PIPE (NAME HOBPARS.EXEC:177 END ?)',
+    'cp QUERY TIMEZONE',
+    '| locate anycase ~active~',
+    '| specs w1.1',
+    '| var tz'
+Return Date('W') Date('M') dd Time() tz yyyy

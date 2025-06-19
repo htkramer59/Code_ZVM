@@ -1,0 +1,63 @@
+/* Sample PROFILE for DRM,
+13 Nov 1991: updated check if having CP-class for dir-update
+17 Jul 1998: interface for MDISKMAP handling
+*/
+ 
+'COMMAND EXTRACT /FTYPE'
+Select
+ when ftype.1='MDISKMAP' then signal ProfMdiskMap
+ when ftype.1='GAPFILE'  then signal ProfGapFile
+ when ftype.1='FREEMAP'  then signal ProfFreeMap
+ otherwise                    signal ProfDirect
+end
+ 
+/*-----------------------------------------------------------------*/
+ProfDirect: /* Profile when XEDITting a DIRECT file                */
+/*-----------------------------------------------------------------*/
+/*-1-* define some PFkeys (use Q PF while in DRM to see what special
+       PF-keys can be defined for DRM)*/
+ 
+'COMMAND PF 16 MACRO $DRM$ $MDMP$ XEDIT'
+'COMMAND PF 19 FU *>'
+'COMMAND PF 20 FI *>'
+'COMMAND PF 22 MACRO $DRM$ $SAVE$'
+'COMMAND PF 23 MACRO $DRM$ $SAVE$ D'
+'COMMAND PF 24 MACRO $DRM$ $SAVE$ DD'
+ 
+/*-2-* Mixed case or not ?
+   As mixed case is required for some POSIX statements, DRM includes
+   a 'SET CASE M I' if you run at least VM/ESA V2.  So ...
+   include 'SET CASE U' if you have VM/ESA V2 and don't use POSIX users*/
+ 
+/*-3-* coding to take a BACKUP of directory once a day */
+if userid()='MAINT' then do
+   address command 'GLOBALV SELECT DRM GET BACKUP'
+   if backup^=date('S') then do
+      'COMMAND SAVE = BACKUP A'
+      if rc=0 then do
+         'COMMAND EXTRACT /FNAME'
+         address command 'GLOBALV SELECT DRM SETP BACKUP' date('S')
+         'COMMAND MSG Backup file created into "'fname.1 'BACKUP A"'
+      end
+   end
+end
+exit
+/*-----------------------------------------------------------------*/
+ProfMdiskMap: /* Profile when XEDITting an MDISKMAP file           */
+/*-----------------------------------------------------------------*/
+ /* If you always prefer our "cleaned" MDISKMAP, include the next line*/
+ /* (issue HELP DRM to learn about our "cleaned" MDISKMAP)            */
+ /* 'MACRO $DRM$ $MDMP$ CLEANUP' */
+exit
+ 
+/*-----------------------------------------------------------------*/
+ProfGapFile: /* Profile when XEDITting a GAPFILE file              */
+/*-----------------------------------------------------------------*/
+exit
+ 
+/*-----------------------------------------------------------------*/
+ProfFreeMap: /* Profile when XEDITting a FREEMAP file              */
+/*-----------------------------------------------------------------*/
+ address '' 'EXECSTAT CHKSMS EXEC' /* Do we have this exec ? */
+ if rc<=4 then 'COMMAND SET PF24 EXEC CHKSMS'
+exit

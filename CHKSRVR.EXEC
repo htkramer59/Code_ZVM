@@ -1,0 +1,119 @@
+/*---------------------------------------------------------------+
+| Function : Check if servers are added/removed                  |
+|                                                                |
+| File     : CHKSRVR  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CHKSRVR  CURRENT                                    |
+|            CHKSRVR  PREVIOUS                                   |
+|            DIFF     EXEC                                       |
+|                                                                |
+| Called   : CHKSRVR  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20230220 15:47:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Source . . myfn myft .
+out.0=0
+/*---------------------------------------------------------------+
+| Make sure we have a pipe stage                                 |
++---------------------------------------------------------------*/
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVR.EXEC:30 END ?)',
+     'rscs all CP QUERY NAMES',                  /* Ask rscs         */
+     '| join keylen 6',                          /* Join on node     */
+     '| stem line.'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Remove the pipe stage                                          |
++---------------------------------------------------------------*/
+Address CMS 'EXECDROP RSCS REXX'
+/*---------------------------------------------------------------+
+| Access work space if available                                 |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (NOT WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Remove oldest file and rename the latest                       |
++---------------------------------------------------------------*/
+Address CMS 'ERASE 'myfn' PREVIOUS 'wfm
+Address CMS 'RENAME 'myfn' CURRENT 'wfm' = PREVIOUS ='
+/*---------------------------------------------------------------+
+| Loop thru what we received via RSCS                            |
++---------------------------------------------------------------*/
+Do l=1 To line.0
+    work=line.l
+    node=Word(line.l,1)
+    'PIPE (NAME CHKSRVR.EXEC:55 END ?)',
+       'var work',                               /* Take this        */
+       '| change /DSC//*',                       /* Remove this      */
+       '| change /,//*',                         /* .and this        */
+       '| specs w2;*',                           /* Remove node      */
+       '| split at -',                           /* Split here       */
+       '| strip',                                /* Remove space     */
+       '| p1: pick substr 1.3 of w1.1 == ~SLD~', /* Select these     */
+       '| fo1: fanout',                          /* Duplicate them   */
+       '| join * x40',                           /* Make 1 record    */
+       '| specs ~SLD~ 1 1;* nw',                 /* Add label        */
+       '| fi: faninany',                         /* Take in others   */
+       '| specs ~'node'~ 1 1;* nw',              /* Ad the node      */
+       '| join keylen 9',                        /* Join on node     */
+       '| append literal  ',                     /* Add empty line   */
+       '| stem out. append',                     /* Hand 2 rexx      */
+       '? fo1:',                                 /* Conn 2 fanout    */
+       '| count lines',                          /* How many         */
+       '| specs',                                /* .                */
+               '~SLD~ 1',                        /* Prep for faninany*/
+               'PAD 0',                          /* .                */
+               '1;* NW.2 RIGHT',                 /* .                */
+       '| fi:',                                  /* Conn 2 faninany  */
+       '? p1:',                                  /* Conn 2 pick      */
+       '| p2: pick substr 1.3 of w1.1 == ~SLT~', /* Select these     */
+       '| fo2: fanout',                          /* Duplicate records*/
+       '| join * x40',                           /* Make 1 record    */
+       '| specs 1.3 1 1;* nw',                   /* Add label        */
+       '| fi:',                                  /* Conn 2 faninany  */
+       '? fo2:',                                 /* Conn 2 fanout    */
+       '| count lines',                          /* How many         */
+       '| specs',                                /* .                */
+               '~SLT~ 1',                        /* Prep 4 faninany  */
+               'PAD 0',                          /* .                */
+               '1;* NW.2 RIGHT',                 /* .                */
+       '| fi:',                                  /* Conn 2 faninany  */
+       '? p2:',                                  /* Conn 2 pick      */
+       '| p3: pick substr 1.3 of w1.1 == ~SLB~', /* Select these     */
+       '| fo3: fanout',                          /* Duplicate records*/
+       '| join * x40',                           /* Make 1 record    */
+       '| specs 1.3 1 1;* nw',                   /* Add label        */
+       '| fi:',                                  /* Conn 2 faninany  */
+       '? fo3:',                                 /* Conn 2 fanout    */
+       '| count lines',                          /* How many records */
+       '| specs',                                /* .                */
+               '~SLB~ 1',                        /* Prep 4 faninany  */
+               'PAD 0',                          /* .                */
+               '1;* NW.2 RIGHT',                 /* .                */
+       '| fi:'                                   /* Conn 2 faninany  */
+End l
+/*---------------------------------------------------------------+
+| Write results 2 file                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME CHKSRVR.EXEC:108 END ?)',
+   'stem out.',                                  /* Take this        */
+   '| > 'myfn' CURRENT 'wfm                      /* Write 2 file     */
+/*---------------------------------------------------------------+
+| Compare current and previous files                             |
++---------------------------------------------------------------*/
+Address CMS 'DIFF 'myfn' CURRENT 'wfm' = PREVIOUS 'wfm
+/*---------------------------------------------------------------+
+| Remove work space if used                                      |
++---------------------------------------------------------------*/
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (NOT WRITE'
+Exit

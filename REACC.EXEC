@@ -1,0 +1,51 @@
+/*---------------------------------------------------------------+
+| Function : Re-access the accessed disk/directories to get      |
+|            access to new or updated files                      |
+|                                                                |
+| File     : REACC    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : REACC    < quiet >                                  |
+|                                                                |
+|            quiet    shows no output                            |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190429 11:04:46                                   |
+| Changes  : .                                                   |
+|            20191008 H.T.Kramer : Made quiet and added help     |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg silent .
+Parse Source . . myfn myft .
+If silent='?' Then Do
+           'VMFCLEAR'
+           'PIPE (NAME REACC.EXEC:29 END ?)',
+               '< 'myfn myft' *',
+               '| tolabel Parse',
+               '| cons'
+           Exit
+           End
+If silent='QUIET' Then out=''
+                  Else out='| cons'
+ 
+'PIPE (NAME REACC.EXEC:38 END ?)',
+   'cms QUERY ACCESSED',                        /* What is accessed*/
+   '| drop first 1',                            /* Drop header     */
+   '| specs w-2;-1 1 w1.1 nw',                  /* Keep this       */
+   '| if: if pick substr 1.3 of w1.1 == ~DIR~', /* Is it a DIR     */
+   '|    specs w2.1 1 w3.1 nw',                 /* ....re-shuffle  */
+   '| if:',                                     /* Conn 2 if       */
+   '|    specs w1.1 1 w3.1 nw',                 /* ......re-shuffle*/
+   '| if:',                                     /* Conn 2 if       */
+   '| nfind 190',                               /* Skip this one   */
+   '| specs ~ACCESS~ 1 w1;* nw',                /* Compose cmds    */
+   out,
+   '| cms'                                      /* Issue them      */
+Exit

@@ -1,0 +1,53 @@
+*
+* Are we running in test modus yes or no
+* In test modus we do not issue the commands we just display them
+:test.no
+*
+* Display informational messages yes/no
+:info.no
+*
+* Identify how we obtain the info thru RSCS or SSI AT
+:type.rscs
+*:type.ssi
+*
+* Identify the nodes we want to investigate
+* Specify: * and the code will obtain all the nodes
+:nodes.*
+*:nodes.R1LB2 R1LB2
+*
+* Do we want to clean spool files yes/no
+:clean.no
+*
+* Identify the files we want thrown away (wildcards are ok)
+* Here we specify filenames/filetypes we do not want
+:clean_fnft.CODE *;* CODE;* REFUSED;DIRMAINT NEWMAIL
+* Here we identify files with a certain distribution code
+:clean_dist.DVHDAILY;DVHOURLY
+*
+* Do we want the console files collected yes/np
+:console.no
+*
+* Who needs to receive the console files
+:collector.conpark
+*
+* Do you want an overview of SPOOL ALLOC yes/no
+:q_alloc.yes
+*
+* Do you want to see a filecount of spool files/user yes/no
+:files.yes
+*
+* Do you want to see all the spool files yes/no
+:spool.yes
+*
+* Which queues do you want to inspect, this also defines the order in which
+* these are displayed
+:queues.RDR PRT PUN
+*
+* Do you want an overview of user DUMP space yes/no
+:dump.yes
+*
+* Do you want an overview of the NSSes in SPOOL yes/no
+:nss.yes
+*
+* The list of files we want execloaded, separated by ;
+:loadlist.rscs exec * = rexx;splmgr exec * = xedit

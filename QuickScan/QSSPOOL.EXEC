@@ -1,0 +1,169 @@
+/*---------------------------------------------------------------+
+| Function : Check spooling                                      |
+|                                                                |
+| File     : QSSPOOL  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSSPOOL  REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSSPOOL  <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSSPOOL  REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* .                */
+que='RDR PRT PUN'                               /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSSPOOL.EXEC:41 END ? .EXEC:41)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose the header                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME QSSPOOL.EXEC:52 END ?)',
+   'literal 'TimeStamp(),                        /* Compose header   */
+   '| var spool_header 1',                       /* .                */
+   '| join * x40',                               /* .                */
+   '| var spool_header'                          /* .                */
+/*---------------------------------------------------------------+
+| Do some queries                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME QSSPOOL.EXEC:60 END ?)',
+   'cp QUERY DUMP',                              /* Ask cp           */
+   '| specs w-1;-1 1',                           /* Keep this        */
+   '| var dump',                                 /* Store as         */
+   '?',                                          /* 2nd PIPE         */
+   'cp QUERY ALLOC *',                           /* Ask cp           */
+   '| pick w1.1 == ~DASD~ or w1.1 == ~SPOOL~',   /* Select these     */
+   '| join * x40',                               /* Make 1 record    */
+   '| split at string ~DASD~',                   /* Split here       */
+   '| specs w1.2 1 w9;* nw',                     /* Rework records   */
+   '| change ~INUSE=~~',                         /* Replace these    */
+   '| change ~AVAIL=~~',                         /* .                */
+   '| change ~TOTAL=~~',                         /* .                */
+   '| specs w1;* 1',                             /* Calculate totals */
+           'a: w3.1 .',                          /* .                */
+           'b: w4.1 .',                          /* .                */
+           'c: w5.1 .',                          /* .                */
+           'set #0+=a',                          /* .                */
+           'set #1+=b',                          /* .                */
+           'set #2+=c',                          /* .                */
+           'eof',                                /* .                */
+           '~Totals~ 1.11',                      /* .                */
+           'print #0 pict 99999999999 nw',       /* .                */
+           'print #1 pict 99999999999 nw',       /* .                */
+           'print #2 pict 99999999999 nw',       /* .                */
+   '| preface literal CUU  Label  Total       In use      Available',   /* Add header       */
+   '| stem allspool.',                           /* Store as         */
+   '| take last 1',                              /* Take this        */
+   '| specs w3.1',                               /* Keep this        */
+   '| strip leading ~0~',                        /* Remove zeros     */
+   '| var used'                                  /* Store as         */
+ovrv='; ;Total pages in use for spool: 'used,
+     '          Pages for DUMP   : 'dump,
+     '          Pages for files  : 'used-dump
+Call Add2Output 'allspool.,Spool area report'
+Call Add2Output 'ovrv'
+Call Check_Queues
+ 
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Check_Queues:
+/*---------------------------------------------------------------+
+| Start checking the system queues                               |
++---------------------------------------------------------------*/
+'PIPE (NAME QSSPOOL.EXEC:109 END ?)',
+    'var que',                                   /* Take this        */
+    '| split',                                   /* Split into...    */
+    '| stem que.'                                /* Hand 2 rexx      */
+Do q=1 To que.0
+  file.0=0
+  old.0=0
+  large.0=0
+  'PIPE (NAME QSSPOOL.EXEC:117 END ?)',
+      'cp QUERY 'que.q' SYSTEM ALL ISODATE DIST', /* Ask the content  */
+      '| pick w1.1 \== ~NO~',                    /* Ignore these     */
+      '| drop first 1',                          /* Only need this   */
+      '| stem file.'                             /* Store as         */
+  If file.0>0 Then Do
+       'PIPE (NAME QSSPOOL.EXEC:123 END ?)',
+           'stem file.',                         /* Take these       */
+           '| f: fanout',                        /* Duplicate them   */
+           '| pick w8.1 \== ~OPEN-~',            /* Ignore the open  */
+           '| sort w8.2 a',                      /* Sort on date     */
+           '| take first 10',                    /* Take top ten     */
+           '| specs w1.7 1 ~=>~ nw w8.2 nw ~<=~ nw w10;* nw',   /* Add markers      */
+           '| preface literal Topten Oldest files in 'que.q':', /* Add header       */
+           '| preface literal ',                 /* Add empty        */
+           '| stem old.',                        /* Store as         */
+           '? f:',                               /* Conn 2 fanout    */
+           '| sort w5.1 d',                      /* Sort on size     */
+           '| take first 10',                    /* Take top ten     */
+           '| specs w1.4 1 ~=>~ nw w5.1 nw ~<=~ nw w6;* nw',     /* Add markers      */
+           '| preface literal Topten Largest files in 'que.q':', /* Add header       */
+           '| preface literal ',                 /* Add empty        */
+           '| buffer',                           /* Prevent loop     */
+           '| stem large.'                       /* Hand 2 rexx      */
+        End
+  If old.0<>0 Then Call Add2Output 'old.'
+  If large.0<>0 Then Call Add2Output 'large.'
+End q
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSSPOOL.EXEC:148 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var spool_header',                /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Hand 2 caller    */
+Return
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSSPOOL.EXEC:164 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* .                */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

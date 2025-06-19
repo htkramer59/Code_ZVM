@@ -1,0 +1,75 @@
+/*---------------------------------------------------------------+
+| Function : Talk to a server                                    |
+|                                                                |
+| File     : TALK2    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TALK2    <server> <cmd>                             |
+|                                                                |
+| Comments : EXECLOAD me as REXX and I can be used as a PIPE     |
+|            stage                                               |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220323 16:55:16                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg server cmdline
+Parse Source . . myfn myft .
+Select
+When myft='EXEC' Then Do
+          pipecmd='PIPE'
+          output='var exrc'
+          End
+When myft='XEDIT' Then Do
+          pipecmd='CALLPIPE'
+          output='var exrc | *:'
+          End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Save some msg settings                                         |
++---------------------------------------------------------------*/
+pipecmd' (NAME TALK2.EXEC:36 END ?)',
+  'cp QUERY SET',                                /* Ask CP           */
+  '| split at ,',                                /* Split here       */
+  '| strip',                                     /* Remove spaces    */
+  '| pick w1.1 == ~MSG~ or w1.1 == ~SMSG~',      /* Select these     */
+  '| specs ~/CP_~ 1 w1.1 n ~/~ n w2.1 n',        /* Compose 4 varload*/
+  '| varload'                                    /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Prepare for communication with the servers                     |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET MSG IUCV'
+Address COMMAND 'CP SET SMSG IUCV'
+/*---------------------------------------------------------------+
+| Set some defaults                                              |
++---------------------------------------------------------------*/
+delay=2
+filter=''
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME TALK2.EXEC:56 END ?)',
+   'literal +'delay,                         /* Set this         */
+   '| delay',                                /* Wait here        */
+   '| g: gate',                              /* Wait for input   */
+   '?',                                      /* 2nd pipe         */
+   'starmsg CP SMSG 'server cmdline,         /* Ask rscs         */
+   '| g:',                                   /* Conn 2 gate      */
+   '| specs 17;* 1',                         /* Adjust output    */
+   filter,
+   '| 'output                                /* Show/hand over   */
+/*---------------------------------------------------------------+
+| Undo message settings from before.                             |
++---------------------------------------------------------------*/
+pipecmd' (NAME TALK2.EXEC:69 END ?)',
+   'rexxvars toload',                            /* Take these       */
+   '| locate ~CP_~',                             /* Select these     */
+   '| specs fs _ ~SET~ 1 f2 nw',                 /* Compose cmds     */
+   '| change ~/~ ~',                             /* Replace these    */
+   '| cp'                                        /* Issue cmds       */
+Exit exrc

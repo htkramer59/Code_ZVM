@@ -1,0 +1,15 @@
+* Specify the code you want executed with the options needed
+* The code is executed in the order they are registered here
+SPLMGR
+ALLDIRM  (QUIET
+ALLFPS   (QUIET
+ALLCNP   (QUIET
+ALLMDU   (QUIET
+ALLREC   (QUIET
+ALLCERT
+ALLCPU   (QUIET
+ALLIND   (QUIET
+ALLMEM
+ALLUSERS (QUIET
+UPTIME   (QUIET
+ALLLVLS  (QUIET

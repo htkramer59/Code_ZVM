@@ -1,0 +1,431 @@
+/*---------------------------------------------------------------+
+| Function : Talk to PERFSVM to collect info/panels              |
+|                                                                |
+| File     : FCX      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : FCX      <panel or report> ( SORT <sort field>      |
+|                                                                |
+|                     <panel or report>  required                |
+|                     <sort field>       optional                |
+|                                                                |
+| Comments : EXECLOAD me as FCX REXX and I am usable as a pipe   |
+|            stage                                               |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190729 14:51:38                                   |
+| Changes  : .                                                   |
+|            20220817 H.T.Kramer : Made it so we can use the menu|
+|                       selections and sorting.                  |
+|            20220720 H.T.Kramer : Rework so we have displays    |
+|                       with colors in them.                     |
+|            20211223 H.T.Kramer : Remove old files from rdr     |
+|            20211202 H.T.Kramer : Changed the receiving end     |
+|                       so we only keep filled records           |
+|            20210210 H.T.Kramer : Rework so the PRINT header    |
+|                       is removed.                              |
+|            20200527 H.T.Kramer : Reworked as PIPE stage...     |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' usropt
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Set some defaults                                              |
++---------------------------------------------------------------*/
+If what='' Then what = 'MENU'
+If what='SELECT' & myft='XEDIT' Then Call ProcessSelect
+If what='SORT'   & myft='XEDIT' Then Call ProcessSort
+perfid='PERFSVM '
+print='PRINT'
+option='( 'usropt' PAGESIZE OFF TO 'Userid()
+Select
+When myft='REXX'  Then Call PipeCode
+When myft='EXEC'  Then Call ExecCode
+When myft='XEDIT' Then Call XeditCode
+Otherwise Nop
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Exit 0
+ 
+ 
+ExecCode:
+/*---------------------------------------------------------------+
+| The exec part of the code                                      |
++---------------------------------------------------------------*/
+pipecmd='PIPE'
+Call Prepare
+If \exl Then Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+Call AskPerfid
+Call Get_Spoolid
+Call Read_Spoolid
+'PIPE (NAME FCX.EXEC:69 END ?)',
+  'stem input.',                                 /* Take these       */
+  '| f: fanout',
+  '| tolabel ~______~',                          /* Up to here       */
+  '| locate anycase ~MENU~',                     /* Find this        */
+  '| count lines',                               /* How many         */
+  '| var menu',                                  /* Set switch       */
+  '? f:',                                        /* .                */
+  '| drop first 7',                              /* .                */
+  '| take first 1',                              /* .                */
+  '| var srtc',                                  /* .                */
+  '| split',                                     /* .                */
+  '| pick 1.1 == ~.~',                           /* .                */
+  '| count lines',                               /* .                */
+  '| var srtl'                                   /* .                */
+If menu>1 Then menu=1
+If srtl>1 Then srtl=1
+Address CMS 'XEDIT 'myfn' OUTPUT A (WIDTH 500 PROFILE FCX'
+If \exl Then Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+PipeCode:
+/*---------------------------------------------------------------+
+| The pipe part of the code                                      |
++---------------------------------------------------------------*/
+pipecmd='CALLPIPE'
+Call Prepare
+Call AskPerfid
+Call Get_Spoolid
+Call Read_Spoolid
+pipecmd '(end ?)',
+    'stem input.',                               /* Take these       */
+    '| *:'                                       /* Hand 2 caller    */
+Return
+ 
+ 
+XeditCode:
+/*---------------------------------------------------------------+
+| The xedit/macro part of the code                               |
++---------------------------------------------------------------*/
+pfkeys='Help;_;Menu;Sort;_;_;Back;Forw;_;Top;Bot;Quit/Return'
+pfkinp='HELP;_;CMS FCX MENU;MACRO FCX SORT;_;_;BACKWARD;FORWARD;_;:1;BOT#BACK#NEXT 2;QQUIT'
+'MSGLINE ON 1 OVERLAY'
+'LINEND OFF'
+Address CMS 'PIPE (NAME FCX.EXEC:114 END ?)',
+   'var pfkeys',                                 /* Take these       */
+   '| split at ;',                               /* Split here       */
+   '| specs recno 1.2 left ~=%G~ n w1.1 n ~%W~ n',   /* Compose          */
+   '| change ~ =~=~',                            /* Replace this     */
+   '| join * x40',                               /* Make 1 record    */
+   '| specs ~%W~ 1 1;* n',                       /* Add this         */
+   '| var pfkeys',                               /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'var pfkinp',                                 /* Take this        */
+   '| dup 1',                                    /* Add 1 copy       */
+   '| split at ;',                               /* Split here       */
+   '| change ~_~~',                              /* Replace this     */
+   '| specs ~SET PF~ 1 recno n.2 left w1;* nw',  /* Compose cmd      */
+   '| subcom xedit'                              /* Hand 2 xedit     */
+'LINEND ON'
+'RECFM V'
+'LRECL 500'
+/*---------------------------------------------------------------+
+| Set all control chars..                                        |
++---------------------------------------------------------------*/
+'SET CTLCHAR % ESCAPE'
+'SET CTLCHAR Y PROTECT   YELLOW HIGH'
+'SET CTLCHAR y NOPROTECT YELLOW HIGH'
+'SET CTLCHAR W PROTECT   WHITE  HIGH'
+'SET CTLCHAR w NOPROTECT WHITE  HIGH'
+'SET CTLCHAR B PROTECT   BLUE   HIGH'
+'SET CTLCHAR b NOPROTECT BLUE   HIGH'
+'SET CTLCHAR G PROTECT   GREEN  HIGH'
+'SET CTLCHAR g NOPROTECT GREEN  HIGH'
+'SET CTLCHAR R PROTECT   RED    HIGH'
+'SET CTLCHAR r NOPROTECT RED    HIGH'
+'SET CTLCHAR $ OFF'
+/*---------------------------------------------------------------+
+| Do some settings                                               |
++---------------------------------------------------------------*/
+'CMDLINE OFF'
+'SCALE OFF'
+'TOFEOF OFF'
+'CURLINE ON 7'
+'PREFIX NULLS LEFT'
+'SET ENTER MACRO FCX SELECT'
+'VERIFY 1 *'
+Address CMS 'PIPE (NAME FCX.EXEC:157 END ?)',
+     'rexxvars 1 toload',                        /* Ask all vars     */
+     '| varload'                                 /* Hand 2 rexx      */
+If srtl Then Do
+        remsrt1='| drop first 2 | f: fanout'
+        remsrt2='? f: | drop first 2 | take 1| var valsrt'
+        End
+        Else Do
+        remsrt1=''
+        remsrt2=''
+        End
+Address CMS 'PIPE (NAME FCX.EXEC:168 END ?)',
+     'stem input.',                              /* Take these       */
+     '| t: take first 6',                        /* Take headers     */
+     '| specs ~%W~ 1 1;* n',                     /* Adjust           */
+     '| change ~From~From%G~',                   /* Add some colors  */
+     '| change ~To~To%G~',                       /* .                */
+     '| change ~At~At%G~',                       /* .                */
+     '| change ~For~For%G~',                     /* .                */
+     '| change ~  CPU ~%WCPU%R~',                /* .                */
+     '| change ~  z/VM ~%Wz/VM%G~',              /* .                */
+     '| change 33.1  ~ ~%W~',                    /* .                */
+     '| stem hdr.',                              /* Hand 2 rexx      */
+     '? t:',                                     /* Conn 2 take      */
+     remsrt1,
+     '| stem line.',                             /* Hand 2 rexx      */
+     remsrt2
+Do h=1 To hdr.0
+  'SET RESERVED 'h' NON NOH     'hdr.h
+End h
+If menu Then Call BuildMenu
+        Else Do
+        If srtl Then Call Set_SortLine
+        ':1'
+         Address CMS 'PIPE (NAME FCX.EXEC:191 END ?)',
+            'stem line.',                        /* Take these       */
+            '| xedit'                            /* Hand 2 xedit     */
+        ':1'
+        End
+'SET RESERVED -1 NON NOH     'pfkeys
+Return
+ 
+ 
+Set_Sortline:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME FCX.EXEC:204 END ?)',
+  'var srtc',                                    /* Take the sortline*/
+  '| change ~ . ~%b.%W~',                        /* Replace these    */
+  '| if: if pick 1.1 == ~.~',                    /* If we find this  */
+  '|    specs ~%b~ 1 1;* n',                     /* ..we change this */
+  '| if:',                                       /* Conn 2 if        */
+  '| var srtc'                                   /* Hand 2 rexx      */
+'SET RESERVED 'hdr.0+1' NON NOH       'srtc
+Return
+ 
+ 
+ 
+BuildMenu:
+/*---------------------------------------------------------------+
+| Building the menu's                                            |
++---------------------------------------------------------------*/
+If what='MENU' Then Do
+   Address CMS 'PIPE (NAME FCX.EXEC:221 END ?)',
+        'stem line.',                            /* Take these       */
+        '| d1: drop first 2',                    /* Move these       */
+        '| d2: drop last 2',                     /* ..and these      */
+        '| change ~User Data    ~    User Data~',   /* Replace this     */
+        '| specs ~:~ 1',                         /* Rework 4 colors  */
+                '2.2 n ~;~ n',                   /* .                */
+                '5-27 n ~:~ n',                  /* .                */
+                '29.3 n ~;~ n',                  /* .                */
+                '33-54 n ~:~ n',                 /* .                */
+                '56.3 n ~;~ n',                  /* .                */
+                '60-80 n ~;~ n',                 /* .                */
+        '| change ~:~%b~',                       /* Setting colors   */
+        '| change ~;~%Y~',                       /* .                */
+        '| change ~User Data  ~%WUser Data%Y~',  /* Adding some more */
+        '| stem work.',                          /* Hand 2 rexx      */
+        '? d1:',                                 /* Conn 2 drop      */
+        '| specs ~%W~ 1 1;* n',                  /* Add colors       */
+        '| stem top.',                           /* Hand 2 rexx      */
+        '? d2:',                                 /* Conn 2 drop      */
+        '| specs ~%W~ 1 1;* n',                  /* Add colors       */
+        '| stem bot.'                            /* Hand 2 rexx      */
+   Drop line.
+   Address CMS 'PIPE (NAME FCX.EXEC:244 END ?)',
+        'stem top.',                             /* Combine all      */
+        '| append stem work.',                   /* .so we have      */
+        '| append stem bot.',                    /* ...the complete  */
+        '| stem line.'                           /* .....panel       */
+   End
+   Else Do
+   Address CMS 'PIPE (NAME FCX.EXEC:251 END ?)',
+        'stem line.',                            /* Take these       */
+        '| buffer',                              /* Prevent loop     */
+        '| if: if pick w1.1 == ~_~ or',          /* Rework these     */
+                      'w1.1 == ~.~',             /* .                */
+        '|    specs ~%b_%Y~ 2 w2;* n',           /* .                */
+        '| if:',                                 /* Conn 2 if        */
+        '|    specs ~%W~ 1 1;* n',               /* .                */
+        '| if:',                                 /* Conn 2 if        */
+        '| stem line.'                           /* Hand 2 rexx      */
+   End
+Do l=1 To line.0
+  'SET RESERVED 'hdr.0+l' NON NOH     'line.l
+End l
+Return
+ 
+ 
+Prepare:
+/*---------------------------------------------------------------+
+| Prepare some items for the exec/rexx part                      |
++---------------------------------------------------------------*/
+If Length(Word(what,1))<=2 Then field=2
+                           Else field=3
+pipecmd' (NAME FCX.EXEC:274 END ?)',
+    'cms EXECMAP 'myfn' XEDIT',                  /* Am I loaded as.. */
+    '| nfind DMS',                               /* Remove emsg      */
+    '| pick w1.1 == ~'myfn'~',                   /* Any trace of me  */
+    '| count lines',                             /* How many         */
+    '| var exl',                                 /* Create boolean   */
+    '?',                                         /* 2nd pipe         */
+    '< FCX LIST *',                              /* Read this        */
+    '| pick 1.1 \== ~~',                         /* Skip empty lines */
+    '| pick 1.1 \== ~*~',                        /* Skip comments    */
+    '| locate fs ; f'field' ~'Word(what,1)'~',   /* Select these     */
+    '| take first 1',                            /* Take one         */
+    '| count lines',                             /* How many         */
+    '| var valcmd',                              /* Store as         */
+    '?',                                         /* 3rd pipe         */
+    'cms QUERY DISPLAY',                         /* Ask sizes        */
+    '| specs w2.2',                              /* Keep this        */
+    '| specs ~/LINES/~ 1 w1.1 n',                /* Add vars reqs.   */
+            '~;/COLS/~ n w2.1 n',                /* .                */
+    '| split at ;',                              /* Split here       */
+    '| varload'                                  /* Hand 2 rexx      */
+If rc<>0 Then exl=0
+Return
+ 
+ 
+AskPerfid:
+/*---------------------------------------------------------------+
+| Ask perfid for the details                                     |
++---------------------------------------------------------------*/
+head=Left(TimeStamp() Strip(what)' ',80,'-')
+Address CMS 'PIPE VMC 'perfid print what option '| hole' /* Ask perfid       */
+If rc<>0 Then Do
+              Say TimeStamp()' Non-zero rc from VMC 'perfid': 'rc
+              Exit rc
+              End
+Return
+ 
+ 
+Read_Spoolid:
+/*---------------------------------------------------------------+
+| Read the spool id                                              |
++---------------------------------------------------------------*/
+input.0=0
+If spid<>'' Then Do
+     pipecmd' (NAME FCX.EXEC:318 END ?) ',
+        'READER FILE 'spid,                           /* Take these       */
+        '| pick 1.1 == x01 ',                         /* Only want these  */
+        '| specs 2;*',                                /* Remove printchars*/
+        '| stem input.'                               /* Store as         */
+     If input.0=0 Then Do
+             If myft='XEDIT' Then 'EMSG 'TimeStamp()' No data returned for 'what
+                             Else Do
+                                  Say TimeStamp() 'No data returned for 'what
+                                  Exit 28
+                                  End
+    End
+End
+Return
+ 
+ 
+Get_Spoolid:
+/*---------------------------------------------------------------+
+| Get the spoolid...                                             |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET IMSG OFF'
+Address COMMAND 'CP SLEEP 1 SEC'
+spid=''
+pipecmd' (NAME FCX.EXEC:341 END ?)',
+   'cp QUERY RDR * ALL ISODATE',                 /* Ask what is there*/
+   '| pick w-2;-2 == ~FCONMON~ and',             /* Locate these     */
+          'w-1;-1 == ~LISTING~',                 /* .                */
+   '| sort w8.2 d',                              /* .                */
+   '| t: take first 1',                          /* Take latest      */
+   '| specs w2.1 1 x40 n',                       /* Keep this        */
+   '| append literal ',                          /* Add empty line   */
+   '| var spid',                                 /* Store as         */
+   '? t:',                                       /* Conn 2 take      */
+   '| specs ~PURGE * RDR~ 1 w2.1 nw',            /* Compose cmds     */
+   '| cp'                                        /* Hand 2 cp        */
+If (spid='' | spid='SPID') Then Do
+   emsg=TimeStamp()' No data returned by VMC from 'perfid' for 'what
+   Select
+   When myft='EXEC' Then Do
+                    Say emsg
+                    Exit 28
+                    End
+   When myft='XEDIT' Then 'EMSG 'emsg
+   When myft='REXX'  Then Exit 28
+   Otherwise Nop
+   End
+   End
+Address COMMAND 'CP SET IMSG ON'
+Return
+ 
+ 
+TimeStamp:                                       /* Return a uniform timestamp */
+Return Date('S') Time() myfn
+ 
+ 
+ProcessSelect:
+/*---------------------------------------------------------------+
+| Process the selection we got from the screen                   |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/RESERVED *'
+num=cursor.1
+pos=cursor.2
+curline=reserved.num
+If Pos('_',curline)<>0 Then Do
+                       Parse Value curline With . . '_%Y' what .
+                       If what='System' Then Parse Value curline With . 'System' what .
+                       End
+                       Else Call CutSelection
+/*---------------------------------------------------------------+
+| Clear the file                                                 |
++---------------------------------------------------------------*/
+':1'
+'MSGMODE OFF'
+'DEL *'
+'MSGMODE ON'
+Address CMS 'FCX 'what
+Queue 'CURSOR SCREEN 'cursor.1 cursor.2
+Return
+ 
+ 
+ProcessSort:
+/*---------------------------------------------------------------+
+| Process when the SORT key (PF4) is pressed                     |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FCX.EXEC:402 END ?)',
+    'var what 1',                                /* Take from caller */
+    '| var what',                                /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'xedit',                                     /* Take in all      */
+    '| totarget locate 2.1 ~>~',                 /* Read up to here  */
+    '| take last 1',                             /* Keep this one    */
+    '| var sortsel'                              /* Hand 2 rexx      */
+'EXTRACT /CURSOR/'
+len=cursor.2-6                                   /* Where is the curs*/
+sortsel=Substr(sortsel,1,len)                    /* Chop up to here  */
+cnt=Words(sortsel)                               /* How many left    */
+valsrt=Word(sortsel,cnt)                         /* Keep this        */
+Address CMS 'FCX 'what' (SORT 'valsrt            /* .                */
+Return
+ 
+ 
+CutSelection:
+/*---------------------------------------------------------------+
+| If it is a complicated menu...we go on                         |
++---------------------------------------------------------------*/
+Select
+When pos>=6  & pos<32 Then what=Substr(curline,38,26)
+When pos>=33 & pos<59 Then what=Substr(curline,67,26)
+When pos>=60 & pos<80 Then what=Substr(curline,96,26)
+Otherwise Nop
+End
+Parse Value what With . '%b' what '%Y' .
+what=Strip(what,'T','.')
+Return

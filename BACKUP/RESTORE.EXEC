@@ -1,0 +1,776 @@
+/*---------------------------------------------------------------+
+| Function : Help with restore of files/dasd on backup           |
+|                                                                |
+| File     : RESTORE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : BACKUP   NAMES                                      |
+|            files on "storage"                                  |
+|                                                                |
+| Called   : RESTORE  <fastpath> ( <testmode>                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190724 09:33:00                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fastpath '(' testmode
+Parse Source . . myfn myft .
+Select
+When myft='EXEC'  Then Call Run_Exec
+When myft='XEDIT' Then Call Run_Xedit
+Otherwise Exit 88
+End
+Exit
+ 
+ 
+Run_Exec:
+/*---------------------------------------------------------------+
+| Running as EXEC                                                |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME RESTORE.EXEC:34 END ?)',
+     'cp QUERY USERID',                         /* Ask cp           */
+     '| specs w3.1',                            /* Select this      */
+     '| var node',                              /* Store as         */
+     '| specs -2;-1',                           /* Select this      */
+     '| var shortnode'                          /* Store as         */
+If testmode='TEST' Then test=1
+                   Else test=0
+Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+Call Read_Names
+/*---------------------------------------------------------------+
+| Access the storage where the stuff is...                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STORAGE (QUIET ONLY(BACKUP) .fm'
+If rc=0 Then Parse Pull . . sfm .
+        Else Call Error rc' Problem linking 'storage' rc: '
+Address CMS 'XEDIT 'myfn' TOOL A (PROFILE 'myfn' WI 120'
+/*---------------------------------------------------------------+
+| Release the storage                                            |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STORAGE <DET (ONLY(BACKUP) QUIET'
+Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+Run_Xedit:
+/*---------------------------------------------------------------+
+| Running as XEDIT macro                                         |
++---------------------------------------------------------------*/
+Call XeditSettings
+Select
+When fastpath=''  Then Call InitDisp
+When fastpath<>'' &,
+     fastpath<>'STORAGE' &,
+     fastpath<>'GENERATIONS' Then Do
+                       Say 'FASTPATH 'fastpath
+                       Call Get_Data_From_Exec
+                       fastpath=Strip(fastpath)
+                       type=fastpath
+                       Address CMS 'PIPE (NAME RESTORE.EXEC:71 END ?)',
+                            'stem data.',       /* Take these       */
+                            '| change ~!~~',    /* Replace tgus     */
+                            '| pick w1.1 == ~'fastpath'~',  /* Select...        */
+                            '| specs w2;* 7',   /* Keep this        */
+                            '| var data'        /* Store as         */
+                       Call Evaluate_Selection
+                       End
+Otherwise Nop
+End
+Do m=1
+   Call Display
+   'READ ALL NUMBER'
+    If bfs Then pipeupper=''
+           Else pipeupper='| xlate upper'
+    Address CMS 'PIPE (NAME RESTORE.EXEC:86 END ?)',
+       'stack',                                 /* Empty stack      */
+       pipeupper,                               /* Uppercase 4 ease */
+       '| var xedcmd'                           /* Store as         */
+   'EXTRACT /CURSOR'
+   line=cursor.1-6
+   Parse Value data.line With . '%Y' data
+   Select
+   When xedcmd='HELP'    Then Address CMS 'HELP 'myfn
+   When xedcmd='RETURN'  Then Do
+                      Call InitDisp
+                      Call Display
+                      End
+   When xedcmd='QUIT'    Then Do
+                      Queue 'QQUIT'
+                      Exit
+                      End
+   When xedcmd='SELECT'  Then Do
+                      Parse Value data With type data
+                      Call Evaluate_Selection
+                      End
+   When xedcmd='SELSEG'  Then Do
+                      Parse Value data With subject data
+                      Call Show_Generations 'DCSS'
+                      End
+   When xedcmd='SELDSD'  Then Do
+                      Parse Value data With subject data
+                      Call Show_Generations Word(data,1)
+                      End
+   When xedcmd='SELFIL'  Then Do
+                      Parse Value data With subject ftpart .
+                      Call Show_Generations ftpart
+                      'MSG >>>> These files will be copied to your A-disk'
+                      End
+   When xedcmd='SELBFS'  Then Do
+                      type='BFS'
+                      bfs=1
+                      Parse Value data With fnsrch ftpart .
+                      Call Show_Generations fnsrch . ftpart . fnsrch ftpart
+                      End
+   When xedcmd='RESTORE' Then Call Evaluate_Restore
+   When xedcmd='LIST'    Then Call ShowVmarc
+   When xedcmd='CONFIRM' Then Call Check_Target_Restore
+   Otherwise 'EMSG No action or Invalid comand >>>>' cmd '<<<<'
+   End
+End m
+Return
+ 
+ 
+XeditSettings:
+/*---------------------------------------------------------------+
+| Initial XEDIT settings                                         |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME RESTORE.EXEC:139 END ?)',
+    'var fastpath 1',                           /* Take from caller */
+    '| var fastpath'                            /* Hand 2 rexx      */
+'RECFM V'
+'LRECL 120'
+'TRUNC *'
+'VERIFY 1 *'
+'CURLINE ON 2'
+'PREFIX OFF'
+'TOFEOF OFF'
+'SCALE  OFF'
+'EXTRACT /SCREEN'
+'SET ENTER IGNORE'
+maxlines=Word(screen.1,2)-8
+vmarc=0
+bfs=0
+/*---------------------------------------------------------------+
+| Set the control characters..                                   |
++---------------------------------------------------------------*/
+'SET CTLCHAR % ESCAPE'
+'SET CTLCHAR Y PROTECT   YELLOW HIGH'
+'SET CTLCHAR y NOPROTECT YELLOW HIGH'
+'SET CTLCHAR W PROTECT   WHITE  HIGH'
+'SET CTLCHAR w NOPROTECT WHITE  HIGH'
+'SET CTLCHAR B PROTECT   BLUE   HIGH'
+'SET CTLCHAR b NOPROTECT BLUE   HIGH'
+'SET CTLCHAR R PROTECT   RED    BLINK'
+'SET CTLCHAR r NOPROTECT RED    HIGH'
+'SET CTLCHAR G PROTECT   GREEN  HIGH'
+'SET CTLCHAR g NOPROTECT GREEN  HIGH'
+'SET CTLCHAR $ OFF'
+Return
+ 
+ 
+InitDisp:
+/*---------------------------------------------------------------+
+| Initial display of the main menu                               |
++---------------------------------------------------------------*/
+title='Main menu'
+header='   NickName    Source                Targetfile         Description                     Details:',
+       'CMS(0)/NONCMS(1) Files Id List'
+pfkeys='1 Help;2;3 Quit;4 Select;5;6;7;8;9;10;11;12 Quit'
+Call Get_Data_From_Exec
+Address CMS 'PIPE (NAME RESTORE.EXEC:182 END ?)',
+    'stem data.',                               /* Take these       */
+    '| buffer',                                 /* Prevent loop     */
+    '| sort fs ! f5',                           /* Sort...noncms    */
+    '| specs ~%b_%Y~ 1 1;* nw',                 /* Add selection fld*/
+    '| change ~!~~',                            /* Remove these     */
+    '| if1: if pick w2.1 == ~DASD~',            /* If we find these */
+                'or w2.1 == ~SEGMENTS~',        /* .                */
+    '|   specs ~& &~ 1 1;* n',                  /* Add this...      */
+    '| if1:',                                   /* Conn 2 if        */
+    '| if2: if pick w2.1 == ~OTHER~',           /* If we find this  */
+    '|   specs ~& &~ 1 1;* n ~& &~ n',          /* Add these        */
+    '| if2:',                                   /* Conn 2 if        */
+    '| split at string ~&~',                    /* Now split        */
+    '| change ~%Y ~%Y~',                        /* Condense this    */
+    '| stem data.'                              /* Store as         */
+Return
+ 
+ 
+Get_Data_From_Exec:
+/*---------------------------------------------------------------+
+| Get the data from the calling exec and rework it               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME RESTORE.EXEC:205 END ?)',
+    'stem nick. 1',                             /* Take from caller */
+    '| stem nick.',                             /* Use as           */
+    '?',                                        /* 2nd pipe         */
+    'var sfm 1',                                /* Take from caller */
+    '| var sfm',                                /* Use as           */
+    '?',                                        /* 2nd pipe         */
+    'var test 1',                                /* Take from caller */
+    '| var test'                                 /* Use as           */
+data.0=nick.0
+Do n=1 To nick.0
+   Address CMS 'PIPE (NAME RESTORE.EXEC:213 END ?)',
+     'literal 'nick.n,                          /* Take this        */
+     '| split before string ~ :~',              /* Split here       */
+     '| strip',                                 /* Remove space     */
+     '| change ~:~/~ 1',                        /* Replace this     */
+     '| change ~.~.'n'/~ 1',                    /* ...and this      */
+     '| xlate fs / f2 upper',                   /* Upper case       */
+     '| varload'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| If the following are empty or not there fill them...           |
++---------------------------------------------------------------*/
+   If product.n=''|product.n='PRODUCT.'n Then product.n='_ ____'
+   If outfile.n=''|outfile.n='OUTFILE.'n Then outfile.n=Word(product.n,1) Right(Word(product.n,2),4,'0')
+   If noncms.n=''|noncms.n='NONCMS.'n Then noncms.n=0
+   If files.n=''|files.n='FILES.'n Then files.n='_'
+   If list.n=''|list.n='LIST.'n Then list.n='_'
+   If id.n=''|id.n='ID.'n Then id.n='_'
+/*---------------------------------------------------------------+
+| Add as new stem member                                         |
++---------------------------------------------------------------*/
+   data.n=Substr(nick.n,1,10) ,
+      '!' Substr(product.n,1,20) ,
+      '!' Substr(Word(outfile.n,1),1,8) Substr(Word(outfile.n,2),1,8),
+      '!' Substr(title.n,1,30) ,
+      '!' noncms.n ,
+      '!' files.n ,
+      '!' id.n ,
+      '!' list.n
+End n
+Return
+ 
+ 
+Evaluate_Selection:
+/*---------------------------------------------------------------+
+| Evaluate the main selection                                    |
++---------------------------------------------------------------*/
+If Substr(Strip(data),74,1)='1' Then type='NONCMS'
+Select
+When type='SEGMENTS' Then Call Segments
+When type='DASD'     Then Call Dasd
+When type='OTHER'    Then Call Other
+When type='NONCMS'   Then Call NonCMS
+Otherwise Call VMARC_files
+End
+Return
+ 
+ 
+Evaluate_Restore:
+/*---------------------------------------------------------------+
+| Evaluate for the restore sections                              |
++---------------------------------------------------------------*/
+Select
+When type='SEGMENTS' Then Call Restore_Segment
+When type='DASD'     Then Call Restore_Dasd
+When type='OTHER'    Then Call Restore_Other
+When type='NONCMS'   Then Call Restore_NonCMS
+When type='BFS'      Then Call Restore_BFS
+Otherwise Call VMARC_restore
+End
+Return
+ 
+ 
+NonCMS:
+/*---------------------------------------------------------------+
+| Dialog for the NONCMS section                                  |
++---------------------------------------------------------------*/
+vmarc=0
+Parse Value data With . . id cuu .
+subject=id cuu '(NONCMS)'
+Call Show_Generations id . cuu . subject
+Return
+ 
+ 
+Restore_Dasd:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+target=Subword(data,2,2)
+Parse Value target With id . '_' cuu .
+If cuu='' Then cuu=Word(target,2)
+linkdata=id cuu
+header='                   Backup archive'
+Call Show_Alt_Conf
+Return
+ 
+ 
+Restore_NonCMS:
+/*---------------------------------------------------------------+
+| Restore the NONCMS parts                                       |
++---------------------------------------------------------------*/
+target=Subword(data,2,2)
+Parse Value target With id . '_' cuu .
+If cuu='' Then cuu=Word(target,2)
+linkdata=id cuu
+header='                   Backup archive'
+Address CMS 'GETFMADR'
+Parse Pull . . vcuu .
+Call Show_Alt_Conf
+Address CMS 'PIPE CP DETACH 'vcuu' HOLE'        /* Det the disk     */
+Return
+ 
+ 
+Restore_BFS:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+target=Subword(data,2,2)
+'PIPE (NAME RESTORE.EXEC:320 END ?)',
+   'stem bfsdata.',
+   '| pick w-2;-2 == ~'Word(target,1)'~ and w-1;-1 == ~'Word(target,2)'~',
+   '| specs w1.1 1 w3.1 nw',
+   '| f: fanout',
+   '| specs w1.1 1 w2.1 n',
+   '| var linkdata',
+   '? f:',
+   '| specs w1.1',
+   '| var bfsdir',
+   '? f:',
+   '| specs w2.1',
+   '| var bfsfile'
+Call Show_Alt_Conf
+Return
+ 
+ 
+Segments:
+/*---------------------------------------------------------------+
+| Dialog for the segments section                                |
++---------------------------------------------------------------*/
+vmarc=0
+title=' The following segments are available for RESTORE'
+header='   FN       FT       FM Format Lrecl    Records     Blocks Date       Time      Remarks'
+pfkeys='1 Help;2;3 Return;4 SelSeg;5;6;7;8;9;10;11;12 Quit'
+Address CMS 'PIPE (NAME RESTORE.EXEC:345 END ?)',
+       'cms LISTFILE * DCSSBKUP 'sfm' (NOH ISODATE',  /* Ask cms          */
+       '| if1: if pick w5.1 < ~4096~',          /* Act on these     */
+       '|    specs 1;* 1 ~%R<<< Possible problem%r~ nw',  /* Append warning   */
+       '| if1:',                                /* Conn 2 if        */
+       '| sort w1.1',                           /* Sort...          */
+       '| specs ~%b_%Y~ 1 1;* n',               /* Add sel fields   */
+       '| if2: if locate ~DMSLST~',             /* Did we find this */
+       '|     change ~%Y~%R~',                  /* Make it red      */
+       '| if2:',                                /* Conn 2 if        */
+       '| stem data.'                           /* Store as         */
+Call Display
+Return
+ 
+ 
+Restore_Segment:
+/*---------------------------------------------------------------+
+| Restore a segment...                                           |
++---------------------------------------------------------------*/
+Parse Value data With gen segname bk_ft .
+If gen=0 Then maptype=map
+         Else maptype=Right(gen,2,0)'_MAP'
+Address CMS 'PIPE (NAME RESTORE.EXEC:367 END ?)',
+    '<' segname maptype sfm,                    /* Take this        */
+    '| drop first 1',                           /* Remove hdr       */
+    '| specs ~DEFSEG~ 1',                       /* Compose cmd      */
+            'w2.1 nw',                          /* .                */
+            'w5.1 nw',                          /* .                */
+            '~-~ n',                            /* .                */
+            'w6.2 n ',                          /* .                */
+            'w3.1 nw',                          /* .                */
+    '| change ~--~~',                           /* Remove these     */
+    '| cons'                                    /* Show             */
+If rc=0 Then Do
+     cmscmd='DCSSRSAV 'segname bk_ft sfm
+     Call RunCmd
+     End
+Return
+ 
+ 
+Other:
+/*---------------------------------------------------------------+
+| Dialog for the other section                                   |
++---------------------------------------------------------------*/
+title=' The following files are available in the section OTHER'
+header='   FN       FT       FM Format Lrecl    Records     Blocks Date       Time      Remarks'
+pfkeys='1 Help;2;3 Return;4 SelFil;5;6;7;8;9;10;11;12 Quit'
+Address CMS 'PIPE (NAME RESTORE.EXEC:389 END ?)',
+      'var data',                               /* Take this        */
+      '| specs 81;* 1',                         /* Adjust           */
+      '| change ~_~~',                          /* Replace this     */
+      '| strip',                                /* Remove spaces    */
+      '| split at ;',                           /* Break up here    */
+      '| specs ~LISTFILE~ 1',                   /* Compose cmd      */
+              '1;* nw ',                        /* .                */
+              '~'sfm '(NOH ISODATE~ nw',        /* .                */
+      '| cms',                                  /* Hand 2 cms       */
+      '| sort',                                 /* Sort outcome     */
+      '| pick substr 1.2 of w2.1 notin ~0123456789~',  /* Select numbers   */
+      '| specs ~%b_%Y~ 1 1;* n',                /* Add fields       */
+      '| if: if locate ~DMSLST~',               /* Any of this      */
+      '|     change ~%Y~%R~',                   /* Make it red      */
+      '| if:',                                  /* Conn 2 if        */
+      '| stem data.'                            /* Store as         */
+Call Display
+Return
+ 
+ 
+Restore_Other:
+/*---------------------------------------------------------------+
+| Restore from the other section                                 |
++---------------------------------------------------------------*/
+Parse Value data With gen fn ft .
+If gen=0 Then oft='='
+         Else Parse Value ft With . '_' oft .
+cmscmd='COPYFILE 'fn ft sfm' = 'oft' A (REPLACE OLDDATE'
+Call RunCmd
+Return
+ 
+ 
+VMARC_files:
+/*---------------------------------------------------------------+
+| Show which generations we have 4 vmarc files                   |
++---------------------------------------------------------------*/
+bfs=0
+data=Strip(data)
+orig=''
+Parse Value data With id cuu .
+subject=Subword(data,1,2)
+If id='.DIR' Then Do
+            If Pos('BFS',data)<>0 Then bfs=1
+            If bfs Then Call BFS_List
+            Else Do
+            cuu=Word(data,4)
+            id=Word(data,3)
+            orig=id cuu
+            subject=Word(data,2)
+            End
+            End
+If \bfs Then Do
+vmarc=1
+vmarclist=0
+Call Show_Generations id . cuu .  subject
+End
+Return
+ 
+ 
+BFS_List:
+/*---------------------------------------------------------------+
+| Process the BFS part...                                        |
++---------------------------------------------------------------*/
+vmarc=0
+vmarclist=0
+'PIPE (NAME RESTORE.EXEC:454 END ?)',
+   'cms LISTFILE * BFSLOG 'sfm,
+   '| getfiles',
+   '| stem bfsdata.',
+   '| specs ~LISTFILE~ 1 w-2;-2 nw ~*~ nw w-1;-1 n ~(NOHEADER ISODATE~ nw',
+   '| cms',
+   '| specs ~%b_%Y~ 1 1;* n',
+   '| stem data.'
+resttarget=Word(data,2)
+title=' The following files are available in the section BFS%G'resttarget
+header='   FN       FT       FM Format Lrecl    Records     Blocks Date       Time      Remarks'
+pfkeys='1 Help;2;3 Return;4 SelBfs;5;6;7;8;9;10;11;12 Quit'
+Call Display
+Return
+ 
+ 
+ShowVmarc:
+/*---------------------------------------------------------------+
+| Show the content of VMARC files...                             |
++---------------------------------------------------------------*/
+Parse Value data with . vmarcfn vmarcft .
+title=' The following files are available in:%G'vmarcfn vmarcft
+header='   FN       FT       FM   Bytes in Bytes out  Compression Remarks'
+pfkeys='1 Help;2;3 Return;4;5;6 Restore;7;8;9;10;11;12 Quit'
+vmarclist=1
+Address CMS 'PIPE (NAME RESTORE.EXEC:479 END ?)',
+       ' CMS VMARC LIST 'vmarcfn vmarcft sfm,   /* Take this        */
+       '| change ~, bytes out=~~',              /* Remove the follow*/
+       '| change ~Bytes in=~~',                 /* .            ing */
+       '| change ~.~~',                         /* .                */
+       '| change ~)~~',                         /* .                */
+       '| change ~(~~',                         /* .                */
+       '| specs ~%b_%Y~ 1 1;* n',               /* Add sel field    */
+       '| stem data.'                           /* Store as         */
+Call Display
+Return
+ 
+ 
+VMARC_restore:
+/*---------------------------------------------------------------+
+| VMARC restore dialog                                           |
++---------------------------------------------------------------*/
+If vmarclist Then target=vmarcfn vmarcft sfm Subword(data,1,2)
+             Else target=Subword(data,2,2) sfm' = = '
+If orig='' Then linkdata=id cuu
+           Else linkdata=orig
+'PIPE (NAME RESTORE.EXEC:500 END ?)',
+   'var data ',                                 /* Take this        */
+   '| specs w1.1 1.8',                          /* Rework layout    */
+           'w2.1 nw.8',                         /* .                */
+           'w3.1 nw',                           /* .                */
+           'w4.1 nw.8',                         /* .                */
+           'w5.1 nw.8',                         /* .                */
+           'w6.1 nw',                           /* .                */
+   '| var data '                                /* Hand 2 rexx      */
+Call Show_Alt_Conf
+Return
+ 
+ 
+Show_Alt_Conf:
+/*---------------------------------------------------------------+
+| Show alternate & confirm target                                |
++---------------------------------------------------------------*/
+header=' '
+Call MakeSeparator
+If rc<>0 Then  'EMSG >>>> Restore failed. Problem linking 'linkdata' Rc: 'rc
+         Else Do
+         title='Select a target for the restore:%b'linkdata'%Y(NONCMS)'
+         data.0=5
+         data.1='%y Data to restore:%G'target
+         data.2=''
+         data.3=''
+         data.4='%y Target for restore according to control file:%G'linkdata
+         data.5='%y Enter an alternate target                   :%g'Copies('_',40)'%G'
+         pfkeys='1 Hlp;2;3 Return ;4;5;6;7;8;9;10 Confirm;11;12 Quit'
+         Call Display
+         End
+Return
+ 
+ 
+Check_Target_Restore:
+/*---------------------------------------------------------------+
+| Check the target....and if ok restore stuff                    |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR'
+line=cursor.1-6
+If line=5 Then Do
+      Parse Value data.line With part1 '%g' .
+      Address CMS 'PIPE (NAME RESTORE.EXEC:542 END ?)',
+         'stack ',                              /* Empty stack      */
+         '| strip ~_~ ',                        /* Remove these     */
+         pipeupper,                             /* Upper case       */
+         '| var linkdata'                       /* Store as         */
+      data.line=part1||'%g'||linkdata||'%G'
+      'SET RESERVED 'cursor.1' HIGH 'data.line
+      End
+Select
+When vmarc Then Do
+             Address CMS 'VMLINK 'linkdata' (NONAMES QUIET WRITE .fm'
+             Parse Pull . . wfm .
+             If rc=0 Then Do
+               cmscmd='VMARC UNP 'target wfm' (OLDDATE REPLACE'
+               Call RunCmd
+               If rc<>0 Then 'EMSG >>>> VMARC UNP 'target wfm' Failed 'rc
+             Address CMS 'VMLINK 'linkdata' <DET (NONAMES QUIET WRITE'
+             End
+             Else 'EMSG >>>> Can not link 'linkdata
+             End
+When bfs   Then Do
+             cmscmd='OPENVM MOUNT 'bfsdir' /'
+             Call RunCmd
+             If rc<>0 Then 'EMSG >>>> OPENVM MOUNT 'bfsdir' Failed 'rc
+             cmscmd='OPENVM PUT 'target sfm linkdata' (REPLACE OLDDATE'
+             Call RunCmd
+             If rc<>0 Then 'EMSG >>>> OPENVM PUT 'target sfm linkdata' Failed 'rc
+             cmscmd='OPENVM UNMOUNT /'
+             Call RunCmd
+             If rc<>0 Then 'EMSG >>>> OPENVM UNMOUNT / Failed 'rc
+             End
+Otherwise Do
+             cmscmd='PIPEDDR RESTORE 'linkdata' FROM FILE ' target sfm
+             Call RunCmd
+             If rc<>0 Then 'EMSG >>>> PIPEDDR RESTORE 'linkdata' FROM FILE 'target sfm' Failed 'rc
+             End
+End
+Drop vmarcfn vmarcft target
+Return
+ 
+ 
+Dasd:
+/*---------------------------------------------------------------+
+| Processing for DASD restore...                                 |
++---------------------------------------------------------------*/
+vmarc=0
+title=' The following DASD are on BACKUP:'
+header='   FN       FT       FM Format Lrecl    Records     Blocks Date       Time      Remarks'
+pfkeys='1 Help;2;3 Return;4 SelDsd;5;6;7;8;9;10;11;12 Quit'
+Address CMS 'PIPE (NAME RESTORE.EXEC:586 END ?)',
+    'var data',                                 /* Take this        */
+    '| specs w-2;-1',                           /* Keep this        */
+    '| split at x40',                           /* Split here       */
+    '| t: take first 1',                        /* Take 1           */
+    '| var id',                                 /* Hand 2 rexx      */
+    '? t:',                                     /* Conn 2 take      */
+    '| var list'                                /* Hand 2 rexx      */
+If list='ALL' Then Do
+    Address CMS 'PIPE (NAME RESTORE.EXEC:595 END ?)',
+        'cp QUERY MDISK USER 'id' 0-FFFF DIR',  /* Ask from CP      */
+        '| pick w1.2 == w3.4',                  /* Owned by         */
+        '| specs w2.1',                         /* Keep this        */
+        '| join * ~;~',                         /* Make 1 record    */
+        '| var list'                            /* Store as         */
+        End
+'PIPE (NAME RESTORE.EXEC:602 END ?)',
+     'var list',                                /* Take this        */
+     '| split at ;',                            /* Split here       */
+     '| sort',                                  /* Change order     */
+     '| specs ~LISTFILE 'id'~ 1',               /* Compose cmds     */
+             'w1.1 nw ',                        /* .                */
+             '~'sfm' (NOHEADER ISODATE~ nw',    /* .                */
+     '| cms',                                   /* Ask cms          */
+     '| specs ~%b_%Y~ 1 1;* nw',                /* Add field        */
+     '| if: if locate ~DMSLST~',                /* Found this ?     */
+     '|     change ~%Y~%R~',                    /* Make it red      */
+     '| if:',                                   /* Conn 2 if        */
+     '| stem data.'                             /* Store as         */
+Call Display
+Return
+ 
+ 
+Show_Generations:
+/*---------------------------------------------------------------+
+| Show the generations available                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg fnsrch '.' ftpart '.' subject
+fnsrch=Strip(fnsrch)
+ftpart=Strip(ftpart)
+subject=Strip(subject)
+title=' The following generations for:%G'subject
+header='   Gen FN       FT       FM Format Lrecl    Records     Blocks Date       Time      Remarks'
+If vmarc Then pfkeys='1 Help;2;3 Return;4;5;6 Restore;7;8;9;10;11 LIST;12 Quit'
+         Else pfkeys='1 Help;2;3 Return;4;5;6 Restore;7;8;9;10;11;12 Quit'
+Address CMS 'PIPE (NAME RESTORE.EXEC:631 END ?)',
+       'cms LISTFILE 'fnsrch' *'ftpart'* 'sfm' (NOH ISODATE',  /* Ask this         */
+       '| sort w-2;-1 d',                       /* Sort on date     */
+       '| specs recno from 0 1.2 right 1;* nw', /* Add generation   */
+       '| specs ~%b_%Y~ 1 1;* nw',              /* Add sel field    */
+       '| if: if locate ~DMSLST~',              /* Found this       */
+       '|     change ~%Y~%R~',                  /* Flag it          */
+       '| if:',                                 /* Conn 2 if        */
+       '| stem data.'                           /* Hand 2 rexx      */
+Call Display
+Return
+ 
+ 
+RunCmd:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If test Then Say cmscmd
+        Else cmscmd
+Return
+ 
+ 
+Error:
+/*---------------------------------------------------------------+
+| Generic error routine                                          |
++---------------------------------------------------------------*/
+Parse Arg exrc msg
+If exrc='' | exrc='EXRC' Then exrc=0
+If exrc<>0 Then Say TimeStamp() msg exrc
+Exit exrc
+Return
+ 
+ 
+MakeSeparator:
+/*---------------------------------------------------------------+
+| Create a separator to measure...                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME RESTORE.EXEC:659 END ?)',
+   'var header ',                               /* Take this        */
+   '| deblock 1',                               /* Split into bytes */
+   '| if: if pick 1.1 \== ~ ~',                 /* If not empty     */
+   '|   specs ~-~ 1',                           /* Replace ...      */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Make 1 rec       */
+   '| var separator'                            /* Store as         */
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Create a uniform timestamp                                     |
++---------------------------------------------------------------*/
+Return Date('S') Time() myfn
+ 
+ 
+SetPFKeys:
+/*---------------------------------------------------------------+
+| Set the pf keys                                                |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME RESTORE.EXEC:681 END ?)',
+   'var pfkeys',                                /* Take this        */
+   '| split at ~;~',                            /* Split            */
+   '| f: fanout',                               /* Dupl. recs       */
+   '| xlate upper',                             /* Uppercase        */
+   '| specs ~SET PF~ 1 1;* n',                  /* Compose cmds     */
+   '| stem set.',                               /* Store as         */
+   '? f:',                                      /* Conn 2 fanout    */
+   '| specs w1.1 1 ~=~ n w2.1 nw',              /* Adjust layout    */
+   '| if: if pick w2.1 \== ~~',                 /* Take nonempties  */
+   '|     specs w1.1 1 ~%B~ n w2.1 n ~%W~ n',   /* Add this         */
+   '| if:',                                     /* Conn 2 if        */
+   '|     specs w1.1 1 ~ ~ n.5',                /* Adjust layout    */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Make 1 rec       */
+   '| specs ~Pf~ 1 1;* n',                      /* Add this         */
+   '| var pfkeyline'                            /* Store as         */
+Do s=1 To set.0
+  Address XEDIT set.s
+End s
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Set the reserved lines...                                      |
++---------------------------------------------------------------*/
+Call SetPFKeys
+Call MakeSeparator
+time=TimeStamp()
+l=Length(time)
+'CURSOR SCREEN 7 2'
+'SET RESERVE 3 WHITE NO 'Center(title,120-l)'%G'time
+'SET RESERVE 4 WHITE NO 'header
+'SET RESERVE 5 WHITE NO 'separator
+If data.0<=maxlines Then Do
+          rep=maxlines-data.0-1
+          Address CMS 'PIPE (NAME RESTORE.EXEC:718 END ?)',
+              'literal ',                       /* Make empty rec   */
+              '| dup 'rep,                      /* Duplicate        */
+              '| stem data. append'             /* Add to...        */
+          End
+Do d=1 To data.0
+ lineno=d+6
+ 'RESERVE 'lineno 'HIGH' data.d
+End d
+'SET RESERVE -1 WHITE NO 'pfkeyline
+Return
+ 
+ 
+Read_Names:
+/*---------------------------------------------------------------+
+| Read the control file                                          |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME RESTORE.EXEC:735 END ?)',
+    '< BACKUP NAMES *',                         /* Read this        */
+    '| pick 1.1 \== ~*~',                       /* Remove comments  */
+    '| pick 1.1 \== ~~',                        /* Remove empty line*/
+    '| strip',                                  /* Remove spaces    */
+    '| join * x40',                             /* Make 1 record    */
+    '| change anycase ~<SHORTNODE>~'shortnode'~',  /* Replace these    */
+    '| split anycase before string ~:NICK.~',   /* Split here       */
+    '| nlocate anycase w1.1 ~:NICK.STORAGE~',   /* Remove this      */
+    '| nlocate anycase w1.1 ~:NICK.GENERATIONS~',  /* ....and this     */
+    '| nlocate anycase w1.1 ~:NICK.CATALOG~',   /* ....and this     */
+    '| n: nlocate anycase ~:NODE.~',            /* Deferr these     */
+    '| fi: faninany',                           /* Take in...       */
+    '| stem nick.',                             /* Store as         */
+    '? n:',                                     /* Conn 2 nlocate   */
+    '| locate anycase ~:NODE.'node'~',          /* Select these     */
+    '| change anycase ~:NODE.'node'~~',         /* Remove it..      */
+    '| fi:'                                     /* Conn 2 faninany  */
+Return

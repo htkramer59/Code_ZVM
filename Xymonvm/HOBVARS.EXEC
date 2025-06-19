@@ -1,0 +1,48 @@
+/*---------------------------------------------------------------+
+| Function : Read the control file and hand the variables to     |
+|            our caller (HOBVMDRV)                               |
+|                                                                |
+| File     : HOBVARS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : HOBVARS  CONTROL  input for this exec.              |
+|                                                                |
+| Called   : HOBVARS  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211222 12:20:58                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+fs='FF'x
+controlfile='HOBVARS CONTROL'
+/*---------------------------------------------------------------+
+| Check if we can find a control file and use the latest found   |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVARS.EXEC:25 END ?)',
+    'cms LISTFILE 'controlfile' * (NOHEADER ISODATE',   /* Find the file    */
+    '| sort w-2;-1 d',                           /* Sort on date     */
+    '| take first 1',                            /* Take latest      */
+    '| specs w1.3 1',                            /* Keep fn ft and fm*/
+    '| var controlfile',                         /* Hand 2 rexx      */
+    '| count lines',                             /* Count lines      */
+    '| var ctrlfnd'                              /* Store as boolean */
+If \ctrlfnd Then Exit 28
+/*---------------------------------------------------------------+
+| Read the file rework to variables and hand them to caller      |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVARS.EXEC:37 END ?)',
+    '< 'controlfile,                             /* Read the file    */
+    '| pick 1.1 \== ~ ~ and 1.1 \== ~*~',        /* Ignore empties   */
+    '| space',                                   /* Reduce spacing   */
+    '| change ~ =~/~',
+    '| change ~=~/~',                            /* Replace this     */
+    '| change ~/*~ xFF',                         /* and this         */
+    '| specs fs 'fs' f1 1',                      /* Ignore comms on  */
+    '| xlate fs / f1',                           /* Replace this     */
+    '| specs ~/~ 1 1;* strip n',                 /* Prep 4 varload   */
+    '| varload 1'                                /* Hand 2 caller    */
+Exit

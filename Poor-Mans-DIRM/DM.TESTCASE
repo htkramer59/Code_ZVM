@@ -1,0 +1,153 @@
+ACC TESTER TESTACCT                                                             
+*                                                                               
+ACI TESTER ACITEST                                                              
+ACI TESTER DEL                                                                  
+*                                                                               
+ADD TEST12 DIRECT                                                               
+*                                                                               
+BATCH TEST BATCH                                                                
+*                                                                               
+AMD TESTER  291 10 AUTO                                                         
+AMD TESTER  391 10 VMCOM1                                                       
+*                                                                               
+CHNGID TEST12 TEST21                                                            
+CHNGID TEST21 TEST12 MOVELINKS                                                  
+CHNGID TEST12 TEST21 KEEPLINKS                                                  
+*                                                                               
+CHV TESTER 291 491                                                              
+CHV TESTER 491 591 MOVELINKS                                                    
+CHV TESTER 591 491 KEEPLINKS                                                    
+*                                                                               
+CLASS TESTER QRY                                                                
+CLASS TESTER ADD AB                                                             
+CLASS TESTER DEL B                                                              
+CLASS TESTER ADD Z                                                              
+*                                                                               
+CLONE TESTER 191 TESTER F191 AUTO                                               
+*                                                                               
+CMD TESTER F191 50 AUTO                                                         
+*                                                                               
+CMS QUERY DISK                                                                  
+*                                                                               
+CP QUERY TIME                                                                   
+*                                                                               
+CPU TESTER  QRY                                                                 
+CPU TESTER  ADD 3F                                                              
+CPU TESTER  QRY                                                                 
+CPU TESTER  MOD 2F BASE                                                         
+CPU TESTER  QRY                                                                 
+CPU TESTER  DEL 2F                                                              
+CPU TESTER  QRY                                                                 
+*                                                                               
+CRYPTO TESTER QRY                                                               
+CRYPTO TESTER DOMAIN 3 76                                                       
+CRYPTO TESTER QRY                                                               
+CRYPTO TESTER APIVIRT                                                           
+CRYPTO TESTER QRY                                                               
+CRYPTO TESTER DEL                                                               
+CRYPTO TESTER QRY                                                               
+*                                                                               
+DATEF TESTER QRY                                                                
+DATEF TESTER ISODATE                                                            
+DATEF TESTER SHORTDATE                                                          
+DATEF DEL                                                                       
+*                                                                               
+DIRECT                                                                          
+*                                                                               
+MAP                                                                             
+FREE                                                                            
+USED                                                                            
+*                                                                               
+DMD TESTER F191                                                                 
+DMD TESTER F191 NOCLEAN                                                         
+*                                                                               
+GET TESTER                                                                      
+*                                                                               
+HELP                                                                            
+HELP ACC                                                                        
+HELP TASK                                                                       
+HELP MENU                                                                       
+*                                                                               
+INCLU TESTER QRY                                                                
+INCLU TESTER TESTINCL                                                           
+INCLU TESTER QRY                                                                
+INCLU TESTER DEL                                                                
+INCLU TESTER QRY                                                                
+*                                                                               
+INDEX                                                                           
+*                                                                               
+IOPRIOR TESTER QRY                                                              
+IOPRIOR TESTER RELATIVE 10 20                                                   
+IOPRIOR TESTER RELATIVE 10 30                                                   
+IOPRIOR TESTER ABSOLUTE 100 130                                                 
+IOPRIOR TESTER DEL                                                              
+*                                                                               
+IPL  TESTER QRY                                                                 
+IPL  TESTER IPLTST1                                                             
+IPL  TESTER IPLTST2 AUTOCR                                                      
+IPL  TESTER DEL                                                                 
+*                                                                               
+LINK TESTER MAINT 193 193 RR                                                    
+LINK TESTER MAINT 193 193 DEL                                                   
+*                                                                               
+LOGONBY TESTER QRY                                                              
+LOGONBY TESTER DMSERVER                                                         
+LOGONBY TESTER ADD MAINT                                                        
+LOGONBY TESTER ADD MAINT730                                                     
+LOGONBY TESTER DEL MAINT                                                        
+LOGONBY TESTER DEL MAINT730                                                     
+LOGONBY TESTER DEL MAINT                                                        
+*                                                                               
+MACHINE TESTER QRY                                                              
+MACHINE TESTER Z                                                                
+MACHINE TESTER QRY                                                              
+MACHINE TESTER ESA                                                              
+MACHINE TESTER QRY                                                              
+MACHINE TESTER DEL                                                              
+MACHINE TESTER QRY                                                              
+*                                                                               
+MAX TESTER QRY                                                                  
+MAX TESTER 4G                                                                   
+*                                                                               
+MDISK TESTER M RPASS WPASS MPASS                                                
+*                                                                               
+MMDISK TESTER F191 MAINT F111                                                   
+*                                                                               
+NAME TESTER QRY                                                                 
+NAME TESTER ADD CMS ZCMS                                                        
+NAME TESTER DEL CMS                                                             
+NAME TESTER QRY                                                                 
+NAME TESTER DEL ZCMS                                                            
+NAME TESTER QRY                                                                 
+*                                                                               
+OPTION TESTER QRY                                                               
+OPTION TESTER ADD  opt                                                          
+OPTION TESTER DEL  opt                                                          
+OPTION TESTER CHNG newopt                                                       
+*                                                                               
+PRIOR TESTER  64                                                                
+*                                                                               
+RELOAD                                                                          
+*                                                                               
+REPL TESTER                                                                     
+*                                                                               
+SEC TESTER QRY                                                                  
+SEC TESTER MAINT                                                                
+SEC TESTER QRY                                                                  
+SEC TESTER DEL                                                                  
+SEC TESTER QRY                                                                  
+*                                                                               
+SETPW TESTER                                                                    
+*                                                                               
+STOR TESTER QRY                                                                 
+STOR TESTER 3G                                                                  
+*                                                                               
+TMD TESTER F191 MAINT F111                                                      
+*                                                                               
+XAU TESTER QRY                                                                  
+XAU TESTER ADD MAINT                                                            
+XAU TESTER ADD MAINT730                                                         
+XAU TESTER DEL MAINT730                                                         
+XAU TESTER DEL MAINT                                                            
+*                                                                               
+PURGE TESTER                                                                    

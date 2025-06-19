@@ -1,0 +1,45 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    /         A slash mark (/) in the COL command line indicates shift
+              the screen to this column.  However, if the "/" is entered
+              in position 1 of the COL command line then it indicates
+              shift left to column 1.
+ 
+    /*        Shift as far right as possible and keep a full screen.
+    /-*       Shift left to column 1.
+    /0        Shift left to column 1.
+    /20       Shift right 20 columns.
+    /-20      Shift left 20 columns.
+ 
+    /cmd      Do the command "here" rather than following the command
+              character.  For example:
+ 
+    /A(nn)    | Same as the base commands except that the text is placed
+    /I text   | in the column where the "/" is positioned instead of
+    /R text   | after the command.  This is useful for column 1.
+    /O text   | To insert a blank in column 1 the command would be:
+    /' text   | /i ?????????????????????????????????????????????????????
+    /- text
+.cs 7 on
+                     COLumn Edit Base Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL BASECMD3 (ALL       A       Add or insert blanks into a column
+COL BASECMD5 (ALL       "       Duplicate a Column
+COL BASECMD2 (ALL       D       Delete a column
+COL BASECMDS (ALL       I       Insert text into a column
+COL BASECMD6 (ALL       /cmd    Do "here" rather than behind the command
+COL BASECMD6 (ALL       /       Shift the screen to this column
+COL BASECMD4 (ALL       O,R,',- Overlay, Replace, Pad or remove data
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

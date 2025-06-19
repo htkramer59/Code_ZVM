@@ -1,0 +1,246 @@
+/* This exec allows to dynamicaly define an MDISK that exists in  a
+   CP directory file (e.g. from a nabour system).
+    Example:  Send CP directory from system VMA to VMB
+              Receive that file as VMA DIRECT
+              Provided DASD of SYSTEM VMA are online to VMB, you'll can:
+                MDSK VMA.MAINT 190  A90 RR Z (Filel DETach ATTACH
+ 
+ +------------------------------------------------------------------+
+ | format:  | MDSK fn.uid addr <laddr <lmode <amode>>> <( options > |
+ |  or   :  | MDSK fn uid addr <laddr <lmode <amode>>> <( options > |
+ |  or   :  | MDSK uid                                 <( options > |
+ | options: |  < Filelist >  < Attach > <Detach>                    |
+ +------------------------------------------------------------------+
+ Option ATTACH: attaches the volser to system before DEFINE MDISK is done
+ Option DETACH: detaches the defined mdisk from the user after FILELIST
+                (and the volser from SYSTEM if we attached it)
+Note: on z/VM 6.2 to get an MDISK that is coded in a SUBCONFIG section,
+      the coded "uid" can/must be the SUBCONFIG one, eg MAINT-1
+      If the IDENTIFY has only 1 BUILD ON statement, the MDSK EXEC
+      searches that single SUBCONFIG too.  With other words: if you use
+      z/VM 6.2 in non-SSI mode, you can still request "MDSK fn MAINT 191"
+      for example.
+WARNING: Accessing it in R/W status can be dangerous, as there is no
+         control of concurrent R/W accesses.
+         Note as well that all MDISKs defined this way are R/W
+         (DEFINE MDISK has no R/O option), so de default "RR" linkmode
+         only forces an R/O Access ( "ACCESS lcuu amode/amode" )
+ 
+PREREQ: -CP Authority for DEFINE MDISK
+         (in VM/ESA 1.1 you need OPTION DEVMAINT and class A).
+        -CMS/Pipelines
+Note: You may specify "MDSK userid.= 191 .."
+      or even "MDSK userid 191 .."
+      Very useful when you got "userid DIRECT" from DIRMAINT.
+Note: If the ftype of the directory is not DIRECT, you must code:
+       "MDSK fn.ft.userid 191 .."
+27 Sep 1993 allow links to "indirect links"
+            E.G. USER RTMESA has no MDISK 191 but LINK yyy 401 191
+                    you now can: MDSK xxx.RTMESA 191
+23 Feb 1995 Allow an = sign as userid
+ 5 Jul 2000 Allow to pass ftype of directory source; make 191 default;
+            understand "MDSK user" as "MDSK user.user"; DETACH if empty
+19 Jun 2002 Also allow invoking as "MDSK fn userid cuu ..."
+ 2 Feb 2009 Improve message when ATTACH is asked but target volume not
+            not in Q DASD FREE
+24 Feb 2011 Give user a chance to do something if MDISK cannot be
+            ACCESSed or FILELISTed.
+10 Dec 2012 Support z/VM 6.2.  Implement CPWONED check as documented
+            in MDSK HELPCMS
+Written by:  Kris Buelens 25 May 1992*/
+parse upper source . . myname mytype . syn addr .
+address command
+parse upper arg uid addr laddr lmode amode . '(' options
+if uid='?' then do;'HELP' myname ;exit ;end
+if uid='' then call exit 5 ,'userid/cuu incomplete'
+ft='DIRECT'
+ 
+if pos('.',uid)=0 then
+   parse upper arg fn uid addr laddr lmode amode . '('
+else do
+   parse var uid fn'.'+0 dot +1 uid
+   if dot<>'.' | uid='' then do
+      'STATE' fn ft
+      if rc=0 then uid=fn
+      else call exit 5,,
+        'Parms invalid; must be: "fname.userid cuu ..."'
+   end
+   if pos('.',uid)>0 then parse var uid ft'.'uid
+end
+ 
+'GETFMADR';  parse pull . fm cuu .
+ 
+if uid  ='='| uid=''    then uid=fn
+if addr ='' | addr='*'  then addr=191
+if laddr='' | laddr='*' then laddr=cuu
+if amode='' | amode='*' then amode=fm
+ 
+det=0; filelist=0;att=0  /* init all our options */
+do while options^='' /* analyse requested options */
+   parse var options option options
+   select
+     when option='FD'  then parse value 1 1   with det filelist
+     when option='FDA' then parse value 1 1 1 with det filelist att
+     when abbrev('DETACH',option,1)   then det=1
+     when abbrev('ATTACH',option,1)   then att=1
+     when abbrev('FILELIST',option,1) then filelist=1
+     Otherwise call exit 5, 'Invalid option:' option
+   end
+end
+ 
+'ESTATE' fn ft '*'
+if rc^=0 then call exit rc,'Directory file "'fn ft '*" not found.'
+ 
+OrgTarget=uid addr
+ 
+do until linkto=''
+   'PIPE (end ?)',
+     '|   STATE' fn ft '*',          /* Find the file */
+     '|   SPEC w1 1 w2 nw w3 nw',
+     '|   VAR dirfid',               /* pass full fnftfm to REXX */
+     '|   GETFILE',                  /* Read file and unpack if needed */
+     '|   NFIND *',
+     '|   SPEC W1 1 w2 nw w3-* nw',  /* remove extraneous spaces */
+     '|   CHANGE 1.8 /IDENTITY/USER/',
+     '|   CHANGE 1.9 /SUBCONFIG/USER/',
+     '|   PAD 30',                   /* assure a space after userid */
+     '|   FROMLABEL USER 'uid' '||,
+     '|   DROP 1',
+     '|   TOLABEL USER',
+     '|B: NFIND BUILD_ON', /* z/VM 6.2 IDENTITY? */
+     '|F: FIND MDISK_'right(addr,4,0)'_',
+     '|   VAR MDISK4',
+     '?F:|L: FIND MDISK_'right(strip(addr,'L',0),3,0)'_',
+     '|   VAR MDISK3',
+     '?L:|FIND LINK',   /* Check for LINK */
+     '|   SPEC W4 1 W2-3 nw',
+     '|K: FIND' right(strip(addr,'L',0),3,0)'_',
+     '|   VAR LINK3',
+     '?K:|FIND' right(addr,4,0)'_',
+     '|   VAR LINK4',
+     '?B:', /* BUILD ON * USING SUBCONFIG AUTLG1-1 */
+     '|SPEC W6 1|Join * / /|Append Literal |VAR SUBCOS'
+   if rc^=0 then exit rc
+   linkto=''
+   select
+    when symbol('MDISK3')='VAR'  then mdisk=mdisk3
+    when symbol('MDISK4')='VAR'  then mdisk=mdisk4
+    when symbol('LINK3')='VAR'   then linkto=subword(link3,2)
+    when symbol('LINK4')='VAR'   then linkto=subword(link4,2)
+    When Words(SubCos)=1         then LinkTo=subCos addr
+    When Words(SubCos)>1 then
+      call Exit 8,'User' uid 'is an IDENTITY, with multiple BUILD ON',
+         'statements.','Try looking for MDISK' addr 'of' subCos,,
+           'e.g. EXEC' myname word(subcos,2) addr '...'
+    otherwise
+      call exit 5, 'User' uid 'Mdisk' addr 'not found in "'dirfid'"'
+   end
+   if linkto<>'' then do
+      if subCos='' then say 'User' uid addr '= LINK to' linkto
+      else say 'User' uid 'is an IDENTITY, searching SUBCONFIG' subcos
+      parse var linkto uid addr
+   end
+end
+parse var mdisk . adr typ sta size vol .
+/*---output of: CPQ Q CPOWNED -------------------------------------------
+Slot  Vol-ID  Rdev  Type   Status
+   1  540RES  E210  Own    Online and attached
+   2  AGCSPL  E42F  Own    Online and attached
+   3  ..
+--words:------W3----W4-----W5*/
+ 
+if att then do /* attach volser to SYSTEM if not yet done */
+   'PIPE CP Q DASD FREE'   ,  /* find disks not attached to system */
+      '| SPLIT AT ,'       ,
+      '| SPECS 1-* 1 / / n',  /* add blank after volser */
+      '| LOCATE / 'vol' /' ,  /* locate our disk */
+      '| SPEC /ATTACH/ 1'  ,  /* make attach command */
+             'w2 nw'       ,  /*  insert cuu  */
+             '/SYSTEM/ nw' ,
+             'w3 nw'       ,  /*  insert volser */
+      '| VAR Att_sys'         /* to remember attach system done */
+   if Symbol('Att_sys')='VAR' then do
+      'PIPE CP Q CPOWNED|PICK W2 == /'vol'/|take|Count lines|VAR CpOwn'
+      if CpOwn then call Exit 220453,'Disk' vol 'is CPOWNED.  So we',
+                'will not ATTACH to SYSTEM.','Do it yourself if you are',
+                'sure you want to keep it ATTACHed to SYSTEM'
+      say 'CP' att_Sys
+      'CP' att_Sys
+      att_sys_rc=rc
+   end
+end
+cmd='CP DEFINE MDISK' laddr sta size vol
+say cmd
+cmd
+if rc^=0 then do
+   if rc=108 & Att then call Exit rc,,
+      'Note: we did not find volume' vol 'in CP Q DASD FREE,',,
+      '      hence we could not ATTACH this volume to SYSTEM'
+   call exit rc
+end
+if amode='0' then exit
+if left(lmode,1)='M' then fm=amode
+                     else fm=amode'/'amode
+/*---output of:  Q DISK G -----------------------------------------------
+LABEL  VDEV M  STAT   CYL TYPE BLKSZ   FILES  BLKS USED-(%) BLKS LEFT
+DOSRES 130  G   R/O  2222 3390           DOS
+540RES 123  Z   R/W  3339 3390            OS
+--words:----W3--W4---W5---W6-------------W7*/
+'ACCESS' laddr fm
+if rc=0 then do
+   'PIPE COMMAND QUERY DISK' amode,
+       '|DROP|SPEC SUBSTR W1 OF 36-44 1|VAR NbFiles'
+   if filelist | det then do
+      if pos('OS',nbFiles)>0 then
+         call AskUser amode,'FILELIST impossible on' os 'formatted disk'
+      else if nbFiles=0
+         then call AskUser amode,'FILELIST impossible on empty MDISK'
+         else 'EXEC FILELIST * *' amode
+   end
+end
+else if rc=28 & det then
+   call AskUser '-','MDISK is empty and cannot be ACCESSed in R/O mode'
+else if det then
+   call AskUser '*','MDISK cannot be ACCESSed'
+ 
+if det then do
+   call diag 8,'CP DET' laddr
+end
+call exit rc
+ 
+/*-----------------------------------------------------------------*/
+AskUser: /*                                                        */
+/*-----------------------------------------------------------------*/
+ parse arg nowFm,msg ''t tt ; fm1=left(fm,1)
+ if nowFm='*'  then tt=' (with DDR for example)'
+ if nowFm<>'-' then t='('nowFm'-disk)'
+ Say
+ Say msg
+ Say 'We currently have User' uid 'Mdisk' addr 'as' laddr t
+ if nowfm='*' then 'CP QUERY MDISK' laddr 'LOCATION'
+ Say '+++ You can write to it if required'tt '+++'
+ Say 'What do you want to do now?  Please enter:'
+ Say '   CMS                 to go to CMS subset (then do as you like)'
+ Say '   FILEList            to list your A-disk (then do as you like)'
+ Say '   FILEList ....       to start that specific FILELIST'
+ if nowFm='-' then
+ say '   ACcess              to ACCESS' laddr fm1  '(in WRITE mode thus)'
+ say '   anything else       to quit'
+ parse upper external cmd rest
+ if abbrev('FILELIST',cmd,1) then 'EXEC FILELIST' rest
+ if abbrev('ACCESS',cmd,2) then do
+    'ACCESS' laddr fm1 ;
+    if rc=0 then call Askuser fm1,'--> ACCESS as' fm1 'successful'
+    return
+ end
+ else if cmd='CMS' | cmd='SUBSET' then 'SUBSET'
+return
+/*-----------------------------------------------------------------*/
+EXIT: /*                                                           */
+/*-----------------------------------------------------------------*/
+ if det=1 & symbol('att_sys')='VAR' then
+    if att_sys_rc=0 then 'CP DET' word(att_sys,2) 'FROM SYSTEM'
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+exit arg(1)

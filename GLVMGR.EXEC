@@ -1,0 +1,350 @@
+/*---------------------------------------------------------------+
+| Function : Overview of all GLOBAL variables which you can      |
+|            modify                                              |
+|                                                                |
+| File     : GLVMGR   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : GLVMGR   OVERVIEW                                   |
+|          : GLVMGR   HELPCMS                                    |
+|            LASTING  GLOBALV                                    |
+|            SESSION  GLOBALV                                    |
+|                                                                |
+| Called   : GLVMGR   .                                          |
+|                                                                |
+| Comments : If you find ': Session  :' in the overview          |
+|               this is a SESSION variable                       |
+|          : If you find ': Lasting  :' in the overview          |
+|               this is a LASTING variable                       |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220608 16:00:41                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+If what='?' Then Do
+    'VMFcLEAR'
+    'PIPE (NAME GLVMGR.EXEC:26 END ?)',
+       '< 'myfn myft' *',                        /* Read myself      */
+       '| tolabel Parse',                        /* Up to here       */
+       '| cons'                                  /* Show             */
+    Exit
+    End
+Select
+When myft='XEDIT' & what=myfn     Then Call RunXedit
+When myft='XEDIT' & what='REMOVE' Then Call RunRemove
+When myft='XEDIT' & what='CHANGE' Then Call RunChange
+When myft='XEDIT' & what='ADD'    Then Call RunAdd
+When myft='REXX'  Then Call RunStage
+When myft='EXEC'  Then Call RunExec
+Otherwise Nop
+End
+Exit
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (WRITE QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+Address CMS 'EXECLOAD 'myfn myft' * = REXX'
+'PIPE (NAME GLVMGR.EXEC:53 END ?)',
+   'cms GLOBALV GRPLIST',                        /* Ask CMS          */
+   '| fi: faninany',                             /* Take in others   */
+   '| sort 1.8',                                 /* Sort on group    */
+   '| join keylen 8',                            /* Join on group    */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs 1;* 1.10 ~:~ nw',                    /* Add colon        */
+   '| j: juxtapose',                             /* Take in the rest */
+   '| strip',                                    /* Remove spaces    */
+   '| sort w1.1',                                /* Sort on group    */
+   '| pick -1;-1 \== ~=~',                       /* Select these     */
+   '| 'myfn,                                     /* Call myself      */
+   '| specs w1.1 1.8 ~:~ nw w2;* nw',            /* Reshuffle        */
+   '| change ~: :~: Memory  :~',                 /* Replace these    */
+   '| change ~: S :~: Session :~',               /* .                */
+   '| change ~: L :~: Lasting :~',               /* .                */
+   '| specs a: 1.8 .',                           /* Add a break      */
+           '9;* 9',                              /* .                */
+           'break a',                            /* .                */
+           'id a 1',                             /* .                */
+   '| if: if pick 1.1 \== ~ ~',                  /* If we find this  */
+   '|     specs ~!~ 1 x00 n ~!~ n 1;* n',        /* We add this      */
+   '| if:',                                      /* Conn 2 if        */
+   '| split at ~!~',                             /* Split here       */
+   '| change x00 x40',                           /* Replace these    */
+   '| drop first 1',                             /* Ignore first line*/
+   '| > 'myfn' OVERVIEW 'wfm,                    /* Write 2 file     */
+   '?',                                          /* 2nd pipe         */
+   'disk LASTING GLOBALV',                       /* Read this        */
+   '| specs 1.8 strip 1.8 ~L~ nw',               /* Adjust           */
+   '| sort unique',                              /* Remove duplicates*/
+   '| fi:',                                      /* Conn 2 faninany  */
+   '?',                                          /* 3rd pipe         */
+   'disk SESSION GLOBALV',                       /* Read this        */
+   '| specs 1.8 strip 1.8 ~S~ nw',               /* Adjust           */
+   '| sort unique',                              /* Remove duplicates*/
+   '| fi:',                                      /* Conn 2 faninany  */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~GLOBALV SELECT~ 1',                 /* Compose cmds     */
+           'w1.1 nw',                            /* .                */
+           '~LIST~ nw',                          /* .                */
+   '| cms',                                      /* Hand 2 cms       */
+   '| j:'                                        /* Conn 2 juxtapose */
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm' (WIDTH 500 PROFILE 'myfn
+Address CMS 'EXECDROP 'myfn' REXX'
+Address CMS 'EXECDROP 'myfn' XEDIT'
+Address CMS 'VMLINK STATUS <DET (WRITE QUIET'
+Return
+ 
+ 
+RunXedit:
+/*---------------------------------------------------------------+
+| Settings...                                                    |
++---------------------------------------------------------------*/
+settings='NONDISP ?;HEX ON;CMDLINE TOP;',
+         'CURLINE ON 4;MSGLINE ON 3 1 OVERLAY;',
+         'PREFIX NULLS LEFT;COLOR PREFIX BLUE;COLOR FILEAR YELLOW;',
+         'VERIFY 1 *;ZONE 1 *;REMOTE ON;NULLS ON;STAY ON;',
+         'SPILL WORD;SCALE ON 3;TEXT ON;NUMBER ON;AUTOSAVE 10;CASE MIXED IGNORE'
+hdr='%W     Group    : Type    : Variable=Value'
+/*--------------------------------------------------------------------+
+| Set my PF keys, using 1 to 12, separated by ;                       |
++--------------------------------------------------------------------*/
+pfkeys='HELP 'myfn';'myfn' ADD;ONLY QQUIT; ; ;'myfn' CHANGE;BACKWARD;FORWARD;'myfn' REMOVE;',
+       'TOP#NEXT;BOT#BACKWARD#NEXT 2;ONLY QQUIT'
+pfkeyline='Help;Add;Quit;_;_;Change;Back;Forw;Remove;Top;Bot;Quit'
+/*---------------------------------------------------------------+
+| Define the control char and colors we are going to use...      |
++---------------------------------------------------------------*/
+ctlchars='% ESCAPE;',
+         'Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;',
+         'W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;',
+         'B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;',
+         'G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;',
+         'R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;',
+         '$ OFF'
+Address CMS 'PIPE (NAME GLVMGR.EXEC:129 END ?)',
+    'var pfkeyline',                             /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs recno 1.2',                         /* Compose          */
+            '~=%G~ n',                           /* ...setting       */
+            'w1.1 n',                            /* .                */
+            '~%W~ n',                            /* .                */
+    '| join *',                                  /* Make 1 record    */
+    '| space 0',                                 /* Suppress spaces  */
+    '| specs ~%W~ 6 1;* n',                      /* Shift 6          */
+    '| var pfkresrvd',                           /* Store as         */
+    '?',                                         /* .                */
+    'var pfkeys',                                /* Take these       */
+    '| dup 1',                                   /* Duplicate        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET PF~ 1',                        /* Compose          */
+            'pad 0 recno n.2 right',             /* ....setting      */
+            'w1;* nw',                           /* .                */
+    '| fi: faninany',                            /* Take in others   */
+    '| subcom xedit',                            /* Hand 2 xedit     */
+    '?',                                         /* 2nd pipe         */
+    'var settings',                              /* Take these       */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET~ 1 1;* nw',                    /* Compose cmds     */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '?',                                         /* 3rd pipe         */
+    'var ctlchars',                              /* Take these       */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET CTLCHAR~ 1 1;* nw',            /* Compose cmds     */
+    '| fi:'                                      /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Show the line with PF keys                                     |
++---------------------------------------------------------------*/
+'SET RESERVED 4 NON NOH 'hdr
+'SET RESERVED  -1 HIGH 'pfkresrvd
+':1'
+Return
+ 
+ 
+Get_Data:
+/*---------------------------------------------------------------+
+| Get the changed data from the XEDIT session                    |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE'
+oldcur=cursor.3 cursor.4
+oldpos=line.1
+actpos=cursor.3
+':'cursor.3
+'EXTRACT /CURLINE'
+If Wordpos(':SELECTED',curline.3)=0 Then Do
+                                        sw=0
+                                        Parse Value curline.3 With . ':' . ':' varname '=' content
+                                        'LOCATE - /SELECTED/'
+                                        'EXTRACT /CURLINE'
+                                         Parse Value curline.3 With group ':' type ':' .
+                                         ':'cursor.3
+                                         End
+                                   Else Do
+                                        sw=1
+                                        Parse Value curline.3 With group ':' type ':' rest
+                                        End
+Select
+When type='Lasting' Then setcmd='SETLP'
+When type='Session' Then setcmd='SETLS'
+Otherwise setcmd='SET'
+End
+Return
+ 
+ 
+Get_File_Data:
+/*---------------------------------------------------------------+
+| Get the original content of the line                           |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME GLVMGR.EXEC:202 END ?)',
+                '< 'myfn' OVERVIEW *',           /* Read this file   */
+                '| drop first 'actpos-1,         /* Remove these     */
+                '| take first 1',                /* Keep one         */
+                '| specs fs : f3;* strip 1',     /* Keep this        */
+                '| var oldcontent'               /* Hand 2 rexx      */
+Return
+ 
+ 
+RunRemove:
+/*---------------------------------------------------------------+
+| What do we need to remove                                      |
++---------------------------------------------------------------*/
+Call Get_Data
+If sw Then Call RemoveGroup
+      Else Call RemoveEntry
+':'oldpos-1
+'CURSOR SCREEN 'oldcur
+Return
+ 
+ 
+RemoveEntry:
+/*---------------------------------------------------------------+
+| Remove an entry from a group                                   |
++---------------------------------------------------------------*/
+'DELETE 1'
+Address CMS 'GLOBALV SELECT 'group setcmd varname
+Return
+ 
+ 
+RemoveGroup:
+/*---------------------------------------------------------------+
+| Remove a group from LASTING GLOBALV                            |
++---------------------------------------------------------------*/
+'DELETE /:SELECTED/'
+Address CMS 'GLOBALV SELECT 'group' PURGE'
+'PIPE (NAME GLVMGR.EXEC:238 END ?)',
+    '< 'type' GLOBALV A',
+    '| pick 1.8 \== ~'Substr(group,1,8)'~',
+    '| > 'type' GLOBALV A'
+Address CMS 'GLOBALV INIT'
+Return
+ 
+ 
+RunChange:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Get_Data
+Call Get_File_Data
+'EXTRACT /CURSOR'
+content=Translate(Strip(content),'_',' ')
+work=Copies('.',22)||Strip(varname)'='content
+Parse Value oldcontent with oldvar '=' .
+oldcontent=Copies('.',22)||oldcontent
+start=Pos('=',oldcontent)+1
+len=cursor.4-start+1
+content=Substr(work,start,len)
+'CLOCATE :21'
+'COVERLAY _'oldvar'='content||Copies('_',50)
+content=Translate(Strip(content),' ','_')
+Address CMS 'GLOBALV SELECT 'group setcmd oldvar content
+':'oldpos
+Return
+ 
+ 
+RunAdd:
+/*---------------------------------------------------------------+
+| What do we need to add                                         |
++---------------------------------------------------------------*/
+Call Get_Data
+If sw Then Call AddGroup
+      Else Call AddEntry
+':'oldpos
+'CURSOR SCREEN 'oldcur
+Return
+ 
+ 
+AddGroup:
+/*---------------------------------------------------------------+
+| Add a group and new entries                                    |
++---------------------------------------------------------------*/
+Call Get_Data
+Call Get_File_Data
+type=Strip(type)
+oldgrp=Reverse(Word(Reverse(oldcontent),1))
+oldcontent=oldgrp' : 'type' : 'oldcontent||Copies('_',50)
+oldcontent=Translate(oldcontent,'_',' ')
+newvar=Subword(rest,5)
+group=Substr(group,1,8)
+'CLOCATE :1'
+'COVERLAY 'oldcontent||Copies('_',50)
+'-1'
+'ADD 1'
+'INPUT 'group' : 'type' : 'Subword(rest,1,3) group
+'PIPE (NAME GLVMGR.EXEC:297 END ?)',
+   'var newvar',
+   '|split at anyof ~:;.,~',
+   '| stem var.'
+Do v=1 To var.0
+   'INPUT          : 'type' : 'var.v
+   Parse Value var.v With newvar '=' newvalue
+   Address CMS 'GLOBALV SELECT 'group setcmd newvar newvalue
+End v
+ 
+Return
+ 
+ 
+AddEntry:
+/*---------------------------------------------------------------+
+| Add an entry to an existing group                              |
++---------------------------------------------------------------*/
+Call Get_Data
+Call Get_File_Data
+Say oldcontent
+'INPUT          :'type':'varname'='content
+Address CMS 'GLOBALV SELECT 'group setcmd varname content
+'-1'
+'CLOCATE :21'
+'COVERLAY _'oldcontent||Copies('_',50)
+Return
+ 
+ 
+RunStage:
+/*---------------------------------------------------------------+
+| Run as a PIPE stage                                            |
++---------------------------------------------------------------*/
+'CALLPIPE (NAME GLVMGR.EXEC:329 END ?)',
+  '*:',                                          /* Take from caller */
+  '| stem line.'                                 /* Hand 2 rexx      */
+Do l=1 To line.0
+  work=line.l
+  'CALLPIPE (NAME GLVMGR.EXEC:334 END ?)',
+     'var work',                                 /* Take this        */
+     '| deblock 1',                              /* Split into chars */
+     '| stem c.'                                 /* Hand 2 rexx      */
+  Do z=1 To c.0
+     If Pos(c.z,'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$1234567890')=0 Then leave z
+  End z
+  line.l=Substr(work,1,z-1) Substr(work,z+1)
+End l
+'CALLPIPE (NAME GLVMGR.EXEC:343 END ?)',
+  'stem line.',                                  /* Take these       */
+  '| *:'                                         /* Hand 2 caller    */
+Return

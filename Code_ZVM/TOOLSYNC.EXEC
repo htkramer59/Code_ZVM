@@ -1,0 +1,11 @@
+/**/
+'PIPE (end ?)',
+   '< TOOLSYNC INPUT A',
+   '| specs w1.2',
+   '| stem file.'
+Do f=1 To file.0
+   Say f' of 'file.0 file.f
+   Address CMS 'COPYFILE 'file.f' Q = = A (OLDDATE'
+   If rc=0 Then Address CMS 'TOOLSUPD 'file.f' A'
+           Else Say 'COPY failed with rc: 'rc
+End f

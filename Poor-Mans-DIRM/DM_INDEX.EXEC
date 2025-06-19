@@ -1,0 +1,123 @@
+/*---------------------------------------------------------------+
+| Function : Create or get info from the index                   |
+|                                                                |
+| File     : DM_INDEX EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_VMLNK EXEC                                       |
+|            REPLACE  EXEC                                       |
+|                                                                |
+| Called   : DM_INDEX                                            |
+|          : INDEX                                               |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 15:27:52                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg action uid '(' dirfn dirft ws .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+outfnft=Word(dirfnft,1)' INDEX'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Select
+When action=''    Then Call Build_Index
+When action='GET' Then Call Get_Details
+Otherwise Nop
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+Get_Details:
+/*---------------------------------------------------------------+
+| Get the location of the user/identity/subconfig/profile        |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_INDEX.EXEC:60 END ?)',
+  '< 'outfnft wfm,                               /* Read the file    */
+  '| pick w1.1 == ~'uid'~',                      /* Select the id    */
+  '| specs w2;*',                                /* Keep this        */
+  '| var details'                                /* Hand back        */
+wfm=DM_VMLNK('SOURCEDIR DET')
+Exit details
+Return details
+ 
+ 
+Build_Index:
+/*---------------------------------------------------------------+
+| Build an index from the DIRECTORY source                       |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_INDEX.EXEC:76 END ?)',
+   '< 'dirfnft wfm,                              /* Read file        */
+   '| specs 1.72 1',                             /* Adjust records   */
+   '| specs pad 0 recno 1.5 right 1;* nw',       /* Add record no    */
+   '| fo1: fanout',                              /* Dupl records     */
+   '| pick anycase w2.1 == ~USER~ or',           /* Find these       */
+                  'w2.1 == ~IDENTITY~ or',       /* .                */
+                  'w2.1 == ~PROFILE~ or',        /* .                */
+                  'w2.1 == ~SUBCONFIG~',         /* .                */
+   '| specs w3.1 1.8 w1.1 nw w2.1 nw',           /* Keep this info   */
+   '| fo2: fanout',                              /* Dupl records     */
+   '| specs pad 0 recno 1.10 right ~1~ nw 1;* nw',   /* Add a record no  */
+   '| buffer',                                   /* Prevent loop     */
+   '| fi1: faninany',                            /* Take in others   */
+   '| sort 1.12',                                /* Sort on 2 fields */
+   '| specs w1.1 1 w3;* nw',                     /* Keep this        */
+   '| join keylen 10',                           /* Join on recno    */
+   '| specs w2.2 1 w6.1 nw w4.1 nw',             /* Remove unwanted  */
+   '| specs w1.2 1',                             /* Start            */
+           'a: w2.1 .',                          /* .calculating     */
+           'b: w3.1 .',                          /* ..no of records  */
+           'set #0:=b-a',                        /* ...last record   */
+           'set #1:=b-1',                        /* .                */
+           'pad 0 print #1 nw.5 right',          /* .                */
+           'pad 0 print #0 nw.5 right',          /* .                */
+           'substr 1.1 of w4.1 nw',              /* .                */
+   '| > 'outfnft ws,                             /* Write 2 file     */
+   '? fo2:',                                     /* Conn 2 fanout    */
+   '| drop first 1',                             /* Loose 1          */
+   '| fi2: fanin',                               /* Add recno        */
+   '| specs pad 0 recno 1.10 right ~2~ nw 1;* nw',   /* Adjust layout    */
+   '| buffer',                                   /* Prevent loop     */
+   '| fi1:',                                     /* Conn 2 fanin     */
+   '? fo1:',                                     /* Conn 2 fanout    */
+   '| count lines',                              /* How many?        */
+   '| specs xFFFFFFFFFFFFFFFF 1 pad 0 w1.1 nw.10 right',   /* Add marker       */
+   '| fi2:'                                      /* Conn 2 fanin     */
+piprc=rc
+wfm=DM_VMLNK('SOURCEDIR DET')
+If piprc=0 Then Do
+                wfm=DM_VMLNK('SOURCEDIR (WRITE')
+                If wfm='' Then Call Exit '98'
+                Address CMS 'REPLACE 'outfnft ws wfm
+                if rc<>0 Then Call Exit '129'
+                wfm=DM_VMLNK('SOURCEDIR DET (WRITE')
+                End
+                Else Call Exit '128'
+Return

@@ -1,0 +1,697 @@
+/*---------------------------------------------------------------+
+| Function : Backup stuff for disaster recovery                  |
+|                                                                |
+| File     : BACKUP   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+|                                                                |
+| Files    : BACKUP   NAMES                                      |
+|            Various output files                                |
+|                                                                |
+| Called   : BACKUP   '(' test                                   |
+|                                                                |
+|            If test is ommitted we will only display            |
+|            If test is filled with RUN we will do it!!          |
+|                                                                |
+| Comments : Controlled with BACKUP NAMES                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20191108 15:11:23                                   |
+| Changes  : .                                                   |
+|            20200127 H.T.Kramer : Added digest to check if      |
+|                          changes happened to stuff we need to  |
+|                          backup                                |
+|            20191212 H.T.Kramer : Added processing for BFS      |
+|                           files/directories                    |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+x=Time('R')
+Parse Upper Arg . '(' test
+Parse Source . . myfn myft .
+Call Prepare
+Call Read_Names
+/*---------------------------------------------------------------+
+| Link & access the target for the backup                        |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'storage' (NONAMES WRITE  .fm'
+If rc=0 Then Parse Pull . . tfm .
+        Else Do
+             Say 'Problem linking STORAGE, see 'myfn' NAMES. rc='rc
+             Exit rc
+             End
+Address CMS 'VMLINK 'catalog' (NONAMES WRITE  .fm'
+If rc=0 Then Parse Pull . . cfm .
+        Else Do
+             Say 'Problem linking CATALOG, see 'myfn' NAMES. rc='rc
+             Exit rc
+             End
+Call Read_Catalog
+/*---------------------------------------------------------------+
+| M A I N L I N E                                                |
++---------------------------------------------------------------*/
+Do n=1 To nick.0
+   files=''                                     /* Initialize       */
+   outfile=''                                   /* Make sure t exist*/
+   noncms=0                                     /* Selection        */
+   'PIPE (NAME BACKUP.EXEC:58 END ?)',
+       'literal 'details.n,                     /* Take this        */
+       '| split before string ~ :~',            /* Split here       */
+       '| strip',                               /* Remove spaces    */
+       '| nlocate anycase ~:NICK.~',            /* Ignore these     */
+       '| nlocate anycase ~:NODE.~',            /* .....and these   */
+       '| xlate fs . f1 upper',                 /* Upper 4 varload  */
+       '| change ~:~/~ 1',                      /* Replace this     */
+       '| change ~.~/~ 1',                      /* .....and this    */
+       '| varload'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Select what to do                                              |
++---------------------------------------------------------------*/
+   Select
+   When nick.n='SEGMENTS'  Then Call Process_Segments
+   When nick.n='DASD'      Then Call Process_Dasd
+   When nick.n='OTHER'     Then Call Process_Other_Files
+   Otherwise Call Process_Minidisk
+   End
+/*---------------------------------------------------------------+
+| Remove these to prevent interference...                        |
++---------------------------------------------------------------*/
+   Drop outfile ffile. files list product
+Say
+End
+/*---------------------------------------------------------------+
+| Release the backup target                                      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'catalog' <DET (NONAMES WRITE QUIET'
+Address CMS 'VMLINK 'storage' <DET (NONAMES WRITE QUIET'
+Address COMMAND 'CP 'hold_more
+elapsed=Time('E')
+min=elapsed%60
+sec=elapsed//60
+Say TimeStamp()' Duration: 'min':'sec' minutes & seconds'
+Exit
+ 
+ 
+Process_Segments:
+/*---------------------------------------------------------------+
+| Process all the segments..we can backup                        |
++---------------------------------------------------------------*/
+Say
+Say TimeStamp() 'Processing segments'
+/*---------------------------------------------------------------+
+| See what is in the list....                                    |
++---------------------------------------------------------------*/
+If list='ALL' Then Do
+     'PIPE (NAME BACKUP.EXEC:106 END ?)',
+        'cp QUERY NSS ALL',                     /* Get all dcsss    */
+        '| pick w9.1 == ~DCSS~',                /* Remove NSSs      */
+        '| pick w4.1 \== ~R~',                  /* take none restric*/
+        '| specs w8.1',                         /* Keep name        */
+        '| sort w1.1',                          /* Sort them        */
+        '| stem segment.'                       /* Store as...      */
+     End
+     Else Do
+     'PIPE (NAME BACKUP.EXEC:115 END ?)',
+        'var list',                             /* Take this        */
+        '| split at ;',                         /* Split here       */
+        '| sort w1.1',                          /* Sort them        */
+        '| stem segment.'                       /* Store as...      */
+     End
+Call Check_Catalog_NSS
+/*---------------------------------------------------------------+
+| Loop thru the list...                                          |
++---------------------------------------------------------------*/
+Do s=1 To segment.0
+   'PIPE (NAME BACKUP.EXEC:126 END ?)',
+      'cms QUERY SEGMENT 'segment.s,            /* Do I have it?    */
+      '| nfind DMS',                            /* Nope             */
+      '| count lines',                          /* What is left     */
+      '| if: if pick 1.1 == ~0~',               /* None...          */
+      '|   specs ~~ 1',                         /* ...make empty..  */
+      '| if:',                                  /* Conn 2 if        */
+      '|   specs ~(NOLOAD~ 1',                  /* ...add this      */
+      '| if:',                                  /* Conn 2 if        */
+      '| var noload'                            /* Store as         */
+   outfile=segment.s' MAP 'tfm
+   Call Shift_Generations outfile
+/*---------------------------------------------------------------+
+| Make a map of the segment so we can restore it properly        |
++---------------------------------------------------------------*/
+   If \test Then 'PIPE (NAME BACKUP.EXEC:141 END ?)',
+      'cp QUERY NSS NAME 'segment.s' MAP',      /* Ask cp           */
+      '| > 'segment.s' MAP 'tfm                 /* Write the results*/
+   outfile=segment.s' DCSSBKUP 'tfm
+   Call Shift_Generations outfile
+   cmd='DCSSBKUP 'segment.s' = 'tfm noload
+   Call RunCmd
+/*---------------------------------------------------------------+
+| If there is an error notify us                                 |
++---------------------------------------------------------------*/
+   If rc<>0 Then Do
+     Address CMS 'FINIS 'segment.s' DCSSBKUP 'tfm
+     errline=TimeStamp() 'Check for alternative ways to backup/restore 'segment.s
+     Say errline
+     If \test Then 'PIPE (NAME BACKUP.EXEC:155 END ?)',
+        'var errline ',                         /* Take these       */
+        '| append literal *** See console log for details',  /* Add this         */
+        '| > 'segment.s' DCSSBKUP 'tfm          /* Add to file      */
+     End
+End s
+Return
+ 
+ 
+Process_Dasd:
+/*---------------------------------------------------------------+
+| Process all the DASD..which are mdisk for the id in :id        |
++---------------------------------------------------------------*/
+Say
+Say TimeStamp() 'Processing DASD'
+/*---------------------------------------------------------------+
+| Check what is in the list...                                   |
++---------------------------------------------------------------*/
+If list='ALL' Then Do
+        'PIPE (NAME BACKUP.EXEC:174 END ?)',
+           'cp QUERY MDISK USER 'id' 0-FFFF DIR',  /* Ask cp           */
+           '| pick w1.2 == w3.2',               /* Do you own them? */
+           '| specs w1.2 1',                    /* Keep this        */
+           '| stem mdisk.'                      /* Hand to rexx     */
+        End
+        Else Do
+        'PIPE (NAME BACKUP.EXEC:181 END ?)',
+           'var list',                          /* Take this        */
+           '| split at ;',                      /* Split...         */
+           '| specs ~'id'~ 1 w1.1 nw',          /* Make id & cuu    */
+           '| stem mdisk.'                      /* Store as         */
+        End
+/*---------------------------------------------------------------+
+| Now loop thru the mdisks....                                   |
++---------------------------------------------------------------*/
+Do m=1 To mdisk.0
+   outfile=mdisk.m
+/*---------------------------------------------------------------+
+| HTK Need to build a check to see if the content changed...     |
++---------------------------------------------------------------*/
+   Call Shift_Generations outfile
+   cmd='PIPEDDR DUMP 'mdisk.m outfile tfm' (LZCOMPACT CMSDDR'
+   Call RunCmd
+End m
+Return
+ 
+ 
+Process_Userid_Mdisk:
+/*---------------------------------------------------------------+
+| Make a pipeddr dump for this mdisk...                          |
++---------------------------------------------------------------*/
+Say
+Say TimeStamp() 'Processing Minidisk for 'product
+outfile=Word(product,1) Right(Word(product,2),4,'0')
+/*---------------------------------------------------------------+
+| HTK Need to build a check to see if the content changed...     |
++---------------------------------------------------------------*/
+Call Shift_Generations outfile
+cmd='PIPEDDR DUMP 'product outfile tfm' (LZCOMPACT CMSDDR'
+Call RunCmd
+Return
+ 
+ 
+Process_Minidisk:
+/*---------------------------------------------------------------+
+| Are processing noncms or just a few files                      |
++---------------------------------------------------------------*/
+If noncms Then Call Process_Userid_Mdisk
+          Else Call Process_Files
+Return
+ 
+ 
+Process_Files:
+/*---------------------------------------------------------------+
+| Put some files in VMARC files...                               |
++---------------------------------------------------------------*/
+Say
+Say TimeStamp()' Processing files for 'product
+If Pos('VMBFS',product)<>0 Then Call BFS_Files
+                           Else Do
+     If outfile='' Then outfile=Word(product,1) Right(Word(product,2),4,'0')
+     Address CMS 'VMLINK 'nick.n' (ONLY('myfn') PUSH QUIET .fm'
+     If rc=0 Then Parse Pull . . sfm .
+             Else Do
+                  Say 'Problem linking 'nick.n' rc='rc
+                  Return
+                  End
+     Call Check_Catalog
+     If newbackup Then Do
+          Call GetFileNames
+          Call Shift_Generations outfile
+          'PIPE (NAME BACKUP.EXEC:246 END ?)',
+              'stem ffile.',                              /* Take these       */
+              '| specs ~VMARC PACK~ 1',                   /* Compose cmds     */
+                      'w1.3 nw',                          /* .                */
+                      '~'outfile tfm'~ nw',               /* .                */
+              '| t: take first 1',                        /* Take only this   */
+              '| fi: faninany',                           /* Take in others   */
+              '| cons',                                   /* Show...          */
+              out,                                        /* run??            */
+              '? t:',                                     /* Conn 2 take      */
+              '| specs w1;* 1 ~(APPEND~ nw',              /* Add to records   */
+              '| fi:'                                     /* Conn 2 faninany  */
+          newbackup=0
+          End
+     Address CMS 'VMLINK 'nick.n' (ONLY('myfn') POP QUIET '
+     End
+Return
+ 
+ 
+BFS_Files:
+/*---------------------------------------------------------------+
+| Backup BFS files                                               |
+| Maybe re-write to PIPEDDR...                                   |
++---------------------------------------------------------------*/
+Say TimeStamp() 'BFS processing for '
+product=Subword(product,2)
+Parse Value product With . ':' . ':' name '/'
+/*---------------------------------------------------------------+
+| Get the names for the next subroutine                          |
++---------------------------------------------------------------*/
+'PIPE (NAME BACKUP.EXEC:276 END ?)',
+    'disk 'name' BFSLOG 'tfm,                   /* Read this        */
+    '| specs w-2;-1',                           /* Keep this        */
+    '| stem outfile.',                          /* Store as         */
+    '| join * ~;~',                             /* Make 1 line      */
+    '| var files'                               /* Now store as     */
+Call GetFileNames
+Call Check_Catalog_BFS
+If newbackup Then Do
+/*---------------------------------------------------------------+
+| Do change the generation number per file                       |
++---------------------------------------------------------------*/
+Do o=1 To outfile.0
+   Call Shift_Generations outfile.o
+End o
+/*---------------------------------------------------------------+
+| Here we start the actual backup of BFS files                   |
++---------------------------------------------------------------*/
+Address CMS 'OPENVM MOUNT 'product
+If rc=0 Then Do
+   If test Then bfsout='| cons'
+           Else bfsout='| > 'name' BFSLOG 'tfm
+   'PIPE (NAME BACKUP.EXEC:298 END ?)',
+       'cms OPENVM LISTFILE /',                 /* Ask openvm       */
+       '| drop first 2',                        /* Forget header    */
+       '| specs w-1;-1',                        /* Keep lastword    */
+       '| strip both x7D',                      /* Add quotes       */
+       '| f: fanout',                           /* Duplicate records*/
+       '| specs fs . ~OPENVM GET~ 1',           /* Compose          */
+               'w1.1 nw',                       /* .    cmds        */
+               'f1 nw.8',                       /* .                */
+               'f2 nw ',                        /* .                */
+               '~'tfm' (OLDDATE REPLACE~ nw',   /* .                */
+       '| stem cmd.',                           /* Store as         */
+       '? f:',                                  /* Conn 2 fanout    */
+       '| specs fs . ~'product'~ 1',            /* Prepare log      */
+                    'w1.1 nw',                  /* .                */
+                    'f1 nw.8',                  /* .                */
+                    'f2 nw.8',                  /* .                */
+       '| xlate w-2;-1 upper',                  /* Uppercase        */
+       bfsout                                   /* Show or store    */
+   Do c=1 To cmd.0
+      cmd=cmd.c
+      Call RunCmd
+   End c
+   Address CMS 'OPENVM UNMOUNT /'
+   End
+   Else Say TimeStamp()' Problem mounting: 'product
+End
+Return
+ 
+ 
+Process_Other_Files:
+/*---------------------------------------------------------------+
+| Processing the single files...                                 |
++---------------------------------------------------------------*/
+Say
+Say TimeStamp()' Processing other files'
+outfile='= = 'tfm
+sfm='*'
+Call GetFileNames
+product='.     .    '
+Do f=1 To ffile.0
+   files=Subword(ffile.f,1,2)
+   sfm=Word(ffile.f,3)
+   Call Check_Catalog
+   If newbackup Then Do
+        Call Shift_Generations ffile.f
+        cmd='COPYFILE 'ffile.f outfile' (REPLACE OLDDATE'
+        Call RunCmd
+        newbackup=0
+        End
+End f
+Return
+ 
+ 
+RunCmd:
+/*---------------------------------------------------------------+
+| Display the command and if not testing execute the command     |
++---------------------------------------------------------------*/
+Say cmd
+If \test Then Address CMS cmd
+Return
+ 
+ 
+GetFileNames:
+/*---------------------------------------------------------------+
+| Collect some filenames....                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME BACKUP.EXEC:365 END ?)',
+   'var files',                                 /* Take this        */
+   '| split at ;',                              /* Split...         */
+   '| specs ~LISTFILE~ 1',                      /* Compose cmd      */
+           'w1.2 nw',                           /* .                */
+           '~'sfm' (NOHEADER~ nw',              /* .                */
+   '| cms',                                     /* Hand 2 cms       */
+   '| specs w1.1 1.8',                          /* Smarten output   */
+           'w2.1 nw.8 ',                        /* .                */
+           'substr 1.1 of w3.1 nw',             /* .                */
+   '| pick w3.1 \== ~'tfm'~',                   /* Ignore these     */
+   '| stem ffile.'                              /* Store as         */
+Return
+ 
+ 
+Shift_Generations:
+/*---------------------------------------------------------------+
+| Move the generations...                                        |
++---------------------------------------------------------------*/
+Parse Arg infile
+Say TimeStamp()' Dealing with generations'
+infile=Subword(infile,1,2)
+infn=Word(infile,1)
+ftpart=Substr(Word(infile,2),1,5)
+cmd.0=0;era.0=0
+'PIPE (NAME BACKUP.EXEC:390 END ?)',
+   'cms LISTFILE 'infn '*_'ftpart tfm,          /* Take this        */
+   '| nfind DMS',                               /* ...remove this   */
+   '| sort w2.1',                               /* Sort on this     */
+   '| specs pad 0 recno from 2 1.2 right',      /* Add gen number   */
+           'w1;* nw',                           /* .                */
+   '| sort w1.1 d',                             /* Sort on gen      */
+   '| t: take last 'generations-1,              /* Remove these     */
+   '| specs ~RENAME~ 1',                        /* Compose renames  */
+           'w2;* nw',                           /* .                */
+           'w2.1 nw',                           /* .                */
+           'w1.1 nw',                           /* .                */
+           'substr 3;* of w3.1 n',              /* .                */
+           'w4;* nw',                           /* .                */
+   '| stem cmd.',                               /* Store as         */
+   '? t:',                                      /* Conn 2 take      */
+   '| specs ~ERASE ~ 1 w2.3 nw',                /* Compose cmds     */
+   '| stem era.',                               /* Store as         */
+   '?',                                         /* 2nd pipe         */
+   'literal 'infile tfm,                        /* Take this in     */
+   '| statew',                                  /* Does it exist    */
+   '| count lines',                             /* How many         */
+   '| var firstcopy'                            /* Store as boolean */
+/*---------------------------------------------------------------+
+| If cmds created ....run them...depending on test               |
++---------------------------------------------------------------*/
+If era.0<>0 Then 'PIPE (NAME BACKUP.EXEC:416 END ?)     stem era. | cons 'out
+If cmd.0<>0 Then 'PIPE (NAME BACKUP.EXEC:417 END ?)     stem cmd. | cons 'out
+/*---------------------------------------------------------------+
+| First file??....only need to do this                           |
++---------------------------------------------------------------*/
+If firstcopy Then Do
+                  cmd='RENAME 'infile tfm infn '01_'ftpart tfm
+                  Call RunCmd
+                  End
+Return
+ 
+ 
+Read_Names:
+/*---------------------------------------------------------------+
+| Read the control file                                          |
++---------------------------------------------------------------*/
+Say TimeStamp()' Reading CONTROL FILE'
+'PIPE (NAME BACKUP.EXEC:433 END ?)',
+     '< 'myfn' NAMES *',                            /* Read this        */
+     '| pick 1.1 \== ~*~',                          /* Remove comments  */
+     '| strip',                                     /* Remove spaces    */
+     '| xlate upper',
+     '| change anycase ~<SHORTNODE>~'shortnode'~',  /* Replace these    */
+     '| join * x40',                                /* Make 1 record    */
+     '| split anycase before string ~:NICK.~',      /* Split here       */
+     '| n1: nlocate anycase ~:NODE.~',              /* Take these out   */
+     '| f: faninany',                               /* Take in others   */
+     '| p: pick anycase w1.1 \== ~:NICK.STORAGE~',  /* Do not select    */
+               'and w1.1 \== ~:NICK.GENERATIONS~',  /* ...and these     */
+     '| n2: nlocate anycase w1.1 ~:NICK.CATALOG~',
+     '| stem details.',                             /* Store as         */
+     '| specs w1.1',                                /* Keep this        */
+     '| specs fs . f2',                             /* Reduce to this   */
+     '| xlate upper',                               /* Upper the lot    */
+     '| stem nick.',                                /* Hand 2 rexx      */
+     '? n1:' ,                                      /* Conn 2 nlocate   */
+     '| locate anycase ~:NODE.'node'~',             /* Find these       */
+     '| f:',                                        /* Conn 2 faninany  */
+     '? p:',                                        /* Conn 2 pick      */
+     '| specs fs . f2;*',                           /* Remove some      */
+     '| specs fs . ~/~ 1 w1.1 n ~/~ n f2;* n',      /* Adjust....       */
+     '| if: if locate anycase ~.DIR~',              /* If it is this    */
+     '|   specs fs : f1.2',                         /* ...rework to     */
+     '| if:',                                       /* Conn 2 if        */
+     '|   specs fs : f1.1',                         /* ....keep this..  */
+     '| if:',                                       /* Conn 2 if        */
+     '| varload',                                   /* Store as         */
+     '? n2:',                                       /* Conn 2 nlocate   */
+     '| split before string ~:~',                   /* Split here       */
+     '| nlocate ~:TITLE.~',                         /* Remove this      */
+     '| nlocate ~:NICK.~',                          /* And this         */
+     '| change ~PRODUCT~CATALOG~',                  /* Replace this     */
+     '| change ~:~/~',                              /* Prep 4 varload   */
+     '| change ~.~/~',                              /* Prep some more   */
+     '| varload'                                    /* Hand to rexx     */
+Say TimeStamp()' Generations kept: 'generations
+Return
+ 
+ 
+Read_Catalog:
+/*---------------------------------------------------------------+
+| Read the catalog file                                          |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Reading catalog file: 'catalogname
+'PIPE (NAME BACKUP.EXEC:480 END ?)',
+   'disk 'catalogname cfm,                      /* Read this        */
+   '| stem cat.'                                /* Store as         */
+Return
+ 
+ 
+Check_Catalog:
+/*---------------------------------------------------------------+
+| Check the catalog and update it                                |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking for changes to: 'files
+'PIPE (NAME BACKUP.EXEC:491 END ?)',
+    'var files',                                /* Take this        */
+    '| split at ;',                             /* Split here       */
+    '| stem chkfile.'                           /* Store as         */
+Do c=1 To chkfile.0
+/*---------------------------------------------------------------+
+| List the input files                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME BACKUP.EXEC:499 END ?)',
+   'cms LISTFILE 'chkfile.c sfm' (NOHEADER ISODATE',  /* Take this        */
+   '| specs w1.3 1 w-2;-1 nw',                  /* Keep this        */
+   '| sort',                                    /* Sort             */
+   '| stem file.'                               /* Store as         */
+newbackup=0
+/*---------------------------------------------------------------+
+| Loop thru the files to see if they changed...                  |
++---------------------------------------------------------------*/
+Do h=1 To file.0
+  new=0
+  file=Subword(file.h,1,3)
+  cfile=Substr(Word(file.h,1),1,8) Substr(Word(file.h,2),1,8)
+  tstmp=Subword(file.h,4)
+  'PIPE (NAME BACKUP.EXEC:513 END ?)',
+      '< 'file,                                 /* Read the file    */
+      '| digest 'digest,                        /* Get the digest   */
+      '| specs ~'product cfile tstmp'~ 1',      /* Compose record   */
+              'w1.1 nw',                        /* .                */
+      '| var curdigest',                        /* Store as         */
+      '| l: lookup',                            /* Check            */
+      '?',                                      /* 2nd pipe         */
+      'stem cat.',                              /* Take catalog     */
+      '| l:',                                   /* Conn 2 lookup    */
+      '| count lines',                          /* Any findings     */
+      '| var new'                               /* Store as         */
+   If new Then Do
+   newbackup=newbackup+1
+   'PIPE var curdigest | stem cat. append'      /* Add to catalog   */
+   End
+End h
+If newbackup<>0 Then newbackup=1
+                Else Do
+                newbackup=0
+                Say TimeStamp() 'No changes detected'
+                End
+/*---------------------------------------------------------------+
+| Re-write the catalog                                           |
++---------------------------------------------------------------*/
+If \test Then Do
+'PIPE (NAME BACKUP.EXEC:539 END ?)',
+   'stem cat.',                                 /* Take these       */
+   '| buffer',                                  /* Prevent stall    */
+   '| sort',                                    /* Sort recs        */
+   '| unique w1.5',                             /* Remove dups      */
+   '| > 'catalogname cfm,                       /* Write as         */
+   '| stem cat.'                                /* Store as         */
+End
+End c
+Return
+ 
+ 
+Check_Catalog_NSS:
+/*---------------------------------------------------------------+
+| Check the catalog for the NSS                                  |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking catalog for NSS'
+new.0=0
+'PIPE (NAME BACKUP.EXEC:557 END ?)',
+   'stem segment.',                             /* Take these       */
+   '| specs ~QUERY NSS NAME~ 1',                /* Compose cmds     */
+           'w1.1 nw ',                          /* .                */
+           '~ISODATE~ nw',                      /* .                */
+   '| cp',                                      /* Issue cmds       */
+   '| nfind OWNERID',                           /* Remove these     */
+   '| specs w8.2 1',                            /* Adjust layout    */
+           'w6.2 nw',                           /* .                */
+           'w3.3 nw',                           /* .                */
+           'w10.1 nw',                          /* .                */
+   '| specs ~SEGMENT~ 1',                       /* Compose lines    */
+           'w1.1 nw.8',                         /* .                */
+           'w2.1 nw.4 ',                        /* .                */
+           'w3;* nw',                           /* .                */
+   '| stem nss_digest.'                         /* Store as         */
+'PIPE (NAME BACKUP.EXEC:573 END ?)',
+      'stem nss_digest.',                       /* Take thse        */
+      '| l: lookup',                            /* Compare          */
+      '?',                                      /* 2nd pipe         */
+      'stem cat.',                              /* Take catalog     */
+      '| l:',                                   /* Conn 2 lookup    */
+      '| stem new.'                             /* Store as         */
+If new.0<>0 & \test Then Do
+            Drop segment.
+            'PIPE (NAME BACKUP.EXEC:582 END ?)',
+               'stem new. ',                    /* Take these       */
+               '| fo: fanout',                  /* Duplicate recs   */
+               '| specs w2.1',                  /* Keep this        */
+               '| stem segment.',               /* Store as         */
+               '? fo:',                         /* Conn 2 fanout    */
+               '| append stem cat.',            /* Add 2 catalog    */
+               '| buffer',                      /* Prevent stall    */
+               '| sort',                        /* Sort             */
+               '| unique w1.5',                 /* Remove duplicates*/
+               '| > 'catalogname cfm,           /* Write as         */
+               '| stem cat.'                    /* Store as         */
+            End
+            Else Do
+            Say TimeStamp() 'No changes detected'
+            segment.0=0
+            End
+Return
+ 
+ 
+Check_Catalog_BFS:
+/*---------------------------------------------------------------+
+| Check and update the catalog for BFS part                      |
++---------------------------------------------------------------*/
+Address CMS 'OPENVM MOUNT 'product
+'PIPE (NAME BACKUP.EXEC:607 END ?)',
+     'literal OPENVM LISTFILE (NOHEADER',       /* Compose cmds     */
+            ';OPENVM LISTFILE (OWNERS NOHEADER', /* .                */
+     '| split at ;',                            /* Split            */
+     '| cms',                                   /* Run them         */
+     '| specs w-1;-1 1.20 w1;-2 nw',            /* Keep this        */
+     '| sort',                                  /* Sort             */
+     '| join keylen 20',                        /* Join here        */
+     '| specs ~BFS~ 1',                         /* Compose lines    */
+             'w1.1 nw',                         /* .                */
+             'w8.2 nw',                         /* .                */
+             'w2.6 nw ',                        /* .                */
+             'w10;* nw',                        /* .                */
+     '| stem bfs_digest.'                       /* Store as         */
+Address CMS 'OPENVM UNMOUNT /'
+'PIPE (NAME BACKUP.EXEC:622 END ?)',
+      'stem bfs_digest.',                       /* Take this        */
+      '| l: lookup',                            /* Compare          */
+      '?',                                      /* 2nd pipe         */
+      'stem cat.',                              /* Take these       */
+      '| l:',                                   /* Conn 2 lookup    */
+      '| stem new.'                             /* Store as         */
+If new.0<>0 & \test Then Do
+            newbackup=1
+            'PIPE (NAME BACKUP.EXEC:631 END ?)',
+               'stem new. ',                    /* Take these       */
+               '| fo: fanout',                  /* Dupl records     */
+               '| specs w2.1',                  /* Keep this        */
+               '| stem bfsdigest.',             /* Store as         */
+               '? fo:',                         /* Conn 2 fanout    */
+               '| append stem cat.',            /* Add to this      */
+               '| buffer',                      /* Prevent stall    */
+               '| sort',                        /* Sort             */
+               '| unique w1.5',                 /* Remove duplicates*/
+               '| > 'catalogname cfm,           /* Write as         */
+               '| stem cat.'                    /* Store as         */
+            End
+            Else Do
+            Say TimeStamp() 'No changes detected'
+            End
+Return
+ 
+ 
+Prepare:
+/*---------------------------------------------------------------+
+| Are we runnning in test mode...                                |
++---------------------------------------------------------------*/
+newbackup=0
+If test='RUN' Then Do
+              test=0
+              out='| cms | cons'
+              mode=''
+              End
+              Else Do
+              Say TimeStamp()' Running in test/check mode'
+              test=1
+              out=''
+              mode='TEST'
+              End
+/*---------------------------------------------------------------+
+| Save some settings                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME BACKUP.EXEC:669 END ?)',
+     'cp QUERY TERM',                           /* Ask cp           */
+     '| split at ,',                            /* Split here       */
+     '| strip',                                 /* Remove excess    */
+     '| all ~HOLD~!~MORE~',                     /* Select these     */
+     '| join * x40',                            /* Make 1 record    */
+     '| specs ~TERM~ 1 1;* nw',                 /* Adjust           */
+     '| var hold_more',                         /* Save as          */
+     '?',                                       /* 2nd pipe         */
+     'cp QUERY USER 'userid(),                  /* Ask cp           */
+     '| specs fs - f2',                         /* Keep this        */
+     '| locate ~DSC~',                          /* Is this found    */
+     '| count lines',                           /* How many         */
+     '| var disco',                             /* Store as         */
+     '?',                                       /* 3rd pipe         */
+     'cp QUERY USERID',                         /* Ask cp           */
+     '| specs w3.1',                            /* Take this        */
+     '| var node',                              /* Store as         */
+     '| specs substr -2;-1 of w1.1',            /* Keep this        */
+     '| var shortnode'                          /* Store as         */
+If \disco Then Address COMMAND 'CP TERM MORE 0 0 HOLD OFF'
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Universal timestamp                                            |
++---------------------------------------------------------------*/
+Return Date('S') Time() myfn

@@ -1,0 +1,72 @@
+/*---------------------------------------------------------------+
+| Function : Preexit for LNXSTART where we want the disk         |
+|            LINKed and NOT accessed                             |
+|                                                                |
+| File     : LNXSTEXT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : LNXSTEXT .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220516 12:58:39                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg .
+Parse Source . . myfn myft myfm .
+Say TimeStamp()
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME LNXSTEXT.EXEC:26 END ?)',
+    'rexxvars 1 toload',                         /* Take from caller */
+    '| p: pick fs / f2 == ~NAMESFILE_PRODUCT~',  /* Select this      */
+    '| specs fs / f3',                           /* Keep this        */
+    '| change ~<~~',                             /* Remove this      */
+    '| f: fanout',                               /* Dupl. record     */
+    '| specs ~LINK~ 1 1;* nw ~RR~ nw',           /* Compose cmd      */
+    '| var linkcmd',                             /* Store as         */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~DETACH~ 1 w3.1 nw',                /* Compose cmd      */
+    '| var detcmd',                              /* Store as         */
+    '| specs w2.1',                              /* Keep this        */
+    '| var vcuu',                                /* Hand 2 rexx      */
+    '? p:',                                      /* Conn 2 pick      */
+    '| pick fs / f2 == ~$TITLE~',                /* Select this      */
+    '| specs fs / f3',                           /* Reduce to...     */
+    '| var title'                                /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Make sure we remove the "old" mdisk                            |
++---------------------------------------------------------------*/
+'PIPE (NAME LNXSTEXT.EXEC:47 END ?)',
+   'var detcmd',                                 /* Take this        */
+   '| cp',                                       /* Issue cmd        */
+   '| hole'                                      /* Ignore output    */
+/*---------------------------------------------------------------+
+| Link then "latest" mdisk                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME LNXSTEXT.EXEC:54 END ?)',
+   'var linkcmd',                                /* Take this        */
+   '| cp',                                       /* Issue cmd        */
+   '| hole'                                      /* Ignore output    */
+lkrc=rc
+If lkrc=0 Then Do
+/*---------------------------------------------------------------+
+| Link is succesfull                                             |
++---------------------------------------------------------------*/
+  Say 'DMSVML2060I 'title' Linked as 'vcuu
+  lkrc=11                                        /* To fob vmlink    */
+  End
+  Else Do
+  Say 'DMSVMLxxxxA 'title
+  End
+Exit lkrc
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

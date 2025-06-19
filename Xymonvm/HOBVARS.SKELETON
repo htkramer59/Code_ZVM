@@ -1,0 +1,9 @@
+If dryrun<>'' Then test='1'                                                     
+              Else test='0'                                                     
+/*---------------------------------------------------------------+              
+| Get the variables from our caller                              |              
++---------------------------------------------------------------*/              
+'PIPE (NAME HOBVARS.SKELETON:4 END ?)',                                         
+   'rexxvars 1 toload',                          /* Take from caller */         
+   '| varload'                                   /* Hand 2 rexx      */         
+                                                                                

@@ -1,0 +1,50 @@
+/*---------------------------------------------------------------+
+| Function : Get files from an other system using RSCS or FTP    |
+|                                                                |
+| File     : GET      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : GETRSCS  EXEC transfer files using RSCS             |
+|            GETFTP   EXEC transfer files using FTP              |
+|                                                                |
+| Called   : GET      <fn> <ft> <fm> <node> <nwfn> <nwft> <nwfm> |
+|                     ( <options>                                |
+|                                                                |
+| Comments : RSCS is the prefered method                         |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220121 09:57:27                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm where nwfn nwft nwfm '(' options
+Parse Source . how myfn myft .
+ 
+'PIPE (NAME GET.EXEC:23 END ?)',
+   'cp QUERY RSCS',                              /* Ask if running   */
+   '| pick w3.1 ==  ~DSC~',                      /* Look for this    */
+   '| count lines',                              /* How many?        */
+   '| var rscs',                                 /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY FTPSERVE',                          /* Ask if running   */
+   '| pick w3.1 ==  ~DSC~',                      /* Look for this    */
+   '| count lines',                              /* How many?        */
+   '| var ftp'                                   /* Store as         */
+ 
+Select
+When rscs  & ftp   Then Address CMS GETRSCS fn ft fm where nwfn nwft nwfm '(' options
+When rscs  & \ftp  Then Address CMS GETRSCS fn ft fm where nwfn nwft nwfm '(' options
+When \rscs & ftp   Then Address CMS GETFTP fn'.'ft'.'fm where nwfn'.'nwft'.'nwfm '(' options
+Otherwise Address CMS Exit '1128 No RSCS or FTPSERVE found'
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmgs
+If Datatype(exec,'NUM') Then Say errmsg
+                        Else exrc=0
+Exit exrc

@@ -1,0 +1,64 @@
+/*---------------------------------------------------------------+
+| Function : Test the new directory and put it online            |
+|                                                                |
+| File     : DM_ONLIN EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DIRECTXA MODULE                                     |
+|            <sourcedir>                                         |
+|                                                                |
+| Called   : DM_ONLIN .                                          |
+|                                                                |
+| Comments : Need cp class A, B or C                             |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240620 10:53:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+DM_ONLIN:
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check the directory syntax and if ok put it online             |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('DIRECTXA')
+If wfm='' Then Call Exit '98'
+Address CMS 'DIRECTXA 'dirfnft ws' (EDIT'
+If rc=0 Then Do
+             wfm=DM_VMLNK('SOURCEDIR (WRITE')
+             If wfm='' Then Call Exit '98'
+             Address CMS 'REPLACE 'dirfnft ws wfm
+             Address CMS 'DM_INDEX'
+             wfm=DM_VMLNK('CPDIR (WRITE')
+             If wfm='' Then Call Exit '98'
+             If \test Then Do
+                           Address CMS 'DIRECTXA USER DIRECT 'wfm
+                           dirrc=rc
+                           End
+                           Else dirrc=0
+             If dirrc<>0 Then Call Exit '638'
+             wfm=DM_VMLNK('CPDIR DET (WRITE')
+             'PIPE (NAME DM_ONLIN.EXEC:52 END ?)',
+                'CMS REL 'wfm' (DET | hole'
+             wfm=DM_VMLNK('DIRECTXA DET')
+             wfm=DM_VMLNK('SOURCEDIR DET (WRITE')
+             End
+        Else Call Exit '738'
+ 
+ 
+Exit:
+Parse Arg exrc
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Return exrc

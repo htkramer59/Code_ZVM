@@ -1,0 +1,170 @@
+/*---------------------------------------------------------------+
+| Function : .                                                   |
+|                                                                |
+| File     : TALK2LNX EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TALK2LNX .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20230322 15:39:18                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmdline '(' dryrun
+Parse Source . . myfn myft .
+Address COMMAND 'CP SET SMSG IUCV'
+timer='+00:30:00'                                /* Change this if needed   */
+reload=4                                         /* Reload control file after 4 cycles */
+wakeupparms=''                                   /* Extra wakeup parms */
+/*---------------------------------------------------------------+
+| For ever loop                                                  |
++---------------------------------------------------------------*/
+Call Read_Control_File
+Do main=1
+  If (main//reload)=0 Then Call Read_Control_File
+  Address CMS 'WAKEUP 'timer' (CC SMSG CONS 'wakeupparms
+  Select
+  When rc=1    Then Call DoCmd
+  When rc=3    Then Say TimeStamp()' Timer expired'
+  When rc=6    Then Do
+                    Say TimeStamp()' Console interrupt'
+                    Leave main
+                    End
+  Otherwise Say TimeStamp()' Unhandled return code from WAKEUP 'rc
+  End
+End main
+/*---------------------------------------------------------------+
+| Clean up and exit                                              |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET SMSG OFF'
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Read_Control_File:
+/*---------------------------------------------------------------+
+| Read the control file here                                     |
++---------------------------------------------------------------*/
+Say TimeStamp()' Reading control file'
+'PIPE (NAME TALK2LNX.EXEC:58 END ?)',
+   'disk 'myfn' AUTHORIZE *',                    /* Read this file   */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~~',          /* Ignore comm&empty*/
+   '| f: fanout',                                /* Dupl. records    */
+   '| inside anycase ~:AUTHORIZED_USERS.~ ~:END_AUTHORIZED_USERS.~',   /* Select this      */
+   '| split',                                    /* Split into recs  */
+   '| strip',                                    /* Remove spaces    */
+   '| n: nlocate ~*~',                           /* Do wildcars away */
+   '| stem auth_user.',                          /* Store as         */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| stem auth_wild.',                          /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| inside anycase ~:AUTHORIZED_COMMANDS.~ ~:END_AUTHORIZED_COMMANDS.~',   /* Select this      */
+   '| stem auth_cmd.'                            /* Store as         */
+Return
+ 
+ 
+CheckUser:
+/*---------------------------------------------------------------+
+| Check if the server is authorized to talk to the proxy         |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking user authorisation'
+authusr=0
+authid=0
+authwild=0
+'PIPE (NAME TALK2LNX.EXEC:83 END ?)',
+   'stem auth_user.',                            /* .                */
+   '| locate anycase ~'returnid'~',              /* Find the id      */
+   '| count lines',                              /* How many         */
+   '| stem authid'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Check if the id is found in the wildcards                      |
++---------------------------------------------------------------*/
+If auth_wild.0<>0 Then Do w=1 To auth_wild.0
+        'PIPE (NAME TALK2LNX.EXEC:92 END ?)',
+          'var returnid',                        /* Take this        */
+          '| wildcard anycase w1.1 ~'auth_wild.w'~',  /* Check if fits    */
+          '| count lines',                       /* How many         */
+          '| var authwrk'                        /* Store as         */
+        authwild=authwild+authwrk                /* Add up 4 later   */
+        End w
+        Else authwild=0
+authusr=authid+authwild
+Return authusr
+ 
+ 
+CheckCommand:
+/*---------------------------------------------------------------+
+| Check if the command is allowed..                              |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking command authorisation'
+authcmd=0
+'PIPE (NAME TALK2LNX.EXEC:110 END ?)',
+    'stem auth_cmd.',                            /* Take these       */
+    '| l: lookup anycase w1.1 w1.1 master',      /* Compare          */
+    '| xlate upper',                             /* Upper case       */
+    '| sort unique',                             /* Remove duplicates*/
+    '| count lines',                             /* How many left?   */
+    '| if: if pick 1.1 >> ~1~',
+    '|     specs ~1~ 1',
+    '| if:',
+    '| var authcmd',                             /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'var cmdline',                               /* Take this        */
+    '| split',                                   /* Split here       */
+    '| l:'                                       /* Conn 2 lookup    */
+Return authcmd
+ 
+ 
+DoCmd:
+/*---------------------------------------------------------------+
+| Analyse the output from wakeup                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME TALK2LNX.EXEC:128 END ?)',
+    'stack',                                     /* Read from stack  */
+    '| specs w2;*',                              /* Keep this        */
+    '| f: fanout',                               /* Duplicate lines  */
+    '| specs ~/RETURNID/~ 1',                    /* Compose 4        */
+            'w1.1 n ~;/OUTFT/~ n',               /* .....varload     */
+            'w2.1 n ~;/CMDLINE/~ n',             /* .                */
+            'w2;* n',                            /* .                */
+    '| split at ;',                              /* Split            */
+    '| varload',                                 /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~'TimeStamp()'~ 1 1;* nw',          /* Add timestamp    */
+    '| cons'                                     /* Show             */
+/*---------------------------------------------------------------+
+| Start some checking                                            |
++---------------------------------------------------------------*/
+If \CheckUser() Then Do
+                     Say TimeStamp()' User not authorized 'returnid
+                     Return
+                     End
+If \CheckCommand() Then Do
+                     Say TimeStamp()' Command not allowed 'cmdline
+                     Return
+                     End
+/*---------------------------------------------------------------+
+| Run the command                                                |
++---------------------------------------------------------------*/
+Address COMMAND 'CP CLOSE CONS'
+Address COMMAND 'CP SPOOL CONS 'returnid' NOMSG NAME 'myfn Word(cmdline,1)
+If Word(cmdline,1)<>'CP'   &,
+   Word(cmdline,1)<>'CMS'  Then cmdline='CMS' cmdline
+'PIPE (NAME TALK2LNX.EXEC:159 END ?)',
+   cmdline,                      /* Talk 2 cp/cms */
+   '| CONS'                      /* Show         */
+/*---------------------------------------------------------------+
+| Send the results to the caller & cleanup                       |
++---------------------------------------------------------------*/
+Address COMMAND 'CP CLOSE CONS'
+Address COMMAND 'CP SPOOL CONS  * NAME 'Userid()' CONSLOG'
+Return

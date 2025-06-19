@@ -1,0 +1,128 @@
+/*---------------------------------------------------------------+
+| Function : Add or change the INCLUde statement                 |
+|                                                                |
+| File     : DM_INCLU EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_INCLU <uid> <include>                            |
+|          : INCLUDE  <uid> <include>                            |
+|                           QRY                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 13:14:19                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid newinclude .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get the uid and the directory                                  |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+'PIPE (NAME DM_INCLU.EXEC:40 END ?)',
+    'stem uid.',                                 /* Take these       */
+    '| pick anycase w2.1 == ~INCLUDE~',          /* Select this      */
+    '| var curinclu',                            /* Hand 2 rexx      */
+    '| count lines',                             /* How many         */
+    '| var inclu'                                /* Store as boolean */
+/*---------------------------------------------------------------+
+| Take action on the input                                       |
++---------------------------------------------------------------*/
+Select
+When newinclude='QRY'    Then Call ShowInclu
+When newinclude='DEL'    Then Call DelInclu
+Otherwise Do
+          If \inclu Then Call AddInclu
+                    Else Call ReplInclu
+          End
+End
+/*---------------------------------------------------------------+
+| Put all online                                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowInclu:
+/*---------------------------------------------------------------+
+| Show the INCLUDE                                               |
++---------------------------------------------------------------*/
+curinclu=Word(curinclu,3)
+Say Date('S') Time() myfn myft' INCLUDE for 'uid' is: 'curinclu
+Call Exit
+Return
+ 
+ 
+ReplInclu:
+/*---------------------------------------------------------------+
+| Replace the existing INCLUDE with a new one                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_INCLU.EXEC:87 END ?)',
+   'var curinclu',                               /* Take this        */
+   '| specs w1.2 1 ~'newinclude'~ nw',           /* Rework record    */
+   '| var newinclu'                              /* Hand 2 rexx      */
+'PIPE (NAME DM_INCLU.EXEC:91 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'curinclu'~ ~'newinclu'~',         /* Replace...       */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+Return
+ 
+ 
+AddInclu:
+/*---------------------------------------------------------------+
+| Add a INCLUDE statement                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_INCLU.EXEC:103 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~USER~ or',           /* Find this        */
+                  'w2.1 == ~IDENTITY~',
+   '| var curusr',                               /* Hand 2 rexx      */
+   '| specs 1;* 1 ~;'Copies(' ',8)'INCLUDE 'newinclude'~ nw',   /* Compose new one  */
+   '| var newusr'                                /* Hand 2 rexx      */
+'PIPE (NAME DM_INCLU.EXEC:110 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| change ~'curusr'~ ~'newusr'~',             /* Replace          */
+   '| split at ;',                               /* Split here       */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+Return
+ 
+ 
+DelInclu:
+/*---------------------------------------------------------------+
+| Remove the INCLUDE statement                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_INCLU.EXEC:123 END ?)',
+   'stem direct.',                               /* Take these       */
+   '| nlocate anycase ~'curinclu'~',             /* Ignore this one  */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write to file    */
+return

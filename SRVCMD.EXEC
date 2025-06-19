@@ -1,0 +1,93 @@
+/*---------------------------------------------------------------+
+| Function : Issue a CP Command to a server/id                   |
+|                                                                |
+| File     : SRVCMD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : SRVCMD   <server> <command>                         |
+|                                                                |
+| Comments : Requires CP Claas: A, C or G                        |
+|            Uses: SET OBSERVER/SECUSER                          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220317 11:13:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg id srvcmd
+Parse Source . . myfn myft .
+If id='' Then Call Exit '28 No id specified'
+if id='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME SRVCMD.EXEC:25 END ?)',
+               '< 'myfn myft' *',
+               '| tolabel Parse',
+               '| cons'
+             Call Exit
+             End
+If srvcmd='' Then Call Exit '128 No command entered'
+/*---------------------------------------------------------------+
+| Initialise these                                               |
++---------------------------------------------------------------*/
+obssec=''
+mode=''
+/*---------------------------------------------------------------+
+| Question the subject/suspect                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME SRVCMD.EXEC:40 END ?)',
+   'cp QUERY MDISK USER 'id' 0 DIR',             /* Ask CP           */
+   '| pick w1.1  ==  ~HCPQMD040E~',              /* Find this        */
+   '| count lines',                              /* How many         */
+   '| var exist',                                /* Store as boolean */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY 'id,                                /* Ask cp           */
+   '| specs fs - f2 strip 1',                    /* Keep this        */
+   '| pick w1.1 == ~DSC~',                       /* Find this        */
+   '| count lines',                              /* Count lines      */
+   '| var rundsc',                               /* Store as boolean */
+   '?',                                          /* 3rd pipe         */
+   'cp QUERY SECUSER 'id,                        /* Ask cp           */
+   '| drop first 2',                             /* Ignore header    */
+   '| specs w1.2 1 ~SECUSER~ nw',                /* Add label/mode   */
+   '| nlocate anycase ~NOT SECUSER~',            /* Ignore these     */
+   '| f: fanin',                                 /* Take in others   */
+   '| specs ~/OBSSEC/~ 1 w2.1 n ~/MODE/~ nw w3.1 n',   /* Prep 4 varload   */
+   '| split',                                    /* Split at space   */
+   '| varload',                                  /* Hand 2 rexx      */
+   '?',                                          /* 4th pipe         */
+   'cp QUERY OBSERVER 'id,                       /* Ask cp           */
+   '| drop first 2',                             /* Ignore header    */
+   '| specs w1.2 1 ~OBSERVER~ nw',               /* Add label/mode   */
+   '| f:'                                        /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Evaluate results from above PIPE                               |
++---------------------------------------------------------------*/
+If \exist  Then Call Exit '28 Invalid id specified: 'id
+If \rundsc Then Call Exit '29 Id is logged on: 'id
+If obssec='' Then obssec='OFF'
+If mode=''   Then mode='OBSERVER'
+/*---------------------------------------------------------------+
+| Issue the commands                                             |
++---------------------------------------------------------------*/
+Say Address COMMAND 'CP SET MSG IUCV'
+Say Address COMMAND 'CP SET 'mode id Userid()
+Say Address COMMAND 'CP SEND CP 'id srvcmd
+Say Address COMMAND 'CP SLEEP 1 SEC'
+Say Address COMMAND 'CP SET 'mode id obssec
+Say Address COMMAND 'CP SET MSG ON'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

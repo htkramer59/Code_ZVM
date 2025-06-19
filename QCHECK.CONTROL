@@ -1,0 +1,14 @@
+* The filepools we want to check , shortnode will be translated
+filepools=VMSYS VMSYSU VMPS<shortnode>
+* The limit above which we star screaming for filepools
+filep_limit=85
+* The limit for spool space
+spool_limit=80
+* The limit for directory space
+dirct_limit=80
+* The limit for paging space
+page_limit=70
+* The dirmaint disk pools we want checked
+dirm_pools=CMSDISKS LINUXOS
+* The limit for the disk pools
+dirm_limit=80

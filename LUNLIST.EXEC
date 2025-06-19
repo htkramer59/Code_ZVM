@@ -1,0 +1,237 @@
+/*---------------------------------------------------------------+
+| Function : List all luns available on the system               |
+|                                                                |
+| File     : LUNLIST  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 3.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : LUNLIST  .       Defaults to CONS                   |
+|                     CONS    Output to screen                   |
+|                     FILE    Output to file LUNLIST <node> A    |
+|                     ?       Shows HELP                         |
+|                                                                |
+|                                                                |
+|                                                                |
+| Comments : EXECLOAD LUNLIST EXEC * = REXX to make              |
+|            this available as pipe stage                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20201009 12:57:45                                   |
+| Changes  : .                                                   |
+|            20220121 H.T.Kramer : Fixed problem with OFFLINE,   |
+|                     ill-defined EDEVs                          |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Initialise some items                                          |
++---------------------------------------------------------------*/
+head='LUN   LUN                   FCP  WWPN  FCP  WWPN  FCP  WWPN  FCP  WWPN  FCP  WWPN  FCP  WWPN  FCP  WWPN  FCP  WWPN;'||,
+     'Hex   Dec Cuu  Label  Size  1    1     2    2     3    3     4    4     5    5     6    6     7    7     8    8'
+red='.... <RED> '
+ora='.... <ORA> '
+yel='.... <YEL> '
+non='.... ..... '
+warnings='Warning levels: <RED>|<ORA>|<YEL>, red|orange|yellow, very urgent|urgent|needs attention'
+/*---------------------------------------------------------------+
+| How am I called                                                |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC' Then pipcmd='PIPE'
+When myft='REXX' Then pipcmd='CALLPIPE'
+Otherwise Do
+          'VMFCLEAR'
+          Say Date('S') Time() myfn' Invalid file type 'myft
+          Exit 99
+          End
+End
+/*---------------------------------------------------------------+
+| Collect some things we need later on                           |
++---------------------------------------------------------------*/
+pipcmd' (NAME LUNLIST.EXEC:51 END ?)',
+    '< 'myfn' EXEC *',                          /* Read this        */
+    '| locate anycase w2.1 ~VERSION~',          /* Find this        */
+    '| specs w4.1 1',                           /* Keep this word   */
+    '| var version',                            /* Store as         */
+    '?',                                        /* 2nd pipe         */
+    'cp QUERY USERID',                          /* Ask cp           */
+    '| specs w3.1 1',                           /* Keep this word   */
+    '| var node'                                /* Store as         */
+/*---------------------------------------------------------------+
+| Where to send the output                                       |
++---------------------------------------------------------------*/
+Select
+When how=''      Then Do
+                      'VMFCLEAR'
+                      out='CONS'
+                      End
+When how='?'     Then Do
+                      'VMFCLEAR'
+                      'PIPE (NAME LUNLIST.EXEC:73 END ?)',
+                          '< 'myfn myft' *',    /* Read myself      */
+                          '| tolabel Parse',    /* Upto here        */
+                          '| cons'              /* Show             */
+                       Exit
+                       End
+When how='CONS'  Then out=how
+When how='FILE'  Then out='> 'myfn node' A'
+When how=''      &,
+     myft='REXX' Then out='*:'
+Otherwise Do
+          'VMFCLEAR'
+          Say Date('S') Time() myfn' Invalid input: 'how
+          Exit 28
+          End
+End
+/*---------------------------------------------------------------+
+| Collect the info we need                                       |
++---------------------------------------------------------------*/
+pipcmd'(NAME LUNLIST.EXEC:86 END ?)',
+    'cp QUERY EDEV ALL',                        /* Ask cp this      */
+    '| f1: fanout',                             /* Duplicate records*/
+    '| specs ~QUERY EDEV~ 1',                   /* Compose cmds     */
+            'w2.1 nw ',                         /* .                */
+            '~DETAILS~ nw',                     /* .                */
+    '| cp',                                     /* Ask cp           */
+    '| join *',                                 /* Make 1 record    */
+    '| split before string ~EDEV~',             /* Split here       */
+    '| nlocate anycase ~NO PATHS EXIST.~',
+    '| specs w2;* 1',                           /* Keep this        */
+    '| f2: fanout',                             /* Duplicate these  */
+    '| specs w1.1 1',                           /* Keep this        */
+            'x40 n',                            /* .....add space   */
+    '| j: juxtapose',                           /* Join m           */
+    '| fi: faninany',                           /* Take other info  */
+    '| sort w1.1',                              /* Sort on CUU      */
+    '| join keylen 4',                          /* Join on CUU      */
+    '| change ~FCP_DEV:~~',                     /* Replace these    */
+    '| change ~WWPN:~~',                        /* ...items         */
+    '| change ~LUN:~~',                         /* .                */
+    '| change ~BLOCKSIZE:~~',                   /* .                */
+    '| change ~BLOCKS:~~',                      /* .                */
+    '| change ~LABEL:~~',                       /* .                */
+    '| change ~_~~',                            /* .                */
+    '| change ~'Copies('0',12)'~~',             /* .                */
+    '| specs w1.2 1',                           /* Calculate        */
+            'w5;* nw',                          /* ....EDEVICE      */
+            'a: w3.1 .',                        /* ........size     */
+            'b: w4.1 .',                        /* .                */
+            'set #0:=a*b',                      /* .                */
+            'print #0 pic ---------------9 nw', /* .                */
+    '| specs w1.2 1',                           /* Move size        */
+            'w-1;-1 nw ',                       /* ...to position   */
+            'w3;-2 nw',                         /* .                */
+    '| siconv w3.1 b2g 8 G',                    /* Conv. bytes to Gb*/
+    '| specs w-1;-1 1',                         /* Rework           */
+            'pad 0',                            /* ....hex LUN      */
+            'w-1;-1 x2d nw.4 right',            /* .....number      */
+            'pad space',                        /* ....to decimal   */
+            'w1.1 nw',                          /* .                */
+            'w2.1 nw.6',                        /* .                */
+            'w3.1 nw.5 right',                  /* .                */
+            'w4;-2 nw',                         /* .                */
+    '| sort w2.1',                              /* Sort on LUN no   */
+    '| specs w1.1 1',                           /* Readjust LUN     */
+            'w1.1 x2d nw.4 right',              /* .......number    */
+            'w3;* nw',                          /* .                */
+    '| f3: fanout',                             /* Duplicate records*/
+    '| specs substr 1.2 of w3.1 1',             /* Prepare for      */
+            'w1;* nw',                          /* .....breaks      */
+    '| specs a: w1.1 .',                        /* Break on CUU no  */
+            'w2;* 4',                           /* .                */
+            'break a',                          /* .                */
+            '~;_;~ 1',                          /* .                */
+    '| strip',                                  /* Remove spaces    */
+    '| stem list.',                             /* Store as         */
+    '? f2:',                                    /* Conn 2 fanout    */
+    '| change ~: ~:_~',                         /* Replace these    */
+    '| split',                                  /* Split            */
+    '| pick substr 1.8  of w1.1 == ~FCP_DEV:~ or',  /* Select           */
+           'substr 1.5  of w1.1 == ~WWPN:~ or', /* ..these          */
+           'substr 1.4  of w1.1 == ~LUN:~ or',  /* ....items        */
+           'substr 1.10 of w1.1 == ~BLOCKSIZE:~ or',  /* .                */
+           'substr 1.7  of w1.1 == ~BLOCKS:~',  /* .                */
+    '| j:',                                     /* Conn 2 juxtapose */
+    '? f1:',                                    /* Conn 2 fanout    */
+    '| specs ~QUERY~ 1',                        /* Compose cmds     */
+             'w2.1 nw',                         /* .                */
+    '| cp',                                     /* Ask CP           */
+    '| nlocate anycase ~OFFLINE~',
+    '| specs w2;* 1',                           /* Keep this        */
+    '| change ~CP OWNED~~',                     /* Replace.         */
+    '| change ~CP SYSTEM~~',                    /* .....these       */
+    '| specs w1.1 1',                           /* Add              */
+            '~LABEL:~ nw ',                     /* ...this string   */
+            'w2.1 nw',                          /* .                */
+    '| fi:',                                    /* Conn 2 faninany  */
+    '? f3:',                                    /* Conn 2 fanout    */
+    '| split',                                  /* Split here       */
+    '| pick 1.4 == ~5006~',                     /* Keep HDS ids..   */
+    '| sort unique',                            /* Remove duplicates*/
+    '| specs recno 1.1',                        /* Add record       */
+            'w1.1 nw',                          /* .....number      */
+    '| specs ~--~ 1',                           /* Add some strings */
+            'w1.1 n',                           /* .                */
+            '~--~ n',                           /* .                */
+            'w2.1 nw',                          /* .                */
+    '| stem legend.',                           /* Store as         */
+    '| specs ~CHANGE /~ 1',                     /* Reword to        */
+            'w2.1 n',                           /* ...PIPE          */
+            '~/~ n',                            /* ....Change       */
+            'w1.1 n',                           /* ......stages     */
+            '~/~ n',                            /* .                */
+    '| join * x4F',                             /* Make 1 record    */
+    '| specs x4F 1',                            /* Add vertical bar */
+            '1;* nw',                           /* .                */
+    '| var repwwpn',                            /* Store as         */
+    '? f3:',                                    /* Conn 2 fanout    */
+    '| specs w1.1',                             /* Keep this        */
+    '| sort unique',                            /* Remove duplicates*/
+    '| specs ~CHANGE w4;* / ~ 1',               /* Compose          */
+            'w1.1 n ',                          /* ....Change       */
+            '~ / /~ n',                         /* .....stages      */
+    '| join * x4F',                             /* Join w vertic.bar*/
+    '| specs x4F 1 1;* nw',                     /* Add vertical bar */
+    '| var repluns'                             /* Store as         */
+/*---------------------------------------------------------------+
+| Combine, condense and show/write the output                    |
++---------------------------------------------------------------*/
+pipcmd'(NAME LUNLIST.EXEC:194 END ?)',
+   'stem list.',                                /* Take these       */
+   repwwpn,                                     /* Replace WWPNs    */
+   repluns,                                     /* Remove LUNs      */
+   '| if1: if pick w8.1 == ~~',                 /* Add warnings     */
+   '|    specs 1;* 1 ~'Copies(red,5)Copies(non,2)'~ nw',  /* .                */
+   '| if1:',                                    /* .                */
+   '| if2: if pick w10.1 == ~~',                /* .                */
+   '|    specs 1;* 1 ~'Copies(ora,4)Copies(non,2)'~ nw',  /* .                */
+   '| if2:',                                    /* .                */
+   '| if3: if pick w12.1 == ~~',                /* .                */
+   '|    specs 1;* 1 ~'Copies(yel,3)Copies(non,2)'~ nw',  /* .                */
+   '| if3:',                                    /* .                */
+   '| if4: if pick w14.1 == ~~',                /* .                */
+   '|    specs 1;* 1 ~'Copies(non,4)'~ nw',     /* .                */
+   '| if4:',                                    /* .                */
+   '| if5: if pick w16.1 == ~~',                /* .                */
+   '|    specs 1;* 1 ~'Copies(non,3)'~ nw',     /* .                */
+   '| if5:',                                    /* .                */
+   '| if6: if pick w18.1 == ~~',                /* .                */
+   '|    specs 1;* 1 ~'Copies(non,2)'~ nw',     /* .                */
+   '| if6:',                                    /* .                */
+   '| if7: if pick w20.1 == ~~',                /* .                */
+   '|    specs 1;* 1 ~'Copies(non,1)'~ nw',     /* .                */
+   '| if7:',                                    /* .                */
+   '| preface var head',                        /* Add header       */
+   '| preface literal ',                        /* ....empty line   */
+   '| preface var warnings',
+   '| preface stem legend.',                    /* .....legend      */
+   '| preface literal WWPN Legenda:',           /* .                */
+   '| preface literal ',                        /* .                */
+   '| preface literal 'Date('S') Time() myfn node' version 'version,  /* .                */
+   '| change ~_~ ~',                            /* Replace these    */
+   '| split at ;',                              /* Add extra lines  */
+   '| 'out                                      /* Store...         */
+Exit

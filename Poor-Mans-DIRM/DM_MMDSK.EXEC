@@ -1,0 +1,109 @@
+/*---------------------------------------------------------------+
+| Function : Copy MDISK statement to an other user               |
+|                                                                |
+| File     : DM_MMDSK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|                                                                |
+|                                                                |
+| Called   : DM_MMDSK <uid1> <cuu1> <uid2> <cuu2>                |
+|          : MMDISK   <uid1> <cuu1> <uid2> <cuu2>                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240708 09:29:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid1 cuu1 uid2 cuu2
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check some stuff                                               |
++---------------------------------------------------------------*/
+If cuu2='=' Then cuu2=cuu1
+'PIPE (NAME DM_MMDSK.EXEC:38 END ?)',
+   'cp QUERY MDISK USER 'uid1 cuu1' DIR LOC',    /* Ask cp           */
+   '| pick w1.1 \== ~HCPQMD040E~',               /* MDISK not there  */
+   '| nlocate anycase ~Target~',                 /* Remove hdr       */
+   '| count lines',                              /* How many         */
+   '| var mdstat1',                              /* Store as boolean */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY MDISK USER 'uid2 cuu2' DIR LOC',    /* Ask cp           */
+   '| pick w1.1 \== ~HCPQMD040E~',               /* Mdisk not there  */
+   '| nlocate anycase ~Target~',                 /* Remove hdr       */
+   '| count lines',                              /* How many         */
+   '| var mdstat2'                               /* Store as boolean */
+If \mdstat1 Then Call Exit 68
+If mdstat2  Then Call Exit 78
+/*---------------------------------------------------------------+
+| Get 1st id                                                     |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid1
+/*---------------------------------------------------------------+
+| See if we can get the MDISK                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MMDSK.EXEC:59 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~MDISK~ and',         /* Find the         */
+                 '(w3.1 == ~'cuu1'~ or',         /* .correct         */
+                  'w3.1 == ~'Strip(cuu1,L,0)'~ or', /* ...mdisk         */
+                  'w3.1 == ~'Right(cuu1,4,0)'~)',   /* .                */
+   '| var curmdsk1'                                 /* Hand 2 rex       */
+Drop uid. direct.
+/*---------------------------------------------------------------+
+| Get second id and directory stmts                              |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid2
+/*---------------------------------------------------------------+
+| Find the location for the new stmt                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MMDSK.EXEC:74 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~MDISK~ or',          /* Find any of      */
+                  'w2.1 == ~IPL~ or',            /* .these           */
+                  'w2.1 == ~SPOOL~ or',            /* .these           */
+                  'w2.1 == ~LINK~',              /* .                */
+   '| take last 1',                              /* Keep 1           */
+   '| var entrypos'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Composing new statement                                        |
++---------------------------------------------------------------*/
+newline=entrypos';'Copies(' ',8)||Word(curmdsk1,2) cuu2 Subword(curmdsk1,4)
+chgstmt='| change ~'entrypos'~ ~'newline'~ | split at ;'
+/*---------------------------------------------------------------+
+| Write the directory file                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MMDSK.EXEC:90 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Replace this     */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online                                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

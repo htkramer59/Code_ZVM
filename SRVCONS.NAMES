@@ -1,0 +1,24 @@
+*
+* Close the console in x groups
+:group.5
+* Wait for n secs between groups
+:sleepsec.2
+* The servers we need to close the console for
+:selection.*
+ 
+*    SLD*
+*    SLB*
+*    VSM*
+*    VMS*
+*    TCP*
+*    SSL*
+*    DTC*
+*    RSCS*
+*    LOHC*
+*    WAV*
+*    MONWRITE
+*    CLDCON*
+*    EREP*
+*    PERFSVM
+*    OPERATOR
+*    XYMON*

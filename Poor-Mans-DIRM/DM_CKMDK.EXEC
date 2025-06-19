@@ -1,0 +1,43 @@
+/*---------------------------------------------------------------+
+| Function : Check if an MDISK exists                            |
+|                                                                |
+| File     : DM_CKMDK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_CKMDK <uid> <cuu>                                |
+|                                                                |
+| Comments : Returns 1 if mdisk does NOT EXIST                   |
+|                    0 if mdisk does EXIST                       |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240623 17:27:31                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid cuu .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CKMDK.EXEC:35 END ?)',
+   'cp QUERY MDISK USER 'uid cuu' DIR LOC',
+   '| pick w1.1 == ~HCPQMD040E~',
+   '| count lines',
+   '| var md'
+If md=0 Then md=1
+        Else md=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit md

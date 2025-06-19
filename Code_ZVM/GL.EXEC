@@ -1,0 +1,15 @@
+/**/
+'PIPE (end ?)',
+   'cms GLOBALV GRPLIST',
+   '| f: fanout',
+   '| specs 1;* 1.10 ~: ~ nw',
+   '| j: juxtapose',
+   '| specs a: 1.10 .',
+           '11;* 11',
+           'break a',
+           '   id a 1',
+   '| cons',
+   '? f:',
+   '| specs ~GLOBALV SELECT~ 1 w1.1 nw ~LIST~ nw',
+   '| cms',
+   '| j:'

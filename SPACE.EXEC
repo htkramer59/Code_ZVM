@@ -1,0 +1,231 @@
+/*---------------------------------------------------------------+
+| Function : Calculate the actual space in use on a MDISK or     |
+|            SFS directory                                       |
+|                                                                |
+| File     : SPACE    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SICONV   REXX                                       |
+|            SPACE    STATUS                                     |
+|                                                                |
+| Called   : SPACE    <object> ( <sortorder>                     |
+|                                                                |
+|                     <object> userid mdisk / filepool directory |
+|                     <sortorde> may be ommitted                 |
+|                                FN sort on filename             |
+|                                FT sort on filetype             |
+|                                LRECL sort on record length     |
+|                                RECS  sort on no of records     |
+|                                SIZE  sort on size of files     |
+|                                BLOCK sort on size on no blocks |
+|                                                                |
+| Comments : Uses PIPE SFSDIRECT and cms LISTFILE                |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250602 14:07:49                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg object '(' order .
+Parse Source . . myfn myft .
+If object='?' Then Do
+              'VMFCLEAR'
+              'PIPE < 'myfn myft' *',
+                 '| tolabel Parse',
+                 '| cons'
+              Exit
+              End
+/*---------------------------------------------------------------+
+| Some defaults                                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME SPACE.EXEC:35 END ?)',
+   'cms QUERY DISPLAY',                          /* Ask cms          */
+   '| specs w3.1',                               /* Keep this        */
+   '| var linesize'                              /* Hand 2 rexx      */
+columns=2
+linked=1
+/*---------------------------------------------------------------+
+| Set a default                                                  |
++---------------------------------------------------------------*/
+If object='' Then object='.'
+/*---------------------------------------------------------------+
+| Process the order entered                                      |
++---------------------------------------------------------------*/
+sortorder=order
+Select
+When order=''      Then order='| sort w1.2'
+When order='FN'    Then order='| sort w1.1'
+When order='FT'    Then order='| sort w2.1'
+When order='LRECL' Then order='| specs 1;* 1 pad 0 w3.1 nw.8 right | sort w9.1 d'
+When order='RECS'  Then order='| specs 1;* 1 pad 0 w4.1 nw.8 right | sort w9.1 d'
+When order='SIZE'  Then order='| specs 1;* 1 pad 0 w5.1 nw.8 right | sort w9.1 d'
+When order='BLOCK' Then order='| specs 1;* 1 pad 0 w7.1 nw.8 right | sort w9.1 d'
+Otherwise Exit 12
+End
+/*---------------------------------------------------------------+
+| If this is a directory....else we go to Proc_Mdisk             |
++---------------------------------------------------------------*/
+If Pos('.',object)<>0 Then Do
+                           task='SFSDIRECT 'object' ISODATE | pick 22.1 \== ~D~'
+                           blkfactor=4
+                           End
+                      Else Call Proc_Mdisk
+/*---------------------------------------------------------------+
+| Access our workspace                                           |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK WORK (QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . workfm .
+        Else workfm='A'
+/*---------------------------------------------------------------+
+| Collect the info                                               |
++---------------------------------------------------------------*/
+Call Get_Info
+/*---------------------------------------------------------------+
+| Display the results                                            |
++---------------------------------------------------------------*/
+Queue 'PREF OFF'
+Queue 'COLOR CURLINE YELLOW'
+Queue 'SET RESERVED 3 White NON NOH >>> 'totals
+Queue 'SET RESERVED 4 Green NON NOH 'Date('S') Time() myfn object sortorder
+Queue 'SET RESERVED 5 White NON NOH 'hdr
+Queue ':1'
+Address CMS 'XEDIT 'myfn' STATUS 'workfm
+/*---------------------------------------------------------------+
+| Release disks/workspace                                        |
++---------------------------------------------------------------*/
+If \linked Then Address CMS 'VMLINK 'object' <DET (NONAMES QUIET'
+Address CMS 'VMLINK WORK <DET (QUIET WRITE'
+/*---------------------------------------------------------------+
+| End of this song                                               |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+Proc_Mdisk:
+/*---------------------------------------------------------------+
+| Is the mdisk already linked?                                   |
++---------------------------------------------------------------*/
+Parse Value object With uid cuu .
+cuu=Right(cuu,4,'0')
+'PIPE (NAME SPACE.EXEC:104 END ?)',
+   'cp QUERY MDISK USER * 0-FFFF',               /* Ask CP           */
+   '| pick w3.1 == ~'uid'~ and',                 /* Make selection   */
+          'w4.1 == ~'cuu'~',                     /* .                */
+   '| specs w2.1 1',                             /* Need 2 hace this */
+   '| strip leading ~0~',                        /* Remove zeros     */
+   '| var localcuu',                             /* Hand 2 rexx      */
+   '| count lines',                              /* How many?        */
+   '| var linked'                                /* Store as boolean */
+If linked Then Do
+               'PIPE (end ?)',                   /* .                */
+                  'cms QUERY ACCESSED',          /* Ask CMS          */
+                  '| pick w4.1 == ~'localcuu'~', /* Find this        */
+                  '| specs 1.1',                 /* Keep filemode    */
+                  '| var wfm'                    /* Hand 2 rexx      */
+               End
+          Else Do
+               Address CMS 'VMLINK 'object' (NONAMES QUIET MODE0 .fm'
+               If rc=0 Then Parse Pull . . wfm .
+                       Else Exit rc
+               End
+/*---------------------------------------------------------------+
+| Calculate the blocking factor for later calculations           |
++---------------------------------------------------------------*/
+'PIPE (NAME SPACE.EXEC:128 END ?)',
+   'cms QUERY DISK 'wfm,                         /* Ask cms          */
+   '| drop first 1',                             /* Ignore header    */
+   '| specs a: w7.1 .',                          /* Calculate        */
+           'set #0:=a/1024',                     /* .factor          */
+           'print #0 picture 9.9 1',             /* .                */
+   '| var blkfactor'                             /* Hand 2 rexx      */
+task='CMS LISTFILE * * 'wfm' (NOHEADER ISODATE'
+Return
+ 
+ 
+Get_Info:
+/*---------------------------------------------------------------+
+| We start the calculations here                                 |
++---------------------------------------------------------------*/
+hdr=Substr('FileName FileType Lrecl  Recs   Bytes    KB        Blocks  Kb_Blocks',1,linesize/columns)
+'PIPE (NAME SPACE.EXEC:144 END ?)',
+    'var hdr',                                   /* Take this        */
+    '| dup 'columns-1,                           /* Make copies      */
+    '| specs 1;* 1.'linesize/columns+1,          /* Get max length   */
+    '| join * x4F40',                            /* Make 1 record    */
+    '| var hdr'                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| We start processing                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME SPACE.EXEC:153 END ?)',
+  task,                                          /* Get details      */
+  '| specs',                                     /* .                */
+          'w1.2 1.20',                           /* Keep these items */
+          'w5.1 nw.5 right',                     /* .                */
+          'w6.1 nw.4 right',                     /* .                */
+          'w7.1 nw.5 right',                     /* .                */
+  '| specs w1.1 1.8',                            /* Calculate        */
+          'w2.1 nw.8',                           /* .no              */
+          'w3.1 nw.8 right',                     /* .  of            */
+          'w4.1 nw.8 right',                     /* .    bytes       */
+          'a: w3.1 .',                           /* .     and        */
+          'b: w4.1 .',                           /* .       kbytes   */
+          'set #0:=a*b',                         /* .                */
+          'set #1:=(a*b)/1024',                  /* .                */
+          'print #0 picture --------9 nw',       /* .                */
+          'print #1 picture ------9.99 nw',      /* .                */
+          'w5.1 nw.8 right',                     /* .                */
+          'c: w5.1 .',                           /* .                */
+          'set #2:=c*'blkfactor,                 /* .                */
+          'print #2 picture ------9 nw',         /* .                */
+  '| specs',                                     /* Adjust layout    */
+          'w1.1 1.8',                            /* .                */
+          'w2.1 nw.8',                           /* .                */
+          'w3.1 nw.6 right',                     /* .                */
+          'w4.1 nw.6 right',                     /* .                */
+          'w5.1 nw.8 right',                     /* .                */
+          'w6.1 nw.8 right',                     /* .                */
+          'w7.1 nw.8 right',                     /* .                */
+          'w8.1 nw.8 right',                     /* .                */
+          'w9.1 nw.8 right',                     /* .                */
+  order,                                         /* Sorting?         */
+  '| specs w1.8 1',
+  '| f: fanout',                                 /* Send away        */
+  '| specs 1;* 1.'linesize/columns' x4F40 nw',   /* Add vertic.bar   */
+  '| snake 'columns,                             /* Make columns     */
+  '| strip trailing anyof x4F40',                /* Remove vbars     */
+  '| > 'myfn' STATUS 'workfm,                    /* Write 2 file     */
+  '? f:',                                        /* Conn 2 fanout    */
+  '| buffer',                                    /* Prevent stall    */
+  '| specs printonly eof',                       /* Add              */
+          ' 1;* 1',                              /* . up             */
+          'd: w5.1 .',                           /* .   all          */
+          'e: w7.1 .',                           /* .   all          */
+          'f: w8.1 .',                           /* .   all          */
+          'set #3+=d',                           /* .      bytes     */
+          'set #4+=e',                           /* .      bytes     */
+          'set #5+=f',                           /* .      bytes     */
+          'eof',                                 /* .                */
+          '~Totals:~ 1',                         /* .                */
+          'print  #3 picture ----------9 34',    /* Print 4 times    */
+          'print  #3 picture ----------9 nw',    /* .                */
+          'print  #3 picture ----------9 nw',    /* .                */
+          'print  #3 picture ----------9 nw',    /* .                */
+          'print  #4 picture ----------9 nw',    /* .                */
+          'print  #5 picture ----------9 nw',    /* .                */
+   '| siconv w3.1 b2k 8.2 k w4.1 b2m 8.2 m w5.1 b2g 8.2 g',   /* Convert to KB,MB.*/
+   '| specs',                                    /* Add totals       */
+           'w1.1 1',                             /* .                */
+           'w2.1 nw',                            /* .                */
+           '~Bytes =~ n',                        /* .                */
+           'w3.1 nw',                            /* .                */
+           '~=~ nw',                             /* .                */
+           'w4.1 nw',                            /* .                */
+           '~=~ nw',                             /* .                */
+           'w5.1 nw',                            /* .                */
+           '~Blocks:~ nw',                       /* .                */
+           'w6.1 nw',                            /* .                */
+           '~Kb Blocks:~ nw',                    /* .                */
+           'w7.1 nw',                            /* .                */
+   '| var totals'                                /* Hand 2 rexx      */
+Return

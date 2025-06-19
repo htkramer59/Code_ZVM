@@ -1,0 +1,301 @@
+/*---------------------------------------------------------------+
+| Function : Imitate FILELIST for BFS directories/files          |
+|                                                                |
+| File     : FLBFS    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : FLBFS    <bfs directory> <mountpoint> ( <option>    |
+| Example  : FLBFS    VMSYSU:ETC.     /                          |
+|                                                                |
+|            <option> can be SUBDIR to have a look at a sub-dir  |
+|                     or NOXEDIT to just display without         |
+|                     using XEDIT                                |
+|                                                                |
+| Comments : Depends on OPENVM/BFS                               |
+|            You need to be ADMIN or have permission for BFS     |
+|            filepool.                                           |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220209 10:10:25                                   |
+| Changes  : .                                                   |
+|            20230208 H.T.Kramer : Changed so we can use it      |
+|                       without XEDIT session                    |
+|            20230202 H.T.Kramer : Fixed error in checking for   |
+|                       myself being execloaded                  |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Arg directory mountpoint '(' option .
+Parse Source . . myfn myft myfm .
+if directory='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME FLBFS.EXEC:34 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show it          */
+             Call Exit
+             End
+/*---------------------------------------------------------------+
+| Check some stuff and prepare directory variable                |
++---------------------------------------------------------------*/
+noxedit=0
+option=Translate(option)
+Select
+When myft='EXEC'   Then Do
+     Select
+     When option='' Then  Call Run_As_Exec
+     When option='SUBDIR' Then Call Dive_Deeper
+     When option='NOXEDIT' Then Do
+                                noxedit=1
+                                Call Run_As_Exec
+                                End
+     Otherwise Call Exit '38 Can not handle option: 'option
+     End
+End
+When myft='XEDIT'  Then Do
+     'PIPE (NAME FLBFS.EXEC:58 END ?)',
+        'var maxlen 1',                          /* Take this        */
+        '| var maxlen'                           /* Hand 2 rexx      */
+     Select
+     When option=''       Then Call Run_As_Xedit
+     When option='SNAME'  Then Call Sort_Function '1.'maxlen
+     When option='SDATE'  Then Call Sort_Function 'W10.2 D'
+     When option='SSIZE'  Then Call Sort_Function 'W-1;-1 D'
+     When option='SOWNER' Then Call Sort_Function 'W2.1'
+     When option='SGROUP' Then Call Sort_Function 'W3.1'
+     When option='SUBDIR' Then Call Dive_Deeper
+     Otherwise 'EMSG 98 Can not handle 'option
+     End
+End
+Otherwise Call Exit '99 Can not handle 'myfn myft
+End
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg rc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Run_As_Xedit:
+/*---------------------------------------------------------------+
+| The xedit part of this code                                    |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME FLBFS.EXEC:89 END ?)',
+    'var directory 1',                           /* Obtain fr caller */
+    '| var directory',                           /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'var maxlen 1',                              /* Idem             */
+    '| var maxlen'                               /* .                */
+'EXTRACT /CURSOR/CURLINE'
+oldpos=curline.1
+curpos=cursor.3
+':'curpos
+'EXTRACT /CURLINE'
+content=curline.3
+type=Word(content,12)
+fn=Strip(Word(content,1),'BOTH',"'")
+Select
+When type='F' Then Address CMS 'XEDIT ./'fn' (NAMETYPE BFS'
+When type='D' Then Do
+     newdir='.'
+     newmnt='/'Strip(fn,'B',"'")
+     Address CMS 'FLBFS 'newdir newmnt' (SUBDIR'
+     End
+Otherwise 'EMSG Can not edit/display non-file 'content
+End
+':'oldpos
+Return
+ 
+ 
+Dive_Deeper:
+/*---------------------------------------------------------------+
+| Go deeper and deeper ... into the tree                         |
++---------------------------------------------------------------*/
+Call Get_BFS_Details
+'PIPE (NAME FLBFS.EXEC:121 END ?)',
+    'cms LISTFILE 'myfn' LIST* A (NOH',          /* Find this        */
+    '| count lines',                             /* How many         */
+    '| var newno'                                /* Store as         */
+chop=Length(newno)+1
+newft=Reverse(Substr(Reverse('LISTFILE'),chop))newno
+Call Present_File newft
+Return
+ 
+ 
+Run_As_Exec:
+/*---------------------------------------------------------------+
+| The exec part of the code                                      |
++---------------------------------------------------------------*/
+If directory='' Then Exit 28
+If mountpoint='' Then mountpoint='/'
+If directory<>'.' Then directory='/../VMBFS:'Translate(directory,'/','.')
+'PIPE (NAME FLBFS.EXEC:138 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',            /* Ask CMS          */
+   '| drop first 1',                      /* Ignore header    */
+   '| count lines',                       /* Count findings   */
+   '| if: if pick 1.1 == ~1~',            /* Check this       */
+   '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */
+   '|     cms',                           /* Issue cmd        */
+   '| if:',                               /* Comm 2 if        */
+   '| var exldd'                          /* Hand 2 rexx      */
+Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+/*---------------------------------------------------------------+
+| Mount the BFS directory                                        |
++---------------------------------------------------------------*/
+If mountpoint='/' Then Address CMS 'OPENVM MOUNT 'directory mountpoint
+Call Get_BFS_Details
+Call Present_File 'LISTFILE'
+If mountpoint='/' Then Address CMS 'OPENVM UNMOUNT 'mountpoint
+If \exldd Then Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+Present_File:
+/*---------------------------------------------------------------+
+| Write the file                                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg outft .
+If noxedit Then out='| specs 1.150 1.150 | cons'
+          Else out='| > 'myfn outft' A F 500'
+'PIPE (NAME FLBFS.EXEC:166 END ?)',
+    'stem out.',                                 /* Take these       */
+    '| specs w1.1 1.'maxlen' w2;* nw',           /* Adjust records   */
+    '| specs pad space 1;* 1.500',               /* Adjust length    */
+    out                                          /* Write 2 file     */
+If \noxedit Then Do
+/*---------------------------------------------------------------+
+| Make the header fit                                            |
++---------------------------------------------------------------*/
+hdr='      %W'Substr('File/Directory',1,maxlen)'Owner      Group       Permissions',
+'Fn Ft BFS         Date     Time     Type',
+'Links      Size'
+/*---------------------------------------------------------------+
+| Start the XEDIT session                                        |
++---------------------------------------------------------------*/
+               If directory<>'.' Then disp_dir=directory
+                                 Else Do
+                                      Address CMS 'PIPE (NAME FLBFS.EXEC:183 END ?)',
+                                             'var directory 1',      /* Take from caller */
+                                             '| strip trailing ~/~', /* Remove 1 /       */
+                                             '| specs w1.1 1',       /* Compose new one  */
+                                                     '~'Strip(mountpoint)'~ n',   /* .                */
+                                             '| var disp_dir'        /* Hand 2 rexx      */
+                                     End
+               Call SetPfk
+               Queue 'RECFM V'
+               Queue 'LRECL 200'
+               Queue 'TRUNC *'
+               Queue 'VERIFY 1 150'
+               Queue 'SET AUTOSAVE OFF'
+               Queue 'SET RESERVED -1 NONE NOH 'pfkresrvd
+               Queue ':1'
+               Queue 'SET RESERVED 3 NONE NOH       %BBFS directory:%W'disp_dir'%Bmounted as%W'mountpoint
+               Queue 'SET RESERVED 4 NONE NOH 'hdr
+               Address CMS 'XEDIT 'myfn outft' A (WIDTH 500'
+/*---------------------------------------------------------------+
+| Unmount the BFS directory and erase the work file              |
++---------------------------------------------------------------*/
+               Address CMS 'ERASE 'myfn outft' A'
+               End
+Return
+ 
+ 
+Get_BFS_Details:
+/*---------------------------------------------------------------+
+| Get all the details for the BFS directory                      |
++---------------------------------------------------------------*/
+'PIPE (NAME FLBFS.EXEC:213 END ?)',
+     'cms OPENVM LIST 'mountpoint' ( OWNERS',   /* Ask OPENVM       */
+     '| drop first 2',                          /* Ignore header    */
+     '| f: fanout',                              /* Duplicate recs.. */
+     '| specs w7.1 1.100  w1.5 nw',              /* Set file 1st     */
+     '| fi: fanin',                              /* Take in others   */
+     '| sort 1.100',                             /* Sort on name     */
+     '| join keylen 100',                        /* Join on name     */
+     '| specs 1;* 1.250',                        /* Add size at end  */
+             'pad 0 w-1;-1 251.10 right',        /* .                */
+     '| change w-1;-1 ~-~0~',                    /* Replace this     */
+     '| specs w1.1 1.100',                       /* Rework layout    */
+             'w2.5 nw',                          /* .                */
+             'w7.1 nw.2',                        /* .                */
+             'w8.1 nw.2',                        /* .                */
+             'w9.3 nw',                          /* .                */
+             'w12.1 nw.4',                       /* .                */
+             'w13.1 nw.4',                       /* .                */
+             'w14.1 nw.10 right',                /* .                */
+             'pad space',                        /* .                */
+             'w15.1 250.10 right',               /* Hide this        */
+     '| dateconv w10.1 usa rexxs',               /* Convert timestamp*/
+     '| stem out.',                              /* Hand 2 rexx      */
+     '?',                                        /* 2nd pipe         */
+     'cms OPENVM LIST 'mountpoint' ( NAMES',     /* Ask OPENVM       */
+     '| drop first 2',                           /* Ignore header    */
+     '| specs w5.1 1.100 w1.3 nw',               /* Set file 1st     */
+     '| fi:',                                    /* Conn 2 fanin     */
+     '?',                                        /* 3rd pipe         */
+     'cms OPENVM LIST 'mountpoint' ( ATTR',      /* Ask OPENVM       */
+     '| drop first 2',                           /* Ignore header    */
+     '| specs w6.1 1.100 w1.5 nw',               /* Set file 1st     */
+     '| fi:',                                    /* Conn 2 fanin     */
+     '? f:',                                     /* Conn 2 fanout    */
+     '| specs w-1;-1',                           /* Take last word   */
+     '| count maxline',                          /* Largest record?  */
+     '| var maxlen'                              /* Hand 2 rexx      */
+If rc='28' Then Do
+           Queue 'EMSG NO files found in 'mountpoint rc
+           Call Exit
+           End
+Return
+ 
+ 
+SetPfk:
+/*---------------------------------------------------------------+
+| Compose the PFK line at the bottom of the screen               |
++---------------------------------------------------------------*/
+pfkeyline='Help;Sort(Name);Sort(Date);Sort(Size);Sort(Owner);Sort(Group);Back;Forw;Bottom;Top;Xedit;Quit'
+pfkaction='HELP OPENVM;FLBFS (SNAME;FLBFS (SDATE;FLBFS (SSIZE;FLBFS (SOWNER;FLBFS (SGROUP;BACKWARD;FORWARD;BOT#BACK;TOP;FLBFS;QQUIT'
+Address CMS 'PIPE (NAME FLBFS.EXEC:263 END ?)',
+     'var pfkeyline',                            /* Take this        */
+     '| split at ;',                             /* Split here       */
+     '| specs recno 1.2',                        /* Compose          */
+             '~=%G~ n',                          /* ...setting       */
+             'w1.1 n',                           /* .                */
+             '~%W~ n',                           /* .                */
+     '| join *',                                 /* Make 1 record    */
+     '| space 0',                                /* Suppress spaces  */
+     '| specs ~%W~ 6 1;* n',                     /* Shift 6          */
+     '| var pfkresrvd',                          /* Store as         */
+     '?',                                        /* 2nd pipe         */
+     'var pfkaction',                            /* Take this        */
+     '| dup 1',                                  /* If we use 24 keys*/
+     '| split at ;',                             /* Split here       */
+     '| specs ~SET PF~ 1 recno n w1;* nw',       /* Compose cmds     */
+     '| stack'                                   /* Stack them       */
+Return
+ 
+ 
+Sort_Function:
+/*---------------------------------------------------------------+
+| Issue the sorts                                                |
++---------------------------------------------------------------*/
+Parse Arg columns
+'MSGMODE OFF'
+':1'
+Address CMS 'PIPE (NAME FLBFS.EXEC:290 END ?)',
+   'xedit',                                      /* Read content     */
+   '| sort 'columns,                             /* Sort             */
+   '| stem line.'                                /* Hand 2 rexx      */
+':1'
+'DELETE *'
+Address CMS 'PIPE (NAME FLBFS.EXEC:296 END ?)',
+   'stem line.',                                 /* Take from rexx   */
+   '| xedit'                                     /* Insert in file   */
+':1'
+'MSGMODE ON'
+Return

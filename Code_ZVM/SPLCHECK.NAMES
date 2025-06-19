@@ -1,0 +1,13 @@
+* User ids that need to be warned
+:staff.OPERATOR HERMAN TJASSEB
+*
+* Limits when we start to get nervous
+:limits.70 80 90
+*
+* the level of nervousnes and the messages/warnings we want to send
+:medium.
+WARNING Spool usage is between $LIMLOW$% and $LIMMED$% current usage $SPLPERC$
+:high.
+WARNING Spool usage is between $LIMMED$% and $LIMHIGH$% current usage $SPLPERC$
+:urgent.
+WARNING Spool usage is above $LIMHIGH$% current usage $SPLPERC$

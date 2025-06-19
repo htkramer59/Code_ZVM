@@ -1,0 +1,53 @@
+When entering RA, RAC, or RACF as Prefix command in the USER DIRECT file, DRM
+prepares RACF commands in a workfile: RACFDRM COMMANDS
+You can then still change the prepared RACF command before you trigger
+execution (hitting PF10 in RACFDRM COMMANDS).
+ 
+The prepared commands depend on two things
+1. The Directory statement on which you enter the RA command
+2. The number of lines to handle ("RA *" tells to handle till next user)
+This first statement defines the initial skeleton DRM will take
+  - USER or IDENTIFY:    skeleton file: RACFDRM SKELUSER
+  - MDISK:               skeleton file: RACFDRM SKELMDSK
+  - LINK:                skeleton file: RACFDRM SKELLINK
+  - DEDICATE, LOGONBY, or XAUTOLOG: no skeleton
+ 
+Then DRM change some &-variables in the skeleton and so create RACFDRM COMMANDS
+If RA is started with a number of lines to handle, all other recognized
+directory statements, related to RACF, will be added to RACFDRM COMMANDS.
+The result is a bit SORTed and presented to the enduser.
+Records starting with an * are comments and will be shown to the enduser.
+ 
+When hitting PF10, DRM will pass all non comment statements to the RAC
+command.  When the returncode is 0, DRM inserts an * before the command.
+- when all commands ended with RC=0, DRM quits the RACFDRM COMMANDS file
+- otherwise RACFDRM COMMANDS remains visible,
+  - you can fix the failing commands and hit PF10 again
+    (thanks to the inserted *, commands that ended OK are not re-executed
+     unless you first remove the *)
+  - or you can issue QQUIT, hereby ignoring RACF commands that failed.
+ 
+ 
+ 
+ RACFDRM SKELUSER
+--------------------
+The RACFDRM SKELUSER file is a bit special.  It can contain some RACF
+settings, like is the VMDEV and/or VMBATCH class active in your RACF.
+ 
+These control statements are written in lines starting with .*
+-The .* lines not recognized are considered comments, and not displayed
+ to then end-user (as opposed to lines starting with *).
+-Control statements we recognize:
+  - .*ClassAct
+    Sample: .*ClassAct  VMBATCH VMDEV
+    With this record you tell if VMDEV and/or VMBATCH classes are active
+    - if VMDEV is active, DRM generates RACF commands for DEDICATEs
+    - if VMBATCH is active and an ADDUSER is prepared, we prepare VMBATCH
+  - .*Group VMBACTH till .*EndClass
+    defines the section to build for VMBATCH when an ADDUSER is prepared.
+  - .*GroupStart  till .*GroupEnd
+    Defines comment lines to display to the user when then enduser could
+    have to fill in RACF group(s), like for ADDUSER
+  - .*Loop VMMDISK  till .*EndLoop
+    Defines the statements to repeat for each MDISK encountered by RA.
+    --> this is possibly not implemted yet.

@@ -1,0 +1,573 @@
+/*---------------------------------------------------------------+
+| Function : Query system queues                                 |
+|                                                                |
+| File     : QS       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : QS       <search string> <sort order>               |
+|                                                                |
+|            <seach string> uid, string or wildcard              |
+|            <sort order>   DATEA, DATED, SIZEA, SIZED, NAMEA or |
+|                           NAMED                                |
+|            DATEA          Date in ascending order              |
+|            DATED          Date in descending order             |
+|            SIZEA          Size in ascending order              |
+|            SIZED          Size in descending order (default)   |
+|            NAMEA          Name in ascending order              |
+|            NAMED          Name in descending order             |
+|                                                                |
+| Examples:  QS SLD*        Show all SLD servers                 |
+|            QS *SL*        Show all SL  servers                 |
+|            QS *AD* DATEA  Show all AD  servers, sorted         |
+|            QS .    SIZED  Show all     servers, sorted         |
+|                                                                |
+|                                                                |
+| Keys     :  1 Help, show this screen                           |
+|          :  2                                                  |
+|          :  3 End, exit the code                               |
+|          :  4 SHOW, undo an "ALL" command                      |
+|          :  5 2CONP, send the file to CONPARK                  |
+|          :  6 Refresh, refresh the content of the screen       |
+|          :  7 Bck , back 1 screen                              |
+|          :  8 Fwd , forward 1 screen                           |
+|          :  9 PUR, purge the file                              |
+|          : 10 Top, go to the top of the display                |
+|          : 11 PEEK, peek the file                              |
+|          : 12 Quit, exit the code                              |
+|                                                                |
+| Comments : Need enough authorisation                           |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180220 11:17:02                                   |
+| Changes  : .                                                   |
+|            20220316 H.T.Kramer : Fixed problem with split      |
+|                 lines when adding a marker, removed the        |
+|                 need to EXECLOAD multiple times.               |
+|            20210217 H.T.Kramer : Updated so we can see what    |
+|                 was transfrd, peeked, purged.                  |
+|            20201211 H.T.Kramer : Separated open file from      |
+|                            closed files.                       |
+|            20201126 H.T.Kramer : Update so % is shown          |
+|            20200402 H.T.Kramer : Added wildcard and help.      |
+|                            Added move 2 conpark 4 cons files.  |
+|            20200323 H.T.Kramer : Small changes, added refresh  |
+|                            function, changed some var names    |
+|                            changed ALLOC MAPs.                 |
+|            20191021 H.T.Kramer : Added EXECDROPs               |
+|            20180420 H.T.Kramer : Fixed purge                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid sort . '(' option .
+Parse Source . . myfn myft .
+spool_queues='RDR PRT PUN NSS'  /* Add/remove queues if you like */
+alloc_spaces='SPOOL'            /* Change order/add/remove if.. */
+/*---------------------------------------------------------------+
+| Which part of the code to invoke                               |
++---------------------------------------------------------------*/
+If uid='?' Then Do
+                'VMFCLEAR'
+                'PIPE (NAME QS.EXEC:72 END ?)',
+                     '< 'myfn myft' *',          /* Read myself      */
+                     '| casei tolabel PARSE',    /* Up to here       */
+                     '| cons'                    /* Show it          */
+                Exit
+                End
+Select
+When myfn='QS' & myft='XEDIT' Then Call QSXEDIT
+When myfn='QS' & myft='EXEC'  Then Call QSEXEC
+Otherwise Do
+   Say 'Invalid invocation 'myfn
+   End
+End
+Exit
+ 
+ 
+QSEXEC:
+/*---------------------------------------------------------------+
+| Check if all we need is execloaded                             |
++---------------------------------------------------------------*/
+'PIPE (NAME QS.EXEC:92 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',                /* Ask CMS          */
+   '| drop first 1',                          /* Ignore header    */
+   '| count lines',                           /* Count findings   */
+   '| if: if pick 1.1 == ~1~',                /* Check this       */
+   '|     specs ~EXECDROP 'myfn' XEDIT~ 1',   /* Compose cmd    */
+   '|     cms',                               /* Issue cmd      */
+   '| if:',                                   /* Comm 2 if        */
+   '| var exldd',                             /* Hand 2 rexx      */
+   '?',                                       /* 2nd pipe         */
+   'cms QUERY DISPLAY',                       /* Ask cms          */
+   '| specs w3.1',                            /* Keep this        */
+   '| var maxlen'                             /* Store as         */
+Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+/*---------------------------------------------------------------+
+| Queue some stuff...                                            |
++---------------------------------------------------------------*/
+Queue 'SET EMSG OFF'
+Queue ':1'
+Queue 'DEL *'
+Queue 'SET EMSG ON'
+Queue myfn
+Queue ':1'
+Queue 'PREFIX OFF'
+/*---------------------------------------------------------------+
+| Invoke XEDIT                                                   |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'myfn' $TEMP$ A (WIDTH 1024'
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+Address CMS 'EXECDROP 'myfn' XEDIT'
+'PIPE (NAME QS.EXEC:124 END ?)',
+    'CMS ERASE 'myfn' $TEMP$ A',                 /* Issue cmd        */
+    '| hole'                                     /* Suppress output  */
+Return
+ 
+ 
+QSXEDIT:
+/*---------------------------------------------------------------+
+| Starting the XEDIT profile                                     |
++---------------------------------------------------------------*/
+Select
+When option='CONPARK' Then Call QSCONPARK
+When option='PEEK'    Then Call QSPEEK
+When option='PURGE'   Then Call QSPURGE
+Otherwise Call Display
+End
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Numeric Digits 64
+Address CMS 'PIPE (NAME QS.EXEC:148 END ?)',
+    'rexxvars 1 toload',                        /* Get all fr callr*/
+    '| varload'                                 /* and use them... */
+/*---------------------------------------------------------------+
+| Defaults                                                       |
++---------------------------------------------------------------*/
+If uid='.' Then uid=''
+If Pos('*',uid)>0 Then search='| wildcard anycase w1.1 /'uid'/'
+                  Else Do
+                  If uid<>'' Then search='| all ~'uid'~'
+                             Else search=''
+                  End
+/*---------------------------------------------------------------+
+| Some XEDIT settings                                            |
++---------------------------------------------------------------*/
+'SET AUTOSAVE OFF'
+'SET RECFM V'
+'SET LRECL 'maxlen
+'SET TRUNC *'
+'SET VERIFY 1 *'
+'SET PF2           '
+'SET PF4  ALL      '
+'SET PF5  MACRO QS (CONPARK'
+'SET PF6  QS        '
+'SET PF9  MACRO QS (PURGE'
+'SET PF11 MACRO QS (PEEK'
+'SET PF12 QQUIT'
+'EXTRACT /RESERVED *'
+Address CMS 'PIPE (NAME QS.EXEC:176 END ?)',
+    'stem reserved.',                            /* Take these       */
+    '| change ~%W2=%GDspc~%W2=%G %W~',           /* Replace these    */
+    '| change ~%W3=%GFile~%W3=%GQuit%W~',        /* Replace these    */
+    '| change ~%W4=%GSp/Jn~%W4=%GShow~',         /* .                */
+    '| change ~%W5=%G<->~%W5=%G2Conp~',          /* .                */
+    '| change ~%W6=%GScr2~%W6=%GRefresh~',       /* .                */
+    '| change ~%W9=%G_~%W9=%GPurge~',            /* .                */
+    '| change ~%W11=%GBot~%W11=%GPeek~',         /* .                */
+    '| var pfline'                               /* Store as         */
+'SET RESERVED 'pfline
+/*---------------------------------------------------------------+
+| Which spaces do we need to check                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME QS.EXEC:190 END ?)',
+    'var alloc_spaces',                          /* Take this var    */
+    '| split',                                   /* Split it         */
+    '| specs ~QUERY ALLOC~ 1 w1.1 nw',           /* Compose cmds     */
+    '| CP',                                      /* Issue cmds       */
+    '| n: nfind USABLE',                         /* Locate this      */
+    '| if: if pick w1.1 == ~SUMMARY~',           /* Adjust when...   */
+    '|     specs 1;* 1 ~; ;~ nw',                /* .                */
+    '|     split at ;',                          /* .                */
+    '| if:',                                     /* .                */
+    '| specs 1;* 1.120',                         /* Mod. line length */
+    '| xedit 'myfn' $TEMP$ A',                   /* Add to file      */
+    '? n:',                                      /* Conn 2 nfind     */
+    '| specs w2.1',                              /* Keep this        */
+    '| siconv w1.1 k2b 8',                       /* Convert 2 bytes  */
+    '| var availblks',                           /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'var spool_queues',                          /* Take this var    */
+    '| split',                                   /* Split            */
+    '| stem q.'                                  /* Store as         */
+/*---------------------------------------------------------------+
+| Determine sort order                                           |
++---------------------------------------------------------------*/
+Select
+  When sort='DATEA' Then sortfields='W9.1 A'
+  When sort='DATED' Then sortfields='W9.1 D'
+  When sort='SIZEA' Then sortfields='W6.1 A'
+  When sort='SIZED' Then sortfields='W6.1 D'
+  When sort='NAMEA' Then sortfields='w2.1 A'
+  When sort='NAMED' Then sortfields='w2.1 D'
+  Otherwise sortfields='W6.1 D'
+  End
+/*---------------------------------------------------------------+
+| Go through the spool_queues                                    |
++---------------------------------------------------------------*/
+work.0=0
+totperc=0
+Do i=1 To q.0
+  If q.i='NSS' Then Call Proc_NSS
+               Else Call Proc_Std
+  Address CMS 'PIPE (NAME QS.EXEC:230 END ?)',
+                 'stem temp.',                   /* Take these       */
+                 '| stem work. append'           /* Append to this   */
+  perc=Right(Word(totalblks,4),15)
+  totperc=totperc+perc
+  q.i=q.i'  'perc
+  Drop temp.
+End i
+If work.0<>0  Then Do
+  Address CMS 'PIPE (NAME QS.EXEC:239 END ?)',
+                 'append literal ',              /* Add empty        */
+                 '| append literal Queue  Percentages',   /* Add header       */
+                 '| append stem q.',             /* Insert data      */
+                 '| append literal Total 'Right(totperc,14) Format(totperc,,0),   /* Add total        */
+                 '| append literal ',            /* Add empty        */
+                 '| append stem work.',          /* Insert overview  */
+                 '| xedit 'myfn' $TEMP$ A'       /* Into xedit       */
+  Queue ':1'
+  End
+Return
+ 
+ 
+Proc_NSS:
+/*---------------------------------------------------------------+
+| Process all NSSes...                                           |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME QS.EXEC:256 END ?)',
+    'cp Q NSS ALL MAP',                          /* Ask CP           */
+    '| t: take first 1',                         /* Keep header      */
+    '| specs 1;* 5',                             /*Adjust header     */
+            '~  Beg(DEC) End(DEC)      #Pages %inUSE~ nw',   /* .                */
+    '| fi1: faninany',                           /* Take in other    */
+    '| preface literal ',                        /* Add space        */
+    '| stem temp.',                              /* Store as         */
+    '? t:',                                      /* Conn 2 take      */
+    '| if: if pick 1.1 == ~ ~',                  /* If no data add   */
+    '|       specs ~.    .        .          .~ 1',   /* some             */
+                  'w1.3 33',                     /* .                */
+                  '~ .  .       .         .~ nw',   /* .                */
+    '| if:',                                     /* Conn 2 if        */
+    '| specs 1;* 1.80',                          /* Send some        */
+            'pad 0',                             /* ...numbers to    */
+            '33.5 80.6 right',                   /* .....end of      */
+            '40.5 nw.6 right',                   /* ......record     */
+    '| specs 1.79 1.79',                         /* Translate 2      */
+            'pad 0',                             /* ....decimal      */
+            '80.6 x2d nw.8 right',               /* .                */
+            '87.6 x2d nw.8 right',               /* .                */
+    '| specs 1;* 1',                             /* Calculate        */
+            'a: w-2;-2 .',                       /* ...a total of    */
+            'b: w-1;-1 .',                       /* ....records      */
+            'set #0:=b-a+1',                     /* .                */
+            'print #0 nw',                       /* .                */
+    '| specs 1;* 1',                             /* Calculate        */
+            'a: w-1;-1 .',                       /* ....a            */
+            'set #0:=(a/'availblks')*100',       /* .....percentage  */
+            'print #0 picture --9.99999999  nw', /* .                */
+    '| fo2: fanout',                             /* Duplicate recs   */
+    '| specs ~'q.i'~ 1 1;* nw',                  /* Add que id       */
+    '| fi2: faninany',                           /* Take in others   */
+    '| fi1:',                                    /* Conn 2 faninany  */
+    '? fo2:',                                    /* Conn 2 fanout    */
+    '| specs printonly eof',                     /* Summarize        */
+            'a: w-2;-2 .',                       /* ...no of records */
+            'b: w-1;-1 .',                       /* ....percentages  */
+            'set #0+=a',                         /* .                */
+            'set #1+=b',                         /* .                */
+            'eof',                               /* .                */
+            '~'q.i' Totals:~ 1',
+            'print #0 104.10 right',             /* .                */
+            'print #1 picture --9.99999999 nw',  /* .                */
+    '| var totalblks',                           /* Store as         */
+    '| fi2:'                                     /* Conn 2 faninany  */
+Return
+ 
+ 
+Proc_Std:
+/*---------------------------------------------------------------+
+| Process standards queues                                       |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME QS.EXEC:310 END ?)',
+    'cp QUERY 'q.i' ALL ISODATE DIST',           /* Ask cp           */
+    '| t: take first 1',                         /* Take header      */
+    '| specs 1;* 5 ~%inUSE~ 96',                 /* Adjust/upd header*/
+    '| fi1: faninany',                           /* Take in res      */
+    '| stem main.',                              /* Store as         */
+    '? t:',                                      /* Conn 2 take      */
+    search,
+    '| specs w4.1 1 1;* nw',                     /* Add this         */
+    '| change w1.1 ~PUN~080~',                   /* Replace with..   */
+    '| change w1.1 ~PRT~132~',                   /* .                */
+    '| change w1.1 ~CON~132~',                   /* .                */
+    '| change w1.1 ~RDR~080~',                   /* .                */
+    '| change w1.1 ~SYS~001~',                   /* .                */
+    '| change w1.1 ~DMP~001~',                   /* .                */
+    '| specs w2;* 1.90',                         /* Calculate %      */
+            'a: w1.1 .',                         /* .                */
+            'b: w6.1 .',                         /* .                */
+            'set #0:=(((a*b)/4096)/'availblks')*100',   /* .                */
+            'print #0 picture --9.99999999 nw',  /* .                */
+    '| fo1: fanout',                             /* Send away        */
+    '| specs ~'q.i'~ 1 1;* nw',                  /* Add queue id     */
+    '| fi1:',                                    /* Conn 2 faninany  */
+    '? fo1:',                                    /* Conn 2 fanout    */
+    '| p: pick w8.1 \== ~OPEN-~',                /* Separate these   */
+    '| fo2: fanout',                             /* Send away        */
+    '| sort w1.1',                               /* Sort on name     */
+    '| specs w1.1 1 w5.1 nw 86;* strip nw ',     /* Adjust layout    */
+    '| specs',                                   /* Calculate        */
+            'select second',                     /* ...usage         */
+            'a: w1.1  1.8',                      /* .....per id      */
+            'b: w2.1  nw',                       /* .                */
+            '   set #0+=b',                      /* .                */
+            'break a',                           /* .                */
+            '   write',                          /* .                */
+            '   print a nw.8',                   /* .                */
+            '   print #0 picture ---------9 nw /T/ nw',   /* .                */
+            '   set #0:=0',                      /* .                */
+    '| pick w3.1 == ~T~',                        /* Select these     */
+    '| fi2: faninany',                           /* Take in others   */
+    '| sort w1.1 w3.1',                          /* Sort on id & type*/
+    '| specs w1.2',                              /* Keep values      */
+    '| join keylen 8',                           /* Join on name     */
+    '| sort w4.1 d',                             /* Sort descending  */
+    '| specs ~'q.i'~ 1 1;* nw',                  /* Add quee id      */
+    '| preface literal     Userid       #Files #Records   %inUSE',   /* Add header       */
+    '| stem sum.',                               /* Store as         */
+    '? fo2:',                                    /* Conn 2 fanout    */
+    '| sort w1.1',                               /* Sort on name     */
+    '| specs w1.1 1 w5.1 nw 86;* strip nw ',     /* Adjust           */
+    '| specs',                                   /* Calculate        */
+            'select second',                     /* ....totals       */
+            'a: w1.1  1.8',                      /* .....per id      */
+            'c: w3.1  nw',                       /* .                */
+            '   set #1+=c',                      /* .                */
+            'break a',                           /* .                */
+            '   write',                          /* .                */
+            '   print a nw.8',                   /* .                */
+            '   print #1 picture --9.99999999 nw /Z/ nw',   /* .                */
+            '   set #1:=0',                      /* .                */
+    '| pick w3.1 == ~Z~',                        /* Keep these       */
+    '| fi2:',                                    /* Conn 2 faninany  */
+    '? fo2:',                                    /* Conn 2 fanout    */
+    '| specs w1.1',                              /* Keep this        */
+    '| sort w1.1',                               /* Sort them        */
+    '| unique w1.1 count',                       /* Add count        */
+    '| specs 11;* 1.8 1.10 nw ~C~ nw',           /* Rework layout    */
+    '| fi2:',                                    /* Conn 2 faninany  */
+    '? fo1:',                                    /* Conn 2 fanout    */
+    '| sort w1.1',                               /* Sort on names    */
+    '| specs',                                   /* Summarize        */
+          'printonly eof',                       /* ...totals        */
+          'a: w5.1 .',                           /* .....and         */
+          'b: w-1;-1 .',                         /* .......percentage*/
+          'set #0+=a',                           /* .                */
+          'set #1+=b',                           /* .                */
+          'eof',                                 /* .                */
+          '~'q.i' Totals~ 1',
+          'print #0 25.8 right',                 /* .                */
+          'print #1 picture --9.99999999 96 right',   /* .                */
+    '| var totalblks',                           /* Store as         */
+    '? p:',                                      /* Conn 2 pick      */
+    '| count lines',                             /* How many         */
+    '| var openfiles'                            /* Store as         */
+ 
+Address CMS 'PIPE (NAME QS.EXEC:395 END ?)',
+    'stem main.',                                /* Take these       */
+    '| buffer',                                  /* Prevent loop     */
+    '| t: take first 1',                         /* Keep header      */
+    '| fi: faninany',                            /* Take in others   */
+    '| stem main.',                              /* Store as         */
+    '? t:',                                      /* Conn 2 take      */
+    '| p: pick w9.1 \== ~OPEN-~',                /* Select others    */
+    '| sort 'sortfields,                         /* Sort them        */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '? p:',                                      /* Conn 2 pick      */
+    '| buffer',                                  /* Prevent stall    */
+    '| sort 'sortfields,                         /* Sort them        */
+    '| preface literal --- ',                    /* Add this         */
+    '| fi:'                                      /* Conn 2 faninany  */
+ 
+Address CMS 'PIPE (NAME QS.EXEC:411 END ?)',
+    'literal ',                                  /* Add empty        */
+    '| append literal No files: 'main.0-1||,     /* Add some details */
+                    ' Open files: 'openfiles||,  /* .                */
+                    ' Closed files: 'main.0-openfiles-1||,   /* .                */
+                    ' Available space: 'availblks,   /* .                */
+    '| append literal ',                         /* Add empty        */
+    '| append stem sum.',                        /* Take summary     */
+    '| append literal ',                         /* Add empty        */
+    '| append stem main.',                       /* Take main        */
+    '| append var totalblks',                    /* Add totals       */
+    '| append literal ',                         /* Add empty        */
+    '| stem temp.'                               /* Store as         */
+  drop main. sum.  /* Clean up */
+Return
+ 
+ 
+QSPURGE:
+/*---------------------------------------------------------------+
+| Pur the spool file from the line....if a valid line..          |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Some settings                                                  |
++---------------------------------------------------------------*/
+'NULLS OFF'
+/*---------------------------------------------------------------+
+| Where are we in the file ...                                   |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE'
+curpos=line.1
+':'cursor.3
+'EXTRACT /CURLINE'
+line=Strip(curline.3)
+/*---------------------------------------------------------------+
+| Split the findings in the right parts                          |
++---------------------------------------------------------------*/
+quid=Subword(line,1,1)
+usid=Subword(line,2,1)
+spid=Subword(line,3,1)
+If quid='NSS' Then Do
+    'EMSG >>>   Too dangerous'
+    End
+    Else Do
+     If lastpos(quid,spool_queues) = '0' Then 'EMSG >>>   Nothing to purge'
+         Else Do
+         If spid='----' Then 'EMSG >>>   Can not purge this file'
+         Else Do
+         /*---------------------------------------------------------------+
+         | Compose the purge command                                      |
+         +---------------------------------------------------------------*/
+         'VMFCLEAR'
+         Address COMMAND 'CP PUR 'usid quid spid
+         'VMFCLEAR'
+         /*---------------------------------------------------------------+
+         | .                                                              |
+         +---------------------------------------------------------------*/
+         marker='* Purged 'Time()' *'
+         Call AddMarker '----'
+     End
+     End
+End
+':'curpos                   /** Adjust current line */
+Return
+ 
+ 
+AddMarker:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg tmpspid .
+'CLOCATE :14'
+'COVERLAY 'tmpspid
+'CAPPEND  'marker            /** Add the marker **/
+'CLOCATE :1'
+Return
+ 
+ 
+QSPEEK:
+/*---------------------------------------------------------------+
+| Peek at the file from the line                                 |
++---------------------------------------------------------------*/
+'NULLS OFF'
+/*---------------------------------------------------------------+
+| Where are we in the file ...                                   |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE'
+curpos=line.1
+':'cursor.3
+'EXTRACT /CURLINE'
+line=Strip(curline.3)
+/*---------------------------------------------------------------+
+| Split the findings in the right parts                          |
++---------------------------------------------------------------*/
+quid=Subword(line,1,1)
+usid=Subword(line,2,1)
+spid=Subword(line,3,1)
+If lastpos(quid,spool_queues) = '0' Then Do
+    'EMSG >>>   Nothing to PEEK'
+    End
+    Else Do
+    If spid='----' Then 'EMSG >>>    Can not PEEK this file'
+    Else Do
+     /*---------------------------------------------------------------+
+     | Obtain the file                                                |
+     +---------------------------------------------------------------*/
+     Address CMS 'PIPE (NAME QS.EXEC:516 END ?)',
+          'CP TRANSFER 'usid quid spid' * RDR',   /* Issue cmd        */
+          '| take first 1',                      /* Take this        */
+          '| specs w3.1',                        /* Keep spool id    */
+          '| var new_sp_id'                      /* Store as         */
+     If new_sp_id='----' Then 'EMSG >>>   Can not PEEK this file'
+                         Else Do
+     Address CMS 'PEEK 'new_sp_id
+     /*---------------------------------------------------------------+
+     | Return the file                                                |
+     +---------------------------------------------------------------*/
+     Address CMS 'PIPE (NAME QS.EXEC:527 END ?)',
+          'CP TRANSFER * RDR 'new_sp_id usid quid,   /* Issue cmd        */
+          '| spec w9.1',                         /* Keep this        */
+          '| var newspid',                       /* Store as         */
+          '| hole'                               /* Suppress output  */
+     marker='* Peeked 'Time()' *'
+     Call AddMarker newspid
+     End
+     End
+    End
+':'curpos
+Return
+ 
+ 
+QSCONPARK:
+/*---------------------------------------------------------------+
+| Transfer a console file to conpark                             |
++---------------------------------------------------------------*/
+'NULLS OFF'
+/*---------------------------------------------------------------+
+| Where are we in the file ...                                   |
++---------------------------------------------------------------*/
+'EXTRACT /CURSOR/LINE'
+curpos=line.1
+':'cursor.3
+'EXTRACT /CURLINE'
+line=Strip(curline.3)
+/*---------------------------------------------------------------+
+| Split the findings in the right parts                          |
++---------------------------------------------------------------*/
+quid=Subword(line,1,1)
+usid=Subword(line,2,1)
+spid=Subword(line,3,1)
+sptp=Subword(line,5,1)
+splk=Subword(line,8,1)
+spst=Subword(line,9,1)
+If sptp<>'CON' |,
+   spid='----' |,
+   splk='LOCK-' |,
+   spst='OPEN-' Then 'EMSG >>>   File not eligible for transfer'
+                 Else Do
+                 Address CMS 'PIPE (NAME QS.EXEC:568 END ?) CP TRANSFER 'usid quid spid' TO CONPARK RDR | hole'
+                 marker='* 2 Conpark 'Time()' *'
+                 Call AddMarker
+                End
+':'curpos
+Return

@@ -1,0 +1,97 @@
+/*---------------------------------------------------------------+
+| Function : Template exec for use in QSCAN EXEC                 |
+|                                                                |
+| File     : QS_EXEC  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QS_EXEC  REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QS_EXEC  <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QS_EXEC  REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* Stem 2 append to */
+stemname='report.'                               /* Stem of caller   */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QS_EXEC.EXEC:41 END ? .EXEC:41)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Sample of how to obtain a single variable from the calling     |
+| exec.                                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME QS_EXEC.EXEC:52 END ?)',
+   'literal 'TimeStamp(),
+   '| var qs_exec_header 1',
+   '| join * x40',
+   '| var qs_exec_header'
+/*---------------------------------------------------------------+
+| Start test/check                                               |
++---------------------------------------------------------------*/
+Check TCPMAINT 198 PROFILE TCPIP & SYSTEM DTCPARMS & DS CONF
+/*---------------------------------------------------------------+
+| End test/check                                                 |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Sample of how to add a var or a stem to an existing stem       |
++---------------------------------------------------------------*/
+Call Add2Output 'qs_stem.,section header'
+Call Add2Output 'qs_var,section header'
+/*---------------------------------------------------------------+
+| Sample of how to return a stem to the caller                   |
++---------------------------------------------------------------*/
+'PIPE (NAME QS_EXEC.EXEC:148 END ?)',
+    'stem work.',
+    '| preface var qs_exec_header',
+    '| preface literal ',
+    '| preface literal ',
+    output
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Adding stuff to an existing stem                               |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QS_EXEC.EXEC:164 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* Split here       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

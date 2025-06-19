@@ -1,0 +1,47 @@
+/*---------------------------------------------------------------+
+| Function : Get the location of where the LPAR runs             |
+|                                                                |
+| File     : HOBPLACE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBPLACE .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220120 16:14:59                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| Get the variables from our caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVARS.SKELETON:4 END ?)',
+   'rexxvars 1 toload',                          /* Take from caller */
+   '| varload'                                   /* Hand 2 rexx      */
+Call Collect_Info          /*  Execute the test                */
+Exit
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If test Then output='| cons'
+        Else output='| > HOBVM320 CLIENT A'
+'PIPE (end ?)',
+   'cp QUERY CPUID',
+   '| specs 13.4 1',
+   '| change ~2F98~ ~Den Haag~',
+   '| change ~2FA8~ ~Oude Meer~',
+   '| preface literal [place]',
+   output
+Return
+ 

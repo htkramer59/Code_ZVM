@@ -1,0 +1,256 @@
+/*---------------------------------------------------------------+
+| Function : Show conpark usage...                               |
+|                                                                |
+| File     : CNPUSAGE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : CNPUSAGE <output> '(' role                          |
+|                     CONS                                       |
+|                     XEDIT             - default                |
+|                     FILE <fn> <ft>    - fn ft are optional     |
+|                                                                |
+|                     role              - empty or admin         |
+|                                                                |
+| Comments : Need to be SFS Admin                                |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190708 10:03:04                                   |
+| Changes  : .                                                   |
+|            20200326 H.T.Kramer : Added % of assigned no of     |
+|                                  blocks                        |
+|            20191113 H.T.Kramer : Added admin function to clean |
+|                                  up when filled                |
+|            20191017 H.T.Kramer : Made XEDIT default, made      |
+|                                  usability changes             |
+|            20190710 H.T.Kramer : Updated totals in PIPE...     |
+|            20190709 H.T.Kramer : Moved calculations into       |
+|                                     PIPE...                    |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg output '(' role .
+Parse Source . . myfn myft .
+runx=0
+If role<>'' Then role='(' role
+Select
+When myft='EXEC' Then Do
+           Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+           Call Run_Exec
+           Address CMS 'EXECDROP 'myfn' XEDIT'
+           End
+When myft='XEDIT' Then Call Run_Xedit
+Otherwise Exit 98
+End
+Exit
+ 
+ 
+Run_Exec:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+output=Strip(output)
+Parse Value output With output parms
+'VMFCLEAR'
+Select
+When output=''      Then Do
+                         runx=1
+                         output='XEDIT'
+                         parms=myfn' $WORK$ A'
+                         output='> 'parms
+                         Call Obtain_Info
+                         Call OutXedit
+                         End
+When output='CONS'  Then Call Obtain_Info
+When output='XEDIT' Then Do
+                         runx=1
+                         parms=myfn' $WORK$ A'
+                         output='> 'parms
+                         Call Obtain_Info
+                         Call OutXedit
+                         End
+When output='FILE'  Then Do
+                         If parms='' Then parms=myfn' $WORK$'
+                         output='> 'parms' A'
+                         Call Obtain_Info
+                         End
+When output='?'     Then Do
+          'PIPE (NAME CNPUSAGE.EXEC:80 END ?)',
+               '< 'myfn myft' *',               /* Read myself      */
+               '| tolabel Parse',               /* To here          */
+               '| cons'                         /* Display          */
+          Exit
+          End
+Otherwise Exit 99
+End
+Return
+ 
+ 
+Obtain_Info:
+/*---------------------------------------------------------------+
+| Obtain directory name                                          |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK CONPARKC (ONLY(CONPARK) NOINVOKE QUIET .pr'
+If rc=0 Then Parse Pull . . target
+        Else Exit rc
+ 
+Parse Value target With '.DIR' target
+target=Strip(target)
+Parse Value target With . ':' cnp_id '.' .
+'PIPE (NAME CNPUSAGE.EXEC:102 END ?)',
+    'cms QUERY LIMITS FOR 'cnp_id,
+    '| drop first 1',
+    '| specs w3.2',
+    '| f: fanout',
+    '| specs w1.1',
+    '| var maxblks',
+    '? f:',
+    '| specs fs - substring f2 of w2.1',
+    '| var usdperc'
+/*---------------------------------------------------------------+
+| Get the list of sub-directories to query                       |
++---------------------------------------------------------------*/
+'PIPE (NAME CNPUSAGE.EXEC:115 END ?)',
+   'cms LISTDIR 'target,                        /* List this        */
+   '| drop first 1',                            /* Remove header    */
+   '| specs w2.1',                              /* Keep this        */
+   '| pick w1.1 \== ~'target'~',                /* Remove top       */
+   '| stem dir.'                                /* Store here       */
+/*---------------------------------------------------------------+
+| Loop thru the directories found                                |
++---------------------------------------------------------------*/
+new.0=0                                         /* Initialise array */
+Do d=1 To dir.0
+   'PIPE (NAME CNPUSAGE.EXEC:126 END ?)',
+      'literal QUERY BLOCKS * * 'dir.d,         /* Compose cmd      */
+      '| cms',                                  /* Ask details      */
+      '| drop first 2',                         /* Remove heading   */
+      '| f: fanout',
+      '| specs',                                /* Do calculations  */
+      '        printonly eof',                  /* .                */
+      '        a: w5.1 .',                      /* .                */
+      '        b: w6.1 .',                      /* .                */
+      '        set (#0+=a;#1+=b)',              /* Actual calcul... */
+      '        eof',                            /* .                */
+      '        /'dir.d'/ 1.30',                 /* .                */
+      '        print  #0 nw',                   /* Total datablocks */
+      '        print  #1 nw',                   /* Total systblocks */
+      '| buffer',                               /* Prevent stall    */
+      '| specs',                                /* Do calculations  */
+      '        w1.3 1',                         /* Keep these       */
+      '        c: w2.1 .',                      /* .                */
+      '        d: w3.1 .',                      /* .                */
+      '        set (#2:=c+d;#3:=(c+d)*4;#4:=((c+d)/'maxblks')*100)', /* Actual calcul..  */
+      '        print  #2 nw',                   /* Total     blocks */
+      '        print  #3 nw',                   /* Total 4k  blocks */
+      '        print  #4 picture ---9.99 nw',   /* %         blocks */
+      '| fi: faninany',                         /* Take in count    */
+      '| join * x40',                           /* Make 1 record    */
+      '| stem new. append',                     /* Add to array     */
+      '? f:',                                   /* Conn 2 fanout    */
+      '| count lines',                          /* How many files   */
+      '| fi:'                                   /* Conn 2 faninany  */
+End d
+/*---------------------------------------------------------------+
+| Totalise the columns created                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME CNPUSAGE.EXEC:159 END ?)',
+    'stem new.',                                /* Take these       */
+    '| specs',                                  /* Start            */
+    '       printonly eof',                     /* .  calculating   */
+    '       a: w2.1 .',                         /* .                */
+    '       b: w3.1 .',                         /* .                */
+    '       c: w4.1 .',                         /* .                */
+    '       d: w5.1 .',                         /* .                */
+    '       e: w6.1 .',                         /* .                */
+    '        set (#0+=a;#1+=b;#2+=c;#3+=d;#4+=e)',  /* .                */
+    '        eof',                              /* .                */
+    '        ~>> Totals for CONPARK~ 1.30',     /* .                */
+    '        print  #4 nw.10 right',            /* Adjust layout    */
+    '        print  #0 nw.10 right',            /* .                */
+    '        print  #1 nw.10 right',            /* .                */
+    '        print  #2 nw.10 right',            /* .                */
+    '        print  #3 nw.10 right',            /* .                */
+    '| specs 1;* 1 ~'usdperc'~ nw.6 right',
+            '~of 'maxblks' Assigned ~nw',
+    '| var totals'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Format the output and show also add header                     |
++---------------------------------------------------------------*/
+heading='Directory                           Files  Data-Blks Cntrl-Blks Total-Blks   Total Kb      %'
+'PIPE (NAME CNPUSAGE.EXEC:183 END ?)',
+   'var heading',                               /* Take this        */
+   '| deblock 1',                               /* Split into...    */
+   '| if: if pick 1.1 \== ~ ~',                 /* When non blank   */
+   '|     specs ~-~ 1',                         /* Replace with -   */
+   '| if:',                                     /* Conn 2 if        */
+   '| join *',                                  /* Remake record    */
+   '| var separtr'                              /* Store as         */
+If runx Then headings=''
+        Else headings='| preface var separtr',
+                      '| preface var totals',
+                      '| preface var separtr',
+                      '| preface var heading'
+'PIPE (NAME CNPUSAGE.EXEC:196 END ?)',
+   'stem new. ',                                /* Take these       */
+   '| specs w1.1 1.30 pad 0',                   /* Keep this        */
+           'w2.1 nw.10 right',                  /* Adjust this      */
+           'w2;* nw',                           /* Add these        */
+   '| specs w1.1 1.30 pad space',               /* Adjust for displ */
+           'w7.1 nw.10 right',                  /* .                */
+           'w3.1 nw.10 right',                  /* .                */
+           'w4.1 nw.10 right',                  /* .                */
+           'w5.1 nw.10 right',                  /* .                */
+           'w6.1 nw.10 right',                  /* .                */
+           'w7.1 nw.6  right',                  /* .                */
+   '| specs 1;* 1 pad 0 w-2;-2 nw.10 right',    /* Add col to sort  */
+   '| sort w-1;-1 d',                           /* Sort...          */
+   '| specs w1;-2 1',                           /* Remove sort col  */
+   headings,
+   '| 'output                                   /* Where            */
+Return
+ 
+ 
+OutXedit:
+/*---------------------------------------------------------------+
+| My favored XEDIT settings                                      |
++---------------------------------------------------------------*/
+width=500
+keys='SET RESERVE -1  H 1=Hlp 2=Dspc 3=End 4=Sp/Jn 5=<-> 6=Scr2 7=Bck 8=Fwd 9=Sc1 10=Top 11=LIST 12=Quit'
+h1='SET RESERVE 3 WHITE NO       'totals
+h2='SET RESERVE 4 WHITE NO       'separtr
+h3='SET RESERVE 5 WHITE NO       'heading
+h4='SET RESERVE 6 WHITE NO       'separtr
+Queue 'RECFM V'
+Queue 'LRECL 'width
+Queue 'TRUNC *'
+Queue 'VERIFY 1 *'
+Queue 'AUTOSAVE OFF'
+Queue ':1'
+Queue 'SET PF11 'myfn role
+Queue keys
+Queue h1
+Queue h2
+Queue h3
+Queue h4
+Address CMS 'XEDIT 'parms' (WI 'width
+Address CMS 'ERASE 'parms
+Return
+ 
+ 
+Run_Xedit:
+/*---------------------------------------------------------------+
+| Run as XEDIT macro                                             |
++---------------------------------------------------------------*/
+Parse Value role With '(' role
+If role='ADMIN' Then opt='( READWRITE'
+                Else opt=''
+'EXTRACT /LINE/CURSOR'                          /* Get some info    */
+oldpos=line.1                                   /* Keep cur pos     */
+':'cursor.3                                     /* Set to newline   */
+'EXTRACT /CURLINE'                              /* Get content      */
+'FILELIST * * 'Word(curline.3,1) opt            /* Invoke cmds      */
+':'oldpos                                       /* Restore screen   */
+Return

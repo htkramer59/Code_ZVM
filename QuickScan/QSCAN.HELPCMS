@@ -1,0 +1,104 @@
+.cm                                                                             
+QSCAN ... Quick Scan of the system                                              
+                                                                                
+                                                                                
+Purpose: A quick scan of the system to see if there are any performance         
+         and security improvements possible                                     
+                                                                                
+                                                                                
+Requirements:                                                                   
+      A userid with:                                                            
+      *  With CP classes: A to G                                                
+                                                                                
+      *  Directory options: DEVMAINT, MAINTCCW & LNKNOPAS                       
+                                                                                
+      *  RACF: operations (if RACF is used)                                     
+                                                                                
+      *  ADMIN for filepools                                                    
+                                                                                
+      *  A minidisk or filepool directory with enough space                     
+         to contain the output                                                  
+                                                                                
+                                                                                
+How to install the code:                                                        
+         Unpack the VMARC file to a disk or filepool directory                  
+                                                                                
+         VMARC UNP QSCAN VMARC * = = <tfm>                                      
+         <tfm> the target filemode where the files are stored.                  
+                                                                                
+                                                                                
+How to run the code:                                                            
+      *  Access the disk or filepool directory                                  
+                                                                                
+      *  Check the QSCAN NAMES file, modify if needed                           
+                                                                                
+      *  Invoke QSCAN                                                           
+                                                                                
+      *  The output file will be written on the A-disk                          
+         unless otherwise specified in the QSCAN NAMES file                     
+                                                                                
+                                                                                
+QSCAN NAMES file:                                                               
+        :nick.loadcode :files.   EXEC that need to be execloaded                
+        :nick.output   :file.    The filename for the report if                 
+                                 reportstyle is "single"                        
+        :nick.quiet    :switch.  yes or no, yes means vmlink is QUIET,          
+                                 no shows all VMLINK output                     
+        :reportstyle   :style    Can be "single" or "individual",               
+                                 single produces one report,                    
+                                 individual will create one report per          
+                                 check                                          
+        :check.<label>           name of the check to be done                   
+                       :switch.  yes or no, indicate if the code is to          
+                                 be executed                                    
+                       :exec.    Name of the exec/code to be run                
+                       :cmds.    A list of CP/CMS commands for this check       
+                       :env.     CP or CMS for the list in :cmds.               
+                       :header.  The header that will be above th section       
+                       :type.    Informational                                  
+                       :fn       filename & filetype of input file              
+        :nick.storgrp1 :limit.   Limit for filepool storage group 1             
+        :nick.storgrp2 :limit.   Limit for filepool storage group 2             
+        :nick.logspace :limit.   Limit for filepool logspace                    
+        :nick.rpw_list :list.    Additional passwords for RPWLIST DATA          
+        :nick.labxlink :lxvalues. Sizes of label/xlink area per type of         
+                                  Dasd                                          
+                       :ignore.  The ids we can ignore in this check            
+        :nick.<label>  :product. Specify a directory or userid mdisk,           
+                                 e.g.: .dir vmsys:vsmwork1. or                  
+                                       dirmaint 1df                             
+                       :title.   Description                                    
+                                                                                
+                                                                                
+The following files are included:                                               
+                                                                                
+QN       EXEC       Query Names EXEC/PIPE stage                                 
+RSCS     EXEC       RSCS comms EXEC/PIPE stage                                  
+SICONV   REXX       Conversion of SI units PIPE stage                           
+                                                                                
+QS_EXEC  TEMPLATE   Template exec for other checks/tests                        
+QSCAN    EXEC       The code                                                    
+QSCAN    NAMES      The control file                                            
+QSCAN    HELPCMS    This help file                                              
+QSDASD   EXEC       The DASD checking part of the code                          
+QSDIRM   EXEC       The DIRMAINT checking code                                  
+QSEREP   EXEC       The code to check EREP                                      
+QSFPS    EXEC       Code to check the filepools                                 
+QSHARDWA EXEC       Hardware checking part of the code                          
+QSLDAP   EXEC       Checking LDAP setup                                         
+QSLEVELS EXEC       Piece to get the levels, CP, CMS, etc.                      
+QSMEMORY EXEC       Memory inventory                                            
+QSMONITO EXEC       Checking of MONWRITE/Monitoring                             
+QSNAMES  EXEC       Show all the curren users                                   
+QSNFS    EXEC       NFS checking part                                           
+QSNODIRM EXEC       Checking the CP directory if DIRMAINT is not installed      
+QSNSS    EXEC       Overview of the NSS's on the system and their usage         
+QSRACF   EXEC       Checking of RACF                                            
+QSRSCS   EXEC       Checking of RSCS                                            
+QSSMTP   EXEC       SMTP checks                                                 
+QSSNMPD  EXEC       SNMPD checking                                              
+QSSSL    EXEC       SSL checking                                                
+QSSPOOL  EXEC       Check of the spool areas                                    
+QSTCPIP  EXEC       TCPIP checking                                              
+QSTELNET EXEC       Overview of TELNET                                          
+QSVSWITC EXEC       Checking the VSWITCHes                                      

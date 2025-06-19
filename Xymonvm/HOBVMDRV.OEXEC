@@ -1,0 +1,208 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/* This EXEC is the client driver and runs every 5 minutes
+   It reads the test names to perform from the file HOBVMTST DATA
+ 
+    Rich Smrcina 02/04/2k+1  Original 1.0
+    Rich Smrcina 12/30/03    Modified for V1.1
+         get VMs hostname and domain name, store in HOST DATA for later
+    Rich Smrcina 06/10/05    Revised  V1.2
+        Added disk test to check SFS filepool usage
+    Thomas Kern  10/20/06    Revised  V1.2+
+        Switched to using WAKEUP times file (HOBBIT TIMES) to control
+        which tests get run and when they get run
+        set spooled console log name to CONLOG date('S')
+    Rich Smrcina 02/10/07    Revised  V1.3
+        Modified to handle local and remote configuration mode.
+    Rich Smrcina 10/20/08
+        Completed SIGNAL SHUTDOWN support started by Thomas Kern.
+    Rich Smrcina 02/10/09
+        Changed to refer to the new project name Xymon.
+/*                                                                    */
+   say '"DMSNXD616W SHUTTRAP does not exist" is OK here.'
+   'nucxdrop shuttrap'
+   'nucxload shuttrap ( system'
+   'shuttrap CP SMSG * SIGSTOP'
+*/
+/* Set shortdate format - suggested by Elisabeth Puritsher,
+                          IBM Germany 03/02/2009.                */
+ /*---------------------------------------------------------------+
+ | H.T.Kramer 20200608 Removed GLOBALV PUT because it is filling  |
+ |                     the A-disk unneeded                        |
+ +---------------------------------------------------------------*/
+   'cp set dateformat shortdate'
+ 
+   'CP SPOOL CONS CONT START NAME CONLOG' date('S')
+   'pipe cp q userid | specs w3 nw | var lparname'
+   ret=SOCKET('Initialize',lparname)
+   parse var ret rc .
+   if rc<>0 then
+     say 'Initialize:' ret
+   ret=SOCKET('Socket')
+   parse var ret rc .
+   if rc<>0 then
+     say 'Socket:' ret
+   parse var ret rc sid .
+   ret=SOCKET('Gethostname')
+   parse var ret rc hostname .
+   if rc<>0 then
+     say 'Gethostname:' ret
+   ret=SOCKET('Getdomainname')
+   parse var ret rc domainame .
+   if rc<>0 then
+     say 'Getdomainname:' ret
+   ret=SOCKET('Close',sid)
+   parse var ret rc .
+   if rc<>0 then
+     say 'Close:' ret
+   ret=SOCKET('Terminate')
+   parse var ret rc .
+   if rc<>0 then
+     say 'Terminate:' ret
+/*    fullname=hostname||'.'||domainame */
+/*  Change periods to commas  */
+/*    fullname=translate(fullname,',','.') */
+/*    'globalv put hostname' */
+/*    'globalv put domainame' */
+/*    'globalv put fullname' */
+   bbdate=date('U')
+   msgdate=date('U')
+   'globalv put bbdate'
+   'globalv put msgdate'
+   'exec hobvars'
+/*  Get client configuration mode */
+   'globalv stack cfgmode'
+   pull cfgmode
+   say cfgmode
+   'SET FILEWAIT OFF'
+/*  Before we start VMUTIL to run the tests, create one of the
+    client data prolog files.  It contains constant data that the
+    client sends to the Hobbit server.                              */
+/*  The client identification lets Hobbit know which operating
+    system the data is coming from.  In client mode, we will tell
+    Hobbit that we are a Linux system.  In server mode, we identify
+    as zvm.                                                         */
+    'MAKEBUF'
+    bufno=rc
+   if cfgmode='CLIENT' then
+     push 'client 'hostname'.linux linux'
+   else
+     push 'client 'hostname'.zvm zvm'
+   'erase HOBVM000 CLIENT A'
+   'execio 1 diskw HOBVM000 CLIENT A (finis'
+   'DESBUF 'bufno
+   'MAKEBUF'
+   bufno=rc
+   'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+   queue '[osversion]'
+   queue cplevel.1
+   queue cplevel.2
+   queue cplevel.3
+   queue ''
+   'erase HOBVM008 CLIENT A'
+   'execio * diskw HOBVM008 CLIENT A (finis'
+   'DESBUF 'bufno
+   'globalv get auth_users'
+   'EXEC HOBVM enable all'
+ 
+   do forever
+/*    'WAKEUP +5 ( CONS EXT SMSG FILE(HOBBIT TIMES *)' */
+      'WAKEUP +5 ( EXT SMSG FILE(HOBBIT TIMES *)'
+/*       'WAKEUP +5 ( EXT SMSG QUIET FILE(HOBBIT TIMES *)' */
+      select
+         when rc = 1 then do
+         /* We only want the last message */
+            if queued() > 1 then do
+              do i = 1 to queued()-1
+                pull var1
+                say var1
+                end
+              end
+            parse pull type uid text    /* get the msg details...     */
+            if wordpos(uid,auth_users) = 0 then do
+              'TELL 'uid' Message from unauthorized user rejected.'
+              iterate
+              end
+            select
+              when text='STOP' then do
+                'TELL 'uid' STOP received for Hobbit client.'
+                'EXEC HOBVM disable all 1 System Maintenance'
+                if substr(Diag(24,-1),13,1) = 2 then
+                  'CP LOGOFF'
+                else
+                  exit 0
+                end
+              when text='RLDDATA' then do
+                'TELL 'uid' RLDDATA received for Hobbit client.'
+                'EXEC HOBVARS'
+                end
+              otherwise
+                nop
+            end
+         end
+         when rc = 2 then nop
+         when rc = 3 then do
+            pull var1
+        /* parse field 4 from the stacked wakeup times file line   */
+            parse upper value var1 with asterisk reqno field1 field2 ,
+              field3 command
+            select
+               when command='MSG01' then do
+                  'globalv get msgdate'
+                  if msgdate = date('U') then iterate
+                  'CP SPOOL CONS NAME CONLOG' date('S')
+                  msgdate=date('U')
+                  'globalv put msgdate'
+                  'EXEC HOBVARS'
+               end
+               when command='MSG02' then do
+                  'CP MSG OPERATOR THE TIME IS NOW:' time() 'ON' date()
+                  'CP SPOOL CONS CLOSE'
+                  'CP SLEEP 10 SEC'         /* sleep through midnight */
+               end
+               when command><'' then do
+                  if subword(command,1,1)='CMS' then
+                    command=subword(command,2) /* strip off cms part  */
+                  address cms command       /* execute command        */
+               end                          /* end of if command><''  */
+               otherwise say var1
+            end
+           'pipe stack | cons'
+         end
+         when rc = 4 then nop
+         when rc = 6 then do
+           say 'Console interrupt...'
+           leave
+           end
+         when rc = 8 then do
+           do queued()
+             parse pull ext intcode
+             if intcode='2401' then      /*  Signal Interrupt  */
+               'CP STORE PSW 000A0000 80000FFF'
+             end
+           end
+         when rc = 28 then do
+           say 'File not found, wait 5 seconds'
+           'cp sleep 5 sec'
+           end
+         when rc = 270 then do
+           say 'Locked file, wait 5 seconds'
+           'cp sleep 5 sec'
+           end
+         otherwise do
+            say '*Wakeup RC:' rc
+         end
+      end
+   end
+   exit

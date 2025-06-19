@@ -1,0 +1,100 @@
+The MDSK exec allows to dynamicaly define an MDISK that exists in a
+CP directory file (e.g. from a neighbor system).
+ 
+Usage example: Send CP directory from system VMA to VMB
+               Receive that file as VMA DIRECT
+               Provided DASD of SYSTEM VMA are online to VMB, you'll can:
+                 MDSK VMA.MAINT 190  A90 RR Z (Filel DETach ATTACH
+ 
+ 
+ +------------------------------------------------------------------+
+ | format:  | MDSK fn.uid addr <laddr <lmode <amode>>> <( options > |
+ |  or   :  | MDSK fn uid addr <laddr <lmode <amode>>> <( options > |
+ |  or   :  | MDSK uid                                 <( options > |
+ | options: |  < Filelist >  < Attach > <Detach> <MODE0|M0>         |
+ +------------------------------------------------------------------+
+ 
+ Parameters addr, laddr, lmode and amode can be coded as an * to ask for
+ the defaults, which are respectively: 191, a freeCUU, RR, and a freeFM
+ 
+ Options:
+-----------
+ - ATTACH:   Attaches the volser to SYSTEM before DEFINE MDISK is done
+ - DETACH:   Detaches the defined mdisk from the user after FILELIST
+             (and the volser from SYSTEM if we attached it)
+ - FILELIST: Starts FILELIST after accessing the minidisk.  FILELIST
+             becomes default when the DETACH option is used.
+ - MODE0:    Explicitly asks to see filemode 0 files.  MDSK always tries
+             to make them visible, with this option though you will get a
+             warning when they cannot be displayed.
+ - Shorthand options
+   - FD stands for FILELIST, and DETACH
+   - AFD, FDA, and FAD stand for ATTACH, FILELIST, and DETACH
+   - M0 stands for MODE0
+ 
++---------------------------------------------------------------------------+
+| WARNING   -*- Life danger  -*-  Possible DataLoss  -*-                    |
++---------------------------------------------------------------------------+
+| Accessing a DEFINEd MDISK in R/W status can be dangerous, as with DEFINEd |
+| MDISKs there is no control of concurrent R/W accesses.                    |
+| All MDISKs defined this way are R/W (DEFINE MDISK has no R/O option),     |
+| so the default "RR" linkmode parameter only forces a ReadOnly ACCESS      |
+|  (we use "ACCESS laddr amode/amode" so CMS won't try to write)            |
+| Beware too for CP's Minidisk cache (MDC):                                 |
+|   If you write to a minidisk owned by some other, active VM system, and   |
+|   the pack is not defined as SHARED there, the owning system may have     |
+|   data of this minidisk in its MDC, and the changes you make to the disk  |
+|   here will be unknow to the owning system.  So, after updating the       |
+|   minidisk, you should issue  "SET MDC MDISK FLUSH userid vdev"   on the  |
+|   other VM system.                                                        |
+|                                                                           |
++---------------------------------------------------------------------------+
+ 
+PREREQ: -CP Authority for DEFINE MDISK
+         (in VM/ESA 1.1 you need OPTION DEVMAINT and class A).
+        -CMS/Pipelines
+ 
+Notes:
+----------
+1. You may specify "MDSK userid.= 191 .."
+   or even "MDSK userid 191 .."
+   Very useful when you have got "userid DIRECT" from DIRMAINT.
+ 
+2. If the filetype of the directory is not DIRECT, you must enter:
+       "MDSK fn.ft.userid 191 .."
+ 
+3. When target minidisk ('userid addr') is not an MDISK record, but a
+   LINK record, the MDSK EXEC searches for the owner of the LINK in the
+   indicated directory file.  That is: MDSK works just like CP's LINK command.
+   Example: the CP command "LINK TCPIP 190 ..." probably results
+   in "LINK MAINT 190 ...", similar: "MDSK fn.TCPIP 190 ..." may become
+   "MDSK fn.MAINT 190 ..."
+4. On z/VM 6.2 to get an MDISK that is coded in a SUBCONFIG section, the
+   coded "uid" can/must be the SUBCONFIG one, eg MAINT-1
+   If the IDENTIFY has only 1 BUILD ON statement, the MDSK EXEC searches that
+   single SUBCONFIG too.  With other words: if you use z/VM 6.2 in non-SSI mode
+   or in an SSI with only 1 member system you can for example still request
+      "MDSK fn TCPIP 191"
+   The MDSK EXEC will tell in such case:
+      User TCPIP is an IDENTITY, searching SUBCONFIG TCPIP-1
+   If there are multiple BUILD ON statements, MDSK will list them:
+      MDSK: User MAINT is an IDENTITY, with multiple BUILD ON statements.
+      MDSK: Try looking for MDISK 191 of MAINT-1 MAINT-2
+      MDSK: e.g. EXEC MDSK MAINT-2 191 ...
+ 
+5. When ACCESSM0 is ON, or when the ACCESSM0 command is available, we use
+   the MODE0 option on the ACCESS command to make filemode files 0 visible.
+ 
+   ACCESSM0 is by default installed on MAINT 193.  The MDSK EXEC will not
+   attempt to LINK to MAINT 193.  To view the filemode 0 files, you have
+   two choices:
+    - LINK & ACCESS MAINT 193 and issue ACCESSM0 ON,
+      afterwards you can DETACH MAINT 193
+    - LINK MAINT 193 and keep it ACCESSed; the MDSK EXEC will turn
+      ACCESSM0 ON before ACCESSing the defined mdisk and restore it
+      afterwards.
+ 
+6. MDSK will verify that the target volume is not included in the CPOWNED list.
+   Otherwise CP will start to use any non-PERM space on the volume, effectively
+   preventing a DETACH.
+   So, when the volume is in the CPOWNED list, MDSK informs you and quits.

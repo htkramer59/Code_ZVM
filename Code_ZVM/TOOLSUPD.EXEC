@@ -1,0 +1,69 @@
+/*---------------------------------------------------------------+
+| Function : Update the tools directory on all nodes             |
+|                                                                |
+| File     : TOOLSUPD EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : PUT      EXEC     ftp frontend                      |
+|            RMCMD    EXEC     issue command to other nodes      |
+|            TOUCH    EXEC     adapt date of file                |
+|            <myfn>   LOG      results of all commands           |
+|                                                                |
+| Called   : TOOLSUPD <fn> <ft> <fm>                             |
+|                                                                |
+| Comments : The timestamp is adapted because FTP does not       |
+|            preserve it                                         |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210416 14:27:19                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Check  arguments                                               |
++---------------------------------------------------------------*/
+If fn='' Then Exit 28
+If ft='' Then Exit 29
+If fm='' Then fm='*'
+/*---------------------------------------------------------------+
+| Some checks                                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME TOOLSUPD.EXEC:34 END ?)',
+    'literal 'fn ft fm,                          /* Take this        */
+    '| state isodate',                           /* Check if file    */
+    '| f: fanout',                               /* Dupl. outcomde   */
+    '| specs w-2;-1',                            /* Keep date        */
+    '| var filedate',                            /* Store as         */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| count lines',                             /* How many         */
+    '| var fileexist',                           /* Store as         */
+    '?',
+    'cms LISTFILE RMCMD EXEC * (NOH',
+    '| count lines',
+    '| var rmc'
+If rmc=0 Then Do
+              Say 'Can not run: RMCMD EXEC is missing'
+              Exit 328
+              End
+If \fileexist Then Exit 28
+/*---------------------------------------------------------------+
+| Send the file to the other nodes                               |
++---------------------------------------------------------------*/
+Address CMS 'PUT' fn ft fm' ALL'
+/*---------------------------------------------------------------+
+| Compose the commands                                           |
++---------------------------------------------------------------*/
+cmd='CMS MOVE2TLS 'fn ft 'A'
+/*---------------------------------------------------------------+
+| Send the command to the other node thru rscs                   |
++---------------------------------------------------------------*/
+todate=Substr(Date('S'),5)
+Address CMS 'RMCMD 'cmd' ,,,FILE,'myfn 'LOG'todate' A'
+If rc<>0 Then Do
+              Say 'Can not execute RMCMD'
+              Exit 128
+              End
+Exit

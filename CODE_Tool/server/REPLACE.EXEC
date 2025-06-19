@@ -1,0 +1,276 @@
+/*---------------------------------------------------------------+
+| Function : Replace a file and make the previous version        |
+|              invisible.                                        |
+|                                                                |
+| File     : REPLACE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : REPLACE  ifn ift ifm ofm ( option keepfiles         |
+|                                                                |
+|            ifn       input file name                           |
+|            ift       input file type                           |
+|            ifm       input file mode                           |
+|            ofm       output file mode                          |
+|            option    specify KEEP if you want keep the         |
+|                      input file on the r/w disk it resides.    |
+|                      NOKEEP or empty it will be removed.       |
+|            keepfiles no of generations of the file you want to |
+|                      keep between 1 and 20, 10 is default      |
+|                                                                |
+| Comments : ofm must be accessed r/w                            |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180227 11:52:38                                   |
+| Changes  : .                                                   |
+|            20200616 H.T.Kramer : Fixed small problem with the  |
+|                     code and it now stops on non-zero rcs      |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+/*H E L P*/
+Parse Upper Arg ifn ift ifm ofm '(' option keepfiles .
+Parse Source . .  myfn myft .
+Call Init
+Call Check_Input
+Call Collect_Info
+Call Compose_Lines_Commands
+Call Prep_Clean_Up
+Do t=1 To text.0
+   Call Update_Log text.t
+End
+Call Do_Change
+Call Exit
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Single point of Exit...                                        |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If exrc=''|exrc='EXRC' Then exrc=0
+If exrc<>0 Then Say errmsg
+Exit exrc
+ 
+ 
+Add_2_Stem:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg stname line
+If stname='cmd.' Then adjust='| SPECS w1.1 1.8 w2.1 nw.8 w3.1 nw.8',
+                                     'w4.1 nw.2 w5.1 nw.8 w6.1 nw.8',
+                                     'w7.1 nw.2 w8;* nw'
+                 Else adjust=''
+'PIPE (NAME REPLACE.EXEC:67 END ?)',
+     'stem 'stname,                              /* Take this        */
+     '| append var line',                        /* Add this         */
+     '| split at ~;~',                           /* Split here       */
+     '| strip',                                  /* Remove spaces    */
+     adjust,                                     /* When needed      */
+     '| stem work.'                              /* Store as         */
+'PIPE (NAME REPLACE.EXEC:74 END ?)',
+    'stem work.',                                /* Move these       */
+    '| stem 'stname                              /* ..... to these   */
+Drop line stname work.
+Return
+ 
+ 
+Compose_Lines_Commands:
+/*---------------------------------------------------------------+
+| Compose update lines & commands                                |
++---------------------------------------------------------------*/
+Select
+When \ofilexist & lastnum=0 Then Do
+                     Say 'New file'
+                     Call Add_2_Stem 'text. NEWFILE  : 'in_data
+                     Call Add_2_Stem 'cmd. COPYFILE 'ifn ift ifm' = = 'ofm' (OLDDATE'
+                     End
+When ofilexist  & lastnum=0 Then Do
+                     Say 'First replace'
+                     Call Add_2_Stem 'text. REPLACING: 'replaced';',
+                                           'WITH     : 'in_data
+                     Call Add_2_Stem 'cmd. RENAME 'ifn ift ofm' = 'wft||lastnum ofm||'0 (NOUPDIRT;',
+                                          'COPYFILE 'ifn ift ifm' = = 'ofm' (OLDDATE'
+                     End
+When ofilexist  & lastnum>0 Then Do
+                     Say 'Replacing'
+                     Call Add_2_Stem 'text. REPLACING: 'replaced';',
+                                           'WITH     : 'in_data
+                     Call Add_2_Stem 'cmd.  RENAME 'ifn ift ofm' = 'wft||lastnum ofm||'0 (NOUPDIRT;',
+                                           'COPYFILE 'ifn ift ifm' = = 'ofm' (OLDDATE'
+                     End
+Otherwise Call Exit 97' Unhandled combination'
+End
+Return
+ 
+ 
+Init:
+/*---------------------------------------------------------------+
+| Set some defaults and initialise some stuff                    |
++---------------------------------------------------------------*/
+/* 'VMFCLEAR' */
+exrc=0                                           /* Default exit rc  */
+errmsg=''                                        /* Init this        */
+first=0 ; text.0=0 ; cmd.0=0 ; cln.0=0           /* ...and this      */
+Return
+ 
+ 
+Check_Input:
+/*---------------------------------------------------------------+
+| Check input                                                    |
++---------------------------------------------------------------*/
+If ifn='?' Then Call Help
+If ifn=''  Then Call Exit '28 No Input FileName'
+If ift=''  Then Call Exit '28 No Input FileType'
+If ifm=''  Then Call Exit '28 No Input FileMode'
+If ofm=''  Then Call Exit '28 No Output FileMode'
+ofm=Strip(ofm)
+/*---------------------------------------------------------------+
+| Check options entered                                          |
++---------------------------------------------------------------*/
+Select
+When option<>'' &,
+     option<>'NOKEEP' &,
+     option<>'KEEP'  Then Call Exit '999 Invalid value for keep: 'keep
+When option=''       Then keep=0
+When option='NOKEEP' Then keep=0
+When option='KEEP'   Then keep=1
+Otherwise Call Exit 98 'Invalid option 'option
+End
+If keepfiles='' Then keepfiles=10
+If keepfiles>20 Then Call Exit '98 No of files to keep larger than: 'keepfiles
+/*---------------------------------------------------------------+
+| Determine working filetype for backups                         |
++---------------------------------------------------------------*/
+wft=Strip(Substr(ift,1,6))
+Return
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Check some stuff....                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME REPLACE.EXEC:155 END ?)',
+     'cms QUERY ACCESSED',                       /* Ask this         */
+     '| p1: pick 1.1 == ~'ifm'~',                /* Select this one  */
+     '| pick w2.1 == ~R/W~',                     /* Is it r/w        */
+     '| count lines',                            /* How many         */
+     '| var in_rw',                              /* Store as boolean */
+     '? p1:',                                    /* Conn 2 pick      */
+     '| p2: pick 1.1 == ~'ofm'~',                /* Select this one  */
+     '| pick w2.1 == ~R/W~',                     /* Is it r/w        */
+     '| count lines',                            /* How many         */
+     '| var out_rw',                             /* Store as boolean */
+     '?',                                        /* 2nd pipe         */
+     'literal 'ifn ift ifm,                      /* Take this        */
+     '| state isodate',                          /* Does it exist?   */
+     '| var in_data',                            /* Store as         */
+     '| count lines',                            /* How many         */
+     '| var ifilexist',                          /* Store as boolean */
+     '?',                                        /* 3rd pipe         */
+     'literal 'ifn ift ofm,                      /* Take this        */
+     '| state',                                  /* It is available  */
+     '| count lines',                            /* How many         */
+     '| var ofilexist',                          /* Store as boolean */
+     '?',                                        /* 4th pipe         */
+     'cms LISTFILE 'ifn wft'*' ofm' (NOHEADER ISODATE',   /* List files       */
+     '| nfind DMS',                              /* Remove errors    */
+     '| p: pick w2.1 \== ~'ift'~',               /* Select these     */
+     '| stem backup.',                           /* Store 4 later use*/
+     '| sort',                                   /* Sort on date/time*/
+     '| take last 1',                            /* Take this one    */
+     '| specs pad 0 substr -2;-1 of w2.1 1.2 right',   /* Keep this        */
+     '| change ~ ~0~',                           /* Replace these    */
+     '| var lastnum',                            /* Store as         */
+     '? p:',                                     /* Conn 2 pick      */
+     '| var replaced',                           /* Store 4 display  */
+     '?',                                        /* 5th pipe         */
+     'cp QUERY USERID',                          /* Ask this         */
+     '| specs 1;* 1 ~'Date('S')||Time()';~ nw',  /* Add date&time    */
+     '| change ~:~~',                            /* Replace these    */
+     '| var id_info'                             /* Store 4 display  */
+/*---------------------------------------------------------------+
+| If the following is wrong....abort..                           |
++---------------------------------------------------------------*/
+If \ifilexist Then Call Exit '28 Input file does not exist: 'ifn ift ifm
+If \out_rw    Then Call Exit '99 Output disk 'ofm' is R/O'
+/*---------------------------------------------------------------+
+| Calculate serial number for the backup...                      |
++---------------------------------------------------------------*/
+If \Datatype(lastnum,'NUM') Then Do
+          lastnum=0
+          first=1
+          End
+If lastnum=0 &,
+   first      Then Nop
+              Else Do
+   lastnum=lastnum+1
+   If lastnum>99 Then lastnum=0
+   End
+lastnum=Right(lastnum,2,'0')
+Return
+ 
+ 
+Do_Change:
+/*---------------------------------------------------------------+
+| Run the CMS commands stem cmd.                                 |
++---------------------------------------------------------------*/
+Do c=1 To cmd.0
+   Address CMS cmd.c
+   If rc<>0 Then Call Exit rc 'Problem executing: 'cmd.c
+   Call Update_Log cmd.c
+End c
+Return
+ 
+ 
+Prep_Clean_Up:
+/*---------------------------------------------------------------+
+| Clean up the copied file if needed                             |
++---------------------------------------------------------------*/
+If \keep & in_rw Then Call Add_2_Stem 'cmd. ERASE 'ifn ift ifm
+If backup.0<>0 Then Do
+    'PIPE (NAME REPLACE.EXEC:234 END ?)',
+         'stem backup.',                         /* Get the files   */
+         '| pick w2.1 \== ~'ift'~',              /* Select these    */
+         '| sort w-2;-1',                        /* Sort date & ft  */
+         '| drop last 'keepfiles-1,              /* Drop files we kp*/
+         '| specs ~ERASE~ 1 w1.3 nw',            /* Compose cmd     */
+         '| stem cln.'                           /* Store as         */
+    If cln.0<>0 Then Do
+          Do c=1 To cln.0
+             Call Add_2_Stem 'cmd. 'cln.c
+          End
+        End
+End
+Return
+ 
+ 
+Update_Log:
+/*---------------------------------------------------------------+
+| Write the update log                                           |
++---------------------------------------------------------------*/
+Parse Arg infoline
+'PIPE (NAME REPLACE.EXEC:255 END ?)',
+    '| var infoline',
+    '| split at ~;~',
+    '| strip',                                   /* Remove spaces   */
+    '| specs ~'id_info'~ 1 1;* nw',              /* Add timestamp & */
+    '| cons',                                    /* Show and         */
+    '| >> UPDATE LOG 'ofm||'0'                   /* Append to log   */
+Return
+ 
+ 
+Help:
+/*---------------------------------------------------------------+
+| Display help for this exec                                     |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+'PIPE (NAME REPLACE.EXEC:270 END ?)',
+     '< 'myfn myft' *',                          /* Read myself      */
+     '| totarget locate ~/*H E L P*/~',          /* Upto here        */
+     '| cons'                                    /* And display      */
+Call Exit
+Return

@@ -1,0 +1,75 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This exec will collect Xymon client data from the tests run and
+    send the data to the Xymon network monitor.  It looks for files
+    in the form HOBVMxxx CLIENT, where xxx is a predefined value for
+    the test being performed.
+ 
+    Rich Smrcina 11/04/2006  original V1.3
+    Rich Smrcina 02/10/2009  Changed project name to Xymon
+    Martha McConaghy 8/27/09 Add TCP server parm to TCPCLIENT
+                                                                      */
+emsgstart=date('U') time() 'HOBVMCD:'  /* Start of error message line */
+/* Marist change - Add TCPSRV to variables */
+'globalv stack BBDISPLAY BBPORT TCPSRV'
+pull bbdisplay
+pull bbport
+pull tcpsrv
+call create_timestamp_file /* Create client timestamp file          */
+call send_data             /* Send the client data files to Xymon   */
+exit
+ 
+create_timestamp_file:
+'execio * cp (stem 'qtime.' str Q TIME'
+parse var qtime.1 'TIME' . tod tz .
+daten=date('N')
+parse var daten dd mm yy .
+dow=date('W')
+dropbuf
+queue '[date]'
+queue left(dow,3) mm dd tod tz yy
+queue ''
+'execio * diskw HOBVM002 CLIENT A 1 (finis'
+return
+ 
+send_data:
+if words(bbdisplay)>1 then do  /*  More than one display requested */
+  'pipe cms listfile hob* client a ' ,/* Collect the data into    */
+        '| sort ' ,                   /* a temp file              */
+        '| getfiles ' ,
+        '| join * x25 ',
+        '| xlate from 1047 to 819 ',
+        '| > $$HOBBIT $$TEMP A'
+  do i=1 to words(bbdisplay)
+    tempdisp=word(bbdisplay,i)
+    parse var tempdisp bbdisp ':' bbprt
+    if bbprt='' then bbprt=bbport
+    'pipe < $$HOBBIT $$TEMP A' ,
+        '| tcpclient ' bbdisp bbprt 'USERID' tcpsrv ,
+        '| hole '
+    end
+  'erase $$HOBBIT $$TEMP A'
+  end
+else do
+  parse var bbdisplay bbdisp ':' bbprt
+  if bbprt='' then bbprt=bbport
+  'pipe cms listfile hob* client a ' ,
+        '| sort ' ,
+        '| getfiles ' ,
+        '| join * x25 ',
+        '| xlate from 1047 to 819 ',
+        '| tcpclient ' bbdisp bbprt 'USERID' tcpsrv ,
+        '| hole '
+  end
+return

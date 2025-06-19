@@ -1,0 +1,82 @@
+#! /bin/bash
+function help {
+myfn=`basename $0`
+	clear
+	echo
+	echo "Syntax:"
+	echo "   $myfn <cmdline>"
+	echo 
+	echo "   <cmdline> can be any command allowed by the proxy" 
+	echo 
+	echo "Notes:"
+	echo "  Some commands maybe blocked on the zVM end in the proxy"
+	echo "  Execution of commands depends on authorization of the proxy server"
+	echo "  The server needs to be authorized in the proxy"
+	echo "  Syntax is NOT CHECKED in this code"
+	echo 
+	echo "To identify the proxy issue: declare -x PROXYNAME=\"<your proxy server>\"" 
+	echo "                           : export PROXYNAME=\"<your proxy server>\"" 
+	echo "To set the maximum wait time: declare -x PROXYWAIT=\"<your wait time>\""
+	echo "                            : export PROXYWAIT=\"<your wait time>\""
+	exit
+}
+cmdline=$*
+echo $cmdline
+if [ $1 = '?' ] || [ -z $1 ] ; then
+	help
+fi
+
+proxyname=$PROXYNAME         # Identify the proxy user id
+maxwait=$PROXYWAIT           # maximum wait time
+if [ -z $proxyname ] ; then
+	echo "No proxy server defined"
+	exit
+	fi
+if [ -z $maxwait ] ; then
+	echo "No max wait time defined, setting to default of 5"
+	maxwait='5'
+fi
+# Check if there is a CMS reader available
+rdr=`sudo lszdev c | tail -n 1 | tr -s \  | cut -d\  -f3`
+if [ $rdr = 'no' ] ; then
+	sudo chccwdev -e c
+	fi
+# Send the command to the proxy user id
+reply=`sudo vmcp smsg $proxyname $cmdline`
+errmsg=`echo $reply | cut -d\  -f1 | cut -b1-3`
+if [ "$errmsg" = 'HCP' ] ; then
+	echo "$reply"
+	exit
+fi
+# Wait for the results
+cntr='1'
+while [ -z $fileno ] ; do
+	fileno=`sudo vmcp QUERY RDR ALL | grep -i talk2lnx | grep -i $1 | tail -n 1 | tr -s \  | cut -d\  -f2`
+	if [ -z $fileno ]; then
+		sleep 1s
+		cntr=$((cntr+1))
+		if [ "$cntr" -gt "$maxwait" ] ; then
+			echo "No response within $maxwait seconds,"
+			echo "Probable causes:"
+			echo "  * VM server is not authorised"
+			echo "  * syntax error on query"
+			echo "  * this server is not authorised"
+		 	echo "  * command not allowed"
+			echo "  * time out too short"
+			echo
+			echo "Proxy id: $proxyname"	
+			echo "Query: $cmdline"
+			exit
+		fi
+	fi
+	
+done
+# Receive the file from the proxy user
+sudo vmur receive -t -f $fileno talk2lnx_$1
+# Show the content of the file
+sudo less talk2lnx_$1 
+# Clean up
+sudo rm talk2lnx_$1
+
+
+

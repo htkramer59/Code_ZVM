@@ -1,0 +1,68 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*--------------------------------------------------------------*/
+/*  Routine designed to interface PIPELINES with COL column     */
+/*   include Y or exclude ^ mode.  When in this mode enter      */
+/*   the pipeline stages on the XEDIT command line prefixed     */
+/*   with COLPIPE.                                              */
+/*                                                              */
+/*  Format is: COLPIPE pipe_stages                              */
+/*                                                              */
+/*   Examples: COLPIPE CONSOLE                                  */
+/*             COLPIPE SPEC W 3.1 1 W 1.1 NEXTWORD | XLATE , 40 */
+/*--------------------------------------------------------------*/
+ Signal on Novalue
+ 
+ Parse arg stage
+ If stage = "?" Then Signal Tell
+ 
+'Preserve'
+'COMMAND SET MSGMODE OFF'           /* Don't indicate trgt not found */
+'COMMAND LOCATE .COLEND'            /* Make sure COL is active       */
+ If rc = 2 Then Signal COL_Not_Active
+ 
+'COMMAND EXTRACT /RANGE/MSGMODE'
+                                    /* Determine if a column include */
+'COMMAND SET SCOPE ALL'             /*  is in effect.  If so, then   */
+'COMMAND LOCATE .COLSTRT'           /*  range.1 will be greater than */
+ col_exclude = rc = 2               /*  the top of the COL range     */
+'COMMAND SET SCOPE DISPLAY'         /*  which has the name .colstart */
+'COMMAND SET MSGMODE' msgmode.1     /*  and therefore .colstart      */
+                                    /*  cannot be found              */
+If col_exclude Then Do              /* Column include in effect and  */
+                                    /*  therfore a range is in effect*/
+ 'COMMAND TOP'                      /* Go to top of column and       */
+                                    /*   "displayed" lines           */
+ 
+ 'ESCAPE OFF'; 'LINEND OFF'; 'IMAGE OFF'; 'CASE M'; 'TABS 1'; 'TRUNC *'
+  Address Command 'PIPE',
+    'XEDIT |',                       /* Read from file               */
+     stage'|',                   /* User's definition of the stage(s)*/
+    'PAD 1 |',                       /* Make sure there is some data */
+    'XEDITREP'                       /* Replace the record           */
+  r = RC
+End
+ 
+Else Do
+ 'MSGMODE ON'                       /* Must have columns specified   */
+ 'EMSG Included columns must be marked with "Y"s in the COL command line.'
+ 'EMSG If the entire line is to be operated upon enter "Y*".'
+  r = -1
+End
+ 
+'Restore'
+Exit r
+ 
+COL_Not_active:
+ 'MSGMODE ON'                       /* COL must be active            */
+ 'EMSG COL Not Active.'
+ 'Restore'
+  r = -1
+Exit r
+ 
+Tell:
+  'MSG  Routine to apply Pipeline stage(s) to COL included columns'
+  'MSG     COLPIPE stage(s)'

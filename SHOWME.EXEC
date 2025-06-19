@@ -1,0 +1,560 @@
+/*---------------------------------------------------------------+
+| Function : Show directory contents for a userid and act on     |
+|            some of the contents                                |
+|                                                                |
+| File     : SHOWME   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SHOWME   NAMES                                      |
+|          : LASTING  GLOBALV    SHOWME group                    |
+|          : QCLASS   EXEC       Query of CP classes             |
+|          : QOPTION  EXEC       Query of CP options             |
+|                                                                |
+| Called   : SHOWME   userid                                     |
+|                                                                |
+| Comments : Loaded as: SHOWME   XEDIT                           |
+|                       SHOWDETL XEDIT                           |
+|                       SHOWME   REXX   seperately!!             |
+|                                                                |
+|            Needs CP class B for ATTACH/DETACH to SYSTEM,       |
+|                  CP class A for DEFINE MDISK and OPTION        |
+|                  DEVMAINT in the CP directory                  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180215 11:16:00                                   |
+| Changes  : .                                                   |
+|            20240601 H.T.Kramer : Adapted to deal with a        |
+|                                  monolithic directory          |
+|            20221208 H.T.Kramer : Fixed a problem with          |
+|                                  EXECLOAD/EXECDROP             |
+|            20220824 H.T.Kramer : Added check for CPCLASSes &   |
+|                                  OPTION (long first time)      |
+|            20220818 H.T.Kramer : Adapted so we use a workdisk/ |
+|                                  directory.                    |
+|                                  Added code to look at the     |
+|                                  disks defined in SUBCONFIGs,  |
+|                                  depends on the Volume being   |
+|                                  available                     |
+|            20211116 H.T.Kramer : Reworked to PIPE stage        |
+|            20181207 H.T.Kramer : Fixed problem with non-exist  |
+|                                  ids                           |
+|            20181107 H.T.Kramer : Wildcards possible...         |
+|            20180604 H.T.Kramer : Fixed filepool part           |
+|            20180525 H.T.Kramer : Fixed dirmpart items          |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid chkuid cfgusr .
+Parse Source . . myfn myft .
+If uid='?' Then Do
+              Address CMS 'HELP SHOWME'
+              Call Exit '0'
+              End
+/*---------------------------------------------------------------+
+| Set a boolean to skip userid checking                          |
++---------------------------------------------------------------*/
+If chkuid=0 Then chkuid=0
+            Else chkuid=0   /* Disabled to show subconfigs */
+/*---------------------------------------------------------------+
+| Select which part to run                                       |
++---------------------------------------------------------------*/
+Select
+When myfn='SHOWDETL' Then Call ShowDetails
+When myft='EXEC'     Then Do
+                          Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+                          If rc=0 Then Parse Pull . . wfm .
+                                  Else wfm='A'
+                          pipecmd='PIPE'
+                          pipout='| > 'uid' $DIRECT$ 'wfm' FIXED 80'
+                          runxed=1
+                          Call RunExec
+                          If wfm<>'A' & lvl=1 Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+                          End
+When myft='REXX'     Then Do
+                          pipecmd='CALLPIPE'
+                          pipout='| *:'
+                          runxed=0
+                          Call RunExec
+                          End
+When myft='XEDIT'    Then Call RunXedit
+Otherwise Nop
+End
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| Run the EXEC part                                              |
++---------------------------------------------------------------*/
+dirtype=Value('DIRTYPE',,'LASTING SHOWME')
+cpclass=Value('CLASSES',,'LASTING SHOWME')
+cpopt=Value('OPTIONS',,'LASTING SHOWME')
+If dirtype='DIRMAINT' Then Do
+     If cpclass='' Then Do
+                  cpclass=QCLASS(Userid()' AB')
+                  C=Value('CLASSES',cpclass,'LASTING SHOWME')
+                  End
+     If cpopt='' Then Do
+                  cpopt=QOPTION(Userid()' DEVMAINT')
+                  D=Value('OPTIONS',cpopt,'LASTING SHOWME')
+                  End
+     If \cpclass Then Call Exit '129 Insufficient CP classes'
+     If \cpopt   Then Call Exit '229 Insufficient Directory OPTIONS'
+     End
+/*---------------------------------------------------------------+
+| List of files we need to have execloaded                       |
++---------------------------------------------------------------*/
+list='SHOWME XEDIT;SHOWDETL XEDIT'
+If Pos('*',uid)<>0 Then Call WildCard
+/*---------------------------------------------------------------+
+| Check if the userid exists                                     |
++---------------------------------------------------------------*/
+ If chkuid Then Do
+ pipecmd' (NAME SHOWME.EXEC:114 END ?)',
+    'CP QUERY MDISK USER 'uid' 000 DIR',         /* Ask CP           */
+    '| locate ~HCPQMD040E~',                     /* Do we have this  */
+    '| count lines',                             /* How many         */
+    '| var exist'                                /* Store as boolean */
+ If \exist Then Call Exit '28 User id 'uid' does not exist'
+End  /* chkuid */
+/*---------------------------------------------------------------+
+| Define work file                                               |
++---------------------------------------------------------------*/
+workfile=uid' $DIRECT$ 'wfm
+/*---------------------------------------------------------------+
+| Access the disk that contains the active/actual directory      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT (NOTYPE ONLY('myfn') .fm'
+If rc=0 Then Do Queued()
+           Parse Pull . . fm .
+           End
+           Else Call Exit rc' Problem linking 'dirmaint', 'rc
+/*---------------------------------------------------------------+
+| Determine what to do...Dirm style or monolithic                |
++---------------------------------------------------------------*/
+Select
+When dirtype='DIRMAINT'   Then Call Style_Dirmaint
+When dirtype='MONOLITHIC' Then Call Style_Mono
+Otherwise Call Exit '399 No DIRTYPE specified in LASTING GLOBALV'
+End
+/*---------------------------------------------------------------+
+| Loose the disk...                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT <DET (NOTYPE ONLY('myfn')'
+/*---------------------------------------------------------------+
+| Determine if we need to execload/execdrop only the 1st time    |
+| during a session                                               |
++---------------------------------------------------------------*/
+Address CMS 'SET CMSTYPE HT'
+pipecmd' (NAME SHOWME.EXEC:154 END ?)',
+   'var first 2',                                /* Can we obtain this */
+   '| var first'                                 /* Store result       */
+Address CMS 'SET CMSTYPE RT'
+If first == '1' Then first=0                     /* Already execloaded */
+                Else first=1                     /* Need to be execloaded*/
+If runxed Then Do
+               If first Then Call Load_Drop '\== | specs ~EXECLOAD 'myfn myft' *~ 1 w1.2 nw'
+/*---------------------------------------------------------------+
+| Start xedit session with my profile                            |
++---------------------------------------------------------------*/
+               Address CMS 'XEDIT 'workfile' (PROFILE 'myfn
+/*---------------------------------------------------------------+
+| Determine how many levels so we do not remove the work disk    |
++---------------------------------------------------------------*/
+               pipecmd' (NAME SHOWME.EXEC:169 END ?)',
+                  'cms LISTFILE * $DIRECT$ 'wfm' (NOH',   /* Search these     */
+                  '| count lines',               /* Count them       */
+                  '| var lvl'                    /* Store as         */
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+               Address CMS 'ERASE 'workfile
+               If first Then Call Load_Drop '== | specs ~EXECDROP~ 1 w1.2 nw'
+               End
+Return
+ 
+ 
+Style_Mono:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME SHOWME.EXEC:186 END ?)',
+    '< USER DIRECT 'fm,
+    '| specs pad 0 recno 1.10 right 1.72 nw',
+    '| stem dir.',
+    '| pick anycase (w2.1 == ~USER~ or w2.1 == ~IDENTITY~ or w2.1 == ~PROFILE~)',
+    '| stem item.'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME SHOWME.EXEC:192 END ?)',
+    'stem item.',
+    '| p: pick anycase (w2.1 == ~USER~ or w2.1 == ~IDENTITY~ or w2.1 == ~PROFILE~) and w3.1 == ~'uid'~',
+    '| specs w1.1',
+    '| var startitem'
+If \Datatype(startitem,'NUM') Then Do
+     Address CMS 'VMLINK DIRMAINT <DET (NOTYPE ONLY('myfn')'
+     Call Exit '28 User id 'uid' not found in USER DIRECT'
+     End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME SHOWME.EXEC:200 END ?)',
+    'stem item.',
+    '| frlabel 'startitem,
+    '| drop first 1',
+    '| take first 1',
+    '| specs w1.1 1 x40 n',
+    '| var enditem'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \Datatype(enditem,'NUM') Then enditem=dir.0
+nolines=enditem-startitem
+pipecmd' (NAME SHOWME.EXEC:212 END ?)',
+    'stem dir.',
+    '| drop first 'startitem-1,
+    '| take first 'nolines,
+    '| specs 12;* 1.80',
+    pipout
+Return
+ 
+ 
+Style_Dirmaint:
+/*---------------------------------------------------------------+
+| Find the userid in USER DIRECT in DIRMAINT                     |
++---------------------------------------------------------------*/
+pipecmd' (NAME SHOWME.EXEC:225 END ?)',
+      '< USER DIRECT 'fm,                       /* Read the file   */
+      '| locate ~ 'uid' ~',                     /* Find user       */
+      '| specs w2.1 1  w-3;-1 nw x40 n',        /* Take details    */
+      '| var details'                           /* Store here      */
+If details='' | details='DETAILS' Then Do
+     Address CMS 'VMLINK DIRMAINT <DET (NOTYPE ONLY('myfn')'
+     Call Exit '928 User id 'uid' is not found in Dirmaint'
+     End
+/*---------------------------------------------------------------+
+| Get the start and end of the userid                            |
++---------------------------------------------------------------*/
+Parse Value details With type dirfn start len .
+If Datatype(start,'N') Then Do
+     start=start-1
+/*---------------------------------------------------------------+
+| Read the selection and store it in workfile                    |
++---------------------------------------------------------------*/
+     pipecmd' (NAME SHOWME.EXEC:243 END ?)',
+          '< 'dirfn' CLUSTER 'fm,
+          '| drop first 'start,                  /* Remove 1st part */
+          '| take first 'len,                    /* Take what we need */
+          pipout                                 /* Hand 2 ??        */
+     End
+     Else Do
+     pipecmd' (NAME SHOWME.EXEC:250 END ?)',
+         '< 'uid' DIRMPART 'fm,                  /* Read this        */
+         pipout                                  /* Hand 2 ??        */
+     End
+Return
+ 
+ 
+Load_Drop:
+/*---------------------------------------------------------------+
+| Load or Drop code...                                           |
++---------------------------------------------------------------*/
+Parse Arg cond specline
+pipecmd' (NAME SHOWME.EXEC:262 END ?)',
+   'var list',                                   /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| f: fanout',                                /* Duplicate lines  */
+   '| specs 1;* 1 x40 n',                        /* Add a space      */
+   '| j: juxtapose',                             /* Collate them     */
+   '| pick anycase w1.2 'cond' w3.2',            /* Select these     */
+   specline,                                     /* Use this         */
+   '| cms',                                      /* Hand 2 cms       */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~EXECMAP~ 1 w1.2 nw',                /* Compose cmds     */
+   '| cms',                                      /* Hand 2 space     */
+   '| pick anycase w1.1 \== ~NAME~',             /* Remove these     */
+   '| space 1',                                  /* Reducs spaces    */
+   '| j:'                                        /* Conn 2 juxtapose */
+Return
+ 
+ 
+WildCard:
+/*---------------------------------------------------------------+
+| If it is a wildcard show a list of findings                    |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT (NOTYPE ONLY('myfn')'
+pipecmd' (NAME SHOWME.EXEC:285 END ?)',
+      '< USER DIRECT *',                         /* Read this        */
+      '| wildcard w3.1 ~'uid'~',                 /* Search for       */
+      '| specs w3.1',                            /* Keep this        */
+      '| stem lines.'                            /* Store as         */
+Address CMS 'VMLINK DIRMAiNT <DET (NOTYPE ONLY('myfn')'
+If lines.0<>0 Then Do
+       Say 'Found the following:'
+       pipecmd' (NAME SHOWME.EXEC:293 END ?) stem lines. | cons'
+       End
+Exit
+Return
+ 
+ 
+RunXedit:
+/*---------------------------------------------------------------+
+| Run the XEDIT part, do settings                                |
++---------------------------------------------------------------*/
+Call GetFromCaller
+'EXTRACT /LSCREEN'                               /* Get last line    */
+ctlchars='% ESCAPE;',
+         'Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;',
+         'W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;',
+         'B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;',
+         'G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;',
+         'R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;',
+         '$ OFF'
+pfkey='HELP_SHOWME;_;QQUIT;_;_;_;BACKWARD;FORWARD;_;_;SHOWDETL;QQUiT'
+pfline='1=%GHelp%W2= 3=%GQuit%W4= 5= 6= 7=%GBack%W8=%GForw%W 9= 10=%GTop%W11=%GShow%W 12=%GQuit%W'
+settings='CMDLINE TOP;CURLINE ON 4;SCALE ON 3;NUM ON;PREFIX NULLS LEFT;',
+         'VERIFY 1 72;COLOR FILEAREA YELLOW;',
+         'RESERVED 'lscreen.1' WHITE NOHIGH 'pfline
+Address CMS 'PIPE (NAME SHOWME.EXEC:317 END ?)',
+    'var ctlchars',                              /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET CTLCHAR~ 1 1;* nw',            /* Compose cmds     */
+    '| fi: faninany',                            /* Take in others   */
+    '| subcom xedit',                            /* Issue cmds       */
+    '?',                                         /* 2nd pipe         */
+    'var pfkey',                                 /* Take this        */
+    '| dup 1',                                   /* Duplicate        */
+    '| split at ;',                              /* Split            */
+    '| specs ~SET PF~ 1 pad 0 recno n.2 right 1;* nw',   /* Compose cmds     */
+    '| change ~_~ ~',                            /* Replace this     */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '?',                                         /* 3rd pipe         */
+    'var settings',                              /* Take this        */
+    '| split at ;',                              /* Split            */
+    '| specs ~SET~ 1 1;* nw',                    /* Compose cmds     */
+    '| fi:'                                      /* Conn 2 faninany  */
+':1'                                             /* Set at the top */
+Return
+ 
+ 
+ShowDetails:
+/*---------------------------------------------------------------+
+| Act on certain input when PF11 is pressed                      |
++---------------------------------------------------------------*/
+Call GetFromCaller
+/*---------------------------------------------------------------+
+| Display some of the content....                                |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| We act on these items                                          |
++---------------------------------------------------------------*/
+selections='USER IDENTITY INCLUDE SUBCONFIG MDISK LINK FILEPOOL'
+/*---------------------------------------------------------------+
+| Get some settings...                                           |
++---------------------------------------------------------------*/
+'EXTRACT /LINE/CURSOR/FNAME'
+curpos=line.1
+If curpos=0 Then curpos=1
+uid=FNAME.1
+/*---------------------------------------------------------------+
+| Make curline where the PF key was pressed                      |
++---------------------------------------------------------------*/
+':'cursor.3
+/*---------------------------------------------------------------+
+| Extract the content of the line                                |
++---------------------------------------------------------------*/
+'EXTRACT /CURLINE'
+line=Strip(curline.3)
+/*---------------------------------------------------------------+
+| Analyze the content of the line...                             |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SHOWME.EXEC:370 END ?)',
+    'var line',                                  /* Take this        */
+    '| split',                                   /* Split            */
+    '| strip',                                   /* Remove space     */
+    '| l: lookup details',                       /* Look for...      */
+    '| var action',                              /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'var selections',                            /* Use this         */
+    '| split',                                   /* Split            */
+    '| strip',                                   /* Remove spaces    */
+    '| l:'                                       /* Conn 2 lookup    */
+/*---------------------------------------------------------------+
+| Execute what we need for each valid action..                   |
++---------------------------------------------------------------*/
+Select
+When action='USER' |,
+     action='IDENTITY' Then Do
+/*---------------------------------------------------------------+
+| When this is found we XAUTOLOG it                              |
++---------------------------------------------------------------*/
+        Parse Value line With action uid .
+        Address COMMAND 'CP XAUTOLOG 'uid
+        End
+When action='INCLUDE' Then Do
+/*---------------------------------------------------------------+
+| Display contents of a profile                                  |
++---------------------------------------------------------------*/
+        Parse Value line With action uid .
+        Address CMS 'SHOWME' uid '0'  /** No checking **/
+        End
+When action='MDISK' Then Do
+/*---------------------------------------------------------------+
+| Display content of a minidisk (if possible)                    |
++---------------------------------------------------------------*/
+        Call GetFromCaller
+        Parse Value line With action mdisk . start size volid .
+        If cfgusr<>'' Then uid=cfgusr
+        Address CMS 'PIPE (NAME SHOWME.EXEC:407 END ?)',
+           'cp QUERY DASD 'volid,                /* Ask CP           */
+           '| change ~CP ~CP_~',                 /* Replace this     */
+           '| specs ~/CUU/~ 1',                  /* Prep 4 varload   */
+                   'w2.1 n',                     /* .                */
+                   '~;/STATUS/~ n',              /* .                */
+                   'w3.1 n',                     /* .                */
+           '| split at ;',                       /* Split here       */
+           '| varload'                           /* Hand 2 rexx      */
+        If type='S' Then Call SubCfgMdisk
+                    Else Call NormalMdisk
+ 
+        End
+When action='LINK'  Then Do
+/*---------------------------------------------------------------+
+| Display content of a LINKed minidisk (if possible)             |
++---------------------------------------------------------------*/
+        Parse Value line With action uid mdisk .
+        Address CMS 'VMLINK 'uid mdisk' (NONAMES NOTYPE FILELIST * * .fm'
+        If rc=0 Then Parse Pull .
+                Else Say 'Problem link/access/filelist: 'rc uid mdisk
+        End
+When action='SUBCONFIG' Then Do
+/*---------------------------------------------------------------+
+| Show the SUBCONFIG                                             |
++---------------------------------------------------------------*/
+Call GetFromCaller
+        Address CMS 'PIPE (NAME SHOWME.EXEC:434 END ?)',
+             'var line',                         /* Take this        */
+             '| split after string /'action'/',  /* Split here       */
+             '| drop first 1',                   /* Remove this      */
+             '| strip',                          /* Remove spaces    */
+             '| specs w1.1',                     /* Reduce to this   */
+             '| var subcfg'                      /* Store as         */
+        chkuid=0
+        Address CMS 'SHOWME' subcfg chkuid uid /** No checking **/
+        End
+When action='FILEPOOL'  Then Do
+/*---------------------------------------------------------------+
+| Display top-level dir for the user (if we are allowed)         |
++---------------------------------------------------------------*/
+        Address CMS 'PIPE (NAME SHOWME.EXEC:448 END ?)',
+             'var line',                         /* Take this        */
+             '| split after string /'action'/',  /* Split here       */
+             '| drop first 1',                   /* Remove 1st part  */
+             '| strip',                          /* Remove spaces    */
+             '| specs w1.1',                     /* Redice to this   */
+             '| var fpid'                        /* Store as         */
+        Address CMS 'DIRLIST 'fpid':'Strip(uid)'.'
+        End
+Otherwise Do
+/*---------------------------------------------------------------+
+| Don't know what to do...                                       |
++---------------------------------------------------------------*/
+   Say 'Invalid statement'
+   Return
+   End
+End
+/*---------------------------------------------------------------+
+| Reset the file to where it all started                         |
++---------------------------------------------------------------*/
+':'curpos
+Return
+ 
+ 
+NormalMdisk:
+/*---------------------------------------------------------------+
+| Link and display a normal MDISK                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid mdisk' (NONAMES NOTYPE FILELIST * * .fm'
+If rc=0 Then Parse Pull .
+        Else Say 'Problem link/access/filelist 'uid mdisk
+Return
+ 
+ 
+SubcfgMdisk:
+/*---------------------------------------------------------------+
+| Hand a minidisk defined in a SUBCONFIG                         |
++---------------------------------------------------------------*/
+Select
+When status=volid       Then Do
+                             Call AttCuu
+                             If attrc=0 Then Call DefineMdisk
+                             Call DetCuu
+                             End
+When status='ATTACHED'  Then Say 'Can not use 'cuu' to access: 'uid mdisk
+When status='CP_OWNED'  Then Call DefineMDisk
+When status='CP_SYSTEM' Then Call DefineMDisk
+Otherwise Say 'Can not handle status: 'status
+End
+Return
+ 
+ 
+AttCuu:
+/*---------------------------------------------------------------+
+| Attach a VOLUME to system                                      |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SHOWME.EXEC:504 END ?) CP ATTACH 'cuu' SYSTEM | hole'
+attrc=rc
+If rc<>0 Then Say 'Can not handle 'cuu
+Return
+ 
+ 
+DetCuu:
+/*---------------------------------------------------------------+
+| Detach a volume from system                                    |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SHOWME.EXEC:514 END ?) CP DETACH 'cuu' SYSTEM | hole'
+Return
+ 
+ 
+DefineMdisk:
+/*---------------------------------------------------------------+
+| We use DEFINE MDISK because we can not reach it otherwise      |
++---------------------------------------------------------------*/
+'GETFMADR'
+If rc=0 Then Parse Upper Pull . ffm fcuu .
+        Else Say 'No free CUU and/or FM available'
+Address CMS 'PIPE (NAME SHOWME.EXEC:525 END ?) cp DEFINE MDISK 'fcuu start size volid' | hole'
+If rc<>0 Then Do
+              Say 'Can not issue CP DEFINE MDISK'
+              Return
+              End
+Address CMS 'PIPE (NAME SHOWME.EXEC:530 END ?) cms  ACCESS 'fcuu ffm'/'ffm' | hole'
+If rc<>0 Then Do
+              Say 'Can not access 'fcuu' as 'ffm
+              Return
+              End
+Address CMS 'FILELIST * * 'ffm
+Address CMS 'RELEASE 'ffm
+Address CMS 'PIPE (NAME SHOWME.EXEC:537 END ?) cp DETACH 'fcuu' | hole'
+Return
+ 
+ 
+GetFromCaller:
+/*---------------------------------------------------------------+
+| Get some items from calling exec                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME SHOWME.EXEC:545 END ?)',
+    'rexxvars 1 toload',                         /* Take from caller */
+    '| all ~CFGUSR~!~UID~!~UIDCHK~!~TYPE~',      /* Select these     */
+    '| specs 1;* 1 x40 n',                       /* Add a space      */
+    '| strip',                                   /* Remove spaces    */
+    '| varload'                                  /* Hand 2 rexx      */
+Return

@@ -1,0 +1,1451 @@
+/* This exec is the handler for listselections from REXX
+/*XEDIT:SET: SET PF10 BEFORE execcall .EXEC DEMOFS */
+/*XEDIT:SET: SET PF22 BEFORE execcall .ts .EXEC DEMOFS  */
+ 
+Written by: Kris Buelens IBM Belgium;  BUELENSC at BRUVMIS1 7 Nov 1991
+ 
+(c) Copyright International Business Machines Corporation 1991, 1998.
+                  All Rights Reserved.
+ 
+Information:  HELP CMS SELFS   Complete description
+         or:  EXEC DEMOFS      Show some samples
+ 
+ +----Initialize a selection panel------------------------------+
+ | format:  | call me INIT vscreen <stacked> <, row col lines>  |
+ |          |     <,STYLE Thin|NOBorder|Default>                |
+ | "INIT" may also be "INITX" for option selections with a char |
+ | "INIT" may also be "INITC" for command selections            |
+ | "INIT" may also be "INITF" for panel with only fields        |
+ | "INIT" may also be "INITD" for a "data-panel" (e.g HELP)     |
+ | "stacked" =  nbr stacked lines to read (deflt='*')           |
+ |           or a "STEM."  (CMS/Pipelines required)             |
+ | STYLE THIN uses a small border iso REVERSE VIDEO             |
+ | STYLE NOBORDER defines a panel without border                |
+ +--------------------------------------------------------------+
+    SEL      <(color high<,charcolor<,charExthi>>)> text
+    SELFLD   <(color high,<char color high>> text _____ text <X15fld1>..
+    SELTAB   <(color high prot x05 clr hi....)> text x05  text x05 ...
+    SELCOLOR
+    SELWORDS <(color high)> selection1 selection2 ....
+    SELSTEM <width> stem.   (takes a REXX stem as input, needs PIPELINES)
+    TOP | TITLE  <(color high<,charcolor<,charExthi>>)> text
+    TOPEXP       <(color high<,charcolor<,charExthi>>)> text
+    SELEXP       <(color high<,charcolor<,charExthi>>)> text
+    SELPRE       <(color high<,charcolor<,charExthi>>)> text
+    SELPOST      <(color high<,charcolor<,charExthi>>)> text
+    BOT | BOTTOM <(color high<,charcolor<,charExthi>>)> text
+    PS           <(color high<,charcolor<,charExthi>>)> text
+    arg2: winstarow winstacol datalines
+ 
+   The max length of stacked lines is 255, so we have a trick to concat:
+     When a stacked line starts with +, all lines starting with ++
+     are catenated with it.
+     The following PIPE can be used to split long lines for SELFS :
+      'PIPE (END ?)',
+       .... create SEL lines ...
+        '|Long:  NLOCATE 256', /* Lines too long for STACK */
+        '|LongI: FaninAny',    /* Gather all lines to stack */
+        '|STACK',              /* STACK them */
+        '?Long:',              /* Long lines come here */
+        '|Long2: SPEC /+/ 1 1.254 N Write OutStream 1 255-* 1',
+        '|LongI:',
+        '?Long2:|DEBLOCK 254|CHange //++/|LongI:'
+ 
+ +----Display a panel-------------------------------------------+
+ | format:  | call me DISPLAY vscreen  <, extra <,extra <,..>   |
+ +--------------------------------------------------------------+
+      NPF number of PFs 12|24
+      PFB back pf-keys default: 7 19
+      PFF
+      PFSEL
+      PFNOSEL
+      MSG             simple info msg
+      EMSG            simple error msg
+      ERRMSG          ErrMsg with colors etc, max 3 lines
+      INFOMSG         Info msg with colors etc, max 3 lines
+      MINSEL n
+      MAXSEL n
+      CURSOR row <col>
+      UPDSELFLD line fldnb data       update a data field
+      SEPX15          separate selections with X15, required for SELFLDs
+      NOHIDE          don't hide window when user gave his input
+      NOSCROLL        Do not autoscroll to force viewing all lines
+      FORGETSEL       Forget user's pervious selections
+      BACKground clr  To display a background behind current SELFS panel
+ +----Delete a panel--------------------------------------------+
+ | format:  | call me TERM vscreen                              |
+ +--------------------------------------------------------------+
+ 
+  Written by: Kris Buelens IBM Belgium;  BUELENS at DIEVMD 7 Nov 1991
+16 May 1994: Support CURSOR control
+15 Dec 1994: Avoid selection in interrupted by WNG
+22 Nov 1995: Correct panel width if SELWORDS used
+24 Apr 1997: Avoid problems when resetting selections > line 10
+ 7 Oct 1997: Add INITC option, allows COMMANDs from a list
+14 Oct 1997: Allow input fields in INITX/C panels (SELFLD keyw)
+25 May 1998: Avoid too much white space at right panel border
+ 8 Sep 1998: Show message when user must scroll forward in INITX
+18 Sep 1998: Add SELTAB selection lines
+14 Oct 1998: Set TEXT on during display of "STYLE THIN" panel
+21 Oct 1998: Avoid abend when caller tries to terminate a panel twice
+18 Nov 1998: Also delete vscreen & co when WINDOW already exist
+19 Nov 1998: STYLE NOBORDER
+30 Nov 1998: Added SELPRE and renamed BOTEXP into SELPOST
+12 Apr 1999: Give a clear message when arg(3) is bad.
+20 May 1999: Correct VSCREEN position indicator on STYLE THIN panels
+20 Dec 1999: Avoid "Data truncated" & add INITF
+24 Mar 2000: Support CHARACTER attributes (color & exthi)
+ 4 Sep 2000: Back & Forw window scrolling is now cursor sensitive
+ 6 Apr 2001: Left border was overlayed on INITF panels with THIN style
+26 Jul 2001: Retain window scroll position between two DISPLAY calls
+20 Mar 2003: Add NOSCROLL & FORGETSEL options for DISPLAY call
+             Fix cursor col after scroll for NOBORDER & THIN panels
+31 Aug 2004: Support more than 1 "errormsg" and color requests for them
+ 2 Sep 2004: Fix field redisplay when Delete key is used in field
+             Allow different colors for all fields on a line
+             Allow field style 'UPPER' to uppercase a fields
+15 Sep 2004: Fix backwd scrolling for redisplayed panels
+16 Nov 2004: Fix panels with inputfields followed by simple "SEL" records
+26 Jan 2005: Fix & change SELTAB colors, must use x05 to sep colors too
+             SELTAB now also supports extended color/highligthing
+15 Feb 2005: Fix centered colors/highs & emsg not shown if had "errmsg"
+24 Feb 2005: Fix centered colors for SelEXP lines
+ 7 Feb 2015: Allow to select background color (request from Dave Jones)
+________________________________________________________________________
+idea: add other field styles such a Required, heX, fileName, ....
+      Problem: we cannot simply check the styles in rtn "GetScreenData"
+      as there we only check the 3270 "modified" fields.  I.e. user makes
+      two errors, we signal one, he corrects one ==> 1 3270 modified
+      field, the other error isn't noticed
+ 
+*/
+ 
+Signal on Syntax /* If things fail, Exit nicely (allow STACK cleanup) */
+Signal on NoValue/* If things fail, Exit nicely (allow STACK cleanup) */
+parse upper source . . myname mytype mymode syn .
+address command
+parse arg function vscreen rest
+if vscreen='' then vscreen=myname
+select
+  when find('INIT INITX INITC INITD INITF',function)^=0 then signal init
+  when function='DISPLAY' then signal display
+  when function='TERM'    then signal terminate
+  otherwise do
+       say myname': Invalid function passed to' myname mytype
+       return 8005
+  end
+end
+ 
+SYNTAX: /*  we come here when SIGNAL ON SYNTAX traps an error      */
+/*******************************************************************/
+ parse upper source . how myname mytype . syn .
+ Say myname': Error' rc 'running' myname mytype 'line' sigl':'
+ Say myname': +++' 'ERRORTEXT'(rc)
+ say myname': +++' sigl':'||'SOURCELINE'(sigl)
+ src=rc ; 'DROPBUF'
+exit 1000+sRC
+NOVALUE: /*  we come here when SIGNAL ON NOVALUE traps unset var   */
+/*******************************************************************/
+ parse upper source . how myname mytype . syn .
+ parse version . rexxlvl . '' UndefVar
+ if rexxlvl>=3.46 then undefvar=' "'||'CONDITION'('D')'"'
+ Say Myname': REXX problem in' myname mytype 'line' sigl,
+      'variable'|| undefvar 'not defined'
+ 'DROPBUF'
+exit 1099
+/*******************************************************************/
+INIT: /*  init the vscreen                                         */
+/*******************************************************************/
+ inputstem='' ; cursor=''
+ select
+  when rest='' | rest='*' then rest=queued() /* take all Stacked lines */
+  when datatype(rest,'W') then nop
+  when is_a_stem(rest)    then rest=input.0
+  otherwise
+    Say myname': Invalid parameter in arg(1):' rest ;exit 5
+ end
+ parse arg , , style type .
+ if style<>'' then do
+    if style<>'STYLE' then
+       call ErrExit 5,'Invalid parameter in arg(3):' style
+    Select; when Abbrev('THIN',type,1)     then style='THIN'
+            when Abbrev('NOBORDER',type,3) then style='NOBO'
+            when Abbrev('DEFAULT',type,3) |type=''  then style=''
+            Otherwise Call ErrExit 5,'Invalid selfs style:' type
+    end
+ end
+ if ( substr(DIAG(24,-1),13,1) = 2 ) then /* Disconnected */
+    call ErrExit 8,'We cannot run in a DISCONNECTED user'
+ 'QUERY DISPLAY(LIFO'
+ parse pull . disprows dispcols .
+/*
+   style='NOBO' /*????*/
+   style=''     /*????*/
+   style='THIN' /*????*/
+*/
+ 
+ LikeInitX=(find('INITX INITC INITF',function)<>0)
+ parse value 0   0      0      0      0   0      0   0  16 ,
+       with  top topexp selexp SelPre sel selPost bot ps width .
+ if style<>'THIN' then
+ parse value 'GRE REV;PIN REV;RED REV;PIN REV;RED REV;WHITE REV',
+       with  Ctop.';'Ctopexp.';'Cselexp.';'CselPost.';'Cbot.';'Cps.
+ else
+ parse value 'YELL  ;PIN REV;RED REV;PIN REV;YELL ;WHITE REV',
+       with  Ctop.';'Ctopexp.';'Cselexp.';'CselPost.';'Cbot.';'Cps.
+ CselPre.=CselPost.
+ 
+ if function='INIT' then
+    selcolor ='YELL NON'  /* default color INIT */
+ else
+    selcolor ='YELL REVV' /* default color INITX/INITC */
+ colorx  ='YELL NON'  /* default color INITX selection field */
+ FieldClr.='GREE UND'  /* default color for input fields */
+ HasFields.=0
+ HasTabs.=0
+ FieldChar.='_'
+ Frozen=''             /* All lines can be scrolled */
+ 
+/*if vscreen='DTE' then trace ?r */
+ Select
+  When Style='THIN' then WideTypes='PS'
+  when Style='NOBO' then WideTypes=''
+  otherwise WideTypes='TOP TITLE TOPEXP SELEXP BOT BOTTOM PS'
+ end
+ PreRead=''
+ 
+ do inp=1 to rest
+    If inputstem<>'' then parse var input.inp type line '' OptClr
+    else do
+       if preRead='' then parse pull          type line '' OptClr
+          else parse var PreRead type line '' OptClr PreRead
+       if left(type,1)='+' then do /* Line is continued */
+          type=substr(type,2)
+          do inp=inp+1 to rest until left(PreRead,2)<>'++'
+             parse pull PreRead 0 cc 3 t
+             if cc<>'++' then parse value inp-1 cc||t with inp PreRead
+                         else line=line || t
+          end
+       end
+    end
+    if left(line,1)='(' then /* special colors asked */
+       parse var line '(' OptClr ')' +2 line
+    If function='INITF' then
+       If find('SELTAB SELSTEM SELWORDS',type)<>0 then do
+          say myname': With INITF, all lines must be SELFLD or SEL;',
+                    '"'type'" is invalid'
+            return 8005
+         end
+    /* Define new Default width */
+    If find(WideTypes,type)<>0
+       then nwidth=max(length(line)-4,width)/*Texts spanning whole VSCR*/
+       else nwidth=max(length(line),width)  /*Texts with extra border  */
+    select
+    when type='SEL' then do
+         parse value sel+1 line with sel sel.sel
+         if OptClr<>'' then Color.sel=OptClr /* special colors asked */
+                       else color.sel=selcolor
+    end
+    when type='SELFLD' then do
+         If ^likeInitX then do
+            say myname': SELFLD is only valid for INITX, INITF',
+                      'and INITC panels'
+            return 8005
+         end
+         parse value sel+1 1 line with sel HasFields.sel sel.sel
+         parse var line t '15'x data
+         nwidth=max(length(t),width) /* Don't count data for field(s)*/
+         parse var OptClr OptClr','char FldClr
+         if length(char)>1 then /* Only colors given */
+            parse value '_' char FldClr with char FldClr
+         if OptClr<>'' then Color.sel=OptClr /* special colors asked */
+                       else color.sel=selcolor
+         if char<>''   then FieldChar.sel=char /* special field char ? */
+         if FldClr<>'' then FieldClr.sel=FldClr /* field color etc ? */
+    end
+    when type='SELTAB' then do
+         if function<>'INIT' then do
+            say myname': SELTAB is only valid for INIT panels'
+            return 8005
+         end
+         parse value sel+1 1 line with sel HasTabs.sel sel.sel
+         if OptClr<>'' then Color.sel=OptClr /* special colors asked */
+                       else color.sel=selColor
+    end
+    when type='SELSTEM' then do
+         parse var line nw stem
+         if ^datatype(nw,'W') then parse var line stem , nw
+         sel.0=sel
+         if LikeInitX then addsel='SPEC /_/ 1 1-* 3|'
+                      else addsel=''
+         'PIPE STEM' stem '1|'addsel'STEM SEL. APPEND'
+         if rc^=0 then exit rc
+         color.0=sel /* append colors for the lines */
+         if OptClr<>'' then t=OptClr /* special colors asked */
+                       else t=selcolor
+         'PIPE VAR T|DUP' sel.0-sel'|STEM COLOR. APPEND'
+         if nw='' then do sel=sel+1 to sel.0 /* calc new max lng */
+            nwidth=max(length(sel.sel),width)
+         end
+         else nwidth=max(nw,width)
+         sel=sel.0
+         end
+    when type='SELWORDS' then do
+         if OptClr<>'' then t=OptClr /* special colors asked */
+                       else t=selcolor
+         nwidth=width /* Ignore width earlier set */
+         do while line^=''
+            parse value sel+1  t       ',' line ,
+                  with  sel   color.sel',' sel.sel line
+            if LikeInitX then sel.sel='_' sel.sel
+            nwidth=max(length(sel.sel),width)
+         end;end
+    when type='SELCOLOR' then    /* new default selection line color */
+         If line <>'' then selcolor=line
+                      else selcolor=OptClr
+    when type='TOP' | type='TITLE' then do
+         parse value top+1 line with top top.top
+         if OptClr<>'' then Ctop.top=OptClr /* special colors asked */
+    end
+    when type='BOT' | type='BOTTOM' then do
+         parse value bot+1 line with bot bot.bot
+         if OptClr<>'' then Cbot.bot=OptClr /* special colors asked */
+    end
+    when type='PS' then do
+         parse value ps+1 line with ps ps.ps
+         if OptClr<>'' then Cps.ps=OptClr /* special colors asked */
+    end
+    when type='SELPRE' then do
+         parse value selPre+1 line with selPre selPre.selPre
+         if OptClr<>'' then CselPre.selPre=OptClr
+    end
+    when type='SELPOST' | type='BOTEXP' then do
+         parse value selPost+1 line with selPost selPost.selPost
+         if OptClr<>'' then CselPost.selPost=OptClr
+    end
+    when type='TOPEXP' then do
+         parse value topexp+1 line with topexp topexp.topexp
+         if OptClr<>'' then Ctopexp.topexp=OptClr
+    end
+    when type='SELEXP' then do
+         parse value selexp+1 line with selexp selexp.selexp
+         if OptClr<>'' then Cselexp.selexp=OptClr
+    end
+    /* Stuff to define non-scrollabel panel sections, it is just like
+       "RESERVED" VSCREEN lines, but RESERVED lines is too hard 4 SELFS*/
+    when type='FIX' & sel=0 then frozen=1
+    when type='FIX' then do
+         if words(frozen)//2<>0 then
+            call ErrExit 5,'FIX is not preceeded by an ENDFIX request'
+         if words(frozen)%2 > 0+ ( word(frozen,1)=1 )
+            then call ErrExit 5,'FIXed sections can only appear',
+                'at start and/or end of panel'
+         frozen=frozen sel+1
+    end
+    when type='ENDFIX' then do
+         if words(frozen)//2<>1 then
+            call ErrExit 5,'ENDFIX is not preceeded by a FIX request'
+         frozen=frozen sel
+    end
+    otherwise
+         if inputstem<>'' then  Say myname':',
+             'Invalid keyword in line' inp 'in stem' inputstem ':' type
+         else call ErrExit 5,'Invalid keyword in stack' type
+    end
+    width=nwidth
+ end inp
+ 
+ if sel=0 then call ErrExit 5,'Nothing to select from.'
+ if words(frozen)//2<>0 then Frozen=Frozen sel
+ If style<>'NOBO' then width=width+8
+                  else width=width+2
+ 
+ if selexp=0 then do /* Default selection explanation */
+    select
+     when function='INITD' then selexp.1=''
+     when function='INITX' then selexp.1='Select with X'
+     when function='INITC' then selexp.1='Select your command'
+     otherwise                  selexp.1='Select by cursor'
+    end
+    If function<>'INITF' then selexp=selexp+1
+ end
+ 
+ topr=top+topexp+selexp+selPre; botr=selPost+bot+ps
+ parse arg  , winstarow winstacol datalines ScrollPos
+ 
+ allrows=topr+botr+sel /* all rows of Vscreen */
+ allcols=width+10      /* all cols of Vscreen */
+ if winstarow='' | winstarow='*' then select
+    when disprows-allrows>2 then winstarow=(disprows-allrows)%2
+    when disprows-allrows<0 then winstarow=1
+    otherwise                    winstarow=disprows-allrows+1
+ end
+ else if ^datatype(WinStaRow,'W') then
+      Call ErrExit 5,'Window start Row' WinStaRow 'not numeric'
+ 
+ if winstacol='' | winstacol='*' then select
+    when dispcols-allcols>10 then winstacol=(dispcols-allcols)%2
+    when dispcols-allcols<0  then winstacol=1
+    otherwise                     winstacol=dispcols-allcols+1
+ end
+ else if ^datatype(WinStaCol,'W') then
+      Call ErrExit 5,'Window start Col' WinStaCol 'not numeric'
+ wwidth=min(width,dispcols-winstacol)
+ 
+ /* If some SEL lines are frozen (RESERVED): count real scroll Sel lins*/
+ parse Value 0 0 Sel Frozen with TopSel BotSel ScrSel toEat
+ if word(toEat,1)=1 then do
+    parse var toEat . TopSel toEat ; ScrSel=ScrSel-TopSel ; end
+ if toEat<>'' then do
+    parse var toEat s e . ; BotSel=e-s+1; ScrSel=ScrSel-BotSel ; end
+ 
+ maxdatalines=min(ScrSel,disprows-winstarow-TopR-TopSel-botr-BotSel+1)
+ if datalines='' | datalines='*' then datalines=maxdatalines
+ else do
+    if ^datatype(datalines,'W') then
+       Call ErrExit 5, 'Number of datalines not numeric.'
+    datalines=min(maxdatalines,datalines)
+ end
+ if datalines<2 & sel>1 then
+    call ErrExit 5,'Too many fixed top & bot lines for display size'
+ 
+ 'QUERY VSCREEN' vscreen '(LIFO'
+ if rc=28 then 'QUERY WINDOW' vscreen '(LIFO'
+ if rc=0 then do /* perform a nice cleanup */
+    pull
+    /* do not allow CMS to write output queued in our Vscreen */
+    cmstype=cmsflag('CMSTYPE')
+    if cmstype then 'SET CMSTYPE HT'
+    'VSCREEN DELETE 'vscreen;         'WINDOW DELETE  'vscreen
+    'VSCREEN DELETE $'left(vscreen,7);'WINDOW DELETE $'left(vscreen,7)
+    'CONWAIT'  /* Wait until CMS output buffer emptied */
+    if cmstype then 'SET CMSTYPE RT'
+ end
+ 'CMDCALL VSCREEN DEFINE 'vscreen sel+0 width TopR+TopSel botr+BotSel,
+              '(RED PROT TYPE'
+ if rc^=0 then exit rc
+ 'CMDCALL WINDOW  DEFINE 'vscreen datalines+TopR+TopSel+botr+BotSel ,
+                             wwidth winstarow winstacol '(NOBORDER VAR'
+ if rc^=0 then exit rc
+ 
+ 'SET LOCATION 'vscreen 'OFF '
+ Write='CMDCALL VSCREEN WRITE' vscreen
+ 
+ parse var Cselexp.selexp Clr ',' ; if clr<>'' then BorderClr = clr
+ LinTyp='RES' /* At first we are writing RESERVED lines,             */
+              /* when handling "SEL" requests, we can write DATA/RES */
+ 
+ Select
+  When Style<>'THIN' then ver=' '
+  when Style= 'NOBO' then nop
+  otherwise
+    BorderClr='YELL'
+    parse value 'bf406a40ac40ea40bc40ab40eb40bb40ee40ef'x,
+          with  hor  ver ucl tdo ucr lcl tup lcr tri tle
+    parse value ucl||ucr with c1 2 c2 3 0 t1 2 t2 3 0 v1 2 v2 3
+ end
+ 
+ BrdWdt=wordpos('.'style,'.NOBO .THIN .')-1
+ 
+ /*----------------------------------------------------------------*/
+ /* Write TOP line(s)                                              */
+ /*----------------------------------------------------------------*/
+ if style='THIN'  then
+ do i=1 to top
+    parse var ctop.i color ',' cString ','hString
+    write i '1' width-1' (RES' Color,
+            'FIELD' c1 || center(top.i,width-4,hor) || c2
+    parse value tri||tle||ver||ver with c1 2 c2 3 v1 4 v2 0 t1 2 t2 3
+    t=length(c1)
+    if cString<>'' then
+       Call ColorString cString,i 2+t width-2-t,width-4 length(top.i)
+    if hString<>'' then
+       Call ExtHiString hString,i 2+t width-2-t,width-4 length(top.i)
+ end i
+ else
+ do i=1 to top
+    parse var ctop.i color ',' cString ','hString
+    write i '1' width-1' (RES' Color 'FIELD' center(top.i,width-3)
+    if cString<>'' then
+       Call ColorString cString,i 2 width-2,width-3 length(top.i)
+    if hString<>'' then
+       Call ExtHiString hString,i 2 width-2,width-3 length(top.i)
+ end i
+ 
+ /*----------------------------------------------------------------*/
+ /* Write TOPEXP line(s)                                           */
+ /*----------------------------------------------------------------*/
+ if style='THIN' then
+    do i=1 to topexp
+       parse var ctopexp.i color ',' cString ','hString
+       Write i+top '1 3(RES' BorderClr 'FIELD' v1 /*border left*/
+       Write i+top 3 width-5 '(RES' Color,
+               'FIELD ' left(topexp.i,width-7)
+       if cString<>'' then Call ColorString ' 'cString,i+top 4 width-6
+       if hString<>'' then Call ExtHiString ' 'hString,i+top 4 width-6
+       Write i+top width-2 '3 (RES' BorderClr 'FIELD' v2
+       parse value tri||tle||ver||ver with c1 2 c2 3 v1 4 v2 0 t1 2 t2 3
+    end i
+ else
+    do i=1 to topexp
+       parse var ctopexp.i color ',' cString ','hString
+       write i+top 1 width-1 '(RES' Color,
+               'FIELD ' left(topexp.i,width-3)
+       if cString<>'' then Call ColorString ' 'cString,i+top 2 width-2
+       if hString<>'' then Call ExtHiString ' 'hString,i+top 2 width-2
+    end i
+ 
+ /*----------------------------------------------------------------*/
+ /* Write SELEXP line(s)                                           */
+ /*----------------------------------------------------------------*/
+ /* First line can contain a scroll indication: "line xx of yy"      */
+ lpos=length(sel) /* The LPOS var becomes place to write where we are*/
+ SelExpWdt.=width-2
+ if datalines<sel then do /* try to indicate where we are */
+    txt2=right('1',lpos) 'of' sel
+    if length(selexp.1 txt2)<width-5 then do
+       if length(selexp.1 'line' txt2)<width-10 then txt2='Line' txt2
+       Select
+        when style='THIN' then SelExpWdt.1=width-length(txt2)-4
+        when Style='NOBO' then SelExpWdt.1=width-length(txt2)-2
+        otherwise              SelExpWdt.1=width-length(txt2)-3
+       end
+       /* Store Row, col, lng where to write VSCREEN scroll position */
+       if left(txt2,1)='L'
+          then lpos=top+topexp+1 SelExpWdt.1+2+(style='THIN')+5 lpos
+          else lpos=top+topexp+1 SelExpWdt.1+2+(style='THIN') lpos
+       parse var cselexp.1 color ',' cString ','hString
+       if cString<>'' then cString=left(0,Style='THIN')||,
+                                   center(cString,SelExpWdt.1)
+       if hString<>'' then hString=left(0,Style='THIN')||,
+                                   center(hString,SelExpWdt.1)
+       cselexp.i= color','cString','hString
+       selexp.1=center(selexp.1,SelExpWdt.1)||txt2
+       SelExpWdt.1=length(selexp.1)
+    end
+ end
+ if style='THIN' then
+    do i=1 to selexp
+       parse var cselexp.i color ',' cString ','hString
+       Write top+topexp+i 1 width-1 '(RES' BorderClr 'FIELD',
+               t1 || translate(center(selexp.i,width-4),hor,' ')t2
+       if cString<>'' then
+          Call ColorString cString,top+topexp+i 1 width-2,SelExpWdt.i,
+                                                         length(selexp.i)
+       if hString<>'' then
+          Call ExtHiString hString,top+topexp+i 1 width-2,SelExpWdt.i,
+                                                         length(selexp.i)
+       parse value tri||tle||ver||ver with c1 2 c2 3 v1 4 v2 0 t1 2 t2 3
+    end i
+ else
+    do i=1 to selexp
+       parse var cselexp.i color ',' cString ','hString
+       Write top+topexp+i 1 width-1 '(RES' Color,
+               'FIELD' center(selexp.i,width-2)
+       if cString<>'' then
+          Call ColorString cString,top+topexp+i 2 width-2,SelExpWdt.i,
+                                                         length(selexp.i)
+       if hString<>'' then
+          Call ExtHiString hString,top+topexp+i 2 width-2,SelExpWdt.i,
+                                                         length(selexp.i)
+    end i
+ 
+ /*----------------------------------------------------------------*/
+ /* Write SELPRE lines                                             */
+ /*----------------------------------------------------------------*/
+ if Style='NOBO' then l=width
+  else if Style='THIN' then l=width-6
+    else l=width-7   /* datalng: allow 1 more for attribute char */
+ Select
+  when Style='NOBO' then offset=0
+  when Style='THIN' then offset=2
+  otherwise              offset=3
+ end
+ l#=top+topexp+selExp
+ do i=1 to selPre
+    parse var cselpre.i color ',' cString ','hString
+    l#=l#+1
+    Write l# offset+1 l+(style='THIN') '(RES' color 'FIELD' selPre.i
+    if cString<>'' then
+       Call ColorString cString,l# offset+2 l+(style='THIN')-1
+    if hString<>'' then
+       Call ExtHiString hString,l# offset+2 l+(style='THIN')-1
+ 
+    if Style<>'NOBO' then do /* Left & right border */
+       Write l# 1       2+(style='') '(RES' BorderClr 'FIELD' ver
+       Write l# width-3+(style='THIN')  3  '(RES' BorderClr 'FIELD' ver
+    end
+ end i
+ topRes#=l#
+ BotRes#=-(BotR+BotSel+1)
+ /*----------------------------------------------------------------*/
+ /* Write SELPOST lines                                            */
+ /*----------------------------------------------------------------*/
+ do i=1 to selPost
+    parse var cselpost.i color ',' cString ','hString
+    l#='-'||(botr-i+1)
+    Write l# offset+1 l+(style='THIN') '(RES' color 'FIELD' selPost.i
+    if cString<>'' then
+       Call ColorString cString,l# offset+2 l+(style='THIN')-1
+    if hString<>'' then
+       Call ExtHiString hString,l# offset+2 l+(style='THIN')-1
+ 
+    if Style<>'NOBO' then do /* Left & right border */
+       Write l# 1       2+(style='') '(RES' BorderClr 'FIELD' ver
+       Write l# width-3+(style='THIN')  3  '(RES' BorderClr 'FIELD' ver
+    end
+ end i
+ 
+ /*----------------------------------------------------------------*/
+ /* Write BOT lines                                                */
+ /*----------------------------------------------------------------*/
+ if style='THIN' then
+    do i=1 to bot
+       parse var cbot.i color ',' cString ','hString
+       l#='-'||(bot+ps-i+1)
+       if i=bot then parse value lcl||lcr with c1 2 c2
+                else parse value tri||tle with c1 2 c2
+       Write l# '1' width-1 '(RES' color 'FIELD',
+             c1 || translate(center(bot.i,width-4),hor,' ') || c2
+       t=length(c1)
+       if cString<>'' then
+          Call ColorString cString,l# 2+t width-2-t,width-4 length(bot.i)
+       if hString<>'' then
+          Call ExtHiString hString,l# 2+t width-2-t,width-4 length(bot.i)
+    end i
+ else
+    do i=1 to bot
+       parse var cbot.i color ',' cString ','hString
+       l#='-'||(bot+ps-i+1)
+       Write l# '1' width-1 '(RES' color 'FIELD' center(bot.i,width-2)
+       if cString<>'' then
+          Call ColorString cString,l# 2 width-2,width-2 length(bot.i)
+       if hString<>'' then
+          Call ExtHiString hString,l# 2 width-2,width-2 length(bot.i)
+    end i
+ 
+ /*----------------------------------------------------------------*/
+ /* Write PS lines                                                 */
+ /*----------------------------------------------------------------*/
+ do i=1 to ps
+    parse var cps.i color ',' cString ','hString
+    l#='-'||(ps-i+1)
+    Write l# '1' width-1 '(RES' color 'FIELD',
+                                left('',(style<>'NOBO'))||,
+                                left(ps.i,width-2-(style<>'NOBO'))
+   if cString<>'' then
+    Call ColorString cString,l# 2+(style<>'NOBO') width-2-(style<>'NOBO')
+   if hString<>'' then
+    Call ExthiString hString,l# 2+(style<>'NOBO') width-2-(style<>'NOBO')
+ end i
+ 
+ /*----------------------------------------------------------------*/
+ /* Write the selection fields                                     */
+ /*----------------------------------------------------------------*/
+ fields=''    /* The extra input fields on the panel (SELFLD) */
+ Tabfields='' /* The extra input fields on the panel (SELTAB) */
+ selections=''
+ first=1;last=datalines
+ sel.0=sel
+ FirstScr=TopSel+1   /* First scrollable SEL line */
+ LastScr =sel-BotSel /* Last scrollable SEL line */
+ allseen=(LastScr-FirstScr+1 = DataLines) /* Are all lines visible?*/
+ /* Scroll vars To save in Glv */
+ ScrCounters=FirstScr LastScr TopR BotR TopSel BotSel TopRes# BotRes#
+ 
+ do i=1 to sel
+    LinTyp=word('RES',(i>=FirstScr & i<=LastScr)+1)
+    If i<FirstScr then      l#=TopRes#+i
+     else if i>LastScr then l#=BotRes#+(i-LastScr)
+      else                  l#=i-TopSel
+    if HasTabs.i then
+     parse var color.i color '' charsPlace colorString HighString
+    else
+     parse var color.i color ',' colorString ','HighString '' charsPlace
+    If colorString || HighString <> '' then
+       If symbol('CharModeOn')<>'VAR' then do
+          CharModeOn=1 ; 'SET CHARMODE ON';end
+    Select /* Type of right border character */
+     When Style='THIN' then do
+          if i=FirstScr then        ind='AA'
+             else if i=LastScr then ind='VV'
+                  else              ind=ver||ver
+     end
+     when Style='NOBO' then nop
+     otherwise
+          if i=FirstScr then        ind='->'
+             else if i=LastScr then ind='<-';
+                  else              ind='  '
+    end
+ 
+    If Style<>'NOBO' then /* border left*/
+       Write l#' 1 3(PROT' LinTyp BorderClr 'FIELD' ver
+ 
+    if sel.i='' then sel.i=left('',l-1) /*Else VSCREEN WRITE complains*/
+ 
+  /* When a line has multiple fields, passing Color/Exthi string for a
+     whole line doesn't work:
+       the Color/Exthi strings must match the standard fields
+     So, Color/Exthi strings are not supported for lines with fields
+   */
+    Select
+    when function='INITF' then do
+       if HasFields.i then Call WriteFields offset+1 i,sel.i
+       else Write l# 1+offset  l '(PROT' LinTyp color 'FIELD' sel.i
+    end
+    when HasFields.i & LikeInitX then do
+       parse var sel.i c 2 3 t
+       prot=word('NOPROT PROT',(c='')+1)
+       /* remember default selection */
+       if c^='_' & c^='' then selections=selections'15'x||i c
+       Write l# 1+offset 2 '('prot LinTyp colorx 'FIELD' c
+       Call WriteFields offset+3 i,t
+    end
+    when HasFields.i then    /* Write a line with fields */
+       Call WriteFields 1+offset i,sel.i
+ 
+    when HasTabs.i then    /* Write a line with tabs */
+       Call WriteTabs sel.i,color
+ 
+    when LikeInitX    then do
+       parse var sel.i c 2 3 t
+       prot=word('NOPROT PROT',(c='')+1)
+       /* remember default selection */
+       if c^='_' & c^='' then selections=selections'15'x||i c
+       Write l# 1+offset     2 '('prot LinTyp colorx 'FIELD' c
+       Write l# 1+offset+2 l-2 '(PROT' LinTyp color  'FIELD' t
+       charsPlace=1+offSet+3 l-2
+    end
+    Otherwise
+      Write l# 1+offset l '(NOPROT' LinTyp color 'FIELD' sel.i
+      charsPlace=1+offSet+1 l
+    end
+ 
+    if style<>'NOBO' then  /* Border right */
+       Write l# width-3 '4 (PROT' LinTyp BorderClr 'FIELD' ind
+ 
+/* Any special color or highligth mask to write ?
+ Colorcodes             Exthi codes
+ 1    Blue               0    Defaults to the extended highlight of the
+ 2    Red                1    Blink
+ 3    Pink               2    Revvideo
+ 4    Green              4    Underline
+ 5    Turquoise
+ 6    Yellow
+ 7    White
+ 0    Defaults to the field
+*/
+   If CharsPlace<>'' & (colorString<>'' | HighString<>'' ) then do
+      parse var charsPlace chOffSet chLng
+      if colorString<>'' then
+         Write l# chOffset chLng-1 '(' LinTyp 'COLOR',
+                         translate(left(ColorString,chLng-1),,
+                         12345670123456700,'brpgtywdBRPGTYWD ')
+      if HighString<>'' then
+         Write l# chOffset chLng-1 '(' LinTyp 'EXTHI',
+              translate(left(highString,chLng-1),1122444000,'BbRrUu_Dd ')
+   end
+ end i
+ /* VSCREEN is ready, save some vars and return to caller */
+ parse value 0 function with execload panelType '' err.Vscreen
+ 'EXECSTAT' myname mytype
+ if rc=4 then do;'EXECLOAD' myname mytype mymode;  execload=(rc=0);end
+ call GLOBALV 'PUT'
+return ''
+/*-----------------------------------------------------------------*/
+ColorString: /*                                                    */
+/*-----------------------------------------------------------------*/
+ procedure expose write CharModeOn LinTyp sigl
+ If symbol('CharModeOn')<>'VAR' then do
+    CharModeOn=1 ; 'SET CHARMODE ON';end
+ parse arg ColorString, line sta lng , centerwidth pad,T '' Type
+ if T<>'' then type=t
+          else type=LinTyp
+ if type='DATA' then type=''
+ if pad<>'' then
+    ColorString=Center(left(ColorString,pad,0),centerwidth,0)
+ Write line sta lng '(' type 'COLOR' translate(left(ColorString,Lng),,
+                                   12345670123456700,'brpgtywdBRPGTYWD ')
+return
+/*-----------------------------------------------------------------*/
+ExtHiString: /*                                                    */
+/*-----------------------------------------------------------------*/
+ procedure expose write CharModeOn LinTyp
+ If symbol('CharModeOn')<>'VAR' then do
+    CharModeOn=1 ; 'SET CHARMODE ON';end
+ parse arg ExtHiString, line sta lng , centerwidth pad,T '' Type
+ if T<>'' then type=t
+          else type=LinTyp
+ if type='DATA' then type=''
+ if pad<>'' then
+    ExtHiString=Center(left(ExtHiString,pad,0),centerwidth,0)
+ Write line sta lng '(' type 'EXTHI',
+                translate(left(ExthiString,Lng),1122444000,'BbRrUu_Dd ')
+return
+ERREXIT: /* general errorexit routine */
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)
+/*-----------------------------------------------------------------*/
+WriteFields: /* Write a line with fields, Start in passed col      */
+/*-----------------------------------------------------------------*/
+ parse arg Sta ix 0 sta1 . , line '15'x data
+ fields=fields','i
+ FieldClrs=Fieldclr.ix
+ oClr='GRE UND'
+ do p=1 by 0 to l
+    np=pos(FieldChar.ix,line,p) /* Pos where new field starts */
+    /* First write data before the (next) field */
+    Select
+     when np<>0 then ln=np-1-p            /* More fields to come */
+     when Style='NOBO' then ln=l-p+1-sta1 /* Last piece to write */
+     otherwise ln=l-p+1
+    end
+    if ln>0 then
+       Write l# sta ln+1'(PROT' LinTyp color.ix 'FIELD' substr(line,p,ln)
+    if np=0 then leave /* No more fields */
+ 
+    parse var Fieldclrs clr ',' FieldClrs  /* Field Styles and colors */
+    parse var clr clr '›' stijl '!' '' stijlen
+    if clr='' then clr=oClr ; else oClr=Clr
+    /* Now write the field itself */
+    parse var data t '15'x data; if t=='' then t=' '
+    sta=sta+ln+1
+    ne=verify(line' ',FieldChar.ix,'N',np) /* Get end-of-field */
+    if np=0 then ln=l-np ; else ln=ne-np
+    Write l# sta ln+1'(NOPROT' LinTyp clr 'FIELD' t
+    stijl=space(stijl)
+    do while stijl<>''  /* Fields styles we know: Upper           */
+       parse var stijl t 2 ' ' stijl
+/*     if pos(t,'URX')=0 then */ /* later maybe also: Required, heX ???*/
+       if t<>'U' then
+          call ErrExit 22,'Invalid stijl "'t'" for line' line
+       stijlen=stijlen||t
+    end
+    fields=fields sta ln
+    if stijlen<>'' then fields=fields'›'stijlen'!'
+    parse value sta+ln+1 ne+1 with sta p
+ end
+return
+ 
+/*-----------------------------------------------------------------*/
+WriteTabs: /* Write a line with tabs; '05'x defines where unprot is*/
+/*-----------------------------------------------------------------*/
+ parse arg line,colors
+ sta=offset+1
+ Tabfields=Tabfields','i
+ do p=1 by 0 to l until np=0 | p>length(line)
+    parse var colors color1 '05'x colors  '' prot
+    if color1='' then color1=lastcolor
+    parse var color1 color ',' colorString ',' HighString
+    do c=1 to words(color)
+       pro=word(color,c)
+       if abbrev('PROTECT',pro,2)   then prot=1
+       else if abbrev('NOPROTECT',pro,4) then prot=0
+    end
+    if prot='' then parse value 0 'NOPROT' color with prot color
+ 
+    np=pos('05'x,line,p) /* Pos where new field starts */
+    if np=0 then ln=l-p+1 ; else ln=np-p
+    if ln>0 then
+       Write l# sta ln+1'('LinTyp color 'FIELD' substr(line,p,ln)
+    if ^prot then Tabfields=Tabfields sta-(offset+1) ln+1
+ 
+    if colorString<>'' then
+       Write l# sta ln'(' LinTyp 'COLOR' translate(left(ColorString,Ln),,
+                                   12345670123456700,'brpgtywdBRPGTYWD ')
+    if HighString<>'' then
+       Write l# sta Ln '(' LinTyp 'EXTHI',
+                   translate(left(highString,ln),1122444000,'BbRrUu_Dd ')
+ 
+    parse value sta+ln+1 np+1 color1,
+          with  sta      p    lastcolor
+ end
+return
+ 
+/*******************************************************************/
+DISPLAY: /*                                                        */
+/*******************************************************************/
+ call GLOBALV 'GET'
+ if paneltype='' then do
+    say myname': Window to display named "'vscreen'" doesn''t exist'
+    return 11005;end
+ parse value (paneltype='INITX') (paneltype='INITC') (paneltype='INITD'),
+             (paneltype='INITF'),
+       with  initx               initc               initd ,
+             initf
+ 
+ parse var ScrCounters ,
+           FirstScr LastScr TopR BotR TopSel BotSel TopRes# BotRes#
+ NbScrSel=LastScr-FirstScr+1 /* Nbr scrollable SEL Lines */
+ LikeInitX=initC | initX | InitF
+ /* Default cursor= same as before */
+ if word(cursor,3)='DATA' then cursor = subword(cursor,1,2)
+                          else cursor= 1 1
+ 
+ parse value 1      1    0      '12   7 19 , 8 20   , 3 15       ,',
+       with  Scroll Hide SepX15 npfs pfk_B','pfk_F ','pfk_nosel ',',
+             pfk_sel emsg msg ErrMsg minsel maxsel bgPanelColor
+ Select
+  when Style='NOBO' then offset=0
+  when Style='THIN' then offset=2
+  otherwise              offset=3
+ end
+ do i=2 to arg()
+    parse upper value arg(i) with w1 rest;rest=strip(rest)
+    if arg(i)^='' then
+    select
+      when w1='UPDSELFLD' then call UpdatePanel Rest
+      when w1='NPF'     then npfs=rest
+      when w1='SEPX15'  then sepX15=1
+      when w1='PFB'     then pfk_b=rest
+      when w1='PFF'     then pfk_f=rest
+      when w1='PFSEL'   then pfk_sel=rest
+      when w1='PFNOSEL' then pfk_nosel=rest
+      when w1='MINSEL'  then minsel=rest
+      when w1='MAXSEL'  then maxsel=rest
+      when w1='NOHIDE'  then hide=0
+      when w1='CURSOR'  then cursor=subword(rest '1 1',1,2)
+      when w1='ERRMSG'  then errmsg=subword(arg(i),2)
+      when w1='INFOMSG' then
+           if errmsg='' then errmsg='(NOBEEP)'subword(arg(i),2)
+      when w1='EMSG'    then emsg=subword(arg(i),2)
+      when w1='MSG'     then msg =subword(arg(i),2)
+      when w1='NOSCROLL'  then scroll=0
+      when w1='FORGETSEL' then Selections=''
+      when abbrev('BACKGROUND',w1,4) then do
+        clr=rest
+        select
+         when abbrev('BLUE',clr,1)     then bgPanelColor='BLUE'
+         when abbrev('TURQUOIS',clr,1) then bgPanelColor='TURQUOIS'
+         when abbrev('RED',clr,1)      then bgPanelColor='RED'
+         when abbrev('PINK',clr,1)     then bgPanelColor='PINK'
+         when abbrev('GREEN',clr,1)    then bgPanelColor='GREEN'
+         when abbrev('WHITE',clr,1)    then bgPanelColor='WHITE'
+         when abbrev('YELLOW',clr,1)   then bgPanelColor='YELLOW'
+         when abbrev('BLACK',clr,3)    then bgPanelColor='BLACK'
+         otherwise
+           say myname': Invalid BACKGROUND color "'clr'"';return 11005
+        end
+      end
+      otherwise
+        say myname': Argument' i '('arg(i)') is invalid.';return 11005
+    end /* outer Select */
+ end i
+ if ^datatype(space(cursor,0),'W') then do
+    say myname': Invalid Cursor position:' cursor;return 11005;end
+ 
+ if fields<>'' & ^sepX15 then do
+    say myname': When you define fields, option SEPX15 is required'
+    return 11005;end
+ 
+ if bgPanelColor<>'' then call DisplayBackGround
+ 'CMDCALL WINDOW SHOW 'vscreen 'ON 'vscreen ScrollPos
+ if rc^=0 then return 10000+rc
+ 'WINDOW POP STATUS'
+ parse var cursor l col
+ LinTyp=word('RES DATA',(l>=FirstScr & l<=LastScr)+1)
+ If l<FirstScr then      l=TopRes#+l
+  else if l>LastScr then l=BotRes#+(l-LastScr)
+   else                  l=l-TopSel
+ 'VSCREEN CURSOR 'vscreen l max(2,col+offset+1) '('linTyp
+ if Style='THIN' then do
+    'QUERY TEXT (LIFO'; parse pull . TextOnOff
+    if TextOnOff ='OFF' then 'SET TEXT ON'
+ end
+ 'GLOBALV SELECT' vscreen 'GET SCROLLPOS'
+ 
+ Resultaat = DisplayIt()
+ if Style<>'' then
+    if symbol('TextOnOff') ='VAR' then
+       if TextOnOff ='OFF' then 'SET TEXT OFF'
+ ScrollPos=''
+ if hide then do
+    'QUERY SHOW' vscreen '(LIFO'
+    if rc=0 then parse pull . . . . ScrollPos
+    'WINDOW HIDE 'vscreen
+    if err.vscreen<>'' then 'WINDOW HIDE' err.vscreen
+    if bgPanelColor<>'' then 'WINDOW HIDE $B$ACK$G'
+ end
+ call GlobalV 'PUT','SELECTIONS.0 WAITREAD.2 CURSOR SCROLLPOS FIRST LAST'
+ return Resultaat
+ 
+/*-----------------------------------------------------------------*/
+DisplayBackGround: /*                                              */
+/*-----------------------------------------------------------------*/
+ 'QUERY DISPLAY(LIFO'
+ parse pull . disprows dispcols .
+ if bgPanelColor='BLACK' then parse value 'NONE DEFAULT' with bgExt bgClr
+    else parse value 'REVVIDEO' bgPanelColor with bgExt bgClr
+/*---output of:  Q VSCREEN * ALL ----------------------------------------
+VSCREEN  $B$ACK$G 32       80       0        0        ( NOHIGH   PROTECT  YELLOW   REVVIDEO PS0      TYPE     USER     BOXDEF   SB
+*/
+/*VSCREEN  XEDIT    32       80       0        0 */
+ 'PIPE COMMAND QUERY VSCREEN * ALL|PICK W2 == /$B$ACK$G/',
+    '|SPEC FS ( SUBSTR W3 OF F2 1 SUBSTR W4 OF F2 NW|Var BgClrExt'
+ 
+ if symbol('bgClrExt')<>'VAR' then
+    'CMDCALL VSCREEN DEFINE $B$ACK$G' disprows dispcols 0 0,
+                                     '( PROTECT' bgExt bgClr
+ else if bgClrExt<>bgClr bgExt then do
+    'CMDCALL VSCREEN DELETE $B$ACK$G'
+    'CMDCALL VSCREEN DEFINE $B$ACK$G' disprows dispcols 0 0,
+                                     '( PROTECT' bgExt bgClr
+ end
+ 'WINDOW DEFINE $B$ACK$G' disprows dispcols 1 1 '( NOBORDER'
+ 'CMDCALL WINDOW SHOW $B$ACK$G ON $B$ACK$G'
+ 
+return
+ 
+/*-----------------------------------------------------------------*/
+DisplayIt: /*                                                      */
+/*-----------------------------------------------------------------*/
+ do forever
+    call err_screen /* show or hide Error Vscreen */
+    'VSCREEN WAITREAD 'vscreen
+    if rc^=0 then do
+       if rc=4 then 'CMDCALL WINDOW SHOW 'vscreen' ON 'vscreen
+       if rc^=0 then return 10000+rc
+       iterate;end
+ 
+    parse value 0 0 with scrolled pfk . ,
+          '' cLin cCol emsg msg errMsg fld CursorFldNb
+    parse var waitread.2 cursorTxt CursorLin CursorCol CursorWhere ,
+              0          .         cLin      cCol      .  '' SelLin .
+    if CursorWhere='DATA' then
+       parse value CursorLin+FirstScr-1 CursorCol-offset-1,
+             with  cLin                 cCol        .  0 SelLin .
+    if CursorWhere='RESERVED' then do
+       if CursorLin>TopR then /* Top Part of Reserved Scroll lines */
+          parse value 'DATA'      CursorLin-TopR CursorCol-offset-1,
+                with  CursorWhere cLin           cCol .  0 . SelLin .
+       if CursorLin<0 then do /* Bot Reserved lines */
+          t=(BotR+botSel)+CursorLin+1 /* place in bottom RES area */
+        if t<=BotSel then /* Bot Part of Reserved Scroll lines */
+          parse value 'DATA'      NbScrSel+TopSel+T CursorCol-offset-1,
+                with  CursorWhere cLin              cCol   . 0 . SelLin .
+       end
+    end
+    Cursor=cLin cCol CursorWhere
+ 
+    call err_screen /* show or hide Error/msg Vscreen */
+    select
+     when waitread.1='UNKNOWN' then iterate /* e.g. interrupted by WNG*/
+     when waitread.1='CLEAR' then pfk=99
+     when word(waitread.1,1)='PFKEY' then do
+        pfk=word(waitread.1,2)
+        if npfs=12 & pfk>12 then pfk=pfk-12
+     end
+     when word(waitread.1,1)='PAKEY' then pfk=9||word(waitread.1,2)
+     otherwise nop
+    end
+    LikeEnter=(wordpos(pfk,Pfk_b pfk_f)=0 ,      /* Not a FORW or BACK */
+             & wordpos(pfk,Pfk_sel pfk_nosel)<>0), /* And a wanted PFK */
+             | pfk=0                             /* Or the ENTER key */
+    if LikeInitx & WaitRead.0>=3 then
+       Call GetScreenData /* Get the modified fields */
+ 
+    If InitC | ^Scroll then AllSeen=1
+    /* For INITX and INITD panels, "ENTER" browses through all panels */
+    if Likeinitx & pfk=0 & allseen^=1 then /* ETK and not at EOF .. */
+       if waitread.0=2 then do         /* ... no dataentry ?    */
+          pfk=word(pfk_F,1)      /*not at EOF: force a FWD*/
+          msg='Scrolled forward to see more selections'
+       end
+       else msg='Input accepted, press enter to see more selections'
+ 
+    if initd & pfk=0 & waitread.0=2 & allseen<>1 then
+       pfk=word(pfk_F,1) /*not at EOF: force a FWD*/
+ 
+    if Tabfields<>'' ,            /* There are user defined tab fields */
+       & wordpos(pfk,0 Pfk_sel)<>0 then do /* And a wanted PFK */
+          t=','selLin' '          /* Get known field cols for the line */
+          parse var tabfields (t) cols ','
+          if cols<>'' then do  /* cursor is indeed on SELTAB line */
+             do cf=1 while cols<>'' & CursorFldNb=''
+                parse var cols sta lng cols
+                if cCol>=sta & cCol<sta+lng then CursorFldNb=cf
+             end
+             if CursorFldNb='' then
+                Emsg='Place cursor in an unprotected field please'
+          end
+       end
+ 
+    if pfk<=24 then tkey='PFkey' pfk
+               else tkey='PA'right(pfk,1)
+    select
+    when emsg<>'' then nop /* An error is already prepared */
+/*  when LikeInitx & allseen<>1 & LikeEnter then    /* user must see > */
+         emsg='Press Enter to see more'  */
+    when LikeInitx & allseen=1 & LikeEnter then do /* all seen:return?*/
+       CheckSelNb=( find(pfk_nosel,pfk)=0 )
+       sels=0
+       if CheckSelNb,                /* Not a PF without requirements */
+        & minsel||maxsel^='' then do /* count real selections */
+          t=substr(selections,2) /* skip initial hex15 */
+          do sels=0 by 0 while t^=''
+             parse var t . d '15'x t
+             if d^='_' then sels=sels+1
+          end
+       end
+/* If some day we support extra field styles, use this
+???   'PIPE LITERAL FIELDS SELECTIONS|SPLIT',
+???       '|VARFETCH TOLOAD|>> SEL VARS A' */
+       select
+        when CheckSelNb & minsel^='' & sels<minsel then
+          emsg='You need to make at least' minsel 'selection(s).'
+        when CheckSelNb & maxsel^='' & sels>maxsel then
+          emsg='You may not make more than' maxsel 'selection(s).'
+        When SepX15 then return pfk substr(selections,2)
+        otherwise return pfk translate(selections,,'15'x)
+       end
+    end
+    when ^LikeInitx & pfk=0 & selLin^='' then
+         return pfk space(selLin CursorFldNb) /* ETK & selected*/
+    when pfk=0 then /* ETK alone */
+         if ^LikeInitx then emsg='Please place cursor on valid line.'
+    when find(pfk_nosel,pfk)^=0 then return pfk selections
+    when find(pfk_sel,pfk)^=0 then do
+      if selLin='' then
+         emsg='The PF'pfk' function needs a cursor selection.'
+      else return pfk space(selLin CursorFldNb)     /*exec handles PF*/
+    end
+    /*-------------------------------------------------------------*/
+    /* Backward scroll                                             */
+    /*-------------------------------------------------------------*/
+    when find(pfk_b,pfk)^=0 then do  /* Backward scroll */
+      parse value 0 1 first with Scr2Cur scrolled ofirst,
+            . '' errmsg emsg msg /* to Hide error screen after scroll */
+ 
+      if CursorWhere='DATA' then /* Cursor in data line  ? */
+         if CursorLin>first then Scr2cur=1 /* And not in first line ? */
+ 
+      select
+       when Scr2cur=1 ,                 /* Scroll to cursor */
+        & last=NbScrSel then do         /* last data on screen  */
+         if NbScrSel<=datalines then diff='' /* More data than screen ?*/
+         else diff= datalines-(cursorLin-first)-1
+       end
+       when Scr2cur=1 then    /* Scroll to cursor */
+         diff= min(first-1,last-CursorLin)
+       when first-datalines<=0 then /* W'd scroll beyond tof */
+         diff=''
+       otherwise
+         diff=min(datalines,first)-1
+      end /* Select */
+      if diff='' then do
+         'WINDOW TOP 'vscreen
+         parse value 1     min(NbScrSel,datalines),
+               with  first last
+      end; else do
+         parse value first-diff min(NbScrSel,first-diff+datalines-1),
+               with  first      last
+         'WINDOW UP' vscreen diff
+      end
+      if ofirst^=first then call showpos
+                       else 'VSCREEN ALARM' vscreen
+      /* 'VSCREEN WRITE 'vscreen '1 2 70 (RES DATA',
+          'first=' first ';Last='last ';sel='sel ';diff=' diff */
+    end
+    /*-------------------------------------------------------------*/
+    /* Forward scroll                                              */
+    /*-------------------------------------------------------------*/
+    when find(pfk_f,pfk)^=0 then do
+      parse value 0 1 first with Scr2Cur scrolled ofirst ,
+            . '' errmsg emsg msg /* to Hide error screen after scroll */
+ 
+      if CursorWhere='DATA' then /* Cursor in data line  ? */
+         if CursorLin>first then Scr2cur=1 /* And not in first line ? */
+ 
+      select
+       when Scr2cur=1 & NbScrSel>datalines then  /* Scroll to cursor */
+         diff= CursorLin-first
+       when last+datalines>NbScrSel then /* W'd scroll beyond eof */
+         diff=NbScrSel-last
+       otherwise
+         diff=datalines-1
+      end
+      parse value first+diff min(NbScrSel,last+diff),
+            with  first      last
+      /* 'VSCREEN WRITE 'vscreen '1 2 70 (RES DATA',
+          'first=' first ';Last='last ';sel='sel ';diff=' diff */
+ 
+      if last>=NbScrSel then if LikeInitx then do;
+         allseen=1; 'GLOBALV SELECT' vscreen 'SET ALLSEEN 1';end
+      'WINDOW NEXT 'vscreen diff
+      if ofirst^=first then call showpos
+                       else 'VSCREEN ALARM' vscreen
+    end
+    /* Our caller isn't handling the key, give a msg */
+    when pfk=99 then nop /*CLEAR */
+    Otherwise
+      emsg=tkey 'is not active now'
+    end
+    if scrolled then 'VSCREEN CURSOR 'vscreen first 2+Offset '(DATA'
+    else nop /* leave cursor */
+ end /* Do Forever "WAITREAD VSCREEN" */
+ 
+/*-----------------------------------------------------------------*/
+GetScreenData: /* Get the modified fields                          */
+/*-----------------------------------------------------------------*/
+/* Format of variable "selections"
+      coded a bit in REXX notation (but <...> denotes an optional part )
+     '15'x||linenbr selchar <fieldstuff>'15'x||line..
+         "fieldstuff" is optional, holds data of extra fields; format:
+                  '14'x||datafld1<||'14'x||datafld2> ...
+      For an InitFld panel "selchar" doesn't exist
+   Format of variable "field"   Example
+     ,1,2 15 9›U! 37 30›U!,3,4 19 25,5 19 25,6 19 25›U!,7...
+     Line 2 has two fields: one: col 15, lnk 9; two: col 37 lnk 30
+                            both fields have style "uppercase"
+*/
+ if style='INITF' then selcol=-1; else selcol=Offset+1
+/*say 'StartGetData:' translate(selections,'Ù@','1415'x) */
+ do i=3 to waitread.0
+    parse var waitread.i t l# c d
+    LinTyp=word('RES',(t='DATA')+1)
+    Select /* Maybe we have SEL fields in RESERVED lines too */
+     when t='DATA' then l=l#+FirstScr-1
+     when l#>0 then     l=l#-TopRes#         /* RESERVED TOP */
+     Otherwise          l=l#-botres#+LastScr /* RESERVED Bot */
+    end
+    t='15'x||l' ' /* Start of data for this line */
+    parse value '1515'x||selections with 2 sel1 (t) sel2 '15'x +0 sel3
+    /* Get the fields of this screen line that might have data already */
+    parse var sel2 selx '14'x +0 fldsData
+ 
+    if c=selcol then do /* An entry in selection column */
+       if d='' then d='_'
+       selections=sel1 || '15'x||l d || FldsData ||sel3
+       If LikeInitX then
+          'VSCREEN WRITE 'vscreen l# c+1 1'('LinTyp 'DATA' d
+    end
+    else do /* An entry in an extra field */
+       t=','l' '       /* Get know field cols for the line */
+       parse var fields (t) fldcols ','
+       if wordpos(c,fldcols)=0 then do
+          Say myname': Problem: field for "'d'" in col' c 'unknown'
+          iterate i
+       end
+       fld.='' ; newFldsData=''
+       do while FldCols<>''
+          parse var FldCols col ln FldCols
+          parse var ln ln '›' styles '!'
+          parse var FldsData 2 t '14'x +0 FldsData
+          if col<>c then NewFldsData=NewFldsData||'14'x||t /* old data*/
+          else do /* This is the field just changed by the user */
+             if pos('U',styles)>0 then upper d
+             NewFldsData=NewFldsData||'14'x||d
+             if d=='' then d=' '
+             if LikeInitX then
+                'VSCREEN WRITE 'vscreen l# c+1 ln '('LinTyp 'DATA' d
+          end
+       end
+       selections=sel1 || '15'x||l selx || NewFldsData ||sel3
+    end
+ end i
+ selections='15'x || strip(selections,'L','15'x)
+/*say 'EndGetData:' translate(selections,'Ù@','1415'x)*/
+return
+/*-----------------------------------------------------------------*/
+UpdatePanel: /* Update field on the panel as requested by our caller*/
+/*-----------------------------------------------------------------*/
+ Procedure expose LikeInitX FirstScr LastScr TopRes# BotRes# TopSel,
+                  vscreen offset selections Fields InitF
+ 
+ parse arg rest
+ if rest<>'' & ^LikeInitX then do
+   say '"UPDSELFLD" requests are only valid for INITX/INITC/INITF panels'
+   return
+ end
+/*say 'StartUpdPanl:' translate(selections,'Ù@','1415'x)*/
+/*say '   Merge:    ' translate(rest      ,'Ù@','1415'x)*/
+ if fields='' then rest=translate(rest,'15'x,';') /*Xlate separ in "nl"*/
+ Do while rest<> ''
+    parse var rest i fld d '15'x rest
+    if i='' then iterate /* Empty */
+    LinTyp=word('RES',(i>=FirstScr & i<=LastScr)+1)
+    If i<FirstScr then      l#=TopRes#+i
+     else if i>LastScr then l#=BotRes#+(i-LastScr)
+      else                  l#=i-TopSel
+ 
+    /* In which screen col is the field to update ? */
+    if ^InitF & fld=1 then do /* Panel with selection char in col1 */
+       col=1+OffSet;lng=1; if d='' then d='_'
+    end; else do /* a real field */
+       if ^datatype(fld,'W') then fld#=999;else /* Avoid Pgm Check */
+       if IniTf then fld#=Fld   /* Var "fields" doesn't define the fld */
+                else fld#=Fld-1 /*   used as "selection" char in col 1 */
+       t=','i' '                 /* Get know field cols for the line */
+       parse var fields (t) fldcols ','
+       col=word(fldcols,(fld#-1)*2+1)
+       parse value word(fldcols,(fld#-1)*2+2) with lng '›'
+    end
+    /* Update vscreen and our "selection" (result) string */
+    if col='' then  say 'Field nbr' fld 'on line' i 'not fnd'
+    else do
+       t='15'x||i' '
+       parse value '15'x||selections,
+             with before (t) in '15'x +0 after '' data
+       do f=1 to fld-(^InitF)  ; parse var in dd '14'x in
+                        data=data||dd||'14'x;end
+       parse var in dd '14'x in
+       selections=strip(before||after||t ||data||d ||'14'x||in,'T','14'x)
+       selections='15'x||strip(selections,'L','15'x)
+       'VSCREEN WRITE 'vscreen l# col lng '('LinTyp 'DATA' left(d,lng)
+    end
+ end
+/*say 'EndUpdPanl:' translate(selections,'Ù@','1415'x)*/
+return
+ 
+/*******************************************************************/
+TERMINATE: /*  delete windows                                      */
+/*******************************************************************/
+ call GLOBALV 'GET'
+ cmstype=cmsflag('CMSTYPE')
+ /* do not allow CMS to write output queued in our Vscreen */
+ if cmstype then 'SET CMSTYPE HT'
+    'VSCREEN DELETE 'vscreen
+    'WINDOW DELETE  'vscreen
+    if err.vscreen^='' then do
+       'VSCREEN DELETE' err.vscreen; 'WINDOW DELETE' err.vscreen
+    end
+    'CONWAIT'  /* Wait until CMS output buffer emptied */
+    if execload=1 then 'EXECDROP' myname mytype
+ if cmstype then 'SET CMSTYPE RT'
+ call GLOBALV 'PURGE'
+ return ''
+SHOWPOS: /* SHOW POSITION IN VSCREEN */
+ if words(lpos)=3 then
+    'VSCREEN WRITE 'vscreen lpos '(RES DATA' right(first,word(lpos,3))
+return
+/*******************************************************************/
+ERR_SCREEN: /*  show or hide Error Vscreen                         */
+/*******************************************************************/
+ Select
+ when errmsg^='' then do /* Modern variant: multiline & colored mssg */
+    parse var errmsg emsg.1 '15'x emsg.2 '15'x emsg.3 '' NoBeep
+    Emsg.0=(1+( (emsg.2<>'') + (emsg.3<>'') ) )
+    if left(emsg.1,8)='(NOBEEP)' then parse var emsg.1 noBeep ')' emsg.1
+    if err.vscreen='' then do
+       err.vscreen='$'left(vscreen,7)
+       'GLOBALV SELECT' vscreen 'PUT ERR.'vscreen
+       'VSCREEN DELETE' err.vscreen; 'WINDOW DELETE' err.vscreen
+       'VSCREEN DEFINE' err.vscreen '3 80 0 0 (WHITE BLINK NOPROT'
+       'WINDOW DEF' err.vscreen '3 80 -1 1(VAR NOBORD NOPOP NOTOP'
+       'WINDOW SHOW' err.vscreen 'ON' err.vscreen
+    end
+    'VSCREEN CLEAR' err.vscreen
+    if NoBeep='' then 'VSCREEN ALARM' err.vscreen
+    Write='CMDCALL VSCREEN WRITE' Err.vscreen
+    do l#=1 to emsg.0
+       if left(emsg.l#,1)='(' then do
+          parse var emsg.l# '('opts')' em
+          parse var opts color ',' cString ','hString
+       end
+       else parse var emsg.l# em '' color cString hString
+ 
+       WRITE l# '1 80 (' color 'FIELD' left(em,79)
+       if cString<>'' then Call ColorString cString,l# 1 79,,'DATA'
+       if hString<>'' then Call ExtHiString hString,l# 1 79,,'DATA'
+    end l#
+    'WINDOW SHOW' err.vscreen
+ end
+ when emsg^='' | msg^='' then do
+    if err.vscreen='' then do
+       err.vscreen='$'left(vscreen,7)
+       'GLOBALV SELECT' vscreen 'PUT ERR.'vscreen
+       'VSCREEN DELETE' err.vscreen; 'WINDOW DELETE' err.vscreen
+       'VSCREEN DEFINE' err.vscreen '3 80 0 0 (WHITE BLINK NOPROT'
+       'WINDOW  DEFINE' err.vscreen '3 80 -1 1(VAR NOBORD NOPOP NOTOP'
+       'WINDOW SHOW' err.vscreen 'ON' err.vscreen
+    end
+     'VSCREEN CLEAR' err.vscreen
+    if emsg^='' then 'VSCREEN ALARM' err.vscreen
+    if emsg^='' then 'VSCREEN WRITE' err.vscreen '1 1 80 (FIELD ' emsg
+                else 'VSCREEN WRITE' err.vscreen '1 1 80 (FIELD ' msg
+    'WINDOW SHOW' err.vscreen
+ end
+ Otherwise if err.vscreen^='' then 'WINDOW HIDE 'err.vscreen
+ end
+return
+GLOBALV: /* get or put some of our vars */
+ vars= 'FIRST LAST CURSLINE ERR.'vscreen ,
+       'DATALINES SEL LPOS PANELTYPE ALLSEEN SELECTIONS.0 EXECLOAD',
+       'FIELDS.0 TABFIELDS.0 STYLE CURSOR SCROLLPOS SCRCOUNTERS'
+ Select
+  when Arg(1)='PUT' then do /* Called when panel is built/aftr DISPLAY */
+    if arg(2)<>'' then parse arg , vars /* Called after DISPLAY of panl*/
+    ToEat=Selections
+    do xxi=1 while toEat<>''
+     parse var toEat selections.xxi 256 ToEat; vars=vars 'SELECTIONS.'xxi
+    end
+    Selections.0=xxi-1
+    ToEat=TabFields
+    do xxi=1 while toEat<>''
+       parse var toEat TabFields.xxi 256 ToEat; vars=vars 'TABFIELDS.'xxi
+    end
+    Tabfields.0=xxi-1
+    ToEat=Fields
+    do xxi=1 while toEat<>''
+       parse var toEat Fields.xxi 256 ToEat; vars=vars 'FIELDS.'xxi
+    end
+    fields.0=xxi-1
+    'GLOBALV SELECT' vscreen 'PUT' vars
+    if rc<>0 then do ; src=rc
+      'PIPE VAR VARS|SPLIT|VARFETCH toLoad|LOCATE FS / Substr 256 of F3',
+          '|SPEC Fs / /Variable/ 1 F2 nw /is too long for GLV/ NW|cons'
+       call ErrExit src,'Unexpected GLOBALV rc:' src'.'
+    end
+  end
+  when Arg(1)='GET' then do
+    'GLOBALV SELECT' vscreen 'GET' vars
+    parse value with TabFields fields selections
+    if datatype(Selections.0,'W') then
+    do xxi=1 to Selections.0
+       'GLOBALV SELECT' vscreen 'GET SELECTIONS.'xxi
+       Selections=Selections || Selections.xxi
+    end
+    if datatype(TabFields.0,'W') then
+    do xxi=1 to TabFields.0
+       'GLOBALV SELECT' vscreen 'GET TABFIELDS.'xxi
+       tabFields=Tabfields || TabFields.xxi
+    end
+    if datatype(Fields.0,'W') then
+    do xxi=1 to Fields.0
+       'GLOBALV SELECT' vscreen 'GET FIELDS.'xxi
+       Fields=fields || Fields.xxi
+    end
+  end
+  otherwise /* This is a PURGE */
+     'GLOBALV SELECT' vscreen 'GET TABFIELDS.0 FIELDS.0 SELECTIONS.0'
+     if datatype(Selections.0,'W') then
+     do xxi=1 to Selections.0
+        'GLOBALV SELECT' vscreen 'SET SELECTIONS.'xxi
+     end
+     if datatype(TabFields.0,'W') then
+     do xxi=1 to TabFields.0
+        'GLOBALV SELECT' vscreen 'SET TABFIELDS.'xxi
+     end
+     if datatype(Fields.0,'W') then
+     do xxi=1 to Fields.0
+        'GLOBALV SELECT' vscreen 'SET FIELDS.'xxi
+     end
+     do g#g=1 to words(vars)
+        'GLOBALV SELECT' vscreen 'SET' word(vars,g#g)
+     end
+ end
+return
+ 
+IS_A_STEM: /* check if "arg(1)" is a valid REXX stem & get vars */
+ parse arg inputstem
+ 'PIPE (name SELFS nomsg 15) STEM' inputstem '1|STEM INPUT.'
+ if rc<>0 then do
+    src=rc
+    'PIPE REXXvars 1|Take 1',
+       '|Specs /Error in:/ 1  Word 3.3 nw',
+       '|CONSOLE'
+    exit src
+ end
+return 1 /* was ok */

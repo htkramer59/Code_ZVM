@@ -1,0 +1,26 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+              XCOL COLumn Edit Macro For Xedit
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL DEMONSTR            Demonstration
+XEDIT COL (BRIEF        General Information
+COL GETSTART (ALL       Getting Started
+COL SCREEN (ALL         Screen Layout
+COL PFKEY (BRIEF        PF Key Settings
+XEDIT COL (FORMAT       Command Summary
+XEDIT COL (REL          Detailed Command Information
+COL PREFIX (BRIEF       Prefix Command Information
+COL MATHCMDS (BRIEF     Mathematical or Logical Operations
+COL APPLYXED (REL       Applying XEDIT Commands
+COL APPLYPIP            Applying PIPELINE Commands
+COL PROFILE (ALL        COL Profile (optional)
+XEDIT COL (DESCR NOTES  Macro and Usage Notes

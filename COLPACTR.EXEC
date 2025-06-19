@@ -1,0 +1,34 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1991                  */
+/*--------------------------------------------------------------*/
+/* EXEC to compact COL: uses XEDIT profile COLPACTR XEDIT       */
+/*--------------------------------------------------------------*/
+trace 'o'
+say 'Enter file mode of disk where COL XEDIT is stored.'
+pull fm
+if fm = '' then
+do
+   Say 'File mode is blank. Exiting'
+   exit
+end
+v = '1.17'
+copywrite = 'Program Name - XEDIT Column Editing/VM; '||,
+            'Licensed Material - Program Property of IBM '||,
+            'Copyright (c)IBM Corp 1991'
+'COPY COL XEDIT' fm 'COL XEDIT'||Substr(v,1,1)||Substr(v,3,2) '='
+'COPY COL XEDIT ' fm 'COLXXXXX XEDIT' fm '(REPLACE'
+'XEDIT COLXXXXX XEDIT' fm '(PROF COLPACTR'
+Say 'Variable compaction complete, starting oneline'
+'COPY COLXXXXX XEDIT ' fm 'COL XEDPACK' fm '(REPLACE'
+'ONELINE COLXXXXX XEDIT' fm  'COLXXXXX ONELINE' fm
+'ERASE COLXXXXX XEDIT' fm
+'COPY COLXXXXX ONELINE ' fm 'COL XEDIT' fm '(REPLACE'
+'ERASE COLXXXXX ONELINE' fm
+Queue 'SET CASE M'
+Queue 'LOCATE :1 CLOCATE :4'
+Queue 'CREPLACE COL XEDIT V'||v||'/'copywrite||'*/'
+Queue 'FILE'
+'XEDIT COL XEDIT' fm '(NOPROF'

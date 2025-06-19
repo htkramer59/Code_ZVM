@@ -1,0 +1,109 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This exec will perform the Page Rate test on a z/VM system and
+    report the results back to the Xymon network monitor.
+ 
+    Rich Smrcina 01/28/2k+1  Original V1.0
+    Rich Smrcina 12/30/03    Revised  V1.1
+        change for new HOBVARS format
+    Rich Smrcina 06/10/05    Revised  V1.2
+        Added disk test to check SFS filepool usage
+    Rich Smrcina 02/10/09
+        Changed project name to Xymon
+                                                                      */
+arg test         /*  Test name passed from driver exec.  */
+cr='15'x         /*  Carriage return  */
+emsgstart=date('U') time() 'HOBVMPRT:'  /* Start of error message line */
+'globalv stack BBDISPLAY BBPORT FQDN'
+pull bbdisplay
+pull bbport
+pull fqdn
+if fqdn='Y' then do
+  'globalv get fullname'
+  machine=fullname
+  end
+else do
+  'globalv get hostname'
+  machine=hostname
+  end
+call init_open_socket      /*  Initialize and Open the socket  */
+call get_cplevel           /*  Get the CP Level for display    */
+call do_the_test           /*  Execute the test                */
+call send status           /*  Send the result in status to bb */
+call close_term_socket     /*  Close and terminate the socket  */
+exit
+ 
+do_the_test:
+'globalv stack PAGING'
+pull paging
+parse var paging yellow red
+'execio * CP (stem' CPRESP. 'string IND'
+if left(cpresp.3,3)='MDC' then
+  resp_line=cpresp.4
+else
+  resp_line=cpresp.3
+parse var resp_line . 'PAGING-' page_rate'/SEC' .
+select
+  when page_rate>red  then color='red'
+  when page_rate>yellow & page_rate<red then color='yellow'
+  otherwise color='green'
+  end
+status='status 'machine'.paging' color date() ,
+        time() 'Paging ' page_rate cr 'paging :' page_rate ,
+        cr cplevel.1 cr resp_line
+return
+ 
+init_open_socket:
+ret=Socket('Initialize','SOCVMPRT')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Initialize rc=' ret
+ret=Socket('Socket')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Socket rc=' ret
+parse var ret rc sid .
+ret=Socket('Setsockopt',sid,'SOL_SOCKET','SO_ASCII','On')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Setsockopt rc=' ret
+name='AF_INET' bbport bbdisplay
+ret=Socket('Connect',sid,name)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Connect rc=' ret
+return
+ 
+close_term_socket:
+ret=Socket('Close',sid)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Close rc=' ret
+ret=Socket('Terminate')
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Terminate rc=' ret
+return
+ 
+send:
+parse arg out_data
+ret=Socket('Send',sid,out_data)
+parse var ret rc .
+if rc<>0 then
+  say emsgstart 'Send rc=' ret
+return
+ 
+get_cplevel:
+'execio * CP (stem' CPLEVEL. 'string Q CPLEVEL'
+return

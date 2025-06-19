@@ -1,0 +1,218 @@
+/*---------------------------------------------------------------+
+| Function : Check vswitches                                     |
+|                                                                |
+| File     : QSVSWITC EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSVSWITC REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSVSWITC <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSVSWITC REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSVSWITC.EXEC:40 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+ 
+'PIPE (NAME QSVSWITC.EXEC:52 END ?)',
+    'literal 'TimeStamp(),                       /* Add ts           */
+    '| append var vswitch_header 1',             /* Add header       */
+    '| join * x40',                              /* Make 1 record    */
+    '| var vswitch_header'                       /* Hand 2 rexx      */
+'PIPE (NAME QSVSWITC.EXEC:57 END ?)',
+   'cp QUERY VSWITCH ALL',                       /* Issue query      */
+   '| strip',                                    /* Remove spaces    */
+   '| join * x40',                               /* Make 1 record    */
+   '| split before string ~VSWITCH~',            /* Split here       */
+   '| specs w3.1',                               /* Keep this        */
+   '| pick 1.7 \== ~XCATVSW~ and',               /* Make a selection */
+          '1.8 \== ~DTCSMAPI~ and',              /* .                */
+          '1.4 \== ~IVLA~ and',                  /* .                */
+          '1.4 \== ~IVLB~ and',                  /* .                */
+          '1.4 \== ~IVLC~ and',                  /* .                */
+          '1.4 \== ~IVLD~ and',                  /* .                */
+          '1.4 \== ~IVLE~ and',                  /* .                */
+          '1.4 \== ~IVLF~',                      /* .                */
+   '| stem vswitch.'                             /* Store as         */
+Call Check_Ports
+Call Check_Errors
+'PIPE (NAME QSVSWITC.EXEC:74 END ?)',
+   'stem work.',                                 /* Take these       */
+   '| preface var vswitch_header',               /* Add header       */
+   '| preface literal ',                         /* Add 2 empties    */
+   '| preface literal ',                         /* .                */
+   output                                        /* Hand back        */
+Exit
+ 
+ 
+Check_Errors:
+/*---------------------------------------------------------------+
+| Check for errors on any part of the switches                   |
++---------------------------------------------------------------*/
+hdr='                                   Received                              Sent                             Received   Sent;'||,
+    'Userid   Ports    Name       Type  Packets         Discarded  Errors     Packets    Discarded  Errors     Mbs        Mbs'
+temp.0=0
+Do v=1 To vswitch.0
+   'PIPE (NAME QSVSWITC.EXEC:91 END ?)',
+      'cp QUERY VSWITCH 'vswitch.v' DETAILS',    /* Do query         */
+      '| pick anycase w1.2 == ~ADAPTER OWNER:~ ',   /* Filter these     */
+                  'or w1.2 == ~UPLINK PORT~ ',   /* .                */
+                  'or w1.1 == ~RX~',             /* .                */
+                  'or w1.1 == ~TX~',             /* .                */
+      '| strip',                                 /* Remove spaces    */
+      '| join * x40',                            /* Make 1 record    */
+      '| split anycase before string ~ADAPTER~', /* Split here       */
+      '| change anycase ~ADAPTER OWNER:~~',      /* Remove some      */
+      '| change anycase ~NIC:~~',                /* ....text or      */
+      '| change anycase ~NAME:~~',               /* .....replace it  */
+      '| change anycase ~TYPE:~~',               /* .                */
+      '| change anycase ~RX PACKETS:~~',         /* .                */
+      '| change anycase ~DISCARDED:~~',          /* .                */
+      '| change anycase ~TX PACKETS:~~',         /* .                */
+      '| change anycase ~ERRORS:~~',             /* .                */
+      '| change anycase ~RX BYTES:~~',           /* .                */
+      '| change anycase ~TX BYTES:~~',           /* .                */
+      '| change anycase ~UPLINK PORT CONNECTION:~Uplink port  _ _~',
+      '| strip',                                 /* Remove spaces    */
+      '| if1: if pick w12.1 \== ~~',             /* If not empty     */
+      '|     siconv w11.1 b2m 8.0',              /* Convert bytes    */
+      '|     siconv w12.1 b2m 8.0',              /* ...to mbytes     */
+      '| if1:',                                  /* Conn 2 if        */
+      '| specs w1.1 1.8',                        /* Improve layout   */
+              'w2.1 nw.8',                       /* .                */
+              'w3.1 nw.10',                      /* .                */
+              'w4.1 nw.10',                      /* .                */
+              'w5.1 nw.10 right',                /* .                */
+              'w6.1 nw.10 right',                /* .                */
+              'w7.1 nw.10 right',                /* .                */
+              'w8.1 nw.10 right',                /* .                */
+              'w9.1 nw.10 right',                /* .                */
+              'w10.1 nw.10 right',               /* .                */
+              'w11.1 nw.10 right',               /* .                */
+              'w12.1 nw.10 right',               /* .                */
+      '| sort w1.2',                             /* Sort..           */
+      '| if2: if pick w7.1 \== ~0~ and w7.1 \== ~~',   /* If this is not 0 */
+      '|    specs 1;* 1 ~<< Check Receive errors~ nw', /* ..we have errors */
+      '| if2:',                                        /* Conn 2 if        */
+      '| if3: if pick w10.1 \== ~0~ and w10.1 \== ~~', /* If this is not 0 */
+      '|    specs 1;* 1 ~<< Check Send errors~ nw',    /* ...we got errors */
+      '| if3:',                                        /* Conn 2 if        */
+      '| p: pick anycase w1.1 \== ~UPLINK~',     /* Select these     */
+      '| buffer',                                /* Prevent loop     */
+      '| fi: faninany',                          /* Take in others   */
+      '| preface var hdr',                       /* Add header       */
+      '| split at ;',                            /* Split here       */
+      '| stem temp. append',                     /* Add 2 stem       */
+      '? p:',                                    /* Conn 2 pick      */
+      '| fi:'                                    /* Conn 2 faninany  */
+  Call Add2Output 'temp.'
+End v
+Return
+ 
+ 
+Check_Ports:
+/*---------------------------------------------------------------+
+| Check if there at least 2 ports used                           |
++---------------------------------------------------------------*/
+port.0=0
+Do v=1 To vswitch.0
+   'PIPE (NAME QSVSWITC.EXEC:154 END ?)',
+     'cp QUERY VSWITCH 'vswitch.v' PORT',                 /* Do query         */
+     '| t: totarget pick anycase w1.2 == ~UPLINK PORT:~', /* Take upto here   */
+     '| f: fromtarget pick anycase w1.1 == ~PORTS:~',     /* Take from here   */
+     '| drop first 1',                           /* Remove header    */
+     '| specs w5.1 1.8 w-1;-1 nw w1.1 nw',       /* Rework records   */
+     '| sort w1.1',                              /* Sort on switch   */
+     '| join keylen 13',                         /* Joim them        */
+     '| if: if pick w4.1 == ~~',                 /* If this...       */
+     '|     specs 1;* 1.30 ~Check if you can add NICDEFs as backup~ nw',
+     '| if:',                                    /* Conn 2 if        */
+     '| stem port.',                             /* Store as         */
+     '| specs w1.1',                             /* Keep this        */
+     '| stem temp.',                             /* Store as         */
+     '? t:',                                     /* Conn 2 totarget  */
+     '| join * x40',                             /* Make 1 record    */
+     '| split anycase before string ~RDEV:~',    /* Split here       */
+     '| drop first 1',                           /* Remove 1         */
+     '| stem rdev.',                             /* Store as         */
+     '| count lines',                            /* How many         */
+     '| var rdevcnt'                             /* Store as         */
+   'PIPE (NAME QSVSWITC.EXEC:175 END ?)',
+     'stem temp.',                               /* Take these       */
+     '| specs w1.1 1.9',                         /* keep this        */
+     '| f: fanout',                              /* Duplicate records*/
+     '| j: juxtapose',                           /* Join them        */
+     '| pick w2.1 == ~HCPQMD053E~',              /* Select these     */
+     '| specs w1.1 1.8 ~9999~ nw w2;* 26',       /* Add marker       */
+     '| append stem port.',                      /* Add 2 stem       */
+     '| buffer',                                 /* Prevent loop     */
+     '| sort 1.13',                              /* Sort             */
+     '| join keylen 8',                          /* Joim them        */
+     '| change ~9999~    ~',                     /* Replace this     */
+     '| stem port.',                             /* Store as         */
+     '? f:',                                     /* Conn 2 fanout    */
+     '| specs ~QUERY MDISK USER~ 1 w1.1 nw ~0 DIR~ nw',   /* Compose cmd      */
+     '| cp',                                     /* Hand 2 cp        */
+     '| j:'                                      /* Conn 2 juxtapose */
+   If rdevcnt=1 Then recomm='Add more rdevs'
+                Else recomm=''
+   Call Add2Output vswitch.v
+   Call Add2Output 'port.,Userid   VLAN Ports            Remarks/Recommendations'
+   Call Add2Output 'rdev.'
+   Call Add2Output 'recomm'
+End v
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSVSWITC.EXEC:213 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| preface literal ',                       /* Add header       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

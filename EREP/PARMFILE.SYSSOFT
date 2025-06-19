@@ -1,0 +1,6 @@
+PRINT=SU                                                                        
+TYPE=SIE                                                                        
+HIST                                                                            
+ACC=N                                                                           
+ZERO=N                                                                          
+ENDPARM                                                                         

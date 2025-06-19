@@ -1,0 +1,146 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*----------------------------------------------------------------------/
+/-  This exec will create a Xymon client-data section                  -/
+/-  for file status checking by the Xymon server.                      -/
+/-                                                                     -/
+/-  Thomas Kern - 20061106 - initial version                           -/
+/-                20061109 - switch to single invocation to process    -/
+/-                           all files in config.                      -/
+/-  Rich Smrcina- 20090210 - Changed project name to Xymon.            -/
+/----------------------------------------------------------------------*/
+arg argstring
+badrc = 0
+lb = 'AD'x; rb = 'BD'x;
+outfile = 'HOBVM700 CLIENT A'
+write = 'EXECIO 1 DISKW' outfile '( STRING'
+'ERASE' outfile
+do i = 1 to value('FILE.0',,'GLOBAL')
+argstring = value('FILE.'||i,,'GLOBAL')
+if substr(argstring,1,6)='MDISK:' then do /* user minidisk file */
+   parse value argstring with . ':' tuser '.' taddr ofn oft .
+   'EXEC VMLINK' tuser taddr '<5FF Z> ( QUIET PUSH'
+   if rc ^= 0 then do
+      badrc = rc
+     'EXEC VMLINK' tuser taddr '<5FF Z> ( QUIET POP'
+     exit badrc
+     end
+/* ofn, oft =    Original filename, filetype     */
+/* tfn, tft = Transformed filename, filetype     */
+   if pos(':',ofn) > 0 then
+     tfn=datefmt(translate(ofn,'%',':'))
+   else
+     tfn=ofn
+   if pos(':',oft) > 0 then
+     tft=datefmt(translate(oft,'%',':'))
+   else
+     tft=oft
+   file_id = lb||'file:/'||tuser||'/'||right(taddr,4,'0')||'/' ,
+             ||ofn||'.'||oft||rb
+   'STATE' tfn tft 'Z'
+   if rc = 0 then do
+      'PIPE CMS LISTFILE' tfn tft 'Z ( ALLDATES ISODATE' ,
+        '| take last 1' ,
+        '| specs w7 1 write w8 1 write w7 1 write w8 1' ,
+        '| stem file_dt.'
+      'PIPE (endchar ?) <' tfn tft 'Z' ,
+        '| a: fanout' ,
+        '| rexx FILE_MD5' ,
+        '| var file_md5' ,
+        '?' ,
+        'a:' ,
+        '| count bytes' ,
+        '| var file_size'
+      'EXEC VMLINK' tuser taddr '<5FF Z> ( QUIET POP'
+      call output_file_status
+      end
+   else do
+      write file_id
+      write 'ERROR: No such file or directory'
+      'FINIS' outfile
+      end
+   end
+else do /* sfs file */
+   parse value argstring with sfsdir ofn oft .
+   'EXEC VMLINK .DIR' sfsdir '<5FF Z> ( QUIET PUSH'
+   if rc ^= 0 then do
+      badrc = rc
+     'EXEC VMLINK .DIR' sfsdir '<5FF Z> ( QUIET POP'
+     exit badrc
+     end
+   parse value sfsdir with filepool ':' rest
+   say 'before='ofn oft
+   if pos(':',ofn) > 0 then
+     tfn=datefmt(translate(ofn,'%',':'))
+   else
+     tfn=ofn
+   if pos(':',oft) > 0 then
+     tft=datefmt(translate(oft,'%',':'))
+   else
+     tft=oft
+   say 'after='tfn tft
+   file_id = lb||'file:/'||filepool||'/'||rest||'/' ,
+             ||ofn||'.'||oft||rb
+   'STATE' tfn tft 'Z'
+   if rc = 0 then do
+      'PIPE CMS LISTFILE' tfn tft 'Z ( ALLDATES ISODATE' ,
+        '| take last 1' ,
+        '| specs w7 1 write w8 1 write w4 1 write w5 1' ,
+        '| stem file_dt.'
+      'PIPE (endchar ?) <' tfn tft 'Z' ,
+        '| a: fanout' ,
+        '| rexx FILE_MD5' ,
+        '| var file_md5' ,
+        '?' ,
+        'a:' ,
+        '| count bytes' ,
+        '| var file_size'
+      'EXEC VMLINK .DIR' sfsdir '<5FF Z> ( QUIET POP'
+      call output_file_status
+      end
+   else do
+      write file_id
+      write 'ERROR: No such file or directory'
+      'FINIS' outfile
+      end
+   end
+end
+exit
+ 
+/*----------------------------------------------------------------------/
+/-    Write a file status section into HOBVM700 CLIENT A               -/
+/----------------------------------------------------------------------*/
+output_file_status:
+write file_id
+write 'type:100000 (file)'
+write 'mode:640 (-rw-r-----)'
+write 'linkcount:1'
+write 'owner:0 (root)'
+write 'group:3 (sys)'
+write 'size:' || file_size
+write 'clock:'||lnxts(DATE('S',,,'-'),time())
+write 'atime:'||lnxts(file_dt.1,file_dt.2)
+write 'ctime:'||lnxts(file_dt.3,file_dt.4)
+write 'mtime:'||lnxts(file_dt.1,file_dt.2)
+write 'md5:' || lower(c2x(file_md5))
+'FINIS' outfile
+return
+ 
+/*  Convert parameter to lower case.  */
+lower:
+arg string
+lc_chars='abcdefghijklmnopqrstuvwxyz'
+uc_chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+string=translate(string,lc_chars,uc_chars)
+return string

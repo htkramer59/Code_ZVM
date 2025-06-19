@@ -1,0 +1,68 @@
+/*---------------------------------------------------------------+
+| Function : Check if RSCS links are up, if not try a start      |
+|                                                                |
+| File     : RSCSLNKS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RSCS     EXEC                                       |
+|                                                                |
+| Called   : RSCSLNKS .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190814 07:00:51                                   |
+| Changes  : .                                                   |
+|            20220922 H.T.Kramer : Modified to cater for updated |
+|                          RSCS EXEC                             |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+If what='?' Then Do
+                 'VMFCLEAR'
+                 'PIPE (NAME RSCSLNKS.EXEC:25 END ?)',
+                      '< 'myfn myft' *',
+                      '| tolabel Parse',
+                      '| cons'
+                 Exit
+                 End
+'PIPE (NAME RSCSLNKS.EXEC:31 END ?)',
+   'cms EXECMAP RSCS REXX',               /* Ask CMS          */
+   '| drop first 1',                      /* Ignore header    */
+   '| count lines',                       /* Count findings   */
+   '| if: if pick 1.1 == ~1~',            /* Check this       */
+   '|     specs ~EXECDROP RSCS REXX~ 1',  /* Compose cmd      */
+   '|     cms',                           /* Issue cmd        */
+   '| if:',                               /* Comm 2 if        */
+   '| var exldd'                          /* Hand 2 rexx      */
+Address CMS 'EXECLOAD RSCS EXEC * = REXX'
+ 
+Say TimeStamp() 'Started'
+Say TimeStamp() 'Checking status of RSCS LINKS'
+'PIPE (NAME RSCSLNKS.EXEC:44 END ?)',
+   'rscs query system links',
+   '| cons',
+   '| pick anycase w3.1 == ~ACTIVE~ or',
+   '               w3.1 == ~INACTIVE~',
+   '| specs w2.1',
+   '| stem tostart.'
+If tostart.0<>0 Then Do
+         Say TimeStamp() 'Starting inactive/active links'
+         Do t=1 to tostart.0
+         'PIPE (NAME RSCSLNKS.EXEC:54 END ?)',
+             '| rscs start 'tostart.t ,
+             '| cons'
+         End t
+         End
+Address CMS 'EXECDROP RSCS REXX'
+Say TimeStamp() 'Ending'
+Exit
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp...                                          |
++---------------------------------------------------------------*/
+Return Date('S') Time() myfn

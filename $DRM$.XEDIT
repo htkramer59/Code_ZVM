@@ -1,0 +1,3603 @@
+/* This exec helps in directory maintenance
+ 
+    +-------------------------------------------------------------+
+    | format:  | should be called by DRM EXEC or                  |
+    |          |    via PF-keys or via PREFIX commands (see below)|
+    +-------------------------------------------------------------+
+ Prerequisites:  DRM EXEC , DIRMAP MODULE
+                 GETFMADR MODULE (for LNK prefix cmds)
+ Routines that could be tailored (at your own risk):
+      PARAMS:  PROFILE:   GAPPROFILE:
+    But you can use PROFDRM XEDIT to tailor PF-keys, etc
+    and DRM NAMES to parameters, defaults, etc
+ Functions to assign to PF-keys:
+    $DRM$ $SAVE$ ›D | DD! save directory ›and DIRMAP ›and DIRECT!!
+    $DRM$ $FILE$ ›D | DD! file directory ›and DIRMAP ›and DIRECT!!
+    $DRM$ $QUIT$          quit directory
+    $DRM$ $FIND$ ›PREV!   find a user top down ›or bottom-up!
+    $DRM$ $REFR$          save directory & refresh GAPFILE
+    $DRM$ $ALL$           See complete user for lines selected with ALL
+    $DRM$ $ALLU$          See USER cards for all lines selected with ALL
+    $DRM$ $MDMP$ XEDIT    Xedit the MDISKMAP
+    $DRM$ $MDMP$ CLEAN    "cleanup" MDISKMAP
+ Functions to be called via PREFIX command
+    DELET             delete a USER from directory
+    GET               find a GAP & prompt for selection
+    GETD              find a GAP noprompt (takes first fitting GAP)
+    GETL              find a GAP noprompt at lowest possible startcyl
+    GETH              find a GAP noprompt at highest possible startcyl
+    GETC              find a GAP noprompt near center disk
+    GETV              find a GAP on MDISK-VOLID (first GAP on VOLID)
+    GETV?             Prompt for gaps on MDISK-VOLID
+    GETM              get max available gap
+    GETMV             get max available gap on MDISK-VOLID
+    DIRME             To call DIRME for the user
+    FI                Prefix cmd for MDISKMAP (or LINKMAP) file
+                      to find MDISK (or LINK) in CP Directory
+                      In USER DIRECT, it tries to find mdisk in MDISKMAP.
+    LINK LNK LK       LINK a USER MDISK ( operands: xyz )
+                      operands may be specified in any order or omitted:
+                       "R|W" READ-only or READ/WRITE (default R)
+                       "A"   ACCESS after succesfull LINK
+                       "F"   Filelist after succesfull LINK ("A" implied)
+                       "D"   Detach after FILELIST ("AF" implied)
+     e.g.  "LK MD"    will  LINK ...  MR, ACCESS, FILELIST, DETACH
+    MDSK MD           Similar to LINK: issue DEFINE MDISK
+                      >>>>> can be dangerous                 <<<<
+                      >>>>> works as a MULTIPLE WRITE link   <<<<
+                      >>>>> issue HELP DEFINE MDISK fir info <<<<
+     e.g.  "MD FD"    will DEFINE MD..  ==> MW, ACCESS, FILELIST, DETACH
+    QLINK QLIN QLI QL to see who's linked to the indicated MDISK
+    QDSK              get details about the indicated MDISK (eg last R/W)
+    FRMT  FORMT FORMA to format the indicated MDISK
+    CMD,DMD,AMD,TMD   To prepare a DIRM xMD command for the mdisk
+    CHV,PURGE         To prepare a DIRM CHV or DIRM PURGE
+    CMP               Starts COMPMDSK for two Mdisks (enter two CMP cmds)
+    RL,LU             Issues a RAC RL or RAC LU command
+    RACF RAC RA       prepare RACF statements, cab be entered in MDISK or
+                      USER card.
+                      Operand 1: number of lines to scan for MDISK's
+                              (can be "*" to scan all cards of the
+                               "current" useris).
+                      The input comes from: RACFDRM SKELUSER or
+                      RACFDRM SKELMDSK
+(c) Copyright International Business Machines Corporation 1985, 1998.
+ 
+Version 2 : april 86   added new prefix commands, changed fn
+      Feb 1987: Find MDISK of a user (PF12)
+   30 Sep 1987: Corrected PF2 'finduser' bug (i.e. USER xxxUSER pswd)
+    7 Jan 1988: updated to support 9332 and 9335 dasd
+   23 Mar 1989: updated to allow find previous userid
+   29 Mar 1989: added LK options to LINK/ACCESS/FILELIST a mdisk
+   16 Oct 1989: updated: SET SERIAL OFF for directory
+   7  Feb 1990: postpone REMAP until realy needed (i.e. GET)
+   21 Feb 1990: Support RACF
+   28 Feb 1990: add PF23 (like PF11 but alloc MDISK at top part of gap
+V2.13  10 Apr 90 add QLink prefix command to perform a Q LINKS command
+V2.13.A 8 Jun 90 correct some vcuu in generated RACF command
+V2.14  13 May 91 use PF5/PF17 to cooperate with XEDIT's ALL macro
+V2.15  15 May 91 PF2 + cursor on INCLUDE statement=find PROFILE xxxx
+       17 Jul 91 updated check if R/O disk or not
+V2.16  24 Sep 91 better RACF interface thanks to RAC EXEC in RACF 1.9
+V2.17  13 Nov 91 check if having CP-class for dir-update
+V2.18  25 Nov 91 correct find a mdisk when mdiskpw contains "USER"
+V2.19  25 Nov 91 Use PSAVE iso SAVE
+V2.20  13 Jan 92 Support new GAPFILE format (since D/T9345)
+V2.20  14 Jan 92 Give better length of Mdisk sta & size numbers
+V2.21  24 Jan 92 Correct some cases where PF10|12 did not leave DRM
+V2.22  26 Feb 92 Added GETM & GETMV command
+V2.23  30 Mar 92 support for DIRMAINT R4 co-existance
+V2.24  31 Aug 92 Added FORMAT prefix command
+V2.25  30 Oct 92 RACF interface: remove leading 0 from 4 digit addresses
+       20 Jan 93 RACF interface: PF5=C /???????/SYSUSERS/
+        3 Feb 93 RACF interface: support AUTOLOG permits
+       17 May 93 Control cursor pos for LINK commands
+       22 Jul 93 PF2 (find user's MDISK) correct for 4 digits addresses
+       27 Sep 93 Avoid REXX error if ALL macro used in GAPFILE
+       29 Sep 93 New GETC/GETL/GETH commands
+       14 Mar 96 Recognize NEWMDISK as an MDISK card (for MVMDISKS XEDIT)
+        5 Jun 96 Recognize GAPFILE format created by VM/ESA V2
+V2.26  27 Nov 96 Add DIRME prefix command to call DIRME for that user
+       30 Jan 97 Allow blanks in disk label (DIRMAINT R5)
+       02 Mar 98 Case Mixed for VM/ESA V2
+V2.27  22 Jun 98 Add CMD; DMD and AMD prefix commands
+V3.00  17 Jul 98 Always prepare the FI prefix cmd (not only when OVLAP)
+       17 Jul 98 FREEMAP xedit interface, and lots small changes
+        8 Sep 98 Accept the LK prefix command also on LINK cards
+       15 Sep 98 Ignore blank lines in RACF commands file
+       29 Sep 98 Bug: do not rebuild the GAPfile for each GET request
+       30 Nov 99 for "LK D" command: if ACCESS fails, still detach disk
+V3.01  04 Jul 00 Improve FREEMAP: add FILELIST pf-key; allow DIRM CMD
+                 into smaller area; recognize change DIRM CMD -> DIRM DMD
+V3.02  07 Jul 00 If "user cuu" in FREEMAP cmdline & PF9= find that mdsk
+                 FREEMAP: if gap becomes 0, PF10 could show wrong pos
+       10 Oct 00 FREEMAP: when move with DIRM: place cursor on nb cyls
+        7 Feb 01 Format prefix command improved
+                 AMDISK: use PWS keyw only when linkmode found
+       19 Apr 01 Prep a DELETE of the automatic RACF PERMIT after RDEFINE
+ 
+Version 4:   DRMGUI Support
+ 
+13 Nov 2001: Freemap BugFix (3270 version)
+             Move of the second Mdisk in a gap below cyl 100 gave an
+             errormsg : No gap found .... starting at xxx
+31 Jan 2002: Better emsg if error occurs during refresh
+ 5 Feb 2002: Allow to use a "classic MDISKMAP" in DRMGUI
+ 6 Mar 2002: Tell DRMGUI about serious DIRMAP problems
+19 Jun 2002: Add MDSK prefix command: issues DEFINE MDISK
+24 Jun 2002: Correct how we convert a LINK WR into a RACF PERMIT
+13 Jun 2003: Don't wait if DIRM USER BACKUP gives rc<>0
+17 Nov 2004: Recognize 'V' and 'G' opers on CMD/AMD cmds to AUTOV/AUTOG
+27 Jan 2005: More prefix commands: TMD, CHV, PURGE, RL, LU
+ 8 Feb 2005: Add CMP prefix command
+27 May 2005: Fix FI prefix command entered in MDISKMAP
+30 May 2005: Start DIRM BATCH if many DIRMAINT commands entered
+             Allow CMD on LINK cards; allow a "nbr" on most DIRM cmds
+25 Jul 2005: Avoid NOVALUE abend in QLINK prefix command
+ 8 Aug 2005: Add KEEPLINKS on prepared CHV and TMD Dirmaint commands
+22 Aug 2006: Support new DIRMAP layout for GAPFILE & MDISKMAP in z/VM 5.1
+25 Aug 2006: Accept a number on FRMT commands to specify CMS blocksize
+26 Oct 2006: Add QDSK prefix command
+17 Nov 2006: PF11 in Mdiskmap (jump to previous volser) didn't work
+ 8 Feb 2007: DMD was not recognized in the checks to see if DRM BATCH
+             is required, hence when mutiple DMDs were entered, only
+             one was executed.
+19 Feb 2007: Reformat z/VM 5.1 MDISKMAP to old format for DRMGUI
+27 Jun 2008: Avoid Novalue in DRMGUI for volume with Fullpack-Mdsk only
+16 Feb 2009: PF10->PF12 no longer performed FILE but SAVE
+ 9 Oct 2009: PF10 (FILE) resulted in Novalue abend for variable DRC
+26 Jan 2010: Fix searching an MDISK with prefix FInd cmd in MDISKMAP
+24 Feb 2011: The FI prefix command now also works in LINKMAP
+24 Mar 2011: Improve QLINK response: now sorted by userid
+28 Mar 2011: Create GETM? prefix command
+24 Feb 2012: Also check dates of DIRMAP ctrl files to check 4 remap
+29 May 2012: Recognize 9336 as FB-512, avoid "not activated for" if
+             DRM was started with a filemode nbr included in the name
+ 6 Nov 2014: Accept an RA command also on AMDISK records
+ 7 Nov 2014: Fix REXX syntex error in Freemap
+24 Feb 2015: Gap size was not reported for gaps at end-of-disk
+15 Aug 2019: Avoid Rexx syntax err for some RACF and Dirmaint prefix cmds
+ 3 Sep 2019: For GET(x) commands: give better msg when GAPFILE has only
+             gaps of different disk type than requested on the MDISK-card
+29 Oct 2019: Xlate volser to upper when GET commands are executed
+             (avoid "no gap found" if volser is e.g. "VM7res")
+ 8 Nov 2019: Prefix command FI in LINKMAP did no longer work
+             Some error msg was sometimes not displayed, Instead:
+               3559 *-*     c 'SET MSGM ON'
+                +++ RC(-3) +++
+Written by:  Kris Buelens  IBM Belgium     85/10/01 */
+Signal on Novalue
+/* Next line is searched by DRMGUI EXEC */
+version=5.2
+ 
+c='COMMAND';ce='COMMAND EXTRACT'; cs='COMMAND SET'; not='5F'x /* ^sign*/
+parse source . . me me2 . cmd . 0 . . myName .; signat=me me2
+parse upper arg args 0 arg1 arg2  arg3 arg4 0 . . pline op1
+Gui=(arg1='$$GUI$$')
+if Gui then parse upper arg . args 0 . arg1 arg2  arg3 arg4
+ 
+/* Save stuff in an XEDIT synonym instead of in GLOBALV.  This way
+   we can have multiple copies of DRM running concurrently (for example
+   "DRM MYDIR1" and while still in DRM, enter "DRM MYDIR2" ) */
+ce '/SYNONYM $$-DRM-$/'         /* Are our values saved as a synonym ? */
+if synonym.3='$$-DRM-$' then do /* If no, get from GLOBALV and save    */
+   address '' 'GLOBALV SELECT $drm$ GET DIRMAPOPTS OUTFM FID MODES',
+                                  'DIRECTCM REMAP DIRECTOPTS REFRESHDIR'
+   Call SaveOptions 'ALL'  /* Save the values as an XEDIT synonym */
+end
+else
+   parse var synonym.3 DirmapOpts'/'outfm'/'fid'/'directcm'/',
+                         remap'/'directopts
+fn=word(fid,1)
+ 
+PARAMS:  /* define us some REXX variables */
+ gapfile =fn 'GAPFILE'  outfm   /* fileid of DIRMAP's GAPFILE file */
+ mdiskmap=fn 'MDISKMAP' outfm   /* fileid of DIRMAP's MDISKMAP file */
+ Linkmap =fn 'LINKMAP'  outfm   /* fileid of DIRMAP's LINKMAP file */
+ Freemap =fn 'FREEMAP'  outfm   /* fileid of our FREEMAP file */
+ delet='DELET'                  /*prefix cmd to delete a USER */
+ get  ='GET'                    /*prefix cmd to find a GAP & prompt */
+ getd ='GETD'                   /*prefix cmd to find a GAP noprompt */
+ getv ='GETV'                   /*prefix cmd to find a GAP on VOLID */
+ getl ='GETL'                   /*find a GAP as low on disk as possible*/
+ geth ='GETH'                   /*find a GAP as high on disk as possibl*/
+ getc ='GETC'                   /*find a GAP near Center */
+ getm ='GETM'                   /*prefix cmd to get MAX GAP */
+ getmv='GETMV GETVM'            /*prefix cmd to get MAX GAP on VOLID */
+ prf_gets=get getd getv getm getmv getl getc geth
+ lnk  ='LINK LNK LK',           /*prefix cmd to LINK a USER MDISK */
+       'MDSK MD'                /*prefix cmd to LINK a USER MDISK */
+ find ='FI'                     /*prefix cmd to find MDISK in cp DIR */
+ Qlink='QLINK QLIN QLI QL'      /*prefix cmd to issue Q LINKS */
+ Qdsk ='QDSK QD'                /*prefix cmd to issue QDSK */
+ format='FRMT FORMT FORMA'      /*PREFIX: to format the indicated MDISK*/
+ racf ='RACF RAC RA'            /*prefix cmd to preparse RACF command */
+ mdisk='MDISK'                  /*cmd to INSERT new MDISK card*/
+ dirme='DIRME DE'               /*prefix cmd to call DIRME */
+ minmd=2                        /*min abbrev for MDISK command */
+ amdisk='AMD'                   /*Prefix cmd to prepare DIRMAINT AMDISK*/
+ cmdisk='CMD'                   /*Prefix cmd to prepare DIRMAINT CMDISK*/
+ dmdisk='DMD'                   /*Prefix cmd to prepare DIRMAINT DMDISK*/
+ tmdisk='TMD'                   /*Prefix cmd to prepare DIRMAINT TMDISK*/
+ chvadr='CHV'                   /*Prefix cmd to prepare DIRMAINT CHV   */
+ purgeU='PURGE'                 /*Prefix cmd to prepare DIRMAINT PURGE */
+ AllDirmCmds= amdisk cmdisk dmdisk tmdisk chvadr purgeu
+ RacLU ='LU'                    /*Issue a RAC LISTUSER                 */
+ RacRL ='RL'                    /*Issue a RAC RLIST                    */
+ CMPMDK='CMP'                   /*Start COMPMDSK                       */
+ 
+if arg1='PREFIX' then GblCmd='PREFIX' pline cmd
+                 else GblCmd='CMDLIN' arg(1)
+if arg1='PREFIX' then select /* a call via PREFIX command */
+     when arg2<>'SET' then exit /* reset of prefix */
+     when find(find,cmd)>0      then signal PrfxFind  /*find Mdisk/LINK*/
+     when cmd=delet             then signal delete    /*delete user*/
+     when find(lnk,cmd)>0       then signal link      /*Link MDISK*/
+     when find(prf_gets,cmd)>0  then signal findspace /*new mdisk*/
+     when find(qlink,cmd)>0     then signal QLINKS    /*Query LINKS */
+     when find(qdsk,cmd)>0      then signal QDSK      /*Query DISK */
+     when find(CmpMdk,cmd)>0    then signal CompMdsk  /*EXEC COMPMDSK*/
+     when find(format,cmd)>0    then signal FORMATmdk /*FORMAT Mdisk */
+     when find(racf,cmd)>0      then signal RACF_PREF /*RACF prefix */
+     when find(Dirme racLU PurgeU,cmd)>0
+                                then signal DIRME  /*DIRME/LU/PURGE uid*/
+     when find(aMdisk cMdisk dMdisk tMdisk chvadr,cmd)>0
+                                then signal DIRM_MD   /*DIRM_MD prefix */
+     when find(racRL,cmd)>0     then signal RACF_RL   /*RACF Rlist */
+     otherwise c 'EMSG 'signat': invalid prefix command "'cmd'"'
+          exit 5
+     end /* PREFIX select */
+else select /* command of PFkey call */
+   when arg1= '$PROFI$' then signal profile   /* called by DRM EXEC*/
+   when arg1= '$PROFI$' then signal profile   /* called by DRM EXEC*/
+   when arg1= '$FMT$'   then signal formatscr /* internal call */
+   when arg1= '$SEL$'   then signal $SEL$     /* select a gap */
+   when arg1= '$END$'   then signal endget    /* do not select gap*/
+   when arg1= '$SAVE$'  then Call Save 'SAVE' /* save directory*/
+   when arg1= '$FILE$'  then Call Save 'FILE' /* file directory*/
+   when arg1= '$QUIT$'  then signal quit      /* quit directory*/
+   when arg1= '$FIND$'  then signal finduser  /* find a user*/
+   when arg1= '$REFR$'  then signal refr      /* refresh gapfile */
+   when arg1= '$RACF$'  then signal racf_EXEC /* prepare RACF commands*/
+   when arg1= '$ALL$'   then signal ALL_USER  /*all cards of this USER */
+   when arg1= '$ALLU$'  then signal ALL_USERS /*all USER cards */
+   when arg1= '$MDMP$'  then call MdiskMap arg2 arg3 arg4 /* MDISKMAP  */
+   when arg1= '$ENTER$' then call EnterKey arg2 arg3 arg4 /* MDKMAP/GAP*/
+   otherwise
+     if arg1='' then emsg=signat': I must be called by DRM or DRMAC'
+                else emsg=signat': Invalid parameters: "'args'"'
+     if Gui Then address '' 'PIPE Var Emsg|Var Emsg 1'
+            else c 'EMSG' emsg
+     exit 5
+end /* select */
+exit
+ 
+FINDSPACE: /* macro called to find a GAP: */
+ c 'EXTRACT /FNAME/FTYPE/FMODE/SYN $$-DSKRO'; dskro=synonym.3
+ f= strip(fname.1) strip(ftype.1) left(fmode.1,1)
+ if f<>fid then call error1 signat 'not activated for 'f', restart "DRM 'f'"'
+ if remap='1' then rc=dirmap('RETURN') /* we should rerun DIRMAP first*/
+ if dskro='RO' then call QRW /* check if still R/O */
+ c 'SOS PUSH'
+ c 'MSGM OFF'; c 'POINT .DIRMO OFF' ; c 'POINT .DIRMO'
+ /*  c 'FU USER';c 'EXTRACT /CURLINE/' /* To find owner of new Mdisk */
+     owner=word(curline.3,2)
+     '.DIRMO'   */
+ /* How many cylinders/FBA blocks are wanted ? */
+ if arg1 = 'PREFIX' then do /* call via prefix */
+                         if cmd=get then call pending /*delay other GET*/
+                         gap=getgap() /* find gapsz in MDISK statement*/
+                         end
+                    else do ; gap=arg1
+                            if gap='' then call error1 'Gapsize required'
+                          end
+ if \datatype(gap,'W') then call error1 'Requested gapsize "'gap'" not numeric'
+ c 'POINT .DIRM OFF' ; c 'POINT .DIRM' ; c 'MSGM ON'
+ call profileGap /* init gapfile*/
+ cs 'SCOPE DISP'
+ if find(getmv,cmd)<>0 then parse value getm '=' with cmd arg4
+ on_same_vol=(arg4='=') | (cmd=getv & arg4<>'?')
+ AllSameVol =(arg4='?') & cmd=getv
+ if cmd=geth then GapPart='LOW'
+             else GapPart='UP'
+ ApplyDynFilter=0 /* dynamic GAPFILE filter ? */
+ if cmd=getD | cmd=get then do
+    address '' 'PIPE Literal GapFltKeepSel GapFltActGrp|SPLIT|Xlate',
+       '|VARFETCH 1 DIRECT TOLOAD|VARSET DIRECT'
+    ApplyDynFilter=( GapFltKeepSel = 1  &  GapFltActGrp<>'')
+/*  Say "ApplyFilter=" applyDynFilter*/
+ end
+ 
+ found=0 ; gapl=''
+ 
+ if ApplyDynFilter then do /* Dynamic filter is active */
+    ce '/SELECT'
+    if select.2<>9 then do
+       address '' 'GLOBALV SELECT DRM GET MAXVARL'
+       address '' 'PIPE REXXVARS 1 TOLOAD WIDTH' word(MaxVarl 4000,1),
+                        '|FIND /GAPFLT|VARLOAD DIRECT'
+       call ApplyDynFilter 'GAPFILE',4
+    end
+    c '-*' c 'SUPERSET /MSGM OFF/SCOPE DISP/DISP 9 9/SHAD OFF'
+ end; else do
+    c '-*' c 'SUPERSET /MSGM OFF/RESERVE 4 OFF/',
+               '/SCOPE ALL/SELECT 0 */WRAP OFF'
+    if AllSameVol then do; vol6=left(volid,6)
+       cs 'ZONE 1 6'
+       do forever
+          c '/'vol6'/' ; if rc<>0 then leave
+          found=1
+          cs 'SELECT 1 1'
+       end
+       if \found then signal notFnd
+       cs 'RESERVE 4 H *** only vol' volid '***'
+       cs 'DISPLAY 1 1'
+       cmd=get /* do as for a normal get */
+    end
+    else c '-*' c 'SUPERSET /SCOPE ALL/SELECT 0 */DISPLAY 0 0'
+ end
+ c 'SUPER /MSGM ON/SCOPE ALL'
+ select
+  when cmd=getl then /* Lowest gaps first */
+    c '-* CMS DMSXMS A' g_sta g_sta+g_lng-1 g_siz g_siz+g_lng-1 1 g_sta+g_lng-1
+  when cmd=geth then /* Highest gaps first */
+    c '-* CMS DMSXMS D' g_end g_end+g_lng-1 g_siz g_siz+g_lng-1 1 g_sta+g_lng-1
+  otherwise          /* sort SIZE & col1->start*/
+    c '-* CMS DMSXMS A' g_siz g_siz+g_lng-1 1 g_sta+g_lng-1
+ end
+ c '-*' cs 'SCOPE DISP'
+ biggestGap=-1; gaptypes=''; gaptype.=0
+ Select
+  when cmd=getm then do i=0 by 1 /* Get max disk available */
+     if i=0 then c '*' /* go to end */
+     c '-1' ; if rc<>0 then signal notfnd
+     c 'EXTRACT /CURLINE/LINE'
+     parse var curline.3 volser gtyp .
+     gapl=substr(curline.3,g_siz,g_lng);gap=gapl
+     if typ='*' | typ=gtyp then biggestGap= max(biggestGap,gapl)
+     if typ<>'*' then if \gaptype.gtyp then
+        parse value 1 gaptypes gtyp with gaptype.gtyp gaptypes
+     if gap=0 then signal notfnd
+     select
+      when on_same_vol then if volser=volid then leave
+      when typ='*' | ,          /* any devtype is OK */
+           typ=gtyp then leave  /* same devtype  */
+      otherwise nop
+     end
+  end
+  when cmd=getc then do          /* Get disk near center pack */
+     c '-*'
+     dsize.=2156
+     dcenter.=dsize.%2
+     delta='999999'
+     bestv=''
+     do forever
+        c '+1' ; if rc<>0 then leave
+        ce '/CURLINE/LINE'
+        parse var curline.3 volser gtyp .
+        if (on_same_vol & volser<>volid) |,     /* bad volid */
+           (typ<>'*' & typ<>gtyp)  then iterate /* bad devtype  */
+        gapl=substr(curline.3,g_siz,g_lng)
+        biggestGap=max(biggestGap,gapl)
+        if typ<>'*' then if \gaptype.gtyp then
+           parse value 1 gaptypes gtyp with gaptype.gtyp gaptypes
+        if gapl<gap then iterate                /* too small */
+        gaps=substr(curline.3,g_sta,g_lng)
+        gape=substr(curline.3,g_end,g_lng)
+        if gaps>dcenter.volser then do;if gaps-dcenter.volser<delta then
+           parse value gaps  volser line.1 'LOW'   gaps-dcenter.volser,
+                 with  bests bestv  bestl  GapPart delta
+        end; else do ;                  if dcenter.volser-gape<delta then
+           parse value gape  volser line.1 'UP'    dcenter.volser-gape,
+                 with  bests bestv  bestl  GapPart delta
+        end
+     end
+     if bestv='' then signal notfnd
+     c ':'bestl
+  end
+  Otherwise do I=0 by 1 /* Normal cmd: size is specified */
+     c '+1' ; if rc<>0 then signal notfnd
+     c 'EXTRACT /CURLINE/LINE'
+     parse var curline.3 volser gtyp .
+     gapl=substr(curline.3,g_siz,g_lng)
+     if typ='*' | typ=gtyp then biggestGap=max(biggestGap,gapl)
+     if typ<>'*' then if \gaptype.gtyp then
+        parse value 1 gaptypes gtyp with gaptype.gtyp gaptypes
+     if on_same_vol then do
+        if volser=volid & gapl>=gap then leave
+                                    else iterate
+     end
+     if typ<>'*' & typ<>gtyp then iterate /* not on same DASD-type */
+     if gapl >= gap          then leave
+  end
+ end
+ 
+ if cmd<>get then  /* do not prompt*/
+    call select . gap GapPart , 'NOPR'
+ else do
+    /* As we where called from PREFIX area, XEDIT does't allow us to
+       switch to another file. So we'll restart ourselves from the CMS
+       STACK, and in the next run we are free to do what we want.
+       If all goes well we come back in this exec on label FORMATSCR: */
+    c 'EXTRACT /SIZE'
+    queue 'MACRO 'me' $FMT$' size.1-i gap line.1
+ end
+ exit
+ 
+/*******************************************************************/
+FORMATSCR: /*  format screen to see GAPFILE & Directory            */
+/*******************************************************************/
+  parse arg . nbr gap line
+  c 'SCREEN 1'
+  c 'X 'gapfile; c 'L :'line
+  c 'EXTRACT /LSCREEN'
+  nl1=lscreen.5%2 ;   nl2=lscreen.5-nl1
+  nc1=lscreen.6%2 ;   nc2=lscreen.6-nc1
+  c 'SCREEN DEF 'nl1 nc1 1 1 nl1 nc2 1 nc1+1 nl2 nc1+nc2 nl1+1 1
+  msgtext='place cursor on wanted GAP ; PF2=get whole gap ; PF11 =get asked gap'
+  c 'X' gapfile
+  c 'SOS TABCMDF' ;c 'X 'gapfile ; c '+2 'c' FO'
+  c 'SOS TABCMDF' ;c 'X 'fid ;  c '.DIRM'
+  c 'SET PENDING ON ?>>>>'
+  c 'SOS TABCMDF' ; c 'CURSOR C'
+exit
+ 
+$SEL$: /* select the gap from the GAPFILE & update CP directory file */
+SELECT:
+  parse arg . ask all , nopr
+ if ask='FLTR' then Signal DynGapFileFilter
+ if nopr<>'NOPR' then do /* not NOPROMT: cursor used to select gap */
+   c 'EXTRACT /CURSOR'
+   if cursor.7='-1' then do
+      c 'EMSG Invalid cursor position for selection'; exit ; end
+   c 'L :'cursor.7
+ end
+ c 'EXTRACT /CURLINE'
+ parse value qgaplayout(curline.3 ,'PARSE') with ,
+       s1 s2 s3','volid','dev','sta','end','size
+ if \datatype(sta||end||size,'N') then call invgapf sta , size
+ dev=strip(dev)
+ if all='ALL' | ask>size then gap=size+0
+                         else gap=ask+0
+ if all='UP' then do /* Get upper part of gap */
+    newsta=sta;            newsiz=size-gap
+    newend=sta+newsiz-1;   mdisksta=sta+size-gap
+ end
+ else do /* Get lower part of gap */
+    newend=end;            newsta=sta+gap
+    newsiz=size-gap;       mdisksta=sta+0
+ end
+ 
+ o=overlay(right(newsta,g_lng,0),'',s1)
+ o=overlay(right(newend,g_lng,0),o,s2)
+ o=overlay(right(newsiz,g_lng,0),o,s3)
+ 
+ c 'CL :1' ;c 'COV' o
+ c 'X 'fid
+ c '.DIRM' c 'EXTRACT /CURLINE/'
+ parse var curline.3 mdk adr typ osta onbr ovol modepws
+ select
+  when find('9345 3380 3390',dev)<>0 &,
+       mdisksta<=9999 & gap<=9999 then l=4
+  when dev='FB-512' &,
+       mdisksta<=999999 & gap<=999999 then l=6
+  otherwise
+       l=max(length(osta),length(gap),length(mdisksta))
+ end
+ mdisksta=right(mdisksta,l,0)
+ if abbrev('MDISK',mdk,1) | mdk='NEWMDISK' then do /* prefix get: */
+    if ask>gap then do /* small: put old line in comments*/
+       c 'CL :1'; c 'COV *'
+       c 'EMSG Warning: selected gap ('gap') smaller than asked('ask')'
+       c 'SET PENDING ON ?=ASK'
+       c 'IN  MDISK 'adr dev mdisksta right(gap,l,0) volid modepws
+       c 'SET PENDING ON ?=SMA'
+    end
+    else do /* ok: replace old line*/
+       c 'RE  MDISK 'adr dev mdisksta right(gap,l,0) volid modepws
+       c 'SET PENDING ON ? OK'
+    end
+ end
+ else c 'I  MDISK xxx' dev mdisksta gap volid 'MR readpw writepw multpw'
+ 
+ENDGET: /* stop GET processing: PF2, PF11 or PF12 pressed on GAPFILE*/
+   c 'SCREEN 1'
+   call noselpf /* inacticate SELECTION PF-keys */
+   c 'X 'fid
+    call setpending /* go to reset delayed pending GET commands*/
+   c '.DIRMO'
+   c 'SOS POP'
+   exit
+ 
+GETGAP: /* extract size for gap from MDISK card */
+   c 'L :'pline c 'EXTRACT /CURLINE'
+   parse var curline.3 mdk adr typ str nbr volid .
+   if volid<>translate(volid) then do
+      c 'CHANGE /'volid'/'translate(volid)'/'
+      volid=translate(volid)
+   end
+   if left(typ,1)='?' | left(typ,1)='*' then typ='*' /* ignore DASDtype*/
+   if \abbrev('MDISK',mdk,1) & mdk<>'NEWMDISK' then
+      call error1 cmd' should be called on MDISK - statement'
+/*  address '' 'GLOBALV SELECT $drm$ SET L' length(nbr) */
+ return nbr
+ 
+/*-----------------------------------------------------------------*/
+DynGapFileFilter: /* User wants subset of GAPFILE volumes          */
+/*-----------------------------------------------------------------*/
+ /* GAPFILE may be in two different XEDIT logical screens,      */
+ /* and FILTER can have been started in either one of the views */
+ /* SCREEN.1= DEFINE 16 40 1 1 16 40 1 41 16 80 17 1 */
+ ce '/SCREEN/FTYPE'
+ if ftype.1<>'GAPFILE' then
+    call Error1 myname arg(1) 'must run from GAPFILE'
+ tabf=0
+ if word(screen.1,1)='DEFINE' then
+  if words(screen.1)>9 then do/* We suppose we're in DRM's split screen*/
+     do tabf=1 to 3
+        c 'SOS TABCMDF' ; ce '/FNAME/FTYPE/FMODE'
+        if space(fname.1 ftype.1) left(fmode.1,1)=fid then leave
+     end
+     if tabf>3 then call Error1 'Wrong screen setup for dynamic filter'
+     c 'SOS TABCMDF' ; ce '/FNAME/FTYPE/FMODE'
+     if space(fname.1 ftype.1) left(fmode.1,1)<>gapfile then
+        call Error1 'Wrong screen setup for dynamic GAP file filter'
+  end
+ 
+ parse value FilterPrompt('GAPFILE',4), /* Prompt user for filter name */
+       with GapFltActGrp GapFltGrpInfo  /* selected group */
+ 
+ call ApplyDynFilter 'GAPFILE',4 /* Use XEDIT SELECT to hide lines */
+ 
+ c ':'line.1 c 'SUPER /DISP 9 9/SHADOW OFF'
+ if tabf>0 then do /* working in splitscreen */
+    c 'SOS TABCMDF' /* go to second logical screen */
+    cs 'SCOPE ALL'
+    c ':'line.1 c 'SUPER /DISP 9 9/SCOPE DISP/SHADOW OFF' ; c 'FO'
+    c 'SOS TABCMDB' /* back to first logical screen */
+ end
+ cs 'SCOPE DISP'
+ 
+exit
+ 
+/*-----------------------------------------------------------------*/
+FilterPrompt: /* Prompt user for filter                            */
+/*-----------------------------------------------------------------*/
+ parse arg fltp,reslin
+ GapFltVols.=''; GapFltColr.='GREEN' /* some defaults */
+ /* Did we already read the filter definitions ? */
+ address '' 'GLOBALV SELECT DRM GET MAXVARL'
+ If MaxVarL<>'' then
+ address '' 'PIPE REXXVARS 1 TOLOAD WIDTH' MaxVarl'|FIND /GAPFLT|VARLOAD'
+ if symbol('GAPFLTGRP.0')<>'VAR' then do
+    emsg=GapFltrSETUP()
+    if emsg<>'' then do; c 'EMSG' fltp 'filtering impossible:'
+                         c 'EMSG' emsg ; exit; end
+    address '' 'GLOBALV SELECT DRM GET MAXVARL'
+    address '' 'PIPE REXXVARS 1 TOLOAD WIDTH' MaxVarl,
+           '|FIND /GAPFLT|VARLOAD'
+ end
+ c 'EXTRACT /DISPLAY/SELECT'
+ showPF11= (Display.1<>0 | select.2<>0)
+ address command
+ 
+ WindowStyle='STYLE THIN'
+ panel='DRM1'
+ queue 'TOP' flTp 'filtering'
+ txtPF12='' ; PfNoSel=''
+ if gapFltEmsg.0>0 then do
+   queue 'TOPEXP (RED REV) Groups in red are in error.  PF12 for details'
+   txtpf12='12=Errors'
+   pfNosel='12'
+ end
+ queue 'SELEXP Select the filtering you want.'
+ do i=1 to GapFltGrp.0
+    grp=word(GapFltGrp.i,1)
+    clrMap=left('',gapFltLng,'W') /* Group name in white */
+    queue 'SEL ('GapFltColr.i','clrMap')' left(grp,gapFltLng),
+           subword(GapFltGrp.i,2) '('words(GapFltVols.grp) 'vols)'
+ end i
+ pfSel=2 4
+ queue 'BOTEXP (GRE NONE)' '41'x
+ queue 'BOTEXP (YELL,',
+             ||'YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY,',
+             ||'DDDDDDDDRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR) ',
+             ||'Enter = List only the volumes in selected group'
+ queue 'BOTEXP (Yell,',
+             ||'YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYRRRYYYYYYYYYYYYYYYYYYY,',
+             ||'DDDDDDDDRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR) ',
+             ||'PF4   = List only the volumes NOT in selected group'
+ if Fltp='GAPFILE' then do
+    pfSel=pfSel 9 10
+    queue 'BOTEXP (Yell,',
+             ||'YYYYYYYYYYYYWWWWWWWWWYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY,',
+             ||'DDDDDDDDRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR) ',
+             ||'PF9   = List&remember: volumes in selected group'
+    queue 'BOTEXP (Yell,',
+             ||'YYYYYYYYYYYYWWWWWWWWWYYYYYYYYYYRRRYYYYYYYYYYYYYYYYYY,',
+             ||'DDDDDDDDRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR) ',
+             ||'PF10  = List&remember: volumes NOT in selected group'
+ end
+ if showPF11 then do
+    pfNosel=PfNoSel 11
+    queue 'BOTEXP (Yell,',
+             ||'YYYYYYYYWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW,',
+             ||'DDDDDDDDRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR) ',
+             ||'PF11  = Back to listing all' flTp 'volumes'
+ end
+ queue 'BOT PF:  1=Help   2=listVols   3=Exit  ' txtPf12
+ call selfs 'INIT' panel,,WindowStyle   /* init the panel */
+ if result<>'' then call FltrErrexit result /* SELFS EXEC gave error */
+ emsg=''
+ do forever         /* loop until user input OK;   note PF99 = CLEAR */
+    parse value selfs("DISPLAY" panel,'PFNOSEL 1 3 99' pfNoSel,,
+                      'PFSEL' pfSel ,'EMSG' emsg),
+          with pfk sel '' emsg GapFltActGrp
+    select
+    when pfk>100 then call FltrErrExit pfk/*SELFS didn't like our stuff*/
+    when pfk=12 then call FltrErrExplain /* List all errors */
+    when pfk=3 | pfk=15 then do /* user wants to stop */
+       call selfs "TERM" panel
+       exit
+    end
+    when pfk=1 then 'HELP DRM GAPFLTR2'
+    when pfk=2 then call ShowFltrVols
+    when pfk=11 then leave
+    otherwise
+      GapFltActGrp=GapFltGrp.sel
+      leave
+   end /* Select "sel"& PFkey */
+ end
+ call selfs "TERM" panel
+ GapFltNotSel = (pfk=4 | pfk=10)  /* take the not listed ones */
+ if Fltp='GAPFILE' then do
+    GapFltKeepSel= (pfk=9 | pfk=10 | pfk=11) /* Keep slected group ?  */
+    'PIPE Literal GapFltKeepSel GapFltActGrp GapFltNotSel',
+       '|SPLIT|Xlate|VARFETCH DIRECT TOLOAD|VARSET 1 DIRECT'
+ end
+return GapFltActGrp
+ 
+/*-----------------------------------------------------------------*/
+ApplyDynFilter: /* Use XEDIT SELECT to hide lines                  */
+/*-----------------------------------------------------------------*/
+ parse arg fltp,reslin
+ if GapFltActGrp='' then do /* display it all again */
+    ce '/LINE';c '-*' c 'SUPER ;SCOPE ALL;SELECT 0 *;DISP 0 0',
+                ';RESERVED' resLin 'OFF',
+                ';ENTER IGNORE COMMAND CURSOR HOME PRI 30'
+    c ':'line.1 ; exit
+ end
+ if words(GapFltActGrp)>1 then /* Still not split up */
+    parse var GapFltActGrp GapFltActGrp GapFltGrpInfo
+ 
+ ce '/LINE';c '-*' c 'SUPER ;SCOPE ALL;SELECT 0 *;DISP 0 0'
+ vols=GapFltVols.GapFltActGrp
+ NbSel=0
+ /* GapFltNotSel=1 means display the not listed vols */
+ if GapFltNotSel then do; cs 'SELECT 9 *'; selval=0; end
+                 else selval=9
+ ovol=''
+ do until vols='' /* take the <not> listed ones */
+    c '+1'; if rc<>0 then leave
+    ce '/CURLINE'
+    vol=word(curline.3,1)
+    if wordpos(vol,vols)=0 then iterate
+    cs 'SELECT' selVal
+    NbSel=NbSel+1
+    if fltp='GAPFILE' then iterate
+    if vol<>ovol then          /* we must be in MDISKMAP */
+       cs 'SELECT' selVal '-2' /* add separline in selection */
+    ovol=vol
+ end
+ 
+ if GapFltNotSel then do
+    cs 'RESERV'  reslin 'H Vols not in "'GapFltActGrp':' GapFltGrpInfo'"'
+    if nbSel=0 then
+      c '-*' c 'MSG No volumes hidden:' fltp 'only contains volumes',
+               'from group' GapFltActGrp
+ end; else do
+    cs 'RESERV' reslin 'H Vols in "'GapFltActGrp':' GapFltGrpInfo'"'
+    if nbSel=0 then
+      c '-*' c 'EMSG none of the' words(GapFltVols.GapFltActGrp),
+              'vols from group' GapFltActGrp 'found in' fltp
+ end
+ /* when user uses e.g. "ALL" prepare a SET RESERVE OFF' */
+ cs 'ENTER AFTER MACRO $DRM$ $ENTER$' fltp reslin
+return NbSel
+ 
+/*-----------------------------------------------------------------*/
+EnterKey: /* user pressed ENTER in GAPFILE of MDISKMAP             */
+/*-----------------------------------------------------------------*/
+ parse arg MapOrGap reslin
+ ce '/FTYPE/SELECT'
+ if rc<>0 then exit /* no files left */
+ if mapOrGap<>ftype.1 then nop /* user went to other file, eg using X*/
+ if select.2=9 then do /* Dynamic filter still active */
+    'COMMAND CURSOR HOME PRI 30'
+    return
+ end
+ ce '/RESERVED'            /* Which lines are reserved? */
+ if reserved.0=0 then return/* No reserved lines left */
+ if wordpos(reslin,reserved.1)=0 then return
+ c 'SUPER /RESERVED' reslin 'OFF',   /* turn it off */
+         '/ENTER IGNORE COMMAND CURSOR HOME PRI 30'
+return
+/*-----------------------------------------------------------------*/
+ShowFltrVols: /*                                                   */
+/*-----------------------------------------------------------------*/
+ grp=word(GapFltGrp.sel,1)
+ say 'vols in' grp',' subword(GapFltGrp.sel,2)':'
+ say GapFltVols.grp
+return
+/*-----------------------------------------------------------------*/
+FltrErrExplain: /* List all errors                                 */
+/*-----------------------------------------------------------------*/
+ swind='DRME'
+ 'MAKEBUF'
+ queue 'TOP These error(s) were found when reading the'
+ queue 'TOP    DYNFILTER tags in DRM NAMES            '
+ queue 'BOT   PF3=end '
+ 'PIPE STEM GAPFLTEMSG.|SPILL 60 OFFSET 3|Insert /SEL /|STACK'
+ call selfs 'INITD' swind,,WindowStyle   /* init the panel */
+ 'DROPBUF'
+ if result<>'' then return/*SELFS EXEC gave error */
+ do until pfk=3
+    call selfs 'DISPLAY' swind ,'PFNOSEL 3'
+    parse var result pfk .
+ end
+ call selfs 'TERM' swind
+return
+ 
+/*-----------------------------------------------------------------*/
+GapFltrSETUP: /*                                                   */
+/*-----------------------------------------------------------------*/
+ Procedure expose GUI
+ address command
+ 'EXECSTAT SELFS EXEC'
+ if rc<>0 then do;
+    'EXECLOAD SELFS EXEC'
+    if rc<>0 then return 'Panel display exec SELFS EXEC not found'
+    GapFltSELFS=1  /* Should unload SELFS too */
+ end
+ 
+ 'MAKEBUF'
+ 'NAMEFIND :TYPE DYNFILTER (FILE DRM STACK *'
+ src=rc
+ if src<>0 then 'DROPBUF'
+ if src=28 then return 'File DRM NAMES not found'
+ if src=32 then return 'No :Nick.xxx :type.DYNFILTER entries in',
+                 'DRM NAMES. Such entries must define your disk groups.'
+ gapFltLng=3; GapFltVols.=''; GapFltColr.='GREEN' ; emsg=0;someOK=0
+ grpNo=0;MaxVarl=512
+ do queued()
+    parse pull tag value; upper tag
+    Select
+     When tag=':NICK' then do
+        grpNo=grpNo+1
+        parse var value GapFltGrp.GrpNo . 0 grp .
+        gapFltLng=max(gapFltLng,length(grp))
+     end
+     When tag=':INFO' then GapFltGrp.grpNo=GapFltGrp.grpNo value
+     When left(tag,5)<>':VOLS' then nop
+     Otherwise
+      if pos('.',value)=0 then do
+         GapFltVols.grp=GapFltVols.grp value
+         SomeOk=1
+      end; else do /* we have a file to imbed */
+         toEat2=value
+         do while ToEat2<>''
+            parse var ToEat2 vol toEat2
+            if pos('.',vol)=0 then do
+               GapFltVols.grp= GapFltVols.grp vol
+               SomeOk=1
+            end; else do; drop vols
+               parse var vol fn'.'ft '.' rest
+               'PIPE DISK' fn ft rest '|STRIP|JOIN * / /|VAR Vols'
+               if symbol('Vols')='VAR'
+                then do
+                  GapFltVols.grp= GapFltVols.grp vols
+                  SomeOk=1
+                end; else do
+                  emsg=emsg+1
+                  gapFltemsg.emsg='File "'fn ft rest'" not found, was',
+                   'imbedded in DRM NAMES, :nick.'grp ':Type.DYNFILTER'
+                  say gapFltemsg.emsg
+                  GapFltColr.grpNo='RED'
+               end
+            end /* imbedded a file */
+         end /* while ToEat2 */
+      end /* file to imbed */
+      MaxVarl=max(MaxVarl,length(GapFltVols.grp)+100)
+    end /* Select */
+ end /* queued lines */
+ 
+ GapFltGrp.0=GrpNo
+ if \SomeOK then return,
+    'All Gap filter defintions in DRM NAMES are in error.'
+ gapFltEmsg.0=emsg
+ address '' 'GLOBALV SELECT DRM SET MAXVARL' maxVarl
+ /* save all related vars in a higher level REXX */
+ 'PIPE REXXVARS TOLOAD WIDTH' maxVarl'|FIND /GAPFLT|VARLOAD 1'
+return ''
+ 
+/*******************************************************************/
+FINDUSER: /*  PF2 : find a user or users mdisk                     */
+/*******************************************************************/
+ top=1  /* default : go to TOP before find */
+ if arg2='PREV' then dir='-' ; else dir='+'
+ cmsg=''
+ ce '/CURSOR/LINE';ReturnTo=line.1
+ if queued()<>0 then do
+    parse upper pull userid mdiskaddr . 0 cmsg
+    if pos('&',userid) = 1 then do ; userid=substr(userid,2) ; top=0
+                                 c 'CMSG &'userid ; end
+    /*enduser inp:  'userid' --> find 'USER userid ' from TOP
+                    '/userid' --> find 'USER userid' from TOP
+                    '&/userid' --> find 'USER userid' from where we are*/
+    ps=pos('/',userid)
+    select
+      when ps=0 then user=userid' /'
+      when ps=1 then user=substr(userid,2)'/'
+      otherwise      user=substr(userid,1,ps)
+    end
+    emsg='USER/PROFILE/IDENTITY/SUBCONFIG "'userid'" not found'
+ end
+ else do  /* PF2 only= next user or if cursor on INCLUDE find PROFILE*/
+    if dir='+' then emsg='Next USER or PROFILE not found'
+               else emsg='Previous USER or PROFILE not found'
+    user='/'; mdiskaddr=''; top=0;
+    if cursor.3>0 then do  /*check if cursor on INCLUDE/BUILD statement*/
+       c ':'cursor.3 ce '/CURLINE'
+       if rc=0 then do     /* rc<>0 if Cursor was on excluded line */
+          c ':'line.1
+          if word(curline.3,1)='INCLUDE' then do
+             user=word(curline.3,2)' /'; top=1
+             emsg='PROFILE named "'user'" not found'
+          end
+          else if word(curline.3,1)='BUILD' then do
+             user=word(curline.3,6)' /'; top=1
+             emsg='SUBCONFIG named "'user'" not found'
+          end
+       end
+    end
+ end
+ subcos=''
+ emsg = FindAUser() /* Find given user and maybe an Mdisk */
+ if emsg<>'' then do; /* problem; not found */
+    if mdiskaddr<>'' then do /* if look for an MDISK: maybe in SUBCO?*/
+       if words(subcos)=1 then do /* only 1 subconfig found, look there*/
+          emsg_1=emsg             /* save some vars */
+          user_1=user; subcos_1=subcos; returnto_1=returnTo
+          user=strip(subcos) '/' /* to search for "userid " */
+          emsg = FindAUser() /* Find given user and maybe an Mdisk */
+          if emsg='' then exit /* found in the subconfig */
+          emsg=emsg_1 '(not even in SUBCONFIG' strip(subcos_1)')'
+          user=user_1;returnto=returnTo_1
+       end
+       if subcos<>"" then /* subconfigs found, tell user */
+          emsg=emsg '(maybe try SUBCONFIGs' strip(subcos)')'
+    end
+    c':'returnTo c 'EMSG' emsg ; if cmsg<>'' then c 'CMSG' cmsg
+ end
+ if arg1='PREFIX' then do /* called by Prefix FI command */
+    ce '/LINE'; queue ':'line.1
+ end
+exit
+/*-----------------------------------------------------------------*/
+FindAUser: /* Subroutine to find a User and maybe an Mdisk         */
+/* arg1: userid <vdev> , arg2=blabla4emsg , arg3: LINK|MDISK|GET   */
+/*-----------------------------------------------------------------*/
+ parse arg what . ; FindLink=(arg(3)='LINK') ; FindMDISK=(arg(3)='MDISK')
+ if what<>'' then do /* Called by subroutine to get MDISK card */
+    parse value '+ 1' arg(1) with dir top userid mdiskAddr
+    user=userid '/'
+ end
+ if top then c '-*'
+ lu=left(user,length(user)-1)
+ llu=length(lu)
+ c 'EXTRACT /VARBLA';cs 'VARBLA ON'
+ do forever
+    c dir'/USER 'user '| /PROFILE 'user,
+       '| /IDENTITY 'user '| /SUBCONFIG 'user
+    if rc<>0 then do                 /* User Not found */
+       cs 'VARBLA 'varblank.1
+       if FindLink|FindMDISK then return,
+          'USER/PROFILE/INDENTITY/SUBCONFIG "'userid'" not found' arg(2)
+       if what<>'' then return ''    /* - Subroutine getting mdsk card */
+                   else return emsg  /* - enduser request */
+    end
+    c 'EXTRACT /CURLINE/LINE'
+    if find('USER PROFILE IDENTITY SUBCONFIG',word(curline.3,1))<>0 &,
+       left(subword(curline.3,2),llu)=lu then leave
+ end
+ if mdiskaddr='' then do
+    cs 'VARBLA 'varblank.1
+    if FindLink|FindMDISK then return '+' line.1 line.1
+                          else return ''
+ end
+ 
+ parse var line.1 userline 0 returnTo /* even if MDK: stay at user strt*/
+ 
+ md3=right(mdiskaddr,3,0) ; md4=right(mdiskaddr,4,0)
+ dig3=(left(md4,1)='0')
+ allUser='/USER /|/PROFILE /|/IDENTITY /|/SUBCONFIG /'
+ allKeyw='BUILD USER PROFILE IDENTITY SUBCONFIG MDISK'
+ subcos=''
+ /* Already positioned in the wanted target userid; find requested item*/
+ If FindLink then do forever /* called from LINKMAP */
+    c '/LINK / |' alluser ; locrc=rc
+    c 'EXTRACT /CURLINE/LINE'
+    if locrc=0 then keyw=word(curline.3,1)
+               else keyw='USER' /* act as if we're on next user */
+    if wordpos(keyw,'LINK' allKeyw)=0 then iterate /* no good keyword */
+    if keyw='BUILD' then do
+       subcos=subcos word(curline.3,6); iterate; end
+    if keyw<>'LINK' then do
+       c 'L :'userline cs 'VARBLA 'varblank.1
+       return userid' has no "LINK xxxxxxxx yyyy' mdiskaddr'"'
+    end
+    if right(word(curline.3,4),4,0)=md4 then leave
+ end /* If seeking a LINK (from LINKMAP) */
+ else do forever /* Seeking an MDISK */
+    if dig3 then c '/MDISK' md3 '/ | /MDISK' md4 '/ |' alluser
+            else c '/MDISK' md4 '/ |' allUser
+    locrc=rc
+    c 'EXTRACT /CURLINE/LINE'
+    if locrc=0 then keyw=word(curline.3,1)
+               else keyw='USER' /* act as if we're on next user */
+    if wordpos(keyw,allKeyw)=0 then iterate /* no good keyword */
+    if keyw='BUILD' then do
+       subcos=subcos word(curline.3,6); iterate; end
+    if keyw<>'MDISK' then do
+       c 'L :'userline cs 'VARBLA 'varblank.1
+       if what<>'' & FindLink+FindMdisk=0 /*  Subroutine getting pws */
+          then return ''
+       return space('MDISK "'mdiskaddr'" of "'userid'" not found' arg(2))
+    end
+    if dig3 then do
+       if find('MDISK' md3 'MDISK' md4,space(subword(curline.3,1,2)))<>0
+          then leave
+    end; else if space(subword(curline.3,1,2)) = 'MDISK' md4 then leave
+ end
+ cs 'VARBLA 'varblank.1
+ if arg(3)='GET' then return curline.3 /* return MDISK card */
+ 
+ CLine=userline
+ /* try to have USERid as curline, but cursor on MDISK*/
+ c ':'userline c 'MSGM OFF'
+ c 'CURSOR FILE' line.1
+ src=rc
+ if rc<>0 then  do /* MDISK card not on same screen as USER card*/
+    CLine=line.1
+    userline=line.1
+    c ':'line.1 c 'CURSOR FILE' line.1
+ end
+ c 'MSGM ON'
+ If FindLink | FindMdisk then return '+' userline line.1
+return ''
+ 
+/*-----------------------------------------------------------------*/
+PrfxFind: /* find the mdisk in the DIRECTORY , mdisk to find is    */
+          /*  indicated in MDISKMAP via prefix FI command          */
+          /*  or in LINKMAP via prefix FI command                  */
+/*-----------------------------------------------------------------*/
+ top=1 ; dir='+' ; cmsg=''
+ c 'L:'pline c 'EXTRACT /CURLINE/FNAME/FTYPE/FMODE'
+ OrgFile= space(fname.1 ftype.1 left(fmode.1,1))
+ Select
+  when orgfile=MdiskMap then do /* PREFIX cmd FI in MDISKMAP file */
+/* z/VM V6.2 includes SUBCONFIG if applicable
+ $$LNX1 3390     ZVMMAPLX  0150 MR         001       3338       3338              ZVMMAP-1  *    */
+     parse var curline.3 18 userid Mdiskaddr  . 83 subco .
+     c 'X 'fid  /* Edit the Directory */
+     if subco<>'' & subco<>'*'
+        then emsg= FindAUser(subco  Mdiskaddr,'in' fid,'MDISK')
+        else emsg= FindAUser(userid Mdiskaddr,'in' fid,'MDISK')
+     parse var emsg 0 w1 lineF LineC .
+     c 'X' orgFile
+     if w1='+' then do
+       c 'SET LINEND ON #'
+       queue c 'SOS TABCMDF#'c 'X' fid'#'c ':'lineF c 'CURSOR F' lineC 1
+       cs 'PENDING ON ?Foun'
+     end
+     else do; c 'EMSG' emsg; cs 'PENDING ON ?NtFn';end
+     exit
+  end
+  when orgfile=LinkMap then do /* PREFIX cmd FI in LINKMAP file */
+/*..+....1....+....2....+....3....+....4....+....5....+....6....+.
+ DISTEL2  0200 :USERSPL 0200  RR  *** Minidisk does not exist ***
+               EDI      0200  RR */
+     parse var curline.3 16 userid 25 Mdiskaddr  . ; card='LINK'
+     if userid=left('',9,'-') then do /* on sepline: find linked user */
+        c '+1' ce '/CURLINE'
+        parse var curline.3 userid Mdiskaddr . '***' 'does not' test
+        if test<>'' then MdiskAddr='' /* look for user only*/
+        else card='MDISK'
+     end
+     else if left(userid,1)=':' then userid=substr(userid,2) /*INCLUDE */
+     c 'X 'fid  /* Edit the Directory */
+     emsg = FindAUser(userid Mdiskaddr,'in' fid,card)
+     parse var emsg 0 w1 lineF LineC .
+     c 'X' orgFile
+     if w1='+' then do
+       c 'SET LINEND ON #'
+       queue c 'SOS TABCMDF#'c 'X' fid'#'c ':'lineF c 'CURSOR F' lineC 1
+       cs 'PENDING ON ?Foun'
+     end
+     else do; c 'EMSG' emsg; cs 'PENDING ON ?NtFn';end
+     exit
+  end
+  when orgfile=fid then do       /* PREFIX cmd FI in DIRECT file */
+     parse var curline.3 mdk adr typ str nbr volid .
+     if abbrev('LINK',mdk,1) then do /* Find that Mdisk, like PF2 */
+        queue adr typ
+        signal FindUser /* Jump to PF2 handler */
+     end
+     if \abbrev('MDISK',mdk,1) then
+         call error1 cmd' should be called on MDISK or LINK statement'
+     parse value FindUserCard('EXIT',,'BOTH') with user subco
+     Call MdiskMap 'XEDIT' /* Edit the MDISKMAP file */
+     c 'PRESERVE'; ce '/LINE/LRECL'
+     if lrecl.1<=80 | subCo='' then do /* Pre z/VM 6.2 or no SUNCONFIG*/
+        c '-*' cs 'ZONE 18 31'; cs 'MSGM OFF'
+        find=left(user,8)'  'right(adr,4,0)
+        c '/'find'/'
+        frc=rc
+     end; else do /* zVM 6.2 : a SubConfig */
+        c '-*'
+        find=left(subco,8)'  'right(adr,4,0)
+        address '' 'PIPE XEDIT|PICK 83.8 == /'left(subco,8)'/',
+                             '|PICK 28.4 == /'right(adr,4,0)'/',
+                             '|Take|Count lines|Var Found'
+        if found then do;frc=0;c '-1' ; end
+                 else frc=2
+     end
+     if frc=0 then ce '/LINE'
+     else do
+        c '-*'
+        address '' 'PIPE (end ?) XEDIT|StrFind /_/|StrNFind /__/',
+          '|CHOP 7|not chop 1',
+          '|StrNfind /Volser/|StrNfind /------/',
+          '|P: Pick 1.6 == /'volid'/|Var Fvol',
+          '?P:|LK: Lookup AutoAdd?LK:|T: Take 6|I: Fanin',
+           '|JOIN * / /|Var allVol',
+           '?T:|Take|SPEC /.../ 1|I:'
+        if symbol('Fvol')='VAR' then emsg=''
+        else emsg='(Vol' volid 'not mapped; mapped:' allvol')'
+     end
+     c ':'line.1 c 'RESTORE'
+     c 'X' orgFile
+     if frc<>0 then do
+        c 'EMSG Mdisk' find 'not found in' mdiskMap
+        if emsg<>'' then c 'EMSG' emsg
+        exit frc
+     end
+     c 'SET LINEND ON #'
+     queue c 'SOS TABCMDF#'c 'X' mdiskmap'#'c ':'line.1 c 'CURSOR F' line.1 1
+     exit
+  end
+  Otherwise
+    call Error1 'The FI prefix command can only used in the MDISKMAP',
+                'or DIRECT file'
+ end
+ 
+/*******************************************************************/
+ALL_USER: /*  PF5 : see also all cards of a USER                   */
+/*******************************************************************/
+ if queued()<>0 then do
+    parse upper pull target
+    'MACRO ALL' target
+    if rc<>0 then do
+       c 'CMSG' target
+       call error1 'ALL completed with rc='rc
+    end
+ end
+ c 'EXTRACT /SELECT/LINE/DISPLAY/CURSOR'
+ cs 'SCOPE ALL'
+ if cursor.3>0 then c ':'cursor.3 ce '/LINE'
+ cs 'MSGM OFF'
+ select
+    when display.1=0 then do /* see only this user */
+       c '-*' cs 'SELECT 0 *'
+       c ':'line.1
+       stauser=FindUserCard('EXIT','#') /* get line nbr current user */
+       enduser=NextUserLine()           /* get line nbr next user */
+       c ':'stauser cs 'SELECT 3 :'enduser
+       c ':'stauser
+       display ='3 3'
+    end
+    when display.2=1 then do /* we are in ALL see only this user */
+       stauser=FindUserCard('EXIT','#') /* get line nbr current user */
+       cs 'DISPLAY 0 0' /* see "other" cards */
+       cs 'SCOPE DISPLAY'
+       ce '/LINE' /* perhaps next USER card is not in "others" */
+       stauser1=line.1
+ 
+       cs 'SCOPE ALL'
+       c ':'stauser
+       enduser=NextUserLine() /* get line nbr next user */
+       cs 'SCOPE DISPLAY' /* avoid changing SELnb of ALL selected cards*/
+       ce '/LINE'         /* perhaps next USER card is not in "others" */
+       enduser1=line.1
+ 
+       c ':'stauser1 cs 'SELECT 2 :'enduser1
+       cs 'SCOPE ALL'
+       c ':'stauser
+       display ='1 2'
+    end
+    when display.2=2 then do /* we were looking to a complete user */
+       cs 'SCOPE DISPLAY'
+       cs 'DISPLAY 2 2'
+       c '-*' cs 'SELECT 0 *'
+       cs 'SCOPE ALL'
+       c ':'line.1
+       display ='1 1'
+    end
+    otherwise /* see ALL again */
+       c '-*' cs 'SELECT 0 *'
+       c ':'line.1
+       display ='0 0'
+ end
+ cs 'MSGM ON'
+ cs 'DISPLAY' display
+ cs 'SCOPE DISPLAY'
+exit
+ 
+/*******************************************************************/
+ALL_USERS: /*  PF17 : see also all USER cards                      */
+/*******************************************************************/
+ target=''
+ if queued()<>0 then do
+    parse upper pull target
+    'MACRO ALL' target
+    if rc<>0 then do
+       c 'CMSG' target
+       call error1 'ALL completed with rc='rc
+    end
+ end
+ c 'EXTRACT /SELECT/LINE/DISPLAY/SIZE'
+ oldcurrent=line.1
+ cs 'MSGM OFF'
+ select
+    when display.1=0 then do /* see all USER & PROFILE cards */
+       cs 'SCOPE ALL'
+       c '-*' cs 'SELECT 0 *'
+       do until stauser>=size.1
+          stauser=NextUserLine() /* get line nbr next user */
+          c ':'stauser cs 'SELECT 4 1'
+       end
+       c ':'oldcurrent
+       display ='4 4'
+    end
+    when display.2=1 then do /* add all users with 'Selected' cards to display */
+       c '-*' cs 'SCOPE DISPLAY' /* scan selected lines */
+       if target='' then selno=2
+                    else selno=1 /* use same selnb as ALL macro*/
+       do forever
+          c '+1'
+          if rc<>0 then leave
+          ce '/LINE'; current=line.1
+          stauser=FindUserCard(,'#') /* get line nbr current user*/
+          if left(staUser,1)='*' then iterate /* no USER card found */
+          if stauser=current then nop /* was selected with ALL */
+          else do
+             cs 'SCOPE ALL'
+             c ':'staUser c 'SUPER /SELECT' selno '1/SCOPE DISP'
+          end
+          c ':'current
+       end
+       display ='1' selno
+       if target='' then c ':'oldcurrent
+                    else c '-*' c '+1'  /* react same as ALL */
+    end
+    when display.2=2 then do /* we were looking to USERcards as well */
+       cs 'SCOPE DISPLAY'
+       cs 'DISPLAY 2 2'
+       c '-*' cs 'SELECT 0 *'
+       cs 'SCOPE ALL'
+       c ':'oldcurrent
+       display ='1 1'
+    end
+    otherwise /* see ALL again */
+       cs 'SCOPE ALL'
+       c '-*' cs 'SELECT 0 *'
+       c ':'oldcurrent
+       display ='0 0'
+ end
+ cs 'MSGM ON'
+ cs 'DISPLAY' display
+ cs 'SCOPE DISPLAY'
+exit
+ 
+/*******************************************************************/
+MDISKMAP: /*  Stuff to work with the MDISKMAP & FREEMAP files      */
+/*******************************************************************/
+ parse arg arg2 arg3 arg4
+ if arg2<>'XEDIT' then do /* Check if MDISKMAP still there */
+    c 'EXTRACT /RING'
+    parse value 0 0 0 with FoundMdMap FoundFreeMap SizeFreeMap
+    do i=2 to ring.0
+      parse var ring.i fid 20 . . . . size .; fid=space(fid)
+      if fid=mdiskMap then FoundMdMap=1
+      else if fid=FreeMap then
+          parse value 1 size with FoundFreeMap . '=' SizeFreeMap
+    end
+    if \FoundMdMap then do
+       c 'EMSG The' mdiskmap 'file is no longer in XEDIT''s RING'
+       c 'QUIT'
+       exit 28
+    end
+ end
+ Select
+  /* MDISKMAP functions */
+  When arg2='XEDIT'   then call MdiskMapXedit   /* Edit MDISKMAP */
+  When arg2='CLEANUP' then call MdiskMapCleanup /* clean MDISKMAP */
+  When arg2='JUMP' then call MdiskMapJump arg3  /* Nxt/prv vol in MDMAP*/
+  When arg2='FILTER'   then call MdiskMapFilter /* Filter MDISKMAP */
+  /* FREEMAP functions */
+  When arg2='FREEMAP'  then call MdiskFreeMap arg3 arg4 /* Make/Edit FR*/
+  When arg2='QMDISK'   then call MdiskQmdisk arg3/* Who owns a cyliner */
+  When arg2='GOMDISK'  then call MdiskGomdisk   /* Return to Mdisk */
+  When arg2='DIRMMMD'  then call MdiskMove arg2 /* Move with DIRM */
+  When arg2='DFSMSMMD' then call MdiskMove arg2 /* Move with DFSMS */
+  When arg2='FNDGAP'   then call MdiskMoveFindGap /* Find a Gap */
+  Otherwise c 'EMSG Unsupported MAP func:' arg2 ; exit 220453
+ end
+return
+ 
+MdiskMapXedit:
+ address '' , /* refresh MDISKMAP required? */
+  'PIPE (end ?) COMMAND LISTFILE GAPFILE VOLSERS * (NOH ISO|TAKE',
+     '|Append COMMAND LISTFILE EXCLUDE VOLSERS *(NOH ISO||TAKE',
+     '|Append COMMAND LISTFILE INCLUDE VOLSERS *(NOH ISO||TAKE',
+     '|Append COMMAND LISTFILE FULLPACK DEFINES *(NOH ISO||TAKE',
+     '|Append COMMAND LISTFILE' fid '(NOH ISO',
+     '|SORT 57-75 D|SPEC 57-75|VAR DDATE',
+  '? COMMAND LISTFILE' MdiskMap '(NOH ISO',
+     '|SPEC 57-75|Append Literal 0000-00-00 00:00:00|VAR MDATE'
+ if mdate<ddate then do /* Must refresh */
+    call QuitFi
+    rc=Dirmap()
+    if rc<>0 then do
+       if Gui then /* Exit quickly if GUI & serious problem ? */
+          if wordpos(rc,104 108)=0 then exit rc
+       if rc=28 then exit rc
+    end
+ end
+ /* Was DRM started by DRMGUI ? */
+ ce '/SYNONYM $$-DRMG$/' /* Get DRMGUI Start options */
+ parse var synonym.3 . GuiStart .
+ if GuiStart=1 Then c 'XEDIT' mdiskmap '(NOPROF'
+               else c 'XEDIT' mdiskmap
+ cs 'PF3 COMMAND QUIT'
+ cs 'PF4  MACRO 'me' $MDMP$ CLEANUP'
+ cs 'PF9  MACRO 'me' $MDMP$ FILTER'
+ cs 'PF10 MACRO 'me' $MDMP$ JUMP +'
+ cs 'PF11 MACRO 'me' $MDMP$ JUMP -'
+ cs 'PF12 MACRO 'me' $MDMP$ FREEMAP'
+ cs 'RESERVE -1 h     4=Cleanup        9=Filter    10=+Vol 11=-Vol ',
+             '12=Freemap'
+ cs 'AUTO OFF'; c 'RESET'
+ if guiStart<>1 then do /* DRM not started in GUI mode */
+    address '' 'EXECSTAT PROFDRM XEDIT'
+    if rc<=4 then 'MACRO PROFDRM'
+ end
+ cs 'RANGE :0 *'
+ If Gui then call MdiskMapCleanup 'RETURN' /* clean MDISKMAP */
+return
+ 
+MdiskMapJump:
+ parse arg JumpDir
+ ce '/LINE/SCOPE/ZONE';cs 'SCOPE ALL'
+ c ':1' ce '/CURLINE' ; c ':'line.1
+ if left(curline.3,1)<>' ' then
+    call Error1 'You must perform cleanup first.  Press PF4'
+ ce '/CURLINE'
+ cs 'ZONE 2 14'
+ volDev = substr(curline.3,2,13) /* Volser and Devtype */
+ c jumpDir not'/'volDev'/ &' not'/-------------/'
+ cs 'SCOPE' scope.1
+ cs 'ZONE' zone.1 zone.2
+exit
+ 
+/*-----------------------------------------------------------------*/
+MdiskMapFilter: /* Fileter the MDISKMAP                            */
+/*-----------------------------------------------------------------*/
+ parse arg what opt
+ ce '/LINE/CURSOR/SCOPE/ZONE/WRAP';cs 'SCOPE ALL'; orgline=line.1
+ c ':1' ce '/CURLINE' ; c ':'orgline
+ cs 'SCOPE' scope.1
+ if left(curline.3,1)<>' ' then
+    call Error1 'You must perform cleanup first.  Press PF4'
+ 
+ parse value FilterPrompt('MDISKMAP',3), /* Prompt user for filter name*/
+       with GapFltActGrp GapFltGrpInfo  /* selected group */
+ 
+ call ApplyDynFilter 'MDISKMAP',3 /* Use XEDIT SELECT to hide lines */
+ 
+ c ':'line.1 c 'SUPER /DISP 9 9/SCOPE DISP/SHADOW OFF'
+ 
+exit
+ 
+ 
+/*-----------------------------------------------------------------*/
+MdiskFreeMap: /* Xedit the FREEMAP                                 */
+/*-----------------------------------------------------------------*/
+ parse arg what opt
+ ce '/LINE/CURSOR/SCOPE/ZONE/WRAP';cs 'SCOPE ALL'; orgline=line.1
+ c ':1' ce '/CURLINE' ; c ':'orgline
+ cs 'SCOPE' scope.1
+ if left(curline.3,1)<>' ' then
+    call Error1 'You must perform cleanup first.  Press PF4'
+ 
+ ToFind=''
+ if what<>'MAP' then
+  If Cursor.3>=0 & cursor.4>=0 then do
+    c ':'cursor.3 ce '/CURLINE' ; src=0 ; c ':'orgline
+    if src=0 then do
+       parse var curline.3 vol . 37 start .
+ 
+       If left(vol,7)<>'-------' then Tofind = vol start
+    end
+ end
+ 
+ If FoundFreeMap & (SizeFreeMap=0 | what='MAP') then do
+    c 'X' FreeMap; c 'QUIT'; FoundFreeMap=0 ; end
+ if \FoundFreeMap then call MdiskBuildFreeMap
+ 
+ If what<>'MAP' then c 'X' FreeMap
+ if ToFind<>'' then call MdiskFindInFreeMap /* Find mdisk in FREEMAP  */
+ exit
+MdiskFindInFreeMap: /* Find mdisk in FREEMAP                         */
+ c 'X' FreeMap
+ c '-*' cs  'Z 1 6'
+ c '/'left(vol,6)'/'
+ MdkFnd=0
+ if rc<>0 then c 'EMSG Volume' vol 'not found in' FreeMap
+ else do
+    str=(start%50)*50 /* We have 50 cyls per line in FREEMAP */
+    c '/'right(str,6)
+    if rc<>0 then c 'EMSG Cyl' start 'not found in' FreeMap
+    else do
+       ce '/LINE'
+       c 'CURSOR FILE' line.1 (start-str)+9
+       MdkFnd=1
+    end
+ end
+ cs  'Z 1 *'
+return MdkFnd
+ 
+/*-----------------------------------------------------------------*/
+MdiskBuildFreeMap: /* Build the FREEMAP                            */
+/*-----------------------------------------------------------------*/
+ parse value '' with Qlinks CharsLogon CharsLogoff CHARShard,
+                     NoMoveMdisks NoMoveusers NoMovecyl0
+ address '' 'STATE DRM NAMES'
+ if rc=0 then do
+    address '' 'MAKEBUF'
+    address '' 'NAMEFIND :nick FREEMAP',
+                    ':CharsLogon :CharsLogoff :CharsHard :Qlinks',
+                    ':ShowMdisk :NoMoveMdisks :NoMoveusers ',
+               '(FILE DRM STACK'
+    if rc=0 then do
+       parse pull CharsLogon ;parse pull CharsLogoff;parse pull CHARShard
+       pull Qlinks; pull ShowMdisk
+       pull NoMoveMdisks; pull NoMoveusers
+    end
+    address '' 'DROPBUF'
+ end
+ if Qlinks=''     then Qlinks=0
+ if ShowMdisk ='' then ShowMdisk=1
+ if wordpos(Qlinks,0 1)=0 then do
+    c 'EMSG :Qlinks.'qlinks 'in DRM NAMES is invalid.  Use 0 or 1'
+    Qlinks=0; end
+ if wordpos(ShowMdisk,0 1)=0 then do
+    c 'EMSG :ShowMdisk.'ShowMdisk 'in DRM NAMES is invalid.  Use 0 or 1'
+    ShowMdisk=1; end
+ 
+ if CharsLogon ='' then CharsLogon ='ZABCDEFGHIJKLMNOPQRSTUVXWY'
+ if CharsLogoff='' then CharsLogoff='zabcdefghijklmnopqrstuvxwy'
+ if CharsHard  ='' then CharsHard  ='%$:/$ë'
+ lngCLog = length(CharsLogon)
+ lngCLof = length(CharsLogoff)
+ lngCHrd = length(CharsHard)
+ cs 'SYN --DRM+QL .' qlinks
+ 
+ HardMove.=0
+ do while NoMoveMdisks <>''
+    parse var NoMoveMdisks user mdisk NoMoveMdisks
+    mdisk=right(mdisk,4,0)
+    HardMove.user.mdisk=1
+ end
+ do while NoMoveUsers <>''
+    parse var NoMoveUsers user  NoMoveUsers
+    HardMove.user=1
+ end
+ if gui=0 then do
+    c 'X' freemap  ; Call ProfileFreeMap
+ end
+ c 'X' mdiskmap ; c '-*'
+ ce '/ZONE/RANGE/MSGM'
+ cs 'RANGE :0 *'
+ if what='MAP' then do /* Just map 1 DASD for GUI */
+    parse var opt vol MapType .
+    cs 'ZONE 2 7'; cs 'MSGM OFF'
+    c 'LOCATE /'left(vol,6)'/'
+    if rc<>0 then do
+       cs 'MSGM' msgmode.1 msgMode.2
+       cs 'ZONE' zone.1 zone.2
+       address '' 'PIPE LITERAL Volume' vol 'not found in' MdiskMap,
+                    '|VAR EMSG 1'
+       exit 56
+    end
+    cs 'POINT .'vol 'OFF'; cs 'POINT .'vol
+    ce '/LINE/';staLine=line.1
+    c 'LOCATE' not'/'left(vol,6)'/'
+    if rc<>0 then c '+*'
+    cs 'RANGE :'StaLine '-1'
+    cs 'ZONE' zone.1 zone.2
+ end
+ c 'CL:71' /* Col to write flags */
+ /* See who is logon, their mdisks will be uppercase letters */
+ parse value diag(8,'Q USERS') with NbUsers .
+ Logon.=0
+ parse value translate(diag(8,'Q NAMES',NbUsers*19+200),',','15'x),
+       with Users
+ do while users<>''
+    parse var users user . ',' users
+    Logon.user=1
+ end
+ parse value '' with oVolser FbaDisks; Drop TotFree
+ do forever
+    c '+1';if rc<>0 then leave
+    ce '/CURLINE/LINE'
+    parse var curline.3 volser type . 17 char 18,
+                        user cuu . 37  sta end size flag .
+    if type='' then iterate /* separator line */
+    if volser<>ovolser then do
+       if oVolser<>'' then call MapVolser
+       parse value 0     0      0       0       0       volser  type,
+             with MaxGap NbGaps totFree DevSize MdiskNo oVolser Devtype,
+               '' map oFlag
+    end
+    if cuu='' then do /* a Gap */
+       map=overlay(left('',size),map,sta+1)
+       parse value 0       max(MaxGap,size) NbGaps+1 totFree+size ,
+             with  mdiskNo MaxGap           NbGaps   totFree
+    end
+    else do
+       mdiskNo=MdiskNo+1
+       cuu=right(cuu,4,0)
+       /* Update classic MdiskMap  */
+       Select
+         when char='-' then t='-Cleaning'  /* Being cleaned */
+         when char='d' then t='-Old place' /* Old place of moved mdisk */
+         when char='m' then t='+New place' /* New place of moved mdisk */
+         when sta=0 | HardMove.user | HardMove.user.cuu then
+              t=substr(CharsHard,(mdiskNo//lngCHrd)+1,1)'Hard2move'
+         When Logon.user then
+              t=substr(CharsLogon,(mdiskNo//lngCLog)+1,1)'Logon'
+         Otherwise
+              t=substr(CharsLogoff,(mdiskNo//lngCLof)+1,1)
+       end
+       parse var t letter 2 t
+       if flag='' then c 'CR' left(t,9) /* Update MDISKMAP file */
+       map=overlay(left('',size,letter),map,sta+1)
+       if ShowMdisk then if size>=50 then do
+          string='__'user'_'cuu'__';offset=trunc((50-length(string))/2)
+          do xx=(trunc(sta/50) + (sta//50<>0))*50 by 50 ,
+             to trunc((sta+size)/50)*50 -1
+             map = overlay(string,map,xx+offset)
+          end
+       end
+    end
+    DevSize=max(DevSize,end+1)
+ end
+ call MapVolser /* Map last disk */
+ 
+ cs 'MSGM' msgmode.1 msgMode.2
+ cs 'ZONE' zone.1 zone.2
+ cs 'SCOPE' scope.1
+ c ':'orgline
+ if what='MAP' then do /* Working for GUI */
+    cs 'RANGE :'range.1 ':'range.2
+    return
+ end
+ c 'X' freemap ; c '-*' ; cs 'ALT 0 0'; cs 'LINEND' linend.1
+return
+ 
+MapVolser:
+ if Symbol('TotFree')<>'VAR' then do
+    address '' 'PIPE LITERAL Volume' ovolser 'has no minidisks',
+                'or only a FULLPACK one.',
+                 '|VAR EMSG 1'
+    exit 56
+ end
+ if what='MAP' then do;/* pass map to caller (GUI exec) */
+    address '' 'PIPE (end 15)',
+          'Var  Map  |Var   MAP.'oVolser' 1 Direct',
+          '15'x'Literal' TotFree'|Var TFREE.'oVolser' 1 Direct',
+          '15'x'Literal' DevSize'|Var  SIZE.'oVolser' 1 Direct',
+          '15'x'Literal' DevType'|Var  DEVT.'oVolser' 1 Direct'
+    return
+ end
+ /* Print mapping of this volser in XEDIT */
+ c 'X' freemap
+ c '.SEP--LIN' c '-1'
+ c 'I *' left(ovolser,6) left(devtype,4) right(DevSize,8) '    ',
+   right(totFree,8) left('('format(TotFree/devSize*100,,0)'%)',5),
+   right(MaxGap,8) format(TotFree/max(nbGaps,1),8,0),
+   right(nbGaps,8)
+/*    format(100/(TotFree/max(nbGaps,1)),4,4) */
+ c '*' c 'I' oVolser devtype 'Size' DevSize 'Free: total -'TotFree'-',
+      '('format(TotFree/devSize*100,,0)'%)',
+      'max -'MaxGap'-  avg/gap -'format(TotFree/max(nbGaps,1),,0)'-'
+ c 'I        |0....+....1....+....2....+....3....+....4....+....|',
+   'Gap sizes'
+ 
+ prev=0 ; tmap=translate(map,'_',' '||xrange())
+/*
+- ttmap=map
+- do i=0 by 50 to devSize
+-    parse var map   l +50 map  0 ToEat +50 '' tFree
+-/* ??? Room for improvement; see also DRMFRAG GUIWIRE, rtn UpdateMap */
+-    do while toEat\==''
+-       parse var toEat char 2 toEat
+-       if char==' ' then prev=prev+1
+-       else if Prev<>0 then do; TFree=tFree Prev; prev=0 ;end
+-    end
+-    if prev<>0 then
+-       if left(map,1)\==' ' | map=='' then do
+-          TFree=tFree Prev
+-          prev=0
+-       end
+-    c 'I' right(i,6) '|'left(l,50,'*')'|' tfree
+- end i
+-prev=0;map=ttmap
+*/
+/* improved version, should be faster */
+ do i=0 by 50 to devSize
+    parse var map   l +50 map  0 ToEat +50 '' tFree
+    parse var tMap toeat +50 tMap
+    ttfree=''
+    do while toEat<>''
+       parse var toEat gap toEat
+       ttfree=ttfree length(gap)
+    end
+    if prev>0 then do /* we know gap is continuing on this line */
+       parse var ttFree free1 ttFree
+       if free1<>"" then prev=prev+free1
+    end
+    if ttFree<>'',                         /* still gaps on this line */
+     | right(l,1)\== " " ,                 /* Gap doesn't continue */
+     | left(tmap,1)\="_" then do           /* Gap doesn't continue */
+       if prev<>0 then do; tfree=prev; prev=0 ; end
+       if right(l,1)==" " ,                /* gap till end-of-line ..*/
+        & left(map,1)==" " & map\=='' then do /* and gap continues*/
+          if ttfree<>'' then do
+             prev=word(ttFree,words(ttfree))
+             ttFree=subword(ttFree,1,words(ttfree)-1)
+          end
+       end
+    end
+    c 'I' right(i,6) '|'left(l,50,'*')'| ' space(tfree ttfree)
+ end i
+ 
+ c 'I        |0....+....1....+....2....+....3....+....4....+....|'
+ c 'I  '
+ c 'XEDIT' mdiskmap
+return
+ 
+ProfileFreeMap:
+ cs 'MSGM OFF'; c '-*' c 'DEL *'
+ c 'I *-Volser Devt     Size  Free:  Total (pct)      Max  Avg/gap   NbGaps'
+ c 'I *--------------------------------------------------------------------'
+ c 'DUP'; cs 'POINT .SEP--LIN'
+ cs 'MSGM ON' ; cs 'AUTO OFF'
+ 
+ ce '/MSGL/CMDL/LINEND'
+ if msgline.0>1 then do  /* MSGL is not off */
+    if msgline.3<3 then cs 'MSGL ON' msgline.2 3 msgline.4
+ end; else do; if cmdline.1='TOP' then cs 'MSGL ON 3 3 'O'
+                                  else cs 'MSGL ON 2 3 'O';end
+ cs 'SCALE OFF'; cs 'AUTO OFF'
+ cs 'PF3' c 'QUIT'
+ cs 'PF4  MACRO 'me' $MDMP$ DIRMMMD'
+ cs 'PF5  MACRO 'me' $MDMP$ DFSMSMMD'
+ cs 'PF9  MACRO 'me' $MDMP$ QMDISK'
+ cs 'PF11 MACRO 'me' $MDMP$ QMDISK FILEL'
+ cs 'PF19 NFU _'  /* Next Volser */
+ cs 'PF20 NFI _'  /* Prev Volser */
+ cs 'PF10 MACRO 'me' $MDMP$ FNDGAP'
+ cs 'PF12 MACRO 'me' $MDMP$ GOMDISK'
+ t=word('-1 -2',(cmdline.1='BOTTOM')+1)
+ cs 'RESERVE' t 'H PF   4=DIRMaint MOVE   5=DFSMS Move  ',
+                       '9=Qmdisk 10=FindGap 11=Filel 12=-> mdisk'
+ address '' 'EXECSTAT PROFDRM XEDIT'
+ if rc<=4 then 'MACRO PROFDRM'
+ cs 'SYNONYM $$&&$$-- $$&&$$--' /* Remove old searched mdisk */
+ cs 'SYNONYM $$&&$$++ $$&&$$++' /* Remove old selected gap */
+return
+/*-----------------------------------------------------------------*/
+MdiskQmdisk: /* PF9 or PF11 in FILELIST call this function:
+|  If cursor is in filearea:
+|       PF9:    Find onwer of mdisk in pointed too
+|       PF11:   Same, but also go to FILELIST
+|  If cursor not in FILEAREA and something in CMDarea:
+|       Suppose user wrote "uid cuu" in cmdarea: find that mdisk
++-----------------------------------------------------------------*/
+ ce '/CURSOR'
+ If cursor.3<0 & queued()<>0 then do
+    parse upper pull user cuu . ; if cuu='' then cuu=191
+    parse value diag(8,'Q MDISK USER' user cuu 'LOCATION DIRECTORY'),
+          with  emsg '15'x . . . . . vol . start size . '15'x
+    if vol='' then do ; c 'EMSG' emsg ; exit ; end
+    Found=MdiskFindInFreeMap() /* Find mdisk in FREEMAP   */
+    if \Found then do;c 'EMSG problem finding mdisk:' user cuu; exit;end
+ end
+ 
+ Parse Arg Go2Filel  /* "Go2Filel" is set if called by PF11 */
+ PctFull=''
+ msg=MdiskFindOwner('Q','Place the cursor in a disk map area',
+                         'to find what mdisk is defined there',
+                    ,Abbrev('FILELIST',Go2filel,1))
+ if owner='' then do
+    c 'EMSG No mdisk found on volume' volser 'covering cylinder' cyl
+    cs 'SYNONYM $$&&$$-- $$&&$$--' /* Remove old searched mdisk */
+    cs 'SYNONYM $$&&$$++ $$&&$$++' /* Remove old selected gap */
+ end
+ else do
+    size=end-start+1
+    Select
+     when dFlag='-' then t='(it is being CLEANED)'
+     when dFlag='d' then t='but you moved him away'
+     when dFlag='m' then t='if your move went OK'
+     otherwise t=''
+    end
+    c 'MSG Cyl' cyl 'on' volser 'is part of' owner':',
+           start'-'end '=' size 'cyl'left('s',(size>1))||pctFull
+    if t<>'' then c 'MSG ..' t
+ 
+    parse var msg . m '15'x msg
+    if m<>'' then c 'MSG .. mdisk usage:' m
+    if msg<>'' then c 'MSG' msg
+    /* Remember Mdisk checked in XEDIT syn $$&&$$-- */
+    if words(owner)=2 then  /* owner= "uid cuu", not a gap, so remember*/
+       cs 'SYNONYM $$&&$$-- 1 .' owner','dFlag volser start end size,
+                                 cursRow CursCol devt LinkMode
+ end
+return
+/*-----------------------------------------------------------------*/
+MdiskGoMdisk: /* Return to Mdisk just moved/queried                */
+/*-----------------------------------------------------------------*/
+ ce '/SYNONYM $$&&$$--/' /* Do we know about a checked mdisk ? */
+ if synonym.3='$$&&$$--' then Call Error1 'There is no qMdisk position',
+            'saved to return to'
+ 
+ parse var synonym.3 . oUser oCuu oVolser oStart oEnd oSize,
+                     ocursRow oCursCol .
+ parse var oCuu oCuu ','oDflag
+ c ':'ocursRow c 'CURSOR FILE' ocursRow oCursCol
+ c '-4'
+ c 'MSG back on' oUser oCuu ,
+   ostart'-'oend '=' osize 'cyl'left('s',(osize>1))
+exit
+ 
+ 
+/*-----------------------------------------------------------------*/
+MdiskMove: /* Prepare or do a move of an Mdisk                     */
+/*-----------------------------------------------------------------*/
+ If arg(1)='DIRMMMD' then pf='4' ; else pf='5'
+ ce '/SYNONYM $$&&$$--/' /* Do we know about a checked mdisk ? */
+ if synonym.3='$$&&$$--' then Call Error1 'You first must use QMDISK',
+            'before requesting a MOVE minidisk (use PF9)'
+ 
+ /* Anal info saved (in synonym) about mdisk to be moved */
+ parse var synonym.3 . oUser oCuu oVolser oStart oEnd oSize,
+                     ocursRow oCursCol oDevt oLinkMode isMoved
+ parse var oCuu oCuu ','oDflag
+ 
+ if IsMoved<>'' then Call Error1 'We already moved' oUser oCuu Ismoved,,
+    'If this move failed use PF9 again or better REFRESH the maps.'
+ 
+ /* Did user press PF-key again to actually move an Mdisk ? */
+ if queued()<>0 then signal MdiskMoveit /* Perform the move */
+ 
+ Call MdiskFindOwner 'M','Place the cursor in a GAP of the map area',
+              'to indicate the place to move' oUser Ocuu ,
+              '('oSize 'cyl'left('s',(oSize>1))') to'
+ 
+ if owner='' then call Error1 mdiskmap 'for volume' volser 'does not',
+                              'cover cylinder' cyl
+ 
+ if words(owner)=2 then do /* owner="uid cuu", so an Mdisk, not a gap */
+    Select
+     when oDflag='-' then t=' but it is being cleaned'
+     when oDflag='d' then t=' but you moved him away'
+     when oDflag='m' then t=' if your move went OK'
+     otherwise t=''
+    end
+    call Error1 'Cyl' cyl 'on' volser 'is not',
+                        'free, but part of' owner''t
+ end
+ else /* A gap, remember it's pos */
+   cs 'SYNONYM $$&&$$++ 1 .' volser start end rDevSize cursRow CursCol Devt
+ 
+ Select
+  when oDflag='d' then
+     c 'EMSG BEWARE: a move for user' oUser oCuu 'has already been',
+       'requested.'
+  when oDflag='-' then
+     c 'EMSG BEWARE: minidisk' oUser oCuu 'has been purged',
+       'and is being cleaned.'
+  when oDflag='m' then
+    call Error1 'You cannot request the move of a moved mdisk:' oUser,
+          oCuu
+  otherwise nop
+ end
+ 
+ size=end-start+1
+ end=start+osize-1
+ TooSmall= (oSize>size)
+ if TooSmall then do
+    t= 'Gap at cyl' cyl 'on' volser 'is',
+           'only' size 'cyls;' oUser Ocuu 'needs' oSize 'cyls'
+    if pf=4 then c 'EMSG BEWARE:' t /* Move into small = OK with DIRM */
+            else call Error1 t      /* DFSMS move needs => space */
+ end
+ 
+ If pf=4
+  then do
+     t='/DIRM FOR' oUser 'CMDisk' oCuu devt start oSize volser
+     c 'CMSG' t
+     c 'CURSOR CMDL' Wordindex(t,8) /* Place cursor on SIZE */
+  end
+  else c 'CMSG /DFSMS MOVE' oUser oCuu 'VOL' volser '(NORESERV DEVTYP',
+         devt 'START' start
+ If oVolser=Volser then
+    c 'MSG Press PF'pf 'to move' oUser oCuu 'from' oStart'-'oEnd ,
+                                              'to'  Start'-'End
+ else
+    c 'MSG Press PF'pf 'to move' oUser oCuu 'from' oVolser oStart'-'oEnd,
+                                             'to'  Volser  Start'-'End
+ 
+return
+ 
+/*-----------------------------------------------------------------*/
+MdiskMoveit: /* User pressed PF-key again to actually move an Mdisk*/
+/*-----------------------------------------------------------------*/
+ parse pull cmd 0 input ; cmd=strip(cmd)
+ if left(cmd,1)<>'D' then cmd=translate(substr(cmd,2))
+ 
+/* Info about mdisk to move is in XEDIT syn $$&&$$--
+   Info about gap to move mdisk to is in syn $$&&$$++  */
+ ce '/LINE/SYNONYM $$&&$$++/' ; OrgLine=line.1
+ if synonym.3='$$&&$$++' then exit 5
+ /* Get Gap info: vol, start gap, end gap, disk size, ..*/
+ parse var synonym.3 . volser Start End rDevSize cursRow CursCol Devt
+ 
+ /* With DFSMS move, user can change VOLSER & start mdisk */
+ /*    "/DFSMS MOVE DBAD 191 VOL VTERES (NORESERV DEVTYP 3390 START 121*/
+ /* With DIRMAINT, end-user can change mdsk size ... Beware... */
+ /*    "/DIRM FOR MAINT220 CMDisk 03A6 3390 3292 6 VTERES */
+ DirmM=(space(subword(cmd,1,4)) = 'DIRM FOR' oUser 'CMDISK' )
+ DirmD=(space(subword(cmd,1,4)) = 'DIRM FOR' oUser 'DMDISK' )
+ DFSMS=(space(subword(cmd,1,3)) = 'DFSMS MOVE' oUser )
+ Select
+ when DFSMS then do
+    parse var cmd ' VOL ' vol . '(' 'START' sta .
+    nSize=oSize
+ end
+ When DirmM then do /* Case for DIRMAINT MOVE */
+    parse var cmd . . . . . . sta sz vol .
+    GapSz=end-start+1
+    if Vol=Volser & Sta=Start & GapSz<sz then do
+       c 'EMSG The gap at' start 'is only' GapSz 'cyls';exit 5;end
+    nSize=sz /* New size after move  */
+ end
+ When DirmD then do /* Case for DIRMAINT Del Mdisk */
+    parse value '' with vol sta /* force "UpdtMap=0" below */
+ end
+ Otherwise
+    c 'EMSG Command not recognized as a move we prepared...'
+/*  rc=0;SAY '+++TEST++++??????? We''d issue',*/
+    cmd
+    if rc<>0 then do;c 'CMSG' input; exit rc;end
+    exit rc
+ end
+ 
+ /* We can only update map if start nor volser has been overtyped */
+ UpdtMap= (Vol=Volser & Sta=Start )
+ 
+ /* Execute the pending DFSMS or DIRMAINT command */
+/* rc=0;SAY '+++TEST+++??????? We''d issue',*/
+ cmd
+ if rc<>0 then do;c 'CMSG' input; exit rc;end
+ 
+ /*--- Avoid user moving same mdisk twice ---*/
+ If oVolser=Volser then
+    IsMoved='from' volser oStart'-'oEnd 'to'  Start'-'End
+ else
+    IsMoved='from' oVolser oStart'-'oEnd  'to'  Volser  Start'-'End
+ cs 'SYNONYM $$&&$$-- 1 .' oUser oCuu oVolser oStart oEnd oSize,
+                           ocursRow oCursCol odevt oLinkMode isMoved
+ parse var oCuu oCuu ','oDflag
+ if UpdtMap then do
+   /*--- remove GAP from FREEMAP , flag with + to tell 'full' ---*/
+   Call MdiskFreeMapUpd '+' volser ouser ocuu cursRow cursCol start nSize
+   results=result
+ end
+ else do
+    If DirmD then results=0 /* Tell OK */
+    else do
+       c 'EMSG Start or Volser of new place changed.'
+       results=1 /* tell NOK */
+    end
+ end
+ 
+ /*--- Flag MDISK in FREEMAP as "moved-if-all-goes-fine" ---*/
+ Call MdiskFreeMapUpd '-' ovolser ouser ocuu ocursRow ocursCol ostart osize
+ results=results result
+ c ':'orgline
+ if results='0 0' then exit
+ if wordpos(1,results)<>0 then t='nor' FreeMap ; else t=''
+    c 'EMSG => the move of' usr dev 'is not reflected in' MdiskMap t
+ exit
+ 
+/*-----------------------------------------------------------------*/
+MdiskFreeMapUpd: /* reflect moved Mdisk in FreeMap                 */
+/*-----------------------------------------------------------------*/
+ parse arg char vol usr dev Row Col strt siz /* Area to overlay */
+ c ':'row ce '/CURLINE'
+ parse var curline.3 scyl . 9 area 59 62 gaps
+ do while word(sCyl,1) > strt  /* Position to start of gap/Mdisk */
+    c '-1' ce '/CURLINE'
+    if rc<>0 then return 1
+    parse var curline.3 scyl . 9 area 59 62 gaps
+ end
+ String = left('',siz,char)
+ tstrt=strt
+ do while string<>''
+    OffSet = tstrt-scyl
+    StaCol = 9+ OffSet
+    Maxlng = 50-OffSet +1
+    c 'CL :'StaCol
+    parse var string t =(MaxLng) String
+    tstrt=tstrt+length(t)
+    c 'CR' t
+    if string<>'' then do
+       c '+1' ce '/CURLINE'
+       parse var curline.3 scyl . 9 area 59 62 gaps
+    end
+ end
+ /* Decrease printed gap size */
+ if char='+' then do
+    area=left(area,offset)
+    area=translate(area,'_',' 'xrange('41'x,'FF'x))
+    t=words(area)+1
+    if t>words(gaps) then do /* This gap does not end on this line */
+       parse value 1 with t gaps
+       do until gaps<>''
+          c '+1' ce '/CURLINE'
+          if rc<>0 then return 1 /* Should not happen */
+          parse var curline.3 scyl . 9 area 59 62 gaps
+       end
+    end
+    gap=word(gaps,t)-siz ; if gap<=0 then gap=''
+    if t>1 then ngaps=subword(gaps,1,t-1) gap subword(gaps,t+1)
+           else ngaps=                    gap subword(gaps,t+1)
+    c 'CL :'62; c 'CDEL *';c 'CR' space(ngaps)' '
+ end
+MdiskMdiskMapUpd: /* reflect moved Mdisk in MdiskMap                */
+ /* If col 46 = ' ' then pre z/VM 5.1 MDISKMAP layout; else z/VM 5.1
+ NOTZV5 3390     $ALLOC$   60D0  RR       000       000       001
+ ZVM510 3390     FULLPACK  6011 RR         000       3338       3339 */
+ c 'X' mdiskmap ; ce '/LINE'; c 'PRESERVE';orgline2=line.1;
+ cs 'SCOPE ALL'; cs 'RANGE :0 *'; cs 'WRAP OFF';cs 'MSGM OFF'
+ c '-*' cs 'Z 2 7'; c 'LOCATE /'left(vol,6)'/'
+ if rc<>0 then do
+    c ':'orgline2 c 'RESTORE'
+    'X' freemap
+    c 'EMSG Volser' vol 'not found in' mdiskmap
+    return 2
+ end
+ ce '/LINE'; staVol=line.1
+ c 'LOCATE' not'/'left(vol,6)'/'
+ if rc=0 then cs 'RANGE :'staVol '-1'
+         else cs 'RANGE :'staVol '*'
+ if strt<100 then strt=right(strt,3,0)
+ c '-*' cs 'Z 18 47'
+ found=0
+ if char='+' then do /* new Mdisk in a GAP */
+    c '/'left('',9) left('',4) '   ' right(strt,9) '/'
+    if rc=0 then do
+       found=1
+       ce '/CURLINE'
+       parse var curline.3  37 tstart tend tsiz . 0 46 t 47
+       zVM51=(t<>' ');l=9+zVM51
+       c 'R ' left(vol,6) left(Devt,8) || 'm'left(usr,9),
+         left(dev,5-zVM51) left(oLinkMode,2+zVM51),
+         right(strt,l) right(strt+siz-1,l) right(siz,l)
+       if tsiz<>siz then do
+          NewStrt=strt+siz;if newstrt<100 then NewStrt=right(NewStrt,3,0)
+          NewSiz =tsiz-siz;if newSiz <100 then NewSiz =right(NewSiz ,3,0)
+          c 'I ' left(vol,6) left(Devt,8) || ' 'left('',9),
+             left(dev,8),
+             right(NewStrt,l) right(tend,l) right(NewSiz,l)'     Gap'
+       end
+    end
+ end
+ else do /* Indicate user's mdisk move is attempted */
+    c '+1' c 'EXTRACT /CURL'
+    zVM51=(substr(curline.3,46,1)<>' ')
+    c '-1' c '/'left(usr,9) left(dev,5-zVM51) left(oLinkMode,2+zVM51),
+           right(strt,9+zVM51)' /'
+    if rc=0 then do; found=1; cs 'Z 1 *'; c 'CL :17'; c 'CR d';end
+ end
+ cs 'RANGE :0 *'; c ':'orgline2 c 'RESTORE';
+ 'X' freemap
+ if \found then do
+    if char='+' then c 'EMSG No gap found in' mdiskmap 'starting at' strt
+    else c 'EMSG User' usr dev 'not found in' mdiskmap 'starting at' strt
+    return 2
+ end
+return 0
+ 
+/*-----------------------------------------------------------------*/
+MdiskMoveFindGap: /* Find a gap for the requested mdisk            */
+/*-----------------------------------------------------------------*/
+ ce '/SYNONYM $$&&$$--/'
+ if synonym.3='$$&&$$--' then Call Error1 'You first must use QMDISK',
+            'before requesting to find space (use PF9)'
+ parse var synonym.3 . oUser oCuu oVolser oStart oEnd oSize .
+ parse var oCuu oCuu ','oDflag
+ 
+ c 'PRESERVE'
+ cs 'WRAP ON'; cs 'ZONE 61 *' ; cs 'MSGM OFF'
+ Seen.=0
+ ce '/CURLINE/LINE'; ol=line.1
+ if left(curline.3,1)<>'' then ogaps=''
+                   else ogaps=substr(curline.3,61) /* Gaps of currline */
+ do until sta=''  /* Nbr for gap found should not be on "comment" line */
+    c '/' osize '/' ; lrc=rc
+    if lrc<>0 then leave
+    ce '/CURLINE/LINE';l=line.1
+    if seen.l then do;lrc=2;leave;end
+    parse var curline.3 sta 2 9 area 59 . gaps
+    seen.l=1
+ end
+ 
+ if lrc<>0 then do
+    c ':'ol c 'RESTORE'
+    If find(ogaps,osize)=0 then
+       call error1 'No gap fits exactly for' oUser oCuu,
+                           '('oSize 'cyl'left('s',(oSize>1))')'
+    Else
+       call error1 'You''re standing on the only gap fitting',
+                           oSize 'cyl'left('s',(oSize>1))
+ end
+ cs 'SCOPE ALL'; cs 'IMAGE OFF'
+ c 'NFU _' ; ce '/CURLINE'
+ c 'RESTORE'
+ c ':'line.1 c 'MSG Indicated gap on' word(curline.3,1),
+               'would fit for' ouser ocuu
+ w=wordpos(osize,gaps); if w=0 then exit /* impossible, but ??? */
+ area=translate(area,'_',' 'xrange('41'x,'FF'x))
+ w = wordindex(area,w)
+ c 'CURSOR FILE' line.1 8+w 'PRIO 50'
+exit
+ 
+/*-----------------------------------------------------------------*/
+MdiskFindOwner: /*                                                 */
+/*-----------------------------------------------------------------*/
+ parse arg QorM , msg1, Go2Filel
+ ce '/CURSOR/LINE/POINT *'
+ parse value line.1 cursor.3 cursor.4 with orgLine CursRow CursCol
+ tocline=0
+ do i=1 to point.0 until tocline<>0
+    parse var point.i . l point .
+    if point='SEP--LIN' then tocline=l
+ end
+ if QorM='Q' then    /* QUERY an MDISK */
+    if cursRow>0 & cursRow<=TocLine then do /* Cursor is in TOC */
+       c ':'cursRow ce '/CURLINE'; if rc<>0 then exit
+       parse var curline.3 sta 3 vol .
+       if sta='*-' then do ; c ':'orgline ;call Error1 msg1;end
+       cs 'Z  1 6' ; c '/'left(vol,6)'/';cs 'Z 1 *'
+       exit
+    end
+ 
+ 
+ GotoMdiskMap=0 /* Stay in FreeMap */
+ if QorM='Q' then    /* QUERY an MDISK */
+    if cursRow>=0 & (cursCol<9 | cursCol>58) then
+       GotoMdiskMap=1 /* Find this "area" in the MdiskMap */
+ 
+ if \GotoMdiskMap then
+    if cursRow<=0 | cursCol<9 | cursCol>58 then call Error1 msg1
+ 
+ c ':'cursRow ce '/CURLINE'; if rc<>0 then exit
+ parse var curline.3 start . 8 c1 +1 c2 +1 59 c3 +1 0 col1 2
+ if \GotoMdiskMap then
+    if c1||c3<>'||' | c2='0' then call Error1 msg1
+ 
+ if \GotoMdiskMap then cyl = start + cursCol - 9
+ else if col1<>'' then cyl = '' ; else cyl = start
+ 
+ cs 'IMAGE OFF'
+ if col1='' then
+    c 'NFU _' ; if rc<>0 then Call Error1 'Could not find start of map'
+ ce '/CURLINE'; parse var curline.3 volser . . rDevSize .
+ c 'CURSOR SCREEN' cursor.1 cursor.2
+ c ':'orgline
+ if cyl>rDevSize-1 then
+    call Error1 'Cylinder' cyl 'is above end-of-disk:' rDevSize-1
+ 
+ c 'X' mdiskmap;c 'PRESERVE'; ce '/LINE';orgline2=line.1
+ c '-*' cs 'SCOPE ALL';cs 'Z 2 7'; c 'LOCATE /'left(volser,6)'/'
+ if rc<>0 then do
+    c ':'orgline2 c 'RESTORE';'X' freemap
+    call Error1 'Volser' volser 'not found in' mdiskmap
+ end
+ address '' 'MAKEBUF'; buffer=rc;oq=queued()
+ parse value rDevSize-1 volser,
+       with  rDevSize   vol  owner oDevt fpack dFlag
+ 
+/*CTBKP 3390     FULLPACK  401D  RR       000      3338      3339 */
+ if cyl<>'' then /* Find the requested cylinder */
+ Do i=0 by 0 until rc<>0 /* do until EOF or disk found */
+    c 'STACK 40 1 70'
+    do queued()-oq
+       parse pull C1 2 vol +6 devt . 17 f 18 user cuu linkmode 37 start end .
+       if c1<>'' then iterate
+       if vol<>'' & vol<>volser then leave i
+       if devt='' then devt=oDevt
+       if end =rDevSize & start=0 then    /* fullpack */
+          do;fpack=linkmode devt start end user cuu';'f;iterate;end
+       if end>= cyl then do;owner=word(user '**gap**',1) cuu; leave i;end
+    end
+ end i
+ if owner='' & fpack<>'' then
+    parse var fpack linkmode devt start end owner';'f
+ dFlag=f
+ c 'RESTORE'
+ 
+ Remains=queued()
+ address '' 'DROPBUF' buffer
+ if vol='' then
+    call Error1 'You must "cleanup" the' mdiskmap 'file (PF4)'
+ 
+ If GotoMdiskMap then do /* Show this "area" in the MdiskMap */
+    if cyl<>'' then c '-'remains
+    exit
+ end
+ 
+ c ':'orgline2
+ c 'X' freemap; c 'CURSOR SCREEN'  cursor.1 cursor.2
+ 
+ /*---- Maybe query the links to this MDISK ---------------------------*/
+ if owner='**gap**' | QorM<>'Q' then return ''  /* A gap or "Q if gap" */
+ If Go2Filel=0 then do
+    ce '/SYNONYM --DRM+QL/'                     /* Check user preferenc*/
+    if synonym.0=0 then return ''
+    parse var synonym.3 . qlinks .
+    if qlinks<>1 then return ''                 /* User doesn't want it*/
+ end
+ /*--- Yes, we should Query LINKS and co ----------------------------- */
+ do FreeCuu=120 until rc<>0
+    parse value diagrc(8,'Q V' FreeCuu) with rc .
+ end FreeCuu
+ parse value diagrc(8,'LINK' owner FreeCuu 'RR'),
+       with rc . 17 emsg '15'x
+ if rc<>0 then return rc Emsg
+ 
+ call CSL 'DMSGETFM rc reas FreeFm'
+ if rc= 0 then do
+    address ''
+    trace -1;'PIPE COMMAND ACCESS' FreeCuu FreeFm
+    if rc<0 then do
+       'SET CMSTYPE HT';'ACCESS' FreeCuu FreeFm;'SET CMSTYPE RT';end
+    if rc<>0 then PctFull=' (ACC rc='rc')'
+    else do
+       If Go2Filel then do
+          queue 'MSG  The listed Mdisk is:' owner
+          'EXEC FILELIST * *' FreeFm
+          'DROPBUF' /* In case FILELIST failed (eg OS-disk) */
+       end
+       'MAKEBUF';oq=queued()
+       'QUERY DISK' FreeFm '(STACK'
+       if queued()-oq=2 then do
+          pull;pull 39 dosOs . '-' used .
+          if used='' then pctFull=' 'dosOs'-disk'
+                     else pctFull=' ('used'% full)'
+       end
+       'DROPBUF'
+       'RELEASE' FreeFm
+    end
+    address XEDIT
+ end
+ 
+ parse value translate(diag(8,'Q LINKS' FreeCuu),,','||'15'x) with links
+ if words(links)=3 then msg= 'not linked by anyone'
+ else do
+   ro=0;rw=0;myself=userid();SomeUsers=''
+   FreeCuu = right(FreeCuu,length(word(links,2)),0)
+   do i=1 until links=''
+      parse var links user lcuu lmode links
+      if user lcuu=myself FreeCuu then do;i=i-1; iterate;end
+      if lmode='R/W' then rw=rw+1; else ro=ro+1
+      SomeUsers=SomeUsers user lcuu lmode';'
+   end
+   if rw+ro<=3 then msg=strip(SomeUsers,'T',';')
+   else msg='used R/O by' ro 'users and' rw 'R/W'
+ end
+ parse value diag(8,'Q MDISK' FreeCuu 'LOCATION') ,
+       with '15'x . . . . . onVol . onStart OnSize . '15'x
+ if OnSize='' then parse value diag(8,'Q V' FreeCuu) ,
+                         with . . . onVol . OnSize . '' OnStart
+ MdskSizeInMap=end-Start+1
+ 
+ If OnStart<>'' then /* We've got a modern VM */
+    mis=OnVol<>Vol | OnStart<>start | MdskSizeInMap<>OnSize
+ else                /* An old VM without Q MDISK command */
+    mis=OnVol<>Vol | MdskSizeInMap<>OnSize
+ 
+ If Mis then msg=msg'15'x'..Beware the mdisk is not located as in the',
+    'map, but on' OnVOl OnStart
+ call diag 8,'DET' FreeCuu
+return 0 msg
+ 
+/*-----------------------------------------------------------------*/
+MdiskMapCleanup: /* Remove print headers, fill in volsers          */
+/*-----------------------------------------------------------------*/
+ ce '/FT/LINEND'
+ if ftype.1<>'MDISKMAP' then call Error1 'ftype must be MDISKMAP'
+ c '-*' ; cs 'SCOPE ALL'  ; cs 'ZONE 1 *' ; c 'CL :2'; cs 'LINEND OFF'
+/* Two layouts for MDISKMAP exist: pre z/VM V5 and from z/VM V5.1 on
+ VCTBKP 3390     FULLPACK  0124  RR123  12000     13338     13339     old
+ VCTBKP 3390     FULLPACK  0124 RR125    12000      13338      13339  new
+ When using DRMGUI, we change format back to V4: DRMGUI does not
+ support cylnumbers >5 digits anyhow */
+ do 20 /* Find first Mdiskline and derive MDISKMAP format from it */
+    c 'FIND _      _       __        __'
+    c 'EXTRACT /CURLINE'
+    parse var curline.3 18 uid cuu 32 sep 34
+    if uid='' then iterate /* Empty line */
+    if sep=='  ' then DirmapV='V4'
+                 else DirmapV='V5'
+    leave
+ end
+ c '-*'
+ Rebuild= (Gui & DirmapV='V5')
+ Removed.=0; Removed=''; oldline=''
+ do forever
+    c '+1' ; if rc<>0 then leave
+    ce '/CURLINE'
+    volDev = substr(curline.3,2,13) /* Volser and Devtype */
+    Select
+     when left(curline.3,1)<>' ' then c 'DEL -1'
+     when volDev='-------------' then /* Separator line */
+       if curline.3=oldline then c 'DEL -1'
+       else oldline=curline.3
+     when curline.3='' then c 'DEL -1'
+     otherwise
+       if rebuild then do
+          if substr(curline.3,41,1)||,
+             substr(curline.3,52,1)\=='  ' then do /* cyl # too hig */
+             if volDev<>'' then            /* Remove those later */
+                if Removed.voldev=0 then do
+                   Removed=removed voldev
+                   Removed.volDev=1
+                end
+             end
+          c 'R' left(curline.3,32) substr(curline.3,33,5)'  '||,
+            substr(curline.3,42,5)'     'substr(curline.3,53,5)'     '||,
+            substr(curline.3,64)
+       end
+       if volDev='' then c 'CR' oldVolDev
+                    else oldVolDev=VolDev
+       oldline=curline.3
+    end
+ end
+ if removed<>'' then do
+    c '-*' cs 'ZONE 2 7'; cs 'STAY ON'
+    parse var removed toEat '' removed
+    do while toEat<>''
+       parse var toEat vol devt toEat
+       removed=removed vol
+       c '-1'; c '/'left(vol,6)'/'
+       c 'DEL' not'/'left(vol,6)'/'
+    end
+    cs 'ZONE 1 *'
+    address '' 'CP MSG * Some volumes too big for DRMGUI; removed:'
+    address '' 'CP MSG *' removed
+ end
+ 
+ 
+ c '-*' cs 'ALT 0 0'; cs 'LINEND' linend.1 linend.2
+ if arg(1)='RETURN' then return
+exit
+ 
+ 
+QUIT: /* PF3 stop DRM */
+  call quitfi
+ c 'X 'fid ; c 'PQUIT'
+exit rc
+ 
+SAVE: /* PF10, PF11 or PF12 */
+  parse arg wat .
+  if queued()<>0 then parse Upper pull wat
+  if abbrev('SAVE',wat,1) then xed='SAVE'
+                          else xed='FILE'
+  call quitfi /* quit MDIKSMAP & GAPFILE if present */
+ c 'X 'fid
+ call EPIFILE /* any user postprocessing*/
+ cs 'MSGM OFF'
+ c 'PSAVE';src=rc
+ cs 'MSGM ON'
+ select
+  when src=0 then nop
+  when src=3 then do
+    c 'EMSG Someone changed this file while you where in XEDIT.'
+    c 'EMSG DANGER:   Saving it on disk will DESTROY his changes.'
+    c 'EMSG           Best you should do QQUIT, and redo your changes.'
+    exit src
+  end
+  otherwise
+    c 'EXTRACT /LASTMSG';c 'EMSG' lastmsg.1; exit src
+ end
+ 
+ updonly=0;drc=0
+ if left(arg2,1)='D' then do ;
+    rc=dirmap() /* go to make new map & don't come back if error's*/
+    if arg2='DD' then do
+       dircmd=directcm fid substr('('directopts,1+(DirectOpts=''))
+       say dircmd
+       address '' dircmd ;drc=rc
+       if drc<>0 then do /*check CP-class for dir-update*/
+          parse value translate(diag(8,'COMMANDS'),,'15'x),
+                 with ' DIAG3C ' test
+          if test='' then
+             c 'EMSG Sorry, but you didn''t have the needed',
+               'CP class to update the online directory'.
+       end
+       updonly=( drc>=4 & drc<=6 )
+       if updonly then c 'MSG CP DIRECTORY updated, but not online'
+       end
+ end
+ if xed<>'SAVE' then  /* not asked for SAVE only */
+    if (drc=0 | arg2='' | updonly ) then c 'PQUIT'
+exit rc
+ 
+/*******************************************************************/
+REFR: /*  PF4: Refresh GAPFILE & MDISKMAP                          */
+/*******************************************************************/
+ call quitfi
+ c 'SET SCREEN 1' /*after refresh screen 1 needed*/
+ c 'X 'fid
+ if queued()<>0 then Do /* User typed an operand */
+    pull arg2 .
+    if arg2<>'' & \abbrev('DIRMAINT',arg2,4) then
+       call Error1 'Invalid parameter' arg2 'for REFRESH'
+ end
+ ce '/SYNONYM $$-DRMR$/' ; RefreshDir=subword(synonym.3,2)
+ select
+ when RefreshDir<>'' then do
+    if gui then address '' 'PIPE COMMAND EXEC $DRMGETD' fid'|CONS|JOIN * X15|VAR EMSG 1'
+    else address '' 'EXEC $DRMGETD' fid
+    src=rc
+    if src<>0 then LastMsg.1='$DRMGETD failed with rc' src
+    if rc=0 then do
+       c 'PRESERVE'; cs 'MSGM OFF';c '-*' cs 'SCOPE ALL';c 'DEL *';
+       c 'GET = = =';src=rc; if rc<>0 then ce '/LASTMSG'
+       c 'RESTORE'; c '-*' cs 'ALT 0 0'
+    end
+    if src<>0 then do
+       If Gui then do;t='DRMGUI';out='|JOIN * X1515|VAR EMSG 1';end
+              else do;t='DRM'   ;out='|XMSG';c 'SOS ALARM';end
+       address '' 'PIPE VAR LASTMSG.1 DIRECT',
+         '|Literal Fatal refresh ERROR:',
+         '|Append Literal You should restart' t,
+         out
+       exit -22-04-1953
+    end
+ end
+ when abbrev('DIRMAINT',arg2,4) then do /* Refresh via DIRMAINT */
+    Say 'Calling DIRMAINT ...  Please wait.'
+    address ''
+    'PIPE COMMAND QUERY ACCESSED' word(fid,3)'|DROP', /* ReACCESS disk */
+       '|SPEC /ACCESS/ 1 W4 NW W1 NW|COMMAND'
+    'PIPE STATE' fid '|Append literal|VAR oldDATE'
+    if rc=28 then Call Error1 'File' fid 'no longer found, restart DRM.'
+    refr=0
+    'EXEC DIRMAINT USER BACKUP'
+    t=time('R')
+    if rc<>0 then say 'DIRM USER BACKUP refused...'
+    else do
+       do i=1 to 30 until oldDate<>newDate & rc=0
+          if i//5=0 then Say 'Waiting until DIRMAINT backup is complete'
+          'CP SLEEP 2 SEC'
+          'PIPE COMMAND QUERY ACCESSED' word(fid,3), /* ReACC disk */
+             '|DROP|SPEC /ACCESS/ 1 W4 NW W1 NW|COMMAND'
+          'PIPE STATE' fid '|Append Literal|VAR newDATE'
+          if rc=28 then iterate /* During backup, the file is gone */
+       end
+       if oldDate<>newDate then refr=1
+       else say 'DIRMAINT failed to create USER BACKUP in',
+                 format(time('E')) 'seconds.'
+    end
+    address Xedit
+    if refr then do
+       c '-*' cs 'SCOPE ALL';c 'DEL *'; c 'GET = = =';c '-*' cs 'ALT 0 0'
+    end
+ end
+ otherwise
+    call epifile
+    c 'EXTRACT /ALT'
+    if alt.2<>0 then c 'SAVE'
+    if rc<>0 then exit rc
+ end
+ rc=dirmap() /* go to make new map & don't come back if error's*/
+exit rc
+ 
+QUITFI: /* this routine will QUIT MDISKMAP and GAPFILE if edited */
+  c 'EXTRACT /RING/FNAME/FTYPE/FMODE'
+  ring=''
+  do i=2 to ring.0
+    ring=ring subword(ring.i,1,2) left(word(ring.i,3),1)
+  end
+  ring=space(ring,1)
+  if find(ring,gapfile)<>0 then do
+                            c 'X 'gapfile ;c 'QUIT' ;end
+  if find(ring,mdiskmap)<>0 then do
+                           c 'X 'mdiskmap ;c 'QUIT' ;end
+  if find(ring,Freemap)<>0 then do
+                           c 'X 'freemap ;c 'QUIT' ;end
+ 
+  /* Be sure to says in same file as where we started from */
+  if wordpos(space(fname.1 ftype.1) left(fmode.1,1),,
+                                         gapFile MdiskMap FreeMap)=0 then
+     c 'X 'fname.1 ftype.1 fmode.1
+  return
+ 
+ 
+DIRMAP: /* make a new MDISKMAP & GAPFILE */
+    remap=0
+    Call SaveOptions  /* Save new value of REMAP */
+    if find(dirmapOpts,'GAPFILE')=0 then dirmapOpts=dirmapOpts 'GAPFILE'
+    address ''
+    'ERASE' MdiskMap /* assure we don't get an old copy if DIRMAP fails*/
+    if Gui then 'PIPE (end ?) Literal',
+                       'DIRMAP 'fid outfm '('dirmapOpts,
+                      '|C: COMMAND',
+                      '|CONS|JOIN * X15|Append Literal|VAR DIRMAPMSGS 1',
+                      '?C:|VAR DIRMAPRC 1|AggRc'
+    else do
+       say 'DIRMAP 'fid outfm '('dirmapOpts
+       'DIRMAP 'fid outfm '('dirmapOpts
+    end
+    drc=rc
+    'FINIS * VOLSERS *' /*close DIRMAP workfiles*/
+    if drc=0 | drc=28 then return 0
+    if Gui then return drc
+/* errors found: show MDISKMAP with all overlapping MDISKS */
+    address XEDIT
+    c 'EMSG Errors found in directory: DIRMAP retcode' drc
+    address '' 'STATE' mdiskmap
+    if rc<>0 then return rc
+    c 'SCREEN 1'
+    c 'X 'mdiskmap
+    c '-*' c 'SCOPE ALL' ; c 'SELECT 0 *'
+    c '-*' c 'WRAP OFF' ; c 'MSGM OFF'
+    overlap=0
+    do forever /* find all overlapping MDISK's */
+      c 'L /OVERLAP/'
+        if rc <> 0 then leave
+      overlap=1
+      c '-1' cs 'SELECT 1 3' ; c '+3'
+    end
+    c 'MSGM ON'
+    if overlap then c '-*' c 'DISP 1 1'
+               else c 'EMSG ?????? Errors in DIRECTORY, but no OVERLAP found'
+    c 'SCOPE DISP'
+    c 'RESERV -1 Yell H   Use prefix "FI" to find (overlapping) MDISK'
+    c 'SCREEN 2'
+    c 'SOS TABCMDF'
+    c 'X 'fid
+if arg(1)='RETURN' then return 4 /* Some errors found */
+                   else exit
+ 
+PENDING: /* remove (but remember) all other pending commands for DIRM*/
+         /* as we must serialize 'GET' requests */
+   c 'EXTRACT /LINE/PREFIX SYN ?'
+   c 'SET PREF SYN ? ?DIRM' /*dummy, SET PENDING must not execute*/
+ do i=0 by 1
+   c 'EXTRACT /PENDING OLDNAME 'me
+    if pending.0=0 then leave
+    c 'L :'pending.1
+     if rc<>0 then leave
+    c 'SET PENDING ON ?'pending.2
+  end
+   c 'L :'LINE.1
+   c 'SET PREFIX SYN ? 'prefix.1 /* reset users syn for ?*/
+   if i<>0 then c 'MSG Execution of 'i' GET commands delayed'
+return
+ 
+SETPENDING: /* reset saved pending commands for DIRM*/
+   c 'EXTRACT /LINE'
+ do i=0 by 1
+   c 'EXTRACT /PENDING OLDNAME ?DIRM'
+    if pending.0=0 then leave
+    c 'L :'pending.1
+     if rc<>0 then leave
+    c 'SET PENDING ON 'pending.5
+  end
+   c ':'LINE.1
+   if i>0 then queue c 'LPREFIX' /*execute delayed GET commands*/
+return
+ 
+/*******************************************************************/
+PROFILE: /*  setup envir for CP Directory file                     */
+/*******************************************************************/
+address '' 'QUERY CMSLEVEL(LIFO'; parse pull . . cmslevel','
+c 'SET REMOTE ON' /*performance for VTAM & PVM terminals*/
+c 'SET AUTO  5'     ;  c 'SET SER   OFF'
+c 'SET CMDL  TOP'   ;  c 'SET CURL  ON 4'
+c 'SET NULLS ON'    ;  c 'SET SCALE ON 3'
+c 'SET NUM   ON'    ;  c 'SET PREF  ON LEFT'
+c 'SET STAY  ON'    ;  c 'SET MSGL  ON 3 12 O'
+c 'SET V 1 72'      ;  c 'SET TRUNC 72'
+if cmslevel >=13 then  c 'SET CASE M I'
+c 'SET COLOR CURL BLUE'
+c 'SET COLOR PEND BLUE REV'
+c 'SET COLOR PREF RED'
+address '' 'EXECSTAT SETSYN XEDIT'
+if rc<=4 then 'MACRO SETSYN'
+c 'SET SYN 'mdisk minmd 'MACRO' me  /* insert new MDISK*/
+Pcmds=lnk qlink racf prf_gets delet format dirme aMdisk cMdisk dMdisk,
+      find tmdisk chvadr RacLU RacRL PurgeU CmpMdk qdsk
+do i=1 to words(Pcmds)
+  c 'SET PREFIX SYN' word(Pcmds,i) me
+end i
+t1='PF:1=H 2=fndUser 3=quit 4=refr 5=ALL+U 10=file 11=file+drmap 12=file+drmap+dire'
+t2='      14=prvUser  16=xedMdMap 17=ALL_U 22=save 23=save+drmap 24=save+drmap+dire'
+ 
+th=' to find mdiskspace: type in  prefix: "'get'", "'getd'" or "'getv'"   (PF1 for HELP)'
+ce '/LSCREEN'
+if lscreen.5<=24 then do
+  c 'RESERV -1 h' t1
+  c 'RESERV -2 yell h' th
+end; else do
+  c 'RESERV -1 h' t2
+  c 'RESERV -2 h' t1
+  c 'RESERV -3 yell h' th
+end
+c 'Pf1  HELP CMS DRM'
+c 'Pf13 HELP CMS DRM'
+c 'PF2  MACRO 'me' $FIND$'   /* Find a userid or by default next user */
+c 'PF14 MACRO 'me' $FIND$ PREV' /* find previuos user */
+c 'PF3  MACRO 'me' $QUIT$'
+c 'PF15 MACRO 'me' $QUIT$'
+c 'PF4  MACRO 'me' $REFR$'
+c 'PF16 MACRO 'me' $REFR$'
+c 'PF5  MACRO 'me' $ALL$'
+c 'PF17 MACRO 'me' $ALLU$'
+c 'PF10 MACRO 'me' $FILE$'
+c 'PF22 MACRO 'me' $FILE$'    /*could define Pf22 as ... $SAVE$ */
+c 'PF11 MACRO 'me' $FILE$ D'
+c 'PF23 MACRO 'me' $FILE$ D'  /*could def Pf23 as ... $SAVE$ D */
+c 'PF12 MACRO 'me' $FILE$ DD'
+c 'PF24 MACRO 'me' $FILE$ DD' /*could def Pf23 as ... $SAVE$ DD */
+ Call QRW /* see if directory on R/W disk or not */
+ if modes<>'' then c 'EMSG' subword(fid,1,2) 'also found on disk(s)' modes
+ if Gui then do
+    call MdiskMapXedit   /* Edit MDISKMAP */
+    'EXEC $DRMFRAG (MAP=OK' ; src=rc
+    call quitfi
+    c 'X 'fid ; c 'PQUIT' src
+ end ; else do
+    /* before showing screen: call user PROFILE */
+    address '' 'EXECSTAT PROFDRM XEDIT'
+    if rc<=4 then 'MACRO PROFDRM'
+ end
+exit
+ 
+EPIFILE: /* before SAVE, DIRMAP & DIRECT: call user EPIFILE */
+ address '' 'EXECSTAT EPIFDRM XEDIT'
+ if rc<=4 then 'MACRO EPIFDRM'
+ return
+ 
+/*******************************************************************/
+QRW: /*  see if directory on R/W disk or not                       */
+/*******************************************************************/
+ procedure expose c GUI
+ myself=userid()
+ parse value translate(diag(8,'COMMANDS'),,'15'x) with ' DIAG3C ' test
+ if test='' then 'COMMAND EMSG Sorry, but you don''t have the needed',
+     'CP class to update the directory'.
+ 
+ 'COMMAND EXTRACT /FNAME/FTYPE/FMODE/SIZE';fm=left(fmode.1,1)
+ address '' 'ESTATEW' fname.1 ftype.1 fmode.1
+ dskro='RW'
+ if rc<>0 & size.1>0 then do  /* file SEEMS readonly, check more */
+ 
+    address '' 'MAKEBUF'
+    do ro=1 for 1  /* file SEEMS readonly, check more */
+       address '' 'QUERY DISK' fm '(LIFO'
+       parse pull 7 addr . stat .; parse pull .
+       if addr='DIR' then do /* File in SFS */
+          address '' 'QUERY ACCESSED' fm '(LIFO'
+          parse pull . . . . dirid . ; parse var dirid':'owner'.'
+          if owner=myself then leave ro /* we can always write */
+          address '' 'QUERY AUTH' fname.1 ftype.1 fmode.1 '(LIFO'
+          if rc=0 then do;parse pull . . . . . . rwauth .;parse pull;end
+          if rwauth='X' then leave ro
+          c 'EMSG Note that you will not be able to change this file:',
+                  'you have no RW authority.'
+          dskro='RO'
+       end
+       else do /* File on MDISK */
+         parse value translate(diag(8,'Q LINKS' addr),,','||'15'x),
+               with links
+         f=find(links,'R/W')
+         if f<>0 then linkedrw=space(subword(links,f-2,3),1)', he is:',
+                space(translate(diag(8,'Q USER' word(links,f-2)),,'15'x))
+         else linkedrw='nobody'
+         c 'EMSG Note that you will not be able to change this file:'
+         c 'EMSG  disk' fm'('addr') is R/O, linked R/W by:' linkedrw
+         dskro='RO'
+       end
+    end ro
+    address '' 'DROPBUF'
+ end
+ 'COMMAND SET SYN $$-DSKRO' dskro
+return
+ 
+/*******************************************************************/
+PROFILEGAP: /*  profile executed when showing GAPFILE              */
+/*******************************************************************/
+ c 'SCREEN 1'
+ c 'X 'gapfile
+ c 'SUPERSET /CMDL TOP/MSGL ON -1 3 O/AUTO OFF',
+            '/COLOR CURL NOH/COLOR PREF HI',
+            '/CURL ON 4/NUM OFF/PREF ON RI/SCOPE ALL'
+ c '-*' c '+1' c 'EXTRACT /CURLINE'
+ call Qgaplayout curline.3
+ if g_lng>=0 then do
+  c 'RESERV 3 RED H Volid  Dev   ' left('Start',G_lng) 'Size'
+  cs 'V 1 7 9 12 8 8' g_sta g_sta+g_lng-1 '8 8' g_siz g_siz+g_lng-1
+ end
+ else do
+  c 'RESERV 3 RED H Volid  Dev     ' left('Start',G_lng) 'Size'
+  cs 'V 1 7 9 16 8 8' g_sta g_sta+g_lng-1 '8 8' g_siz g_siz+g_lng-1
+ end
+ ce '/LSCREEN'
+ if lscreen.5<=24 then
+   c 'RESERV -1 RED REV H PF 1=? 2=getAll 11=getAsk 9=Fltr 12=End             4=S/volid   5=S/gapsize'
+ else do
+   c 'RESERV -2 RED REV H PF 1=? 2=get all 11=get asked 9=Filter'
+   c 'RESERV -1 RED REV H PF 4=S/volid  5=S/gapsize     12=End'
+ end
+ c 'SET PF4 -* macro sort * 1 6'
+ c 'SET PF16 -* macro sort * 1 6'
+ c 'SET PF5  -* macro sort *' g_siz g_siz+g_lng-1 g_sta g_sta+g_lng-1
+ c 'SET PF17 -* macro sort *' g_siz g_siz+g_lng-1 g_sta g_sta+g_lng-1
+SELPF: /* set following PFs active for selection */
+ c 'SET PF1  HELP DRM GAPFLTR'
+ c 'SET PF13 HELP DRM GAPFLTR'
+ c 'SET PF3  MACRO' me '$END$'
+ c 'SET PF15 MACRO' me '$END$'
+ c 'SET PF12 MACRO' me '$END$'
+ c 'SET PF24 MACRO' me '$END$'
+ c 'SET PF2  MACRO' me '$SEL$ 'gap 'ALL'
+ c 'SET PF14 MACRO' me '$SEL$ 'gap 'ALL'
+ c 'SET PF11 MACRO' me '$SEL$ 'gap
+ c 'SET PF23 MACRO' me '$SEL$ 'gap 'UP'
+ c 'SET PF9  MACRO' me '$SEL$ FLTR'
+ c 'SET PF21 MACRO' me '$SEL$ FLTR'
+ address '' 'EXECSTAT PROFDRM XEDIT'
+ if rc<=4 then 'MACRO PROFDRM'
+return
+NOSELPF: /* set following PFs inactive now*/
+ c 'X 'gapfile
+ c 'SET PF3' c 'QUIT'
+ c 'SET PF15' c 'QUIT'
+ c 'SET PF12'
+ c 'SET PF24'
+ c 'SET PF2'
+ c 'SET PF14'
+ c 'SET PF11'
+ c 'SET PF23'
+return
+QGAPLAYOUT: /* adapt our behaviour depending on format of GAPFILE */
+/* Known GAPFILE formats :
+VHKBK1  3390    001965002099000135
+VHKBK1  3390    000019650000209900000135
+VBRP01  9345    00002068 00002155 00000088
+VSHRD1  3390    0000002205 0000002205 0000000001  /* z/VM V5.1 */
+*/
+ parse arg 17 t . /*arg passed to us is a line of gapfile */
+ select           /*from col 17 we expect 3 numbers: sta|end|siz of gap*/
+   when length(t)=18 then parse value '6 17 23 29',
+                                with g_lng g_sta g_end g_siz
+   when length(t)=24 then parse value '8 17 25 33',
+                                with g_lng g_sta g_end g_siz
+   when length(t)=8  then parse value '8 17 26 35',
+                                with g_lng g_sta g_end g_siz
+   when length(t)=10 then parse value '10 17 28 39',
+                                with g_lng g_sta g_end g_siz
+   otherwise
+    queue c 'X 'gapfile
+    if arg(1)='' then queue c 'EMSG Sorry: GAPFILE seems empty'
+    else do;queue c 'EMSG Sorry: DIRMAP MODULE produced an',
+                              'unrecognised GAPFILE format.'
+            queue c 'EMSG        Change' signat 'after label QGAPLAYOUT:'
+    end
+    exit
+ end
+ if arg(2)<>'PARSE' then return
+ parse arg volid 7 9 dev .
+return g_sta g_end g_siz','volid','dev','||,
+       substr(arg(1),g_sta,g_lng)','||,
+       substr(arg(1),g_end,g_lng)','||,
+       substr(arg(1),g_siz,g_lng)
+ 
+/*******************************************************************/
+DELETE: /*  PREFIX command DELET: delete this USERID and put in a file */
+/*******************************************************************/
+ c 'L :'pline c 'EXTRACT /CURLINE/SCOPE/ZONE'
+ parse var curline.3 usr name .
+ if \(abbrev(word(curline.3,1),'USER',1) |,
+      abbrev(word(curline.3,1),'PROFILE',1)) then
+        call error1 cmd' should be called on USER or PROFILE statement'
+ c 'SET MSGM OFF'
+ c 'SET Z 1 10'
+ c 'SET SCOPE ALL'
+ do forever /* see how many statements this user has*/
+    c '/USER / | /PROFILE /'
+    if rc<>0 then do; c 'L *';leave;end /* no more users found */
+    c 'EXTRACT /CURLINE'
+    if abbrev(word(curline.3,1),'USER',1) |,
+       abbrev(word(curline.3,1),'PROFILE',1) then leave
+ end
+ c 'EXTRACT /LINE'
+ delete=line.1-pline
+ c 'MSGM ON';c 'SET Z' zone.1 zone.2
+ address '' 'EXECIO 1 DISKW' fn 'DELETED' outfm '(FINIS STRING ****>>>>>>>*** Deleted on 'date() time() 'from:' fid
+ c 'L :'pline c 'PUTD 'delete fn 'DELETED' outfm
+ if rc<=1 then c 'MSG User 'name'('delete' lines) deleted, but saved in 'fn 'DELETED' outfm
+ cs 'SCOPE' scope.1
+exit rc
+ 
+/*-----------------------------------------------------------------*/
+FindUserCard: /*                                                   */
+/* arg1: Can be EXIT; arg2: if=# return linenbr iso userid         */
+/* arg3: If=USER then if in a SUBCO, then find real IDENTITY userid*/
+/*       this last request is only used when we LINK (or alike)    */
+/*       meaning we never return the linenbr of the IDENTITY card  */
+/*       If=BOTH then we return USER & SUBCO if applicable         */
+/*-----------------------------------------------------------------*/
+ Procedure expose curline.3 gblCmd GUI; subco=''
+ 'COMMAND EXTRACT /SCOPE/ZONE/WRAP/LINE/MSGMODE'
+ 'COMMAND SUPER /ZONE 1 */WRAP OFF/SCOPE ALL/MSGM OFF'
+ do until rc<>0 /* find "owner" of this record (previous 'USER' card) */
+    'COMMAND EXTRACT /CURLINE/LINE'
+    if find('USER IDENTITY SUBCONFIG PROFILE',word(curline.3,1))>0
+       then leave
+    'COMMAND -/USER / | /IDENTITY / | /SUBCONFIG / | /PROFILE /'
+ end
+ src=rc
+ if src<>0 then
+    emsg='No USER/SUBCONFIG/IDENTITY/PROFILE card preceedes line' line.1
+ /* need USER/IDENTIY card, not (only) SUBCO */
+ if src=0 & (arg(3)='USER' | arg(3)='BOTH') then
+    if word(curline.3,1)='SUBCONFIG' then do
+       SubCo=word(curline.3,2)
+       parse value FindIDENTofSUBCO(),/* Must find its IDENTITY */
+             with src emsg            /* if found: sets CURLINE.3 */
+    end
+ 
+ 'COMMAND SUPER /ZONE' zone.1 zone.2 '/SCOPE' scope.1'/WRAP' wrap.1,
+               '/MSGMODE' msgmode.1
+ if src=0 then do /* found */
+    if arg(2)='#' then return line.1
+    if arg(3)='BOTH' then return word(curline.3,2) subco
+    return word(curline.3,2)
+ end
+ if word(GblCmd,1)='PREFIX' then
+    'COMMAND :'word(GblCmd,2) 'COMMAND SET PENDING ERROR' word(GblCmd,3)
+ 'COMMAND :'line.1 /* return to where we were */
+ if arg(1)='EXIT' then do
+    'COMMAND SET MSGM ON';'COMMAND EMSG' emsg; exit src; end
+return '*' src emsg
+ 
+/*-----------------------------------------------------------------*/
+FindIDENTofSUBCO: /* Must find IDENTITY that has "BUILD ON subco"  */
+/* Record format:      BUILD ON * USING SUBCONFIG MAINT-1
+  We count a bit on the fact that a SUBCO can only be used once:
+   HCP664E: SUBCONFIG ID <id> was specified on multiple BUILD statements.
+-------------------------------------------------------------------*/
+ subco= word(curline.3,2) ; oldLine=line.1
+ 'COMMAND -*'
+ address '' 'PIPE (end ?) XEDIT',
+      '|ID: PICK W1 == /IDENTITY/',
+      '|JX: JUXTAPOSE', /* Keep last IDENTITY */
+      '|VAR Id',
+      '?ID:|PICK W1 == /BUILD/|PICK W2 == /ON/',
+      '|PICK W6 == /'subco'/', /* keep only this subco */
+      '|VAR BUILD',            /* to check the nodeid */
+      '|TAKE|JX:',             /* Keep only one, to end PIPE quickly*/
+      '?CP Q USERID|SPEC W3 1|VAR HERE'
+ 'COMMAND :'oldLine
+ if symbol('ID')<>'VAR' then
+    return 29 'No IDENTITY using "BUILD ON ...' subco'" is found'
+ parse var build . . node .
+ if node<>'*' then if node<>here then
+    return 30 subco 'is for minidisks used at member' node 'not at' here
+ curline.3=left(id,80)
+ 
+return 0
+ 
+/*-----------------------------------------------------------------*/
+NextUserLine: /* return linenbr where next "user" section starts   */
+/*-----------------------------------------------------------------*/
+ Procedure expose GUI
+ 'COMMAND EXTRACT /SCOPE/ZONE/WRAP/LINE/MSGMODE/STAY'
+ 'COMMAND SUPER /ZONE 1 */WRAP OFF/SCOPE ALL/MSGM OFF/STAY OFF'
+ do forever /* find next "USER" section */
+    'COMMAND /USER / | /IDENTITY / | /SUBCONFIG / | /PROFILE /'
+    if rc<>0 then leave
+    'COMMAND EXTRACT /CURLINE'
+    if find('USER IDENTITY SUBCONFIG PROFILE',word(curline.3,1))>0
+       then leave
+ end
+ 'COMMAND EXTRACT /LINE'
+ 'COMMAND SUPER /ZONE' zone.1 zone.2 '/SCOPE' scope.1'/WRAP' wrap.1,
+               '/MSGMODE' msgmode.1'/STAY' stay.1
+return line.1
+ 
+/*******************************************************************/
+LINK: /*  PREFIX command LINK: link to mdisk of this user          */
+/*******************************************************************/
+ c 'EXTRACT /CURSOR/SCOPE'
+ if cursor.3 > 0 then c 'CURSOR File' cursor.3 '1 P 31'
+ c 'L :'pline c 'EXTRACT /CURLINE'
+ parse var curline.3 mdk adr typ str nbr volid . rpw wpw mpw .
+ DefMdsk= (wordpos(cmd,'MDSK MD')>0 )
+ 
+ if \abbrev('MDISK',mdk,1) then do /* Not on MDISK card          */
+    if \abbrev('LINK',mdk,1) then  /* .. BAD if not on LINK card */
+       call error1 cmd' should be called on an MDISK or LINK statement'
+    parse var curline.3 . userid adr .
+    cs 'SCOPE ALL' /* More change to expose USER & MDISK cards */
+    cs 'MSGM OFF'  /* Maybe user is not found ... */
+    parse value FindAUser(userid adr,,'GET'), /* Find Mdisk definition */
+          with  . . typ str nbr volid . rpw wpw mpw .
+    c 'L :'pline cs 'SCOPE' scope.1 ; cs 'MSGM ON'
+ end
+ else                              /* LINK command on MDISK card */
+    Userid = FindUserCard('EXIT',,'USER') /* find owner of this mdisk */
+ 
+ if arg(1)='QDSK' then do /* Called to issue a QDSK */
+    address '' 'EXEC QDSK' userid adr '(DETAILS'
+    if rc<>0 then c 'EMSG' rc 'Error' rc 'from QDSK EXEC'
+    exit
+ end
+ myself=userid()
+ address '' 'GETFMADR'
+ if rc=0 then parse pull . mode nadr oadr .
+         else parse value 'Z 100' with mode nadr oadr
+ if userid=myself then do /* link to ourselves */
+    deflt='M' /* default= Mutlilink */
+    parse value diagrc(8,'Q V' adr,1) with rc . /* Linked already ? */
+    if rc<>0 then nadr=adr
+ end
+ else  deflt='R' /* default= READ-Only link */
+ 
+ if DefMdsk then if Op1='' then op1='FD'
+ test=verify(op1,'RWMAFD ')
+ if test<>0 then call error1 'Invalid parameter "'|| ,
+      substr(op1,test,1)'" in "'op1'" for "'cmd'"'
+ ixR=index(op1,'R');ixW=index(op1,'W'); ixM=index(op1,'M')
+ ixA=index(op1,'A');ixF=index(op1,'F'); ixD=index(op1,'D')
+ select
+  when ixR<>0    then parse value 'RR' rpw with lmode pw
+  when ixW<>0    then parse value 'WR' wpw with lmode pw
+  when ixM<>0    then parse value 'MR' mpw with lmode pw
+  when deflt='R' then parse value 'RR' rpw with lmode pw
+  when deflt='M' then parse value 'MR' mpw with lmode pw
+  otherwise           parse value 'RR' rpw with lmode pw
+ end
+ if ixD<>0 then ixF=1 /* Filelist implies Access as well */
+ if ixF<>0 then ixA=1 /* Filelist implies Access as well */
+ if ixA<>0 & oadr<>'' then  call error1 'No more diskmodes free, RELEASE a disk'
+ 
+ if DefMdsk then do
+    parse value diagrc(8,'DEFINE MDISK' nadr str nbr volid),
+           with rc . 17 LinkMsg '15'x
+    parse value (rc=0) 0 0 with Lnk_Done lnk_ro Lnk_upd
+ end; else do
+    parse value diagrc(8,'LINK 'userid adr nadr lmode pw,80) ,
+           with rc . 17 LinkMsg '15'x
+    lnk_upd =(rc=53 | rc=107)    /* user or mdisk not found*/
+    lnk_ro  =(rc>=101 & rc<=103) /* forced R/O*/
+    lnk_done=(rc=0 | lnk_ro) /* Linked anyway*/
+ end
+ LinkMsg=strip(LinkMsg,'T')
+ if lnk_done then do
+    call checkextents /* LINK cmd on MDISK card */
+    if lnk_ro then msg='EMSG'
+              else msg='MSG'
+    if LinkMsg='' then LinkMsg=qvdisk
+    msg=msg userid adr 'now' LinkMsg
+    if ixA<>0 then do
+       if DefMdsk then 'ACCESS' nadr mode'/'mode /* access */
+                  else 'ACCESS' nadr mode /* access */
+       acrc=rc
+       if acrc=0 then msg=msg '('mode'-disk)'
+       if ixF<>0  & acrc=0 then 'EXEC FILELIST * *' mode
+       if ixD<>0 then do
+          if acrc=0 then 'RELEASE' mode
+          msg=''
+          call diag 8,'DET' nadr,1
+       end
+    end
+    if msg<>'' then c msg
+ end
+ else do
+ if DefMdsk then call error1 LinkMsg,'DEFINE MDISK rc:' rc
+            else call error1 LinkMsg,'LINK Retcode:' rc
+ end
+ if lnk_upd then call error1 LinkMsg , 'Place directory online first',
+                                      '(SAVE+PF12) and retry.'
+exit rc
+ 
+CHECKEXTENTS: /* check extents to see if linked disk = asked MDISK*/
+/*---output of: CPQ Q MDISK 191 LOCATION --------------------------------
+TargetID Tdev OwnerID  Odev Dtype Vol-ID Rdev   StartLoc       Size
+KRIS     0191 KRIS     0191 3390  VTE003 50A7        180         17
+--words:--2---W3-------W4---W5----W6-----W7----------W8----------W9*/
+ parse value diagrc(8,'CP Q V 'nadr,80) ,
+       with crc . 17 'DASD' laddr ltyp lvolid lmode lnbr . '' lstr ,
+                  17 qvdisk
+ if nbr='' then return /* We do not know MDISK card linked to */
+ 
+ parse value diag(8,'Q MDISK' nadr 'LOCATION') with '15'x qmdisk '15'x
+ if word(qmdisk,2)= laddr then /* Yes, this system knows Q MDISK */
+    lstr=word(qmdisk,8)        /* Size of linked mdisk */
+ if lstr<>'' then StaOK=(lstr=str)
+             else StaOK=1
+ 
+ if find('3310 3370 9332 9335 9336',ltyp)<>0 then ltyp='FB-512'
+ if nbr='' then return /* We don't know MDISK card linked to */
+ if staOK & typ=ltyp & nbr=lnbr & volid=lvolid then return /* Same disk*/
+ 
+ if lstr='' then parse value nbr 'cyls;'lnbr 'cyls;',
+                       with  cyls    ';'lcyls    ';'
+ else parse value 'cyl' str'-'str+nbr-1';cyl' lstr'-'lstr+lnbr-1';',
+            with  cyls                 ';'lcyls                 ';'
+ c 'EMSG WARNING: You linked the previous definition of this MDISK'
+ c 'EMSG          Linked:' lcyls 'on' lvolid ||,
+                  '; MDISK card:' cyls 'on' volid
+ c 'EMSG          Place directory online (PF24/PF12) to get new version'
+return
+ 
+/*******************************************************************/
+QDSK: /*  PREFIX command QDSK: call QDSK EXEC to get much info    */
+/*******************************************************************/
+ address '' 'EXECSTAT QDSK EXEC'
+ if rc=8 then call error1 'QDSK EXEC not found'
+ else call Link 'QDSK'
+ 
+/*******************************************************************/
+QLINKS: /*  PREFIX command QLINKS: LINK to mdisk and issue Q LINKS*/
+/*******************************************************************/
+ parse value LinkAnMdisk('NOACCESS' pline) ,
+       with rc emsg 0 . NewLink user adr mode nadr oadr
+ if rc<>0 then call error1 emsg
+ 
+ if NewLink then IgnoreNew='|PICK 1.13 \== /'left(myself,8) nadr'/'
+            else IgnoreNew=''
+ 
+ address '' 'PIPE (end ?) CP Q LINKS' nadr,
+   '|SPLIT String /, /',            /* 1 line per LINK */
+   IgnoreNew,                       /* Remove the LINK we just made */
+   '|SORT 17 D 1.8 A',              /* Sort, R/W first, then userid */
+   '|CT: Count lines',
+   '|JOIN 3 /, /',                  /* 4 links per line */
+   '|Buffer',
+   '|I: Fanin 1 0',
+   '|xmsg',
+   '?CT:',
+   '|CH: Change 1 /0/No LINKs are active to' user adr'/',
+   '|Title: FaninAny|I:',
+   '?CH:|P1: Pick 1-* == /1/',
+        '|SPEC /One LINK is active to' user adr':/ 1 |Title:',
+   '?P1:|INSERT / LINKs are active to' user adr':/ after| Title:'
+ 
+ if NewLink then call diag 8,'DET' nadr,1
+exit rc
+/*-----------------------------------------------------------------*/
+LinkAnMdisk: /*                                                    */
+/*-----------------------------------------------------------------*/
+ Procedure expose cmd gui myself c
+ parse value 0 userid() with linked myself
+ parse arg AccessOrNot Theline
+ 'COMMAND :'Theline 'COMMAND EXTRACT /CURLINE'
+ parse var curline.3 mdk adr typ str nbr volid . rpw wpw mpw .
+ if \abbrev('MDISK',mdk,1) then
+    return 5 cmd' should be called on MDISK - statement'
+ User=FindUserCard('EXIT',,'USER') /* find owner of this mdisk */
+ if left(user,1)='*' then return subword(user,2)
+ if AccessOrNot='QDSK' then do
+    address '' 'EXEC QDSK' user adr '(DETAILS'
+    return rc 'Error' rc 'from QDSK EXEC'
+ end
+ address '' 'GETFMADR'
+ if rc=0 then parse pull . mode nadr oadr .
+         else parse value 'Z 100' with mode nadr oadr
+ if oadr<>'' then if AccessOrNot='ACCESS' then
+    return 38 'No free filemode available.'
+ if user=myself then do /* link to ourselves */
+    parse value diagrc(8,'Q V' adr,1) with rc . /* Linked already ? */
+    if rc<>0 then  nadr=adr
+ end
+ if \linked then do
+    parse value diagrc(8,'LINK 'user adr nadr 'RR' rpw,80) ,
+          with rc . 17 answer '15'x ; answer=strip(answer,'T')
+    if rc<>0 then return rc answer
+    linked=1
+ end
+ if AccessOrNot='ACCESS' then do
+    'PIPE COMMAND ACCESS' nadr mode '|VAR EMSG'
+    if rc<>0 then do; call diag 8,'DET' nadr,1; return rc emsg;end
+ end
+return 0 Linked user adr mode nadr oadr
+/*******************************************************************/
+CompMdsk: /* PREFIX command CMP: LINK mdisks & run COMPMDSK        */
+/*******************************************************************/
+ c ':'pline; if rc<>0 then exit rc
+ c 'EXTRACT /PENDING BLOCK' cmd '-* :'pline '/'
+ If pending.0=0 Then do;
+    c 'EXTRACT /PENDING' cmd'/'
+    If pending.0=0 Then
+       c 'MSG Enter another' cmd 'to indicate second MDISK'
+    cs 'PENDING BLOCK' cmd
+    return
+ end
+ c ':'pending.1 cs 'PENDING OFF'
+ parse value LinkAnMdisk('ACCESS' pending.1) ,
+       with rc emsg 0 . NewLink user adr mode nadr oadr user
+ if rc<>0 then call error1 emsg
+ 
+ parse value LinkAnMdisk('ACCESS' pline) ,
+       with rc emsg 0 . NewLink2 user2 adr2 mode2 nadr2 oadr2
+ if rc<>0 then do
+    if NewLink then call diag 8,'DET' nadr,1
+    call error1 emsg
+ end
+ address '' 'MAKEBUF'
+ address '' 'EXECSTAT COMPMDSK XEDIT'
+ if rc<=4 then queue 'MACRO COMPMDSK' mode2
+ else do
+   queue 'MSG COMPMDSK XEDIT not found.  Manually compare this with'
+   queue 'MSG second mdisk:' user2 adr2 'linked as' nadr2 mode2
+ end
+ address '' 'EXEC FILELIST * *' mode
+ address '' 'DROPBUF'
+ if NewLink then call diag 8,'DET' nadr,1
+ if NewLink2 then call diag 8,'DET' nadr2,1
+exit rc
+/*******************************************************************/
+DIRME: /*  PREFIX command DIRME:    Call DIRME to updt DIRMAINT    */
+/*******************************************************************/
+ c 'L :'pline
+ user=FindUserCard('EXIT') /* find "userid" of this section */
+ if abbrev('LOCK',op1,1) then op1='LOCK'
+ Select
+  when find(racLu,cmd)>0 then address '' 'EXEC RAC LU' user
+  when find(PurgeU,cmd)>0 then do
+    cm='DIRM FOR' user 'PURGE ~NOCLEAN KEEPLINKS'
+    parse var cm c1 '~' c2 /* remove cursor indicator */
+    c 'CMSG' c1||c2
+    if c2<>'' then push c 'CURSOR CMD' length(c1)+1
+  end
+  Otherwise
+    address '' 'EXEC DIRME' user op1
+  end
+exit rc
+/*******************************************************************/
+DIRM_MD: /*  PREFIX command xMD:    prepare a DIRMAINT command     */
+/*******************************************************************/
+ parse value 1 pline cmd op1 with Nb cmd.nb
+ ce '/SCOPE/ZONE/MSGM/LINEND';cs 'SCOPE ALL'
+ /* Get all pending commands */
+ do Ln=pline
+    c 'EXTRACT /PENDING OLDNAME' myname ':'ln '*'
+    if pending.0=0 | rc<>0 then leave
+    if find(AllDirmCmds,pending.2)=0 then iterate /* Not for us */
+    parse value Nb+1 pending.1 pending.2 pending.5 pending.6 pending.7,
+          with Nb Cmd.nb 0 . ln .
+ end
+ cs 'SCOPE' scope.1 ; cs 'MSGM OFF'
+ do CmdNb=1 to nb
+    parse value Dirm_One_MD(Cmd.CmdNb) with rc . 0 Info.CmdNb
+    if rc<>0 then do
+       if rc=15 then cs 'PENDING ERROR' cmd
+       else if rc=16 then cs 'PENDING ERROR' cmd op1
+       Info.cmdNb=Info.cmdNb"14"x||Cmd 'on "'strip(left(curline.3,72))'"'
+    end
+ end
+ cs 'MSGM' msgMode.1
+ Info.0=CmdNb-1
+ address '' 'PIPE (end ?) STEM Info.|SPLIT X15|LOCATE 3',
+    '|OK: FIND 0|VAR CMD|COUNT LINES|VAR nbCMD',
+    '?OK:|SPEC W2-* NW|CHOP Str x14|STEM ERR.'
+ 
+ if NbCmd<=1 then do
+    cs 'LINEND OFF'
+    if NbCmd=1 then do
+       parse var cmd . c1 '~' c2 /* remove cursor indicator */
+       c 'CMSG DIRM FOR' c1||c2
+       if c2<>'' then push c 'CURSOR CMD' length(c1)+10
+    end
+    do i=1 to Err.0; c 'EMSG' err.i; end
+    cs 'LINEND' Linend.1
+ end; else do
+    address '' 'PIPE (end ?) STEM Info.|SPLIT X15|LOCATE 3',
+     '|OK: FIND 0|CHANGE /~//', /* Remove cursor indicator */
+     '|SPEC /FOR/ 1 3-* NW',
+     '|IN: FaninAny',
+     '|> DVHBATCH COMMANDS A0',
+     '?OK:',
+     '|SPEC FS 14 "/* Error:" 1 f2 NW "*/" NW',
+          'Write  "/*  ===> " 1 Substr W2-* Of f1 NW "*/" NW',
+     '|IN:'
+    address cms 'DIRM BATCH'
+ end
+exit
+ 
+/*-----------------------------------------------------------------*/
+DIRM_ONE_MD: /*                                                    */
+/*-----------------------------------------------------------------*/
+ parse arg pline cmd op1 op2 op3 '' auto toRet
+ c 'L :'pline c 'EXTRACT /CURLINE'
+ if rc<>0 then return '' /* on excluded line */
+ if CmdNb>0 then cs 'PENDING OFF' /* Remove this pending cmd */
+ 
+ if find(cmdisk amdisk,cmd)>0 then
+    if op1='G' | op1='V' then parse value 'AUTO'op1 with Auto '' op1
+ if op1<>'' & \datatype(op1,'W') then return '16 Operand' op1 'invalid'
+ if datatype(op1,'W') then if op2='G' | op2='V' then auto='AUTO'op2
+ 
+ parse var curline.3 mdk adr typ str nbr volid mode pwstuff
+ if \abbrev('MDISK',mdk,1) then if Mdk<>'LINK' then
+               return 15 cmd' should be called on MDISK - statement'
+ 
+ user=FindUserCard() /* find owner of this mdisk */
+ if left(user,1)='*' then return subword(user,2) /* return retc+emsg*/
+ 
+ op1=word(op1 1,1)
+ c ':'pline
+ if auto<>'' then str=auto
+ 
+ do i=1 to op1
+    if i>1 then do
+       c '+1' c 'EXTRACT /CURLINE'
+       if rc<>0 then leave
+       parse var curline.3 mdk adr typ str nbr volid mode pwstuff
+       if \abbrev('MDISK',mdk,1) then
+          if Mdk<>'LINK' then iterate
+    end
+    Select
+     when mdk='LINK' & find(cMdisk,cmd)<>0 then
+       ToRet=ToRet'15'x|| 0 user 'LINK' adr typ '~'str nbr
+     when find(aMdisk,cmd)<>0 then do
+       if mode<>'' then mode=mode 'PWS' pwstuff
+       ToRet=ToRet'15'x|| 0 user cmd adr typ '~'str nbr volid mode
+     end
+     when find(cMdisk,cmd)<>0 then
+       ToRet=ToRet'15'x|| 0 user cmd adr typ '~'str nbr volid
+     when find(dMdisk,cmd)<>0 then
+       ToRet=ToRet'15'x|| 0 user cmd adr '~NOCLEAN KEEPLINKS'
+     when find(tMdisk,cmd)<>0 then
+       ToRet=ToRet'15'x|| 0 user cmd adr 'TO ~uuuu' adr 'KEEPLINKS'
+     when find(chvadr,cmd)<>0 then
+       ToRet=ToRet'15'x|| 0 user cmd adr 'TO ~vdev KEEPLINKS'
+    end
+ end i
+Return substr(ToRet,2)
+ 
+/*******************************************************************/
+FORMATmdk: /*  PREFIX command FORMT:    link to mdisk and FORMAT    */
+/*******************************************************************/
+ parse value 0 0 strip(op1) with reLabel NewLink op1 '' blkOpt
+ c 'L :'pline c 'EXTRACT /CURLINE/CURSOR/LINE' ; oldl=line.1
+ parse var curline.3 mdk adr typ str nbr volid . rpw wpw mpw .
+ if \abbrev('MDISK',mdk,1) then call error1 cmd' should be called on MDISK - statement'
+ If Op1<>'' then do
+    if wordpos(op1,5 1 2 4)=0 then call error1,
+          'Blocksize parameter "'op1'", it must be 5, 1, 2, or 4.'
+    if op1=5 then blkOpt='BLKSIZE 512'; else blkOpt='BLKSIZE' op1'K'
+ end
+ User=FindUserCard('EXIT',,'USER') /* find owner of this mdisk */
+ address '' 'GETFMADR'
+ if rc=0 then parse pull . mode nadr oadr .
+         else parse value 'Z 100' with mode nadr oadr
+ parse value diagrc(8,'CP LINK 'user adr nadr 'M' mpw,80) ,
+       with rc . 17 answer ; answer=translate(answer,,'15'x)
+ if rc<>0 then call error1 answer , 'Place directory online first',
+                                      '(SAVE+PF12) and retry.'
+ newlink=1
+ /* assure new Mdisk definition is linked */
+ parse value diagrc(8,'CP Q V 'nadr,80) ,
+       with crc . 17 'DASD' laddr ltyp lvolid lmode lnbr . 0  17 qvdisk
+ if find('3310 3370 9332 9335 9336',ltyp)<>0 then ltyp='FB-512'
+ if typ<>ltyp | nbr<>lnbr | volid<>lvolid then do
+    if typ<>ltyp then t='MDISK devtype' ltyp 'does not match' typ
+    if nbr<>lnbr then t='MDISK size' lnbr 'does not match' nbr
+    if volid<>lvolid then t='MDISK Volser' lvolid 'does not match' volid
+    if newlink then call diag 8,'DET' nadr
+    call error1 t,'Place directory online (SAVE+PF12) to get new Mdisk version'
+ end
+ address command
+ Say 'User' user 'disk' adr 'now linked as' nadr
+ say '  ' qvdisk
+ 'PIPE COMMAND ACCESS' nadr mode '|VAR EMSG'
+ accrc=rc
+ if accrc<>0 then do
+    Say '1DE8'x'Disk seems not formatted yet:'"1DD0"x||emsg;
+    If BlkOpt='' then say '  (the blocksize will be CMS'' default)'
+    else say '  (the blocksize will be' word(BlkOpt,2)')'
+ end; else do m=1 by 1 /* can be accessed ??? */
+    'MAKEBUF'
+    'QUERY DISK' mode '(STACK'
+    parse pull hdr ; parse pull 7 . . . cmsSz . . Nbf . 0 info
+    'DROPBUF'
+    If Nbf>0      then t= '/ Filelist' ; else t=''
+    If CmsSz=lNbr then tt= '/ reLabel' ; else tt=''
+    say 'Do you wish to scratch this disk ? Yes / -No-' t tt
+    If BlkOpt=''
+      then say '1de0'X '(the new blocksize will be CMS'' default)'
+      else say '1de0'X '(the new blocksize will be' word(BlkOpt,2)')'
+    say '1de8'X
+    'CP Q V' nadr
+    say hdr; say info
+    If CmsSz<>lNbr then do; say
+       if right(adr,2)='90' then t=''; else t=' You probably must format'
+       say 'Beware: CMS and CP sizes mismatch. ' t
+    end
+    say '1de0'X
+    do mm=1 by 0
+       parse upper external yn
+       select
+         when abbrev('FILELIST',yn,1) then do;'EXEC FILELIST * *' mode
+              iterate m;end
+         when abbrev('YES',yn,1) then leave m
+         when abbrev('RELABEL',yn,1) ,
+           |  abbrev('LABEL',yn,1)   then do
+            If BlkOpt<>'' & mm=1 then do
+                 say 'Blocksize' BlkOpt 'cannot be combined with Relabel'
+                 Say ' re-enter your RELABEL request and we will',
+                     'ignore the blocksize'; mm=2;iterate mm ; end
+            Relabel=1;leave m
+         end
+         when abbrev('NO',yn) then do
+            if accrc=0 then 'RELEASE' mode
+            call diag 8,'DET' nadr
+            address XEDIT
+            c ':'oldl c 'CURSOR SCREEN' cursor.5 cursor.6 'PRI 31'
+            exit;end
+         otherwise say 'invalid answer 'yn' , answer Yes or No'
+       end
+    end mm
+ end m
+ 
+ If Relabel then t='(LABEL' ; else t='('blkOpt
+ 'FORMAT' nadr mode t
+ 'RELEASE' mode
+ call diag 8,'DET' nadr
+ address XEDIT c ':'oldl c 'CURSOR SCREEN' cursor.5 cursor.6 'PRI 31'
+exit
+ 
+/*******************************************************************/
+RACF_RL: /*  PREFIX command RL:    run RACF RLIST                  */
+/*******************************************************************/
+ if op1<>'' & \datatype(op1,'W') then
+    call error1 'Operand' op1 'invalid'
+ c 'L :'pline c 'EXTRACT /CURLINE'
+ parse var curline.3 mdk adr .
+ if \abbrev('MDISK',mdk,1) then
+    call error1 cmd' should be called on MDISK - statement'
+ 
+ User=FindUserCard('EXIT',,'USER') /* find owner of this mdisk */
+ c 'L :'pline
+ do i=1 to word(Op1 1,1)
+    if i>1 then do
+       c 'L +1' c 'EXTRACT /CURLINE' ; if rc<>0 then leave /* at EOF */
+       parse var curline.3 mdk adr .
+       if \abbrev('MDISK',mdk,1) then iterate
+       say left('=',79,"=")
+    end
+    if length(adr)<=3 then adr=right(adr,3,0)
+       else if left(adr,1)=0 then adr=right(adr,3)
+    address '' 'EXEC RAC RL VMMDISK' user'.'adr 'ALL'
+ end i
+exit
+ 
+/*******************************************************************/
+RACF_PREF: /*  PREFIX command RACF: request to show RACF command file */
+/*******************************************************************/
+ if op1<>'' & \datatype(op1,'W') & op1<>'*' then call error1 'Operand' op1 'invalid'
+ c 'L :'pline c 'EXTRACT /CURLINE/SCOPE/ZONE'
+ parse var curline.3 type . 1 pcard
+ select
+   when abbrev('USER',type,1) then call RACP_USER
+   when abbrev('IDENTITY',type,2) then call RACP_USER
+   when abbrev('MDISK',type,1) then call RACP_MDISK
+   when abbrev('AMDISK',type,1) then call RACP_MDISK
+   when abbrev('LINK',type,1) then call RACP_LINK
+   when abbrev('DEDICATE',type,3) then call RACP_DEDICATE
+   when type='LOGONBY' then call RACP_LOGONBY
+   when wordpos(type,'AUTOLOG XAUTOLOG')<>0 then call RACP_AUTOLOG
+   otherwise call error1 cmd' should be called on USER, IDENTITY,'
+     'MDISK, LINK, DEDICATE, LOGONBY, or XAUTOLOG statement'
+ end
+exit
+ 
+RACP_USER: /* PREFIX command RACF: get userid */
+   parse var pcard . user  passw .
+   user=word(curline.3,2)
+   c '+1' c 'EXTRACT /CURLINE'
+   if left(curline.3,1)='*' then name=strip(substr(curline.3,2))
+                            else name=' his name '
+   call RACP_CMDS 'USER'
+ 
+RACP_MDISK: /* PREFIX command RACF: on MDISK card, get owning userid */
+   parse var pcard mdk adr typ str nbr volid . rpw wpw mpw .
+   if length(adr)=4 then if left(adr,1)='0' then adr=substr(adr,2)
+   User=FindUserCard('EXIT',,'USER') /* find owner of this MDISK */
+   call RACP_CMDS 'MDISK'
+ 
+RACP_AUTOLOG: /*PREF command RACF: on AUTOLOG card, get owning userid */
+   parse var pcard . aut_users
+   User=FindUserCard('EXIT',,'USER') /* find owner of this card */
+   call RACP_CMDS 'AUTOLOG' , aut_users
+ 
+RACP_LOGONBY: /*PREF command RACF: on LOGONBY card, get owning userid */
+   parse var pcard . aut_users
+   User=FindUserCard('EXIT',,'USER') /* find owner of this card */
+   call RACP_CMDS 'LOGONBY' , aut_users
+ 
+RACP_LINK: /* PREFIX command RACF: on LINK card, get owning userid */
+   parse var pcard . owner adr . mode .
+   if length(adr)=4 then if left(adr,1)='0' then adr=substr(adr,2)
+   User=FindUserCard('EXIT',,'USER') /* find owner of this LINK */
+   call RACP_CMDS 'LINK'
+ 
+RACP_DEDICATE: /* PREFIX command RACF: on DEDICATE record */
+   parse var pcard . . rdev.1 . ; rdev=1
+   if length(rdev.1)<4 then rdev.1=right(rdev.1,4,0)
+   User=FindUserCard('EXIT',,'USER') /* find owner of this LINK */
+   call RACP_CMDS 'DEDICATE'
+ 
+RACP_CMDS: /*get other directory cards (if any) and XEDIT RACF commands*/
+ m=0;l=0;auto=0;lgby=0
+ if symbol('rdev')<>'VAR' then rdev=0
+ if arg(1)='AUTOLOG' then parse value auto+1 arg(2) with auto auto.auto
+ if arg(1)='LOGONBY' then parse value lgby+1 arg(2) with lgby lgby.lgby
+ myself=userid()
+ select
+   when op1='' then nop
+   when op1='*' then do
+     c ':'pline
+     c ':'pline+1 c 'STACK :'NextUserLine()
+   end
+   otherwise
+     c ':'pline+1 c 'STACK' op1-1
+ end
+ do queued()
+    parse pull mdsk addr . 0 card
+    select
+     when mdsk='MDISK' | mdsk='AMDISK' then do
+        if length(addr)=4 & left(addr,1)='0' then addr=substr(addr,2)
+        m=m+1;maddr.m=addr;end
+     when mdsk='AUTOLOG' | mdsk='XAUTOLOG' then
+        parse value auto+1 subword(card,2) with auto auto.auto
+     when mdsk='LOGONBY' then
+        parse value lgby+1 subword(card,2) with lgby lgby.lgby
+     when mdsk='LINK' then do
+        l=l+1;parse var card . owner.l addr.l . mode.l .
+        if length(addr.l)=4 then
+           if left(addr.l,1)='0' then addr.l=substr(addr.l,2)
+        end
+     when mdsk='DEDICATE' then do
+        rdev=rdev+1;parse var card . . rdev.rdev .
+        if length(rdev.rdev)<4 then
+           rdev.rdev=right(rdev.rdev,4,0)
+        end
+     When mdsk='USER' | mdsk='IDENTITY' | mdsk='SUBCONFIG' then do
+        address '' 'DROPBUF'; leave; end
+     Otherwise nop
+    end
+ end
+ c 'XEDIT RACFDRM COMMANDS A (WIDTH 200 NOPROF NOMSG'
+ call PROFILE_RACF
+ c ':0' c 'DEL *'
+ parse value '|CHANGE /&USERID/'user'/' with Changes '' toXedit
+ if arg(1)='USER' then do
+    toXEDIT='|Xedit'
+    changes=changes'|CHANGE /&MYSELF/'myself'/',
+                   '|CHANGE' '01'x||'&NAME' || '01'x ||name || '01'x,
+                   '|CHANGE /&PASSWORD/'passw'/'
+ end
+ address '' 'PIPE (end ?) < RACFDRM SKELUSER',/* get skeleton */
+   Changes,
+   '|BATCH: Inside ANyCase /.*Class VMBATCH/ /.*endClass/|STEM VMBAT.',
+   '?BATCH:',
+   '|O: Fanout|StrNfind ".*"' toXedit,
+   '?O:|Inside ANyCase /.*GroupStart/ /.*GroupEnd/',
+   '|STEM Group.',
+   '?O:|StrFind ANyCase /.*ClassAct/ |SPEC W2-* 1',
+   '|Xlate Upper|Append Literal|Var ClassAct'
+ c '+*' c 'EXTRACT /SIZE'
+ select
+    when arg(1)='USER' then do /* Most is done by PIPE above */
+       if wordpos('VMBATCH',classAct)>0 then do
+          do vmbat=1 to vmbat.0; c '*' c 'I' vmbat.vmbat;end
+       end
+    end
+    when arg(1)='MDISK' then do
+       c 'GET RACFDRM SKELMDSK' /* Get skeleton */
+       c ':'size.1 c 'C/&MYSELF/'myself'/*'
+       c ':'size.1 c 'C/&USERID/'user'/* *'
+       c ':'size.1 c 'C/&ADDRESS/'adr'/* *'
+    end
+    when arg(1)='AUTOLOG' then NOP /* handle later */
+    when arg(1)='LOGONBY' then NOP /* handle later */
+    when arg(1)='DEDICATE' then classAct=classAct 'VMDEV' /* force ON */
+    when arg(1)='LINK' then do
+       c 'GET RACFDRM SKELLINK' /* Get skeleton */
+       c ':'size.1 c 'C/&USERID/'user'/* *'
+       c ':'size.1 c 'C/&OWNER/'owner'/* *'
+       c ':'size.1 c 'C/&ADDRESS/'adr'/* *'
+       select
+          when left(mode,1)='R' then access='READ'
+          when left(mode,1)='W' then access='UPDATE'
+          when left(mode,1)='M' then access='CONTROL'
+          otherwise access='??????'
+       end
+       c ':'size.1 c 'C/&ACCESS/'access'/* *'
+    end
+ end
+ c '-*' c 'FI RDEFINE VMMDISK'
+ do i=1 to m
+    c 'I RDEFINE VMMDISK' user'.'maddr.i 'OWNER('user') UACC(NONE)'
+ end i
+ if auto>0 then do
+    c 'I RDEFINE VMCMD XAUTOLOG.'user 'OWNER('user') UACC(NONE)'
+    do i=1 to auto
+       toEat=auto.i
+       do while ToEat<>''
+          parse var ToEat u toEat
+          c 'I PERMIT XAUTOLOG.'user 'CLASS(VMCMD) ID('u') AC(READ)'
+       end
+    end i
+ end
+ if lgby>0 then do
+    c 'I RDEFINE SURROGAT LOGONBY.'user 'OWNER('user') UACC(NONE)'
+    do i=1 to lgby
+       toEat=lgby.i
+       do while ToEat<>''
+          parse var ToEat u toEat
+          c 'I PERMIT LOGONBY.'user 'CLASS(SURROGAT) ID('u') AC(READ)'
+       end
+    end i
+ end
+ if rdev>0 then if wordpos('VMDEV',classAct)>0 then do
+    parse value diag(8,'Q USERID') with . . here '15'x
+    do rd=1 to rdev
+       c '*' c 'I RDEFINE VMDEV RDEV.'rdev.rd'.'here
+    end
+    do rd=1 to rdev
+       c '*' c 'I PERMIT RDEV.'rdev.rd'.'here 'CLASS(VMDEV)',
+               'ID('user') ACCESS(UPDATE)'
+    end
+ end
+ c '-*' c 'FI PERMIT'
+ do i=1 to l
+     select
+       when left(mode.i,1)='R' then acc='READ'
+       when left(mode.i,1)='W' then acc='UPDATE'
+       when left(mode.i,1)='M' then acc='CONTROL'
+       otherwise acc='??????'
+    end
+    'I PERMIT' owner.i'.'addr.i 'CLASS(VMMDISK) ID('user') ACC('acc')'
+ end i
+ c '-*' c 'EXTRACT /SIZE'
+ address command 'PIPE (end ?) XEDIT',
+   '|Nocmt: Strfind "*"', /* keep the comment lines here */
+   '|iNocmt: FaninAny',   /* collect non-comment lines too*/
+   '|BUFFER|XEDIT',       /* Append these lines to XEDIT file */
+   '?Nocmt:',                   /* Non-comment lines */
+   '|RDEF: StrNfind "RDEFINE"', /* Look for RDEFINEs */
+   '|iRDEF: FaninAny',          /* Collect RDEFINEs and PERMIT DELETE*/
+   '|SPEC 1-* 1 x15 N 1-* N',   /* Prepare cleanup duplicates */
+   '|CHANGE FS 15 F1 /  / /',   /* Remove extraneous spaces in ...*/
+   '|CHANGE FS 15 F1 /  / /',   /* .. first field that we test...*/
+   '|CHANGE FS 15 F1 /  / /',   /* .. use CHANGE as SPACE is not GA */
+   '|LK: Lookup FS 15 F1 autoAdd', /* Keep only 1 occurance of each*/
+   '?LK:',
+   '|SPEC FS 15 F2 1',          /* Keep the field with original cmd */
+   '|iNocmt:',                  /* Pass unique lines to main stream */
+   '?RDEF:',                    /* RDEFINE statements */
+   '|SPEC 1-* 1 Write',         /* add a PERMIST DELETE */
+      '/PERMIT/ 1 W3 NW /CLASS(/ NW W2 N /) ID('myself') DELETE/ N',
+   '|iRDEF:'                    /* send back for unique checking */
+ 
+ c '-*' c 'DEL' size.1+1 /* delete old lines */
+ c 'SUPER /ALT 0 0/MSGM  ON'
+/* STACK next command is needed as we where called by a PREFIX MACRO */
+ queue c 'XEDIT RACFDRM COMMANDS A'
+exit
+PROFILE_RACF:
+c 'SUPERSET /LRECL */TRUNC */RECFM V/ZONE 1 */SCALE OFF/VERIF 1 *',
+           '/NULLS ON/AUTO OFF/SER OFF/LINEND OFF'
+c 'SET CMDL  TOP'   ;  c 'SET CURL  ON 4'
+c 'SET NUM   ON'    ;  c 'SET PREF  ON LEFT'
+c 'SET STAY  ON'    ;  c 'SET MSGL  ON 3 12 O'
+c 'SET COLOR CURL BLUE'
+c 'SET COLOR PEND BLUE REV'
+c 'SET COLOR PREF RED'
+c 'RESERV -1 h' justify('PF:1=help 3=quit 7=back 8=forw 10=RACF-execute',79)
+cs 'RESERVE 3 YELL H  Adding / modifying  a userid definition for RACF:'
+cs 'RESERVE 4 YELL H   - Adapt these statements to your wishes'
+cs 'RESERVE 5 YELL H   - Delete unwanted lines'
+cs 'RESERVE 6 YELL H   - Press PF10 "execute" when ready'
+cs 'Pf1  HELP CMS DRM'
+cs 'Pf13 HELP CMS DRM'
+cs 'Pf5  C /????????/SYSUSERS/:2'
+cs 'PF10 MACRO 'me' $RACF$'
+cs 'PF22 MACRO 'me' $RACF$'
+return
+ 
+/*-----------------------------------------------------------------*/
+RACF_EXEC: /* execute prepared RACF commands                       */
+/*-----------------------------------------------------------------*/
+ address '' 'EXECSTAT RAC EXEC'
+ if rc<=4 then do /* RACF 1.9 exist */
+    rrc=0
+    c '-*' c 'CL :1';c 'RESET'
+    do forever
+       c '+1';if rc<>0 then leave
+       c 'EXTRACT /CURLINE'
+       if left(curline.3,1)='*' | curline.3='' then iterate
+       address '' 'EXEC RAC' curline.3
+       rrc=max(rrc,rc)
+       if rc=0 then c 'CI *(0) '
+               else cs 'PENDING ON' left('?R'rc,5)
+    end
+ end
+ else do
+    c '-* STACK *'
+    do queued()
+       parse pull line 1 C1 2
+       if c1<>'*' then queue line
+    end
+    queue 'END'
+    address cms 'RACF (BATCH' ; rrc=rc
+    address '' 'DROPBUF'
+ end
+ if rrc=0 then c 'QUIT'
+          else c '-*' c 'EMSG Retcode' rrc 'from RACF.'
+ exit rc
+ 
+/*******************************************************************/
+NOTFND: /* No space found in GAPFILE                               */
+/*******************************************************************/
+ gapl=strip(gapl,'L','0')
+ select
+  when AllSameVol & \found then /* 'ALL' function failed */
+    emsg='Volume' volid 'not found in' gapfile
+  when AllSameVol then
+   emsg='No gap of size' gap 'available on' volid 'in' gapfile',',
+           'biggest gap:' gapl
+  when on_same_vol then
+   emsg='No gap of size' gap 'available on volume' volid
+  otherwise
+   if typ='*' then typ=''
+              else typ=' on type' typ
+   emsg='No gap of size' gap 'available'typ' in 'gapfile
+   if gapl<>'' then do
+      if biggestGap =-1 then
+         emsg=emsg', No free space found' typ ||,
+               ', free space found on disk type(s)' strip(gaptypes)
+      else
+         emsg=emsg', biggest gap:' biggestGap || typ
+   end
+ end
+ c '-*' cs 'MSGM ON'
+ /* When applying Dynamic filter and no space is found */
+ /*  If this apply is "remembered" we msut allow the user to turn */
+ /*  this dynamic filtering OFF */
+ if value('ApplyDynFilter')=1 then do /* avoid NoValue */
+    cs 'MSGM ON'
+    c 'EMSG' emsg
+    c 'EMSG Note: Filter is active, use PF9 to remove'
+    queue c 'X' gapfile
+    exit
+ end
+ call noselpf
+ c 'X 'fid         /* Go to the CP directory */
+ cs 'MSGM ON'
+ c 'EMSG' emsg
+ cs 'PENDING ON ?'get
+ queue c 'SOS POP'
+exit
+ 
+/*-----------------------------------------------------------------*/
+SaveOptions: /* Save some values in an XEDIT synonym               */
+/*-----------------------------------------------------------------*/
+ cs 'SYNONYM $$-DRM-$ 8' DirmapOpts'/'outfm'/'fid'/'directcm'/'||,
+                              remap'/'directopts
+ if arg(1)='ALL' then do
+    cs 'SYNONYM $$-DRMR$ 8 $$-DRMR$' RefreshDir
+    cs 'SYNONYM $$-DRMG$ 8 $$-DRMG$' Gui /* Started by GUI */
+ end
+return
+/*******************************************************************/
+INVGAPF: /*                                                        */
+/*******************************************************************/
+  c 'SET SCREEN 1'
+  c 'X 'fid
+  if \datatype(arg(1),'N') then err='start "'arg(1)'"'
+                           else err='size "'arg(2)'"'
+  c 'EMSG GAPFILE layout changed or not numeric data in GAPFILE:' err
+  c 'EMSG    -try to correct with: REFRESH (PF4)'
+  c 'EMSG    -or change' signat 'arround line' sigl-1
+  signal endget
+ 
+/*******************************************************************/
+ERROR1: /*                                                         */
+/*******************************************************************/
+ address XEDIT
+ c 'SET MSGM ON'
+ if Gui Then do
+    parse upper source . how myname mytype . syn . '' undefvar
+    emsg=Myname mytype':'
+    do i=1 to arg()
+       emsg=emsg'15'x||arg(i)
+    end
+    address '' 'PIPE Var Emsg|NOT CHOP 1|Var Emsg 1'
+ end; else do
+    do i=1 to arg()
+      c 'EMSG 'arg(i)
+    end
+    if arg1='PREFIX' then c ':'pline c 'SET PENDING ERROR' cmd
+ end
+ exit 5
+/*-----------------------------------------------------------------*/
+NOVALUE: /* we come here when REXX finds unitialised variable      */
+/*-----------------------------------------------------------------*/
+ parse upper source . how myname mytype . syn . '' undefvar
+ parse version . rexxlvl .
+ if rexxlvl>=3.46 then undefvar=' "'||'CONDITION'('D')'"'
+ call errexit 99,'REXX problem in' myname mytype 'line' sigl,
+      'variable'|| undefvar 'not defined'
+/*-----------------------------------------------------------------*/
+ERREXIT: /* exit with retcode & errormsg                           */
+/*-----------------------------------------------------------------*/
+ parse upper source . how myname mytype . syn . '' undefvar
+ address xedit
+ 'DROPBUF 0'
+ 'COMMAND SET MSGM ON'
+ if Gui Then do; emsg=Myname mytype':'
+    do i=2 to arg()
+       emsg=emsg'15'x||arg(i)
+    end
+    address '' 'PIPE Var Emsg|Var Emsg 1'
+ end; else
+ do i=2 to 'ARG'()
+    'COMMAND EMSG' 'ARG'(i)
+ end
+exit arg(1)

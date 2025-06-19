@@ -1,0 +1,239 @@
+ 
+ PIPEDDR EXEC
+ 
+ The PIPEDDR EXEC can dump a disk into a regular CMS file, to an ftp
+ server, to a file in an NFS share (which is mounted to BFS, the CMS
+ Byte File System), or via TCP/IP directly to a disk on a remote
+ system. Restore a disk from a PIPEDDR output file via one of the same
+ methods. The data is packed or can also be compressed further, saving
+ network bandwidth or disk space. The data can also be encrypted either
+ on disk or as it is sent over the network. A remote disk can be kept
+ in sync with a local disk using the remote update function.
+ 
+ The PIPEDDR EXEC can save and restore disk images using either the raw
+ disk I/O support available in CMS Pipelines or the Pipelines interface
+ to the CMS DDR command. The internal structure of each kind of disk
+ image are different and are not compatible with each other. The
+ Pipelines raw disk I/O support uses the Pipe stages TRACKREAD and
+ TRACKWRITE (for ECKD disks) or FBAREAD and FBAWRITE (for FB-512
+ disks.) These stages are part of either z/VM&reg; 6.4 and later or the
+ optional "Runtime Distribution" of CMS Pipelines. The interface to the
+ CMS DDR command uses the DDR Pipelines stage.
+ 
+ The exec dumps an entire disk into a regular CMS file. The operating
+ system format of the disk or the type of data on it does not matter.
+ The disk is read in binary track by track or block by block. The
+ output data by default is written in packed format compatible with the
+ PACK option of the CMS COPYFILE command and is in fixed record format
+ with 1024 byte records. This allows easier interchange of the backup
+ files with non-mainframe systems. These files can be used for backups
+ of disks or restored on another system. There are also options to
+ compress the output to make the file even smaller. See the notes
+ section of the help file for more information on compressing the
+ output.
+ 
+ The output file created by this exec has meta data about the source
+ disk as the first record. The contents of the disk follow in the rest
+ of the records. This ensures that the disk is restored to a device of
+ the same type and size. Data must be restored to the same type of
+ device using the same disk data encoding method. In other words, ECKD
+ devices (3390) must be restored to ECKD devices and FB-512 devices
+ must be restored to FB-512 devices. It is not possible to convert the
+ data on one device type to another device type using this exec.
+ 
+ The disk can also be transferred over a TCP/IP connection directly to
+ a receiving PIPEDDR exec listening to an IP port on a remote system.
+ The default is to send the entire disk. If the disk was transferred
+ previously, a PIPEDDR option will send just the changes to the blocks
+ or tracks to the remote system instead of the entire disk. Recent
+ updates to CMS Pipelines and TCPIP allow optional secure (TLS) remote
+ sessions. It is recommended that the same version of the PIPEDDR exec
+ be used on both ends of the TCP/IP connection. PIPEDDR also supports
+ sending the output file directly to an ftp or ftps (secure ftp)
+ server. The file created on the ftp server is in the same format as
+ the CMS file. A disk can be restored from a file hosted by either an
+ ftp server or an HTTP (web) server. Secure connections are supported.
+ 
+ By default, PIPEDDR will display messages on the console about the
+ progress of the disk operation as it processes a disk. The default
+ behavior is to display a message for every 10% of disk that has been
+ processed.
+ 
+ If the disk contains sensitive data, the disk contents can be
+ encrypted using the CPACF hardware encryption processor. You must
+ obtain the KM Package from the VM download library to enable
+ encryption. The KMRTNS CSLLIB is used from the VMARC file. These CSL
+ routines require your machine to have the CPACF feature enabled to use
+ the built in hardware encryption and decryption.
+ 
+ Dumping or restoring to FTP supports 3 different FTP pipeline stages.
+ The newest ftp stage is built in to Pipelines and is available if
+ secure TCP/IP connections are supported by CMS Pipelines. (APAR
+ VM66365 for z/VM 7.1, included in z/VM 7.2 and later.) This stage
+ supports both secure and unsecured ftp sessions. The other ftp stages
+ supported by PIPEDDR are not built-in to Pipelines; they are loaded
+ from a separate module or file. The preferred external ftp stage is
+ found in the FTPREXX package on the VM downloads page. Get the FTPREXX
+ Package to download this stage.
+ 
+ The final one is supplied with z/VM, but only supported for the
+ installation of z/VM. It requires either the INSTPIPE MODULE from a
+ modern version of CMS (found on MAINTvrm 4CC or MAINT 193) or the DRPC
+ MODULE.
+ 
+ The exec also supports two other forms of compaction, TERSE and ZLIB.
+ The TERSE option can only be used if the TERSE Pipelines stage is
+ available. This allows the exec to create output files that are
+ smaller or send less data over the network. The TERSE Pipelines stage
+ is part of the PIPSYSF filter package which is now available from the
+ Marist Pipelines page. See the PIPSYSF Filter Package page for more
+ information and a link to download the module.
+ 
+ The ZLIB compression option requires the zlib Pipeline stage which is
+ found in in the ZLIBSTG MODULE file. You can download the file
+ "fplgcc.vma" which is a VMARC format file downloadable from John
+ Hartmann's space on GitHub.
+ 
+ If the CMS DDR format is used, the DDR module supports 2 compression
+ options, COMPRESS and LZCOMPACT, which may provide an acceptable level
+ of compression.
+ 
+ There is also a copy option which preforms a disk to disk copy, with
+ automatic linking of the source and target disks. If the flashcopy
+ option is specified, the exec attempts to copy the disks using the CP
+ FLASHCOPY command. If that command fails or your user id is not
+ allowed to use this command, the exec falls back to a disk to disk
+ copy. The copy option is no different than copying a disk using DDR,
+ and in fact just the DDR module is used if the CMSDDR option is
+ specified on the copy command.
+ 
+ A help file is included in the package and it contains a detailed
+ description of all of the options. Enter HELP PIPEDDR on the CMS
+ command line for usage information. Be sure to also download the zip
+ file which contains a pdf document. This document includes all of this
+ description, all of the help file contents, plus additional details.
+ 
+ ----------------------------------------------------------------------
+ Feedback: Bruce Hayden IBM (retired)
+ ----------------------------------------------------------------------
+ 
+ Some examples of how to use PIPEDDR.
+ 
+ To dump a minidisk to a file with the default name:
+ 
+ PIPEDDR DUMP MAINT 19E
+ 
+ This creates a file named MAINT DISK019E A
+ 
+ To dump a minidisk to a file and terse the output:
+ 
+ PIPEDDR DUMP MAINT 19E (TERSE
+ 
+ Another way is to set the default compression format to TERSE and then
+ dump the disk:
+ 
+ PIPEDDR SET COMPACT TERSE
+ PIPEDDR DUMP MAINT 19E
+ 
+ To dump a minidisk to a file including the CRC:
+ 
+ PIPEDDR DUMP MAINT 19E (CRC
+ 
+ To dump the same disk to a different filemode:
+ 
+ PIPEDDR DUMP MAINT 19E TO FILE = = E
+ 
+ To dump a minidisk to a file in CMS DDR format:
+ 
+ PIPEDDR DUMP MAINT 19E (CMSDDR
+ 
+ To restore the file to the same disk:
+ 
+ PIPEDDR RESTORE MAINT 19E
+ 
+ To restore the file to a different disk and skip the prompt:
+ 
+ PIPEDDR RESTORE CMSUSER 191 FROM FILE MAINT DISK019E A (NOPROMPT
+ 
+ To dump a minidisk to a file and encrypt the data:
+ 
+ PIPEDDR DUMP MAINT 19E (CIPHER AES KEY(Super Secret KEY)
+ 
+ To restore it:
+ 
+ PIPEDDR RESTORE MAINT 19E (CIPHER AES KEY(Super Secret KEY)
+ 
+ To send an entire minidisk over the network On the receiving node,
+ enter:
+ 
+ PIPEDDR RESTORE MAINT 19E FROM REMOTE
+ 
+ This will display the port number it is using. To force the port to
+ 12345:
+ 
+ PIPEDDR RESTORE MAINT 19E FROM REMOTE (PORT 12345
+ 
+ On the sending system use (where pppp is the listening port):
+ 
+ PIPEDDR DUMP MAINT 19E TO REMOTE nodeid.example.com:pppp
+ 
+ To just update a disk that was copied previouslly:
+ 
+ PIPEDDR DUMP MAINT 19E TO UPDATE nodeid.example.com:pppp
+ 
+ The connection should be made and the disk sent over.
+ 
+ To send a minidisk to a file named maint.disk019e on an ftp server:
+ 
+ PIPEDDR DUMP MAINT 19E TO ftp://hayden:password@server.example.com
+ 
+ To restore a minidisk from file disk.dump on an ftp server:
+ 
+ PIPEDDR RESTORE MAINT 19E FROM ftp://hayden:password@server.example.com/disks/disk.dump
+ 
+ To do the same thing but from an http server:
+ 
+ PIPEDDR RESTORE MAINT 19E FROM http://server.example.com/disks/disk.dump
+ 
+ To dump a minidisk to a file named maint.disk019e on an NFS server,
+ first the nfs directory must be mounted to your virtual machine using
+ OPENVM MOUNT. Assuming it is mounted at /home/maint/mnt, the command
+ is:
+ 
+ PIPEDDR DUMP MAINT 19E TO BFSPATH /home/maint/mnt
+ 
+ ----------------------------------------------------------------------
+ 
+ Change log of recent changes, latest changes first
+ 
+ Version    Change Description
+ -------    ------------------
+ V1.7.15    Support a CMS KEYVAULT for ftp id and password.
+ V1.7.14    Show message for unsecured remote connection.
+ *          Add timestamp to dump/restore progress messages.
+ *          NOIMSG and SLEEP options, improve HTTP client code.
+ V1.7.13    Add some options to help testing.
+ V1.7.12    Handle encoded urls, encode password for ftp stage.
+ V1.7.11    Add FTPSITE option to send FTP site command
+ V1.7.10    Allow delimiters of ' or " for cipher key string, fix 3380.
+ V1.7.9     Check that a dump is the first Pipe stage or restore has no output.
+            Allow secondary output for PIPE for progress messages.
+ V1.7.8     Add option TRUNCATE nnn to only dump or copy part of a disk.
+ V1.7.7     Ignore SECURE option instead of exiting, show level with DEBUG.
+ V1.7.6     Add special first option DEFAULTS to ignore all preset options.
+ V1.7.5     Add SDIGEST (single digest) option which works like crc.
+ V1.7.4     Allow exec to be called as a Pipeline stage.
+ V1.7.3     Support new ftp stage which supports ftps.
+            Add VMFTP option, to send proper SITE command for VM FTP.
+ V1.7.2     Support secure SSL/TLS sockets for remote dump/restore.
+ V1.7.1     Fix port number in error message and some spelling.
+            Validate some of the fields in the file header.
+            Ensure valid values for crc or digest check.
+            If no input with oneread, issue error.
+            RAW option supersedes ONEREAD option.
+ V1.7.0     Don't restrict NOPACK, and don't force it to be blocked.
+            Show fewer progress messages with large disks.
+            Add digest or cksum in ascii after binary value in last record.
+            For remote receive or update, verify cipher key.
+ 
+ 

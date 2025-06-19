@@ -1,0 +1,129 @@
+/*---------------------------------------------------------------+
+| Function : Add, delete, replace or show the MACHINE stmt       |
+|                                                                |
+| File     : DM_MACH  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_MACH  <machine type>                             |
+|          : MACHINE  <machine type>                             |
+|            <machine type> can be specified as QRY to display   |
+|                           the current type.                    |
+|                           If specified as DEL the machine type |
+|                           will be removed                      |
+|                           QRY will display curren setting      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240707 10:05:11                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid newmtype .
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get the ID and directory stmts                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Find if there is a MACHINE stmt                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MACH.EXEC:46 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~MACHINE~',           /* Check for this   */
+   '| var curmtype',                             /* Hand 2 rexx      */
+   '| count lines',                              /* How many         */
+   '| var mtstat'                                /* Store as boolean */
+mtypes='ESA XA xC Z DEL QRY'
+/*---------------------------------------------------------------+
+| Act on the input and finding                                   |
++---------------------------------------------------------------*/
+Select
+When newmtype='QRY' Then Call ShowMtype
+When newmtype='DEL' Then Call DelMtype
+When \mtstat        Then Call AddMtype
+When mtstat         Then Call ChgMtype
+When newmtype=curmtype Then Call Exit 350
+Otherwise Call Exit 28
+End
+/*---------------------------------------------------------------+
+| Write the directory to workspace                               |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_MACH.EXEC:67 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Apply changes    */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put directory online                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowMtype:
+/*---------------------------------------------------------------+
+| Show the MACHINE stmt                                          |
++---------------------------------------------------------------*/
+Say curmtype
+Say Date('S') Time() myfn myft 'Machine for 'uid' is: 'Word(curmtype,3)
+Call Exit
+Return
+ 
+ 
+AddMtype:
+/*---------------------------------------------------------------+
+| Add a MACHINE stmt                                             |
++---------------------------------------------------------------*/
+If Pos(newmtype,mtypes)=0 Then Call Exit 351
+'PIPE (NAME DM_MACH.EXEC:104 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~ACCOUNT~',           /* Select this      */
+   '| var curacnt',                              /* Hand 2 rexx      */
+   '| specs 1;* 1 ~;'Copies(' ',8)'MACHINE 'newmtype'~ nw',   /* Change stmt      */
+   '| var newacnt'                               /* Hand 2 rexx      */
+chgstmt='| change anycase ~'curacnt'~ ~'newacnt'~ | split at ;'
+Return
+ 
+ 
+DelMtype:
+/*---------------------------------------------------------------+
+| Delete MACHINE stmt                                            |
++---------------------------------------------------------------*/
+chgstmt='| nlocate anycase ~'curmtype'~'
+Return
+ 
+ 
+ChgMtype:
+/*---------------------------------------------------------------+
+| Change the MACHINE stmt                                        |
++---------------------------------------------------------------*/
+If Pos(newmtype,mtypes)=0 Then Call Exit 351
+newmtype=Subword(curmtype,1,2)' 'newmtype
+chgstmt='| change anycase ~'curmtype'~ ~'newmtype'~'
+Return

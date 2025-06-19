@@ -1,0 +1,214 @@
+/*---------------------------------------------------------------+
+| Function : Present a memory overview for all members of        |
+|            an SSI cluster                                      |
+|                                                                |
+| File     : SSIMEM   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : SSIMEM   .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220310 10:07:48                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft myfm .
+ssi.0=0
+'PIPE (NAME SSIMEM.EXEC:23 END ?)',
+   'cp QUERY SSI',
+   '| frlabel SLOT',
+   '| pick anycase w3.1 == ~JOINED~',
+   '| specs w2.1 1',
+   '| stem ssi.'
+/*---------------------------------------------------------------+
+| Not in a cluster...                                            |
++---------------------------------------------------------------*/
+If ssi.0=0 Then Do
+            ssi.0=1
+            ssi.1='*'
+            End
+/*---------------------------------------------------------------+
+| Loop thru all the partners we found                            |
++---------------------------------------------------------------*/
+out.0=0                                          /* Init stem        */
+Do s=1 To ssi.0
+   Call Get_Data
+End s
+Call Process_Data
+Call Display_Data
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Get_Data:
+/*---------------------------------------------------------------+
+| Get the data                                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME SSIMEM.EXEC:61 END ?)',
+   'cp AT 'ssi.s' CMD QUERY STORAGE',            /* Ask cp           */
+   '| space 1 ;',                                /* Remove spaces    */
+   '| change ~;=;~ ~',                           /* Remove this      */
+   '| split at ;',                               /* Split            */
+   '| siconv w2.1 g2m 12.2',                     /* Convert to GB    */
+   '| strip trailing ~M~',                       /* Remove this      */
+   '| specs 1;* 1 ~;~ nw',                       /* Add semicolon    */
+   '| join * x40',                               /* Make 1 record    */
+   '| specs w1;* 1',                             /* Add up the blocks*/
+          '~TOTAL~ nw',                          /* .                */
+          'a: w5.1 .',                           /* .                */
+          'b: w11.1 .',                          /* .                */
+          'c: w14.1 .',                          /* .                */
+          'set #0:=a+b+c',                       /* .                */
+          'print #0 nw',                         /* .                */
+   '| fi: faninany',                             /* Take in others   */
+   '| split at ;',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| specs pad space ~'ssi.s'~ 1.8 1;* nw',
+   '| stem out. append',                         /* Show             */
+   '?',                                          /* 2nd pipe         */
+   'cp AT 'ssi.s' CMD INDICATE ACTIVE',          /* Ask cp           */
+   '| change ~,~ ;~',                            /* Replace this     */
+   '| specs w2.1 1',                             /* Rework layout    */
+           'w1.1 nw',                            /* .                */
+           'w3.1 nw',                            /* .                */
+           'w5.1 nw',                            /* .                */
+           'w4.1 nw',                            /* .                */
+           'w6.1 nw',                            /* .                */
+           'w8.1 nw',                            /* .                */
+           'w7.1 nw',                            /* .                */
+           'w9.1 nw',                            /* .                */
+           'w11.1 nw',                           /* .                */
+           'w10.1 nw',                           /* .                */
+   '| fi:',                                      /* Conn 2 faninany  */
+   '?',                                          /* 3rd pipe         */
+   'cp AT 'ssi.s' CMD QUERY ALLOC PAGE',         /* Ask cp           */
+   '| pick w1.1 == ~USABLE~',                    /* Select these     */
+   '| specs w2.2 1',                             /* Keep this        */
+   '| change ~K~~',                              /* Remove this      */
+   '| specs',                                    /* Rework to        */
+           'a: w1.1 .',                          /* ...bytes         */
+           'b: w2.1 .',                          /* .                */
+           'set #0:=(a*1024)*4',                 /* .                */
+           'set #1:=(b*1024)*4',                 /* .                */
+           'print #0 picture ---------------9.99 1',   /* .                */
+   '| siconv w1.1 b2m 16.2 w2.1 b2m 16.2',       /* Convert 2 MB     */
+   '| specs ~Pages available~ 1 w1.1 nw ~;Pages on DASD~ nw w2.1 nw',   /* Add this         */
+   '| fi:',                                      /* Conn 2 faninany  */
+   '?',                                          /* 4th pipe         */
+   'cp AT 'ssi.s' CMD QUERY NAMES',                             /* Ask cp           */
+   '| split at ,',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| pick w1.1 \== ~VSM~ and w3.1 \== ~TCPIP~', /* Ignore these     */
+   '| pick w3.1 \== ~SSI~',                      /* Not on this clstr*/
+   '| specs ~AT 'ssi.s' CMD INDICATE USER~ 1 w1.1 nw',          /* Compose cmds     */
+   '| cp',                                       /* Ask cp           */
+   '| join * x40',                               /* Make 1 record    */
+   '| split at string ~USERID=~',                /* Split here       */
+   '| sort unique w1.1',                         /* Keep 1 value     */
+   '| split before string ~RES=~',               /* Split here       */
+   '| pick 1.3 == ~RES~',                        /* Rework layout    */
+   '| specs fs = substr  w1.1 of f2',            /* Sum all the      */
+   '| specs printonly eof',                      /* ...pages         */
+           'a: w1.1 .',                          /* .                */
+           'set #0+=a',                          /* .                */
+           'eof',                                /* .                */
+           'print #0 1',                         /* .                */
+   '| specs a: w1.1 .',                          /* Rework to bytes  */
+           'set #0:=(a*1024)*4',                 /* .                */
+           'print #0 picture ---------------9.99 1',   /* .                */
+   '| siconv w1.1 b2m 12.2',                     /* Convert to MB    */
+   '| specs ~Pages in memory~ 1 w1.1 nw',        /* Add this         */
+   '| fi:'                                       /* Conn 2 faninany  */
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Process_Data:
+/*---------------------------------------------------------------+
+| Process all the collected data                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME SSIMEM.EXEC:146 END ?)',
+    'stem out.',                                 /* Take these       */
+    '| pick 1.1 \== ~ ~',                        /* Only filled lines*/
+    '| specs pad _ w1.1 1.8 w-1;-1 nw x40 n',            /* Add a space      */
+    '| join keylen 8',                           /* Join on shortnode*/
+    '| specs w1.1 1',                            /* Adjust layout    */
+            'w2.1 nw.6 right',                   /* .                */
+            'w3.1 nw.6 right',                   /* .                */
+            'w4.1 nw.6 right',                   /* .                */
+            'w5.1 nw.6 right',                   /* .                */
+            'w6.1 nw.8 right',                   /* .                */
+            'w7.1 nw.8 right',                   /* .                */
+            'w8.1 nw.5 right',                   /* .                */
+            'w9.1 nw.8 right',                   /* .                */
+            'w10.1 nw.8 right',                  /* .                */
+            'w11.1 nw.8 right',                  /* .                */
+            'w12.1 nw.8 right',                  /* .                */
+            'w13.1 nw.8 right',                  /* .                */
+            'w14.1 nw.8 right',                  /* .                */
+    '| specs 1;* 1',                             /* Add up 2 items   */
+            'a: w-2;-2 .',                       /* .                */
+            'b: w-1;-1 .',                       /* .                */
+            'set #0:=a+b',                       /* .                */
+            'print #0 nw',                       /* .                */
+    '| specs 1;* 1',                             /* Calculate        */
+            'a: w11.1 .',                        /* ....percentage   */
+            'b: w15.1 .',                        /* .                */
+            'set #0:=(b/a)*100',                 /* .                */
+            'print #0 picture ------999.99 nw',  /* .                */
+    '| sort w-1;-1 d',                           /* Sort on perc     */
+    '| f: fanout',                               /* Dupl records     */
+    '| specs w1;-2 1',                           /* Loose last item  */
+    '| stem line.',                              /* Store as         */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs w-1;-1',                            /* Keep last word   */
+    '| stem perc.'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Add wng label                                                  |
++---------------------------------------------------------------*/
+Do p=1 To perc.0
+   If perc.p <= '70'                    Then lbl='Ok'
+   If perc.p >  '70'  & perc.p <= '100' Then lbl='Well balanced'
+   If perc.p >  '100' & perc.p <= '150' Then lbl='Needs attention'
+   If perc.p >  '150'                   Then lbl='Danger zone'
+   line.p=line.p perc.p lbl
+End p
+Return
+ 
+ 
+Display_Data:
+/*---------------------------------------------------------------+
+| Display results                                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (NOTYPE WRITE .fm'
+If rc=0 Then Parse Pull  . . wfm .
+        Else wfm='A'
+hdr='           Users                     Memory (Mb)                                        Pages (Mb);',
+    '          Active Disp   Elig   Dorm Availabl Configd  Incr  Standby  Reserved Conf+Rsr Avail    On_Dasd  In_memor Dasd+Mem    OverCommit%'
+'VMFCLEAR'
+'PIPE (NAME SSIMEM.EXEC:205 END ?)',
+    'stem line.',                                /* Take these       */
+    '| preface var hdr',                         /* Add hdr          */
+    '| split at ;',                              /* Split            */
+    '| > 'myfn' OVERVIEW 'wfm                    /* Show             */
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (NOTYPE WRITE'
+Return

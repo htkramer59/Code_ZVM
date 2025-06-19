@@ -1,0 +1,20 @@
+/*---------------------------------------------------------------+
+| Function : Some default commands we want issued                |
+|                                                                |
+| File     : LNXDEFLT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : LNXDEFLT .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220518 10:48:04                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SPOOL CONS * START EOF'
+Address COMMAND 'CP TERM MORE 10 10 HOLD ON'

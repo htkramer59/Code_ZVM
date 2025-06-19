@@ -1,0 +1,115 @@
+/*--------------------------------------------------------------------+
+| Function : Do some settings I like in my XEDIT sessions             |
+|                                                                     |
+| File     : PROFILE  XEDIT                                           |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : N/A                                                      |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, ICU-IT Almere                                |
+| Created  : 20120316 11:16:41                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+"SET MSGMODE OFF"
+"QUERY LSCREEN"
+If rc /= "0" Then Exit rc
+"SET MSGM ON LONG"
+"SET LINEND OFF"
+/*--------------------------------------------------------------------+
+| Set my PF keys                                                      |
++--------------------------------------------------------------------*/
+"PF01 HELP"
+"PF02 DSPC"
+"PF03 ONLY SET MSGMODE OFF#QUIT#SET MSGMODE ON#FILE"
+"PF04 SPLTJOIN"
+"PF05 RGTLEFT"
+"PF06 SCREEN 2"
+"PF07 BACKWARD"
+"PF08 FORWARD"
+"PF09 SCHANGE 12"
+"PF10 TOP#N"
+"PF11 BOT#BACKWARD#N 2"
+"PF12 ONLY QUIT"
+"PF13 HELP"
+"PF14 DSPC"
+"PF15 ONLY SET MSGMODE OFF#QUIT#SET MSGMODE ON#FILE"
+"PF16 SPLTJOIN"
+"PF17 RGTLEFT"
+"PF18 SCREEN 2"
+"PF19 BACKWARD"
+"PF20 FORWARD"
+"PF21 SCHANGE 12"
+"PF22 TOP#N"
+"PF23 BOT#BACKWARD#N 2"
+"PF24 ONLY QUIT"
+/*--------------------------------------------------------------------+
+| Set the synonyms to use the MANY macro                              |
++--------------------------------------------------------------------*/
+prefix="BOX COM DCM HD MC TAG PIPE IF DO DEL SAV FIL NUL TR Z",
+       "PBOX T TS B N CEN LEF RIG UPP LOW PTF ANC UL OL TBL PCM",
+       "SEL SUB CONS"
+cmdl="HD MC PIPNAM"
+"PIPE (end ?)",
+     "var prefix",      /* Take this */
+     "| split",         /* Split in records */
+     "| specs ~SET PREFIX SYNONYM~ 1 w1.1 nw ~MANY~ nw",
+     "| f: faninany",   /* Take in the others */
+     "| subcom xedit",  /* Hand it to XEDIT */
+     "?",               /* Start 2nd PIPE */
+     "var cmdl",        /* Take this */
+     "| split",         /* Split in records */
+     "| specs ~SET SYNONYM~ 1 w1.1 nw ~MANY~ nw",
+     "| f:"             /* Connect to faninany */
+/*
+"ENTER IGNORE COMMAND CURSOR CMDLINE 1 PRIORITY 5"
+*/
+"SET LINEND ON #"
+'NONDISP ?'
+"HEX ON"
+Address CMS 'pipe CMS DEVTYPE CONS|strip|specs -1;-1 1|var dev'
+Select
+When dev=3 Then max=80
+When dev=5 Then max=132
+Otherwise max=80
+End
+max = max - 8 /** remove the prefix **/
+/* If lrecl.1 > max Then lrecl = max */
+/*                  Else lrecl = max */
+"EXTRACT ?RECFM?TRUNC?LRECL?FNAME?FTYPE?FMODE"
+/* "SET LRECL "lrecl */
+/* "VERIFY 1" lrecl */
+"VERIFY 1 *"
+If ftype.1='IOSDISP' Then 'VERIFY 1 *'
+NOVER:
+"CURLINE ON 4"
+"STAY ON"
+"SPILL WORD"
+"SCALE ON 3"
+"REMOTE ON"
+'PREFIX NULLS LEFT'
+'TEXT ON'
+'CMDLINE TOP'
+'COLOR PREFIX BLUE'
+'COLOR FILEAR YELLOW'
+'SET MSGLINE ON 3 1  OVERLAY'
+'SET NULLS ON'
+'NUMBER ON'
+'AUTOSAVE 10'
+'SYN F  1 FORWARD'
+'SYN FI 2 FIND'
+'SYN BO 2 BOTTOM'
+'SYN B  1 BACKWARD'
+'SYN E  1 X'
+'CASE MIXED IGNORE'
+If recfm.1 /= 'F' | recfm.1 /= 'FP' Then Signal NoSer
+If trunc.1 /= '71' Then Signal NoSer
+'SERIAL ALL 10000 10000'
+NoSer:
+'RESERVE -1  H 1=Hlp 2=Dspc 3=End 4=Sp/Jn 5=<-> 6=Scr2 7=Bck 8=Fwd 9=Sc1 10=Top 11=Bot 12=Quit'
+Exit

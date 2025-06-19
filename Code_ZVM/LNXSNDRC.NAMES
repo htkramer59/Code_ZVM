@@ -1,0 +1,11 @@
+* Beheer LPARS
+:nick.B2   :ip.10.35.4.16
+:nick.B1   :ip.10.35.4.15
+* Ontwikkel/Test LPARS
+:nick.O1   :ip.10.35.4.14
+* Acceptatie LPARS
+:nick.A2   :ip.10.35.4.13
+:nick.A1   :ip.10.35.4.12
+* Productie LPARS
+:nick.P2   :ip.10.35.4.11
+:nick.P1   :ip.10.35.4.10

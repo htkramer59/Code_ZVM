@@ -1,0 +1,449 @@
+/*---------------------------------------------------------------+
+| Function : Display a menu of MDISK, Virtual DASD & filepool    |
+|            directories                                         |
+|                                                                |
+| File     : MD       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|            FILELIST EXEC                                       |
+|            cms ACCESS  cmd                                     |
+|            cms RELEASE cmd                                     |
+|            cms HELP    cmd                                     |
+|            cp  DETACH  cmd                                     |
+|                                                                |
+| Called   : MD       .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200513 07:42:03                                   |
+| Changes  : .                                                   |
+|            20250526 H.T.Kramer : Fixed problem with accessing  |
+|                                  filepool directory            |
+|            20250526 H.T.Kramer : Added no of blocks for        |
+|                                  filepool directories.         |
+|                                  Add owner for fp directories. |
+|            20200514 H.T.Kramer : Fixed some typos and minor    |
+|                            errors                              |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+If what='?' Then Do
+                 'VMFCLEAR'
+                 'PIPE (NAME MD.EXEC:37 END ?)',
+                    '< 'myfn' EXEC *',
+                    '| tolabel Parse',
+                    '| cons'
+                 Call Exit
+                 End
+If what<>'' Then Call Exit
+Select
+When myft='EXEC'  Then Call RunExec
+When myft='XEDIT' Then Call RunXedit
+Otherwise Call Exit 99
+End
+ 
+ 
+Exit:
+Parse Upper Arg exrc .
+If exrc='' | exrc='EXRC' Then exrc=0
+Exit exrc
+ 
+ 
+RunXedit:
+/*---------------------------------------------------------------+
+| The xedit part of the code                                     |
++---------------------------------------------------------------*/
+Call XeditSettings
+Call SetHeader
+pfk='1=Help, 2=, 3=Quit, 4=Release, 5=, 6=Detach, 7=, 8=, 9=Link, 10=Access, 11=Filelist, 12=Quit'
+Call SetPFKeys
+Call Collect_Info
+Call Display
+Do x=1
+  'READ ALL NUMBER'                             /* Get from XEDIT   */
+  'EXTRACT /CURSOR'                             /* Where is cursor  */
+  sel=cursor.1                                  /* This is selctd   */
+  lineno=sel-firstline                          /* Which rsrvd line */
+  wfm=Substr(input.lineno,14,1)                 /* Take this        */
+  cuu=Substr(input.lineno,8,4)                  /* ...& this        */
+  dir=Substr(input.lineno,105)                  /* ....& this       */
+  If cuu='FILC' | cuu='DIRC' Then dirhandle=1    /* Is it a DIR?     */
+                             Else dirhandle=0    /* .                */
+  refresh=0                                     /* Initialise this  */
+  Address CMS 'PIPE (NAME MD.EXEC:78 END ?)',
+     'stack',                                   /* Read from stack  */
+     '| xlate upper',                           /* Uppercase        */
+     '| strip',                                 /* Remove spaces    */
+     '| join * x40',                            /* Make 1 rec       */
+     '| f: fanout',                             /* Duplicate rec    */
+     '| specs w1.1',                            /* Keep this        */
+     '| var cmd',                               /* Store as         */
+     '? f:',                                    /* Conn 2 fanout    */
+     '| specs w2;*',                            /* Keep this        */
+     '| strip ~_~',                             /* Remove these     */
+     '| var parms'                              /* Store as         */
+/*---------------------------------------------------------------+
+| S & Y are skipped because changing them breaks CMS for you     |
++---------------------------------------------------------------*/
+  usablemodes='ABCDEFGHIJKLMNOPQRTUVWXZ'
+  If (Length(cmd)=1 &,
+     Pos(cmd,usablemodes)<>0) |,
+     (Length(cmd)=1 &,
+     cmd='.') |,
+     (Length(cmd)=3  &,
+     Pos('/',cmd)=2 &,
+     Pos(Substr(cmd,1,1),usablemodes)<>0 &,
+     Pos(Substr(cmd,3,1),usablemodes)<>0) Then Do
+                                               wfm=cmd
+                                               cmd='ACCESSWM'
+                                               Address CMS 'PIPE (NAME MD.EXEC:104 END ?)',
+                                                  'cms RELEASE 'cuu,
+                                                  '| hole'
+                                               End
+/*---------------------------------------------------------------+
+| What to do when we hit these commands                          |
++---------------------------------------------------------------*/
+  Select
+  When cmd='ENTER'    Then refresh=1
+  When cmd='FILELIST' Then Do
+                           If wfm='.' Then Do
+                                      If dirhandle then targ='.DIR 'dir
+                                                   Else targ=' * 'cuu
+                                      Address CMS 'VMLINK 'targ' (NONAMES QUIET FILELIST'
+                                      End
+                                      Else Do
+                                      If dirhandle Then targ=dir
+                                                   Else targ=wfm
+                                      Address CMS 'FILELIST * * 'targ
+                                      End
+                           End
+  When cmd='DETACH'   Then Do
+                           If \dirhandle Then Address CMS 'PIPE (NAME MD.EXEC:126 END ?)',
+                                                             'cp DETACH 'cuu,
+                                                             '| HOLE'
+                                         Else 'EMSG Can not DETACH directory: 'Strip(dir)
+                           refresh=1
+                           End
+  When cmd='RELEASE'  Then Do
+                           If wfm<>'.' Then Address CMS 'RELEASE 'wfm
+                                       Else 'EMSG Can not RELEASE 'wfm' item is not ACCESSed'
+                           refresh=1
+                           End
+  When cmd='ACCESS'   Then Do
+                           'GETFMADR'
+                           Address CMS 'PIPE (NAME MD.EXEC:139 END ?)',
+                                          'stack',
+                                          '| specs w2.1',
+                                          '| var wfm'
+                           If dirhandle Then what=dir
+                                        Else what=cuu
+                           Address CMS 'PIPE (NAME MD.EXEC:145 END ?)',
+                                          'CMS ACCESS 'what wfm,
+                                          '| hole'
+                           refresh=1
+                           End
+  When cmd='ACCESSWM' Then Do
+                           If dirhandle Then what=dir
+                                       Else what=cuu
+                           Address CMS 'PIPE (NAME MD.EXEC:153 END ?)',
+                                          'CMS ACCESS 'what wfm,
+                                          '| hole'
+                           refresh=1
+                           End
+  When cmd='LINK'     Then Do
+                           If Pos(':',parms)<>0 Then parms='.DIR 'parms
+                           Address CMS 'VMLINK 'parms' (NONAMES QUIET'
+                           refresh=1
+                           End
+  When cmd='HELP'     Then Address CMS 'HELP 'myfn
+  When cmd='QUIT'     Then Do
+                           Queue 'QQUIT'
+                           Leave x
+                           End
+  Otherwise Nop
+  End
+  If refresh Then Do
+                  Call Collect_Info
+                  Call Display
+                  End
+End x
+Return
+ 
+ 
+Display:
+/*---------------------------------------------------------------+
+| Set up the display                                             |
++---------------------------------------------------------------*/
+'SET RESERVED 3 WHITE NON NOH 'inf
+'SET RESERVED 4 WHITE NON NOH 'hdr
+'SET RESERVED 5 WHITE NON NOH 'seprtr
+/*---------------------------------------------------------------+
+| Set up the filled lines                                        |
++---------------------------------------------------------------*/
+Do i=1 To input.0
+    'SET RESERVED 'firstline+i' YELLOW NON NOH 'input.i
+End i
+/*---------------------------------------------------------------+
+| Clear the rest of the lines                                    |
++---------------------------------------------------------------*/
+Do m=firstline+input.0+1 To maxlines
+    'SET RESERVED 'm' YELLOW NON NOH '
+End m
+'SET RESERVED 'lastline' WHITE NON NOH 'pfk
+Return
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Collect the info                                               |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MD.EXEC:205 END ?)',
+   'cms QUERY DISK',                            /* Ask cms          */
+   '| drop first 1',                            /* Drop header      */
+   '| p: pick substr 1.3 of w2.1 \== ~DIR~',    /* Select these     */
+   '| specs pad 0 w1.1 1',                      /* Adjus cuu        */
+   '              w2.1 nw.4 right',             /* .                */
+   '              w3;* nw',                     /* .                */
+   '| specs w2.1 1',                            /* Prefix w cuu     */
+   '        ~1~ nw',                            /* .                */
+   '        w1;* nw ',                          /* .                */
+   '        ~;~n',                              /* .                */
+   '| fi1: faninany',                           /* Take in other    */
+   '| sort w1.2',                               /* Sort...          */
+   '| join keylen 4',                           /* Join recs        */
+   '| specs w2;*',                              /* Keep this        */
+   '| if2: if pick w1.1 \== ~1~',               /* If we do not     */
+   '|   specs ~1 . ~ 1',                        /* .have this info  */
+   '          w2.1 nw',                         /* ...we adjust     */
+   '          ~. . . . . . . . .;~ nw ',        /* .... the record  */
+   '          w1;* nw',                         /* .                */
+   '| if2:',                                    /* Conn 2 if        */
+   '| specs w4.1 1.4 w2;* nw',                  /* Adjust record    */
+   '| fi3: faninany',                           /* Take in others   */
+   '| sort 1.3',                                /* Sort on filemode */
+   '| change ~ FB ~ >>> ~',                     /* Replace this     */
+   '| change w8.1 ~4096~4K~',                   /* Replace these    */
+   '| change w8.1 ~2048~2K~',                   /* .                */
+   '| change w8.1 ~1024~1K~',                   /* .                */
+   '| specs w2.1 1.6',                          /* Rework layout    */
+   '        w3.1 nw.4',                         /* .                */
+   '        ~%g~ n',                            /* .                */
+   '        w4.1 n.4',                          /* .                */
+   '        ~%Y~ n',                            /* .                */
+   '        w5.1 n.3',                          /* .                */
+   '        w6.1 nw.6 right',                   /* .                */
+   '        w8.1 nw.3 right',                   /* .                */
+   '        w9.1 nw.5 right',                   /* .                */
+   '        w10.1 nw.13 right',                 /* .                */
+   '        w11.1 nw.10 right',                 /* .                */
+   '        w12.1 nw.10 right',                 /* .                */
+   '        w15.1 nw.4 right',                  /* .                */
+   '        w16.1 nw.10 right',                 /* .                */
+   '        w18.1 nw.8',                        /* .                */
+   '        w19.1 nw.4',                        /* .                */
+   '        w21;* nw',                          /* .                */
+   '| change ~;~~',                             /* Remove thse      */
+   '| if1: if pick 1.1 == ~.~',                 /* To get these     */
+   '|   specs ~2~ 1 1;* nw',                    /* ..at the bottom  */
+   '| if1:',                                    /* Conn 2 if        */
+   '|   specs ~1~ 1 1;* nw',                    /* Adjust these     */
+   '| if1:',                                    /* Conn 2 if        */
+   '| sort 1.1',                                /* Rearrange        */
+   '| specs w2;* 1',                            /* Remove key       */
+   '| buffer',                                  /* Prevent stall    */
+   '| change ~DIR ~FILC~',                      /* Replace this     */
+   '| if3: if pick 89.1 == ~ ~',                /* If this is empty */
+   '|      change 89.1 x40 xE1',                /* Replace with..   */
+   '| if3:',                                    /* Conn 2 if        */
+   '| if4: if pick anycase substr 1.4 of w2.1 == ~FILC~ or',   /* Select these     */
+   '                       substr 1.4 of w2.1 == ~DIRC~',      /* .                */
+   '|   specs w1.11 1 fs . substr f1 of w-1;-1 nw w13;* nw',   /* Add owner        */
+   '|   specs w1.11 1 fs : substr f2 of w12 nw.8 w13;* nw',    /* Remove fp name   */
+   '| if4:',                                    /* Conn 2 if        */
+   '| stem input.',                             /* Store as         */
+   '? p:',                                      /* Conn 2 pick      */
+   '| specs w3.1 1.3',                          /* Adjust layout    */
+   '        w1;* nw ',                          /* .                */
+   '        ~; 2 . . ; 3 . . ;~ n',             /* .                */
+   '| fi2: faninany',                           /* Take in others   */
+   '| sort w1.1',                               /* Sort them        */
+   '| join keylen 3',                           /* Join them        */
+   '| fi4: faninany',                           /* Take in others   */
+   '| fi3:',                                    /* Conn 2 faninany  */
+   '?',                                         /* 2nd pipe         */
+   'cms QUERY ACCESSED',                        /* Ask cms          */
+   '| pick substr 1.3 of w-2;-2 == ~DIR~',      /* Keep these       */
+   '| specs w1.1 1.3',                          /* Adjust layout    */
+   '        w-1;-1 nw',                         /* .                */
+   '| fi2:',                                    /* Conn 2 faninany  */
+   '?',                                         /* 3rd pipe         */
+   'cp QUERY VIRTUAL DASD',                     /* Ask cp           */
+   '| specs w2.1 1',                            /* Adjust layout    */
+   '        ~2~ nw',                            /* .                */
+   '        w2.2 nw',                           /* .                */
+   '        w6.1 nw',                           /* .                */
+   '        w7.1 n',                            /* .                */
+   '        ~;~ n',                             /* .                */
+   '| fi1:',                                    /* Conn 2 faninany  */
+   '?',                                         /* 4th pipe         */
+   'cp QUERY MDISK 0-FFFF',                     /* Ask CP           */
+   '| drop first 1',                            /* Remove header    */
+   '| specs w2.1 1',                            /* Adjust layout    */
+   '        ~3~ nw',                            /* .                */
+   '        w3;* nw ',                          /* .                */
+   '        ~;~n',                              /* .                */
+   '| fi1:',                                    /* Conn 2 faninany  */
+   '?',                                         /* 5th pipe         */
+   'cms LISTDIR .',                             /* Ask cms          */
+   '| drop first 1',                            /* Remove header    */
+   '| pick 1.1 == ~-~',                         /* Only non-accessed*/
+   '| specs w2.1 1',                            /* Remove -         */
+   '| f2: fanout',                              /* Duplicate recs   */
+   '| specs ~QUERY DIRATTR~  1 w1.1 nw',        /* Compose cmds     */
+   '| cms',                                     /* Hand 2 cms       */
+   '| specs w1.1 1 x40 n',                      /* Add a spaces     */
+   '| j1: juxtapose',                           /* Join them        */
+   '| change ~DIRCONTROL~DIRC~',                /* Replace these    */
+   '| change ~FILECONTROL~FILC~',               /* ...& these       */
+   '| specs ~.  .~ 1',                          /* Complete layout  */
+           'w1.1 nw ~. . . . . . . . .; 2 . . ; 3 . . ;~ nw ',  /* .                */
+           'w2.1 nw',                           /* .                */
+   '| fi4:',                                    /* Conn 2 faninany  */
+   '? f2:',                                     /* Conn 2 fanout    */
+   '| j1:'                                      /* Conn 2 juxtapose */
+/*---------------------------------------------------------------+
+| Add the nr of blocks per directory                             |
++---------------------------------------------------------------*/
+Do i=1 To input.0
+   If Substr(Word(input.i,2),1,4) = 'FILC' |,
+      Substr(Word(input.i,2),1,4) = 'DIRC' Then Do
+           dir=Reverse(Word(Reverse(input.i),1))
+           Address CMS 'PIPE (NAME MD.EXEC:326 END ?)',
+              'sfsdir 'dir' isodate',            /* Get block        */
+              '| pick w3.1 \== ~D~',             /* Ignore these     */
+              '| specs',                         /* Summ blocks      */
+                      'printonly eof',           /* .                */
+                      'a: w7.1 .',               /* .                */
+                      'set #0+=a',               /* .                */
+                      'eof',                     /* .                */
+                      'print #0 1 ~-__~ n',      /* Print total      */
+              '| var used'                       /* Hand 2 rexx      */
+           input.i=Subword(input.i,1,6)||Right(Strip(used),14),
+                   Right(Word(input.i,7),10),
+                   Right(Word(input.i,8),9),
+                   Right(Word(input.i,9),4),
+                   Right(Word(input.i,11),9),
+                   Left(Word(input.i,12),8),
+                   Right(Word(input.i,13),4),
+                         Word(input.i,14)
+           End
+End i
+Return
+ 
+ 
+RunExec:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME MD.EXEC:353 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',             /* Ask CMS          */
+   '| drop first 1',                      /* Ignore header    */
+   '| count lines',                       /* Count findings   */
+   '| if: if pick 1.1 == ~1~',            /* Check this       */
+   '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */
+   '|     cms',                           /* Issue cmd      */
+   '| if:',                               /* Comm 2 if        */
+   '| var exldd'                          /* Hand 2 rexx      */
+Address CMS 'EXECLOAD 'myfn' EXEC * = XEDIT'
+/*---------------------------------------------------------------+
+| Some initial settings and invoke myself as XEDIT macro         |
++---------------------------------------------------------------*/
+Queue 'SET PREFIX OFF'
+Queue 'SET RECFM V'
+Queue 'SET LRECL 500'
+Queue 'SET TRUNC *'
+Queue myfn
+Queue ':1'
+Address CMS 'XEDIT 'myfn' OVERVIEW A3 (WIDTH 500'
+If \exldd Then Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+XeditSettings:
+/*---------------------------------------------------------------+
+| Initial XEDIT settings                                         |
++---------------------------------------------------------------*/
+'RECFM V'
+'LRECL 500'
+'TRUNC *'
+'VERIFY 1 *'
+'CURLINE ON 4'
+'PREFIX OFF'
+'TOFEOF OFF'
+'SCALE  OFF'
+'EXTRACT /SCREEN'
+'SET ENTER IGNORE'
+lastline=Word(screen.1,2)                       /* This is the last */
+maxlines=lastline-6                             /* Max no of lines  */
+firstline=5                                     /* First line 2 start*/
+/*---------------------------------------------------------------+
+| Define the control char and colors we are going to use...      |
++---------------------------------------------------------------*/
+'SET CTLCHAR % ESCAPE'
+'SET CTLCHAR Y PROTECT   YELLOW HIGH'
+'SET CTLCHAR y NOPROTECT YELLOW HIGH'
+'SET CTLCHAR W PROTECT   WHITE  HIGH'
+'SET CTLCHAR w NOPROTECT WHITE  HIGH'
+'SET CTLCHAR B PROTECT   BLUE   HIGH'
+'SET CTLCHAR b NOPROTECT BLUE   HIGH'
+'SET CTLCHAR G PROTECT   GREEN  HIGH'
+'SET CTLCHAR g NOPROTECT GREEN  HIGH'
+'SET CTLCHAR $ OFF'
+Return
+ 
+ 
+SetHeader:
+/*---------------------------------------------------------------+
+| Set the header, separator and input line                       |
++---------------------------------------------------------------*/
+hdr='Label  VDev Mod  Stat   Cyl Blk Files  Blk_Used-(%)   Blk_Left Blk_Total Type R_Blk/Cyl Owner    VDev Directory'
+inf='%GLink this: Owner%g________%GVDev%g____%G  or  Directory %g'Copies('_',30)'%G  and press PF9'
+Address CMS 'PIPE (NAME MD.EXEC:416 END ?)',
+    'var hdr',
+    '| deblock 1',
+    '| if: if pick 1.1 \== ~ ~',
+    '|   spec ~-~ 1',
+    '| if:',
+    '| join *',
+    '| var seprtr'
+Return
+ 
+ 
+SetPFKeys:
+/*---------------------------------------------------------------+
+| Disable all PF keys and set the ones we need                   |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME MD.EXEC:431 END ?)',
+    'var pfk',                                  /* Take this        */
+    '| split at ,',                             /* Split here       */
+    '| strip',                                  /* Remove spaces    */
+    '| specs fs = ~SET PF~ 1 f1 n f2 nw',       /* Compose cmd      */
+    '| stem setpf.'                             /* Store as         */
+/*---------------------------------------------------------------+
+| Reset all PF keys                                              |
++---------------------------------------------------------------*/
+Do s=1 To 24
+   'SET PF's
+End s
+/*---------------------------------------------------------------+
+| Set the new values                                             |
++---------------------------------------------------------------*/
+Do s=1 To setpf.0
+   setpf.s
+End
+Return

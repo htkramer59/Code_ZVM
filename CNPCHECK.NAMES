@@ -1,0 +1,50 @@
+* The id that is running conpark
+:cnpid.CONPARK
+* The path to the log files
+:fp.VMPS<shortnode>:CONPARK.
+* The user ids we want to investigate
+*:ids.SLD* SLB*
+:ids.*
+* Logical record length of packed files
+:lrecl.132
+* The record format of packed files
+:recfm.F
+* The files need to contain more than this no of records
+:minrecs.8
+* These are the OK terms we want to filter out..
+* These string are case sensitive
+* You van add the & if you need to search for more than 1 string
+:filter.HCPMID,
+HCPGSP,
+HCPCFX,
+DMSACR,
+DMSACP,
+00:00:00,
+Ready;,
+RECONNECTED AT,
+CONNECT=,
+LOGOFF AT,
+ERASE ACCOUNT,
+COMMAND ACCEPTED,
+Storage Cleared -,
+GRUB,
+Starting Show Plymouth Reboot Screen,
+Stopping Session,
+Linux version,
+CON FILE,
+RDR FILE,
+Welcome to SUSE,
+Detected virtualization,
+Detected architecture,
+Running in initial RAM disk,
+OK & Activated,
+OK & Closed,
+OK & Created,
+OK & Found,
+OK & Listening,
+OK & Mounted,
+OK & Reached,
+OK & Removed,
+OK & Stopped,
+OK & Started,
+OK & Unmounted

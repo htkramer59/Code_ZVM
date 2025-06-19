@@ -1,0 +1,97 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    E(nn)     Emulates (copies) existing data in the columns starting at
+              the position the of "E".  Text in this column is copied
+              forward through blank fields until new data is found in
+              that column, then that data is copied forward, etc.
+ 
+    EE  EE    Emulates (copies) existing data in columns starting at the
+ or EEEEEE    position of the first "E" up to the position of the last
+              "E".  Text in this column is copied forward through blank
+              fields until new data is found in that column, then that
+              data is copied forward, etc.
+ 
+    _(n)      This is the de-emulate operation.  Redundant text within
+ or __  __    columns starting at the position of the first "_" up to the
+ or ______    position of the last "_" are blanked.
+ 
+    !(n)      Insert a blank line whenever the data in the specified
+ or !!  !!    column changes as specified by the position of the first
+ or !!!!!!    "!" up to the position of the last "!".  You may optionally
+              enter the number of lines to insert as   !!!!!!!!(n
+              where n is the number of lines to be inserted as well as
+              !!!!!!!(text where text is to be inserted rather than a
+              blank line.  Alternately you may enter !!!!!!( and
+              simultaneously enter the text in the XEDIT command line.
+              This allows for easier text alignment.
+ 
+              EXAMPLE:  eeeeeeeeee????????????????????????????????????????
+                        Jan86               845
+                                            467
+                                            478
+                        Feb86               743
+                                            234
+                        Mar86               743
+              yields:
+                        Jan86               845
+                        Jan86               467
+                        Jan86               478
+                        Feb86               743
+                        Feb86               234
+                        Mar86               743
+ 
+              EXAMPLE:  _____?????????????????????????????????????????????
+                        Jan86               845
+                        Jan86               467
+                        Jan86               478
+                        Feb86               743
+                        Feb86               234
+                        Mar86               743
+              yields:
+                        Jan86               845
+                                            467
+                                            478
+                        Feb86               743
+                                            234
+                        Mar86               743
+ 
+              EXAMPLE:  !!!!!?????????????????????????????????????????????
+                        Jan86               845
+                        Jan86               467
+                        Jan86               478
+                        Feb86               743
+                        Feb86               234
+                        Mar86               743
+              yields:
+                        Jan86               845
+                        Jan86               467
+                        Jan86               478
+ 
+                        Feb86               743
+                        Feb86               234
+ 
+                        Mar86               743
+.cs 7 on
+                     COLumn Edit Column Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL COLMCMD5 (ALL       Y,^    Exclude columns from XEDIT PREFIX commands
+COL COLMCMDS (ALL       +      Add or sum numbers in a column
+COL COLMCMD2 (ALL       N      Place sequence numbers in a column
+COL COLMCMD3 (ALL       E      Emulate (copy forward) data down a column
+COL COLMCMD3 (ALL       _      Blank duplicate or redundant data ("de-emulate")
+COL COLMCMD3 (ALL       !      Insert blank separator lines when data changes
+COL COLMCMD4 (ALL       S,G    Sort data within a column
+COL COLMCMD6 (ALL       \      Reverse the command or swap column end for end
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

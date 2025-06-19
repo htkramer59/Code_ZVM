@@ -1,0 +1,89 @@
+/*---------------------------------------------------------------+
+| Function : Backout code for the REPLACE tool                   |
+|                                                                |
+| File     : BACKOUT  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : BACKOUT  <ifn> <ift> <ifm> <ofm>                    |
+|                                                                |
+| Comments : Complete rework of the tool                         |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220325 16:44:52                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg ifn ift ifm ofm .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Show help if requested                                         |
++---------------------------------------------------------------*/
+if ifn='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME BACKOUT.EXEC:26 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* ..and show       */
+             Call Exit
+             End
+/*---------------------------------------------------------------+
+| Evaluate the rest of the input                                 |
++---------------------------------------------------------------*/
+If ifn='' Then Call Exit '28 No input filename'
+If ift='' Then Call Exit '28 No input filetype'
+If ifm='' Then Call Exit '28 No input filemode'
+If ofm='' Then Call Exit '28 No output filemode'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME BACKOUT.EXEC:42 END ?)',
+   'CP QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1 1.8',                           /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce to this   */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* .                */
+   'literal ',                                   /* .                */
+   '| timestamp 16',                             /* .                */
+   '| specs 1.14 1',                             /* .                */
+   '| var timestamp'                             /* .                */
+logprefix=Substr(Userid(),1,8)' AT 'node timestamp'; 'Substr(myfn,1,8)
+/*---------------------------------------------------------------+
+| Read the log file, compose cmds and update the log file        |
++---------------------------------------------------------------*/
+'PIPE (NAME BACKOUT.EXEC:57 END ?)',
+   '< UPDATE LOG 'ofm,                           /* Read the log     */
+   '| pick w5.1 == ~RENAME~ and',                /* Find these       */
+          'w6.1 == ~'ifn'~ and',                 /* .                */
+          'w7.1 == ~'ift'~',                     /* .                */
+   '| sort w10.1',                               /* Sort on filetype */
+   '| take last 1',                              /* Take last one    */
+   '| specs ~RENAME~ 1',                         /* Compose cmds     */
+           'w6.1 nw.8',                          /* .                */
+           'w7.1 nw.8',                          /* .                */
+           '~'ofm' = -~ nw',                     /* .                */
+           'w10.1 n',                            /* .                */
+           '~= (NOUPDIRT;RENAME~ nw',            /* .                */
+           'w6.1 nw.8',                          /* .                */
+           'w10.1 nw.8',                         /* .                */
+           '~'ofm' =~ nw',                       /* .                */
+           'w7.1 nw',                            /* .                */
+           '~= (NOUPDIRT~ nw',                   /* .                */
+   '| split at ;',                               /* Split here       */
+   '| f: fanout',                                /* Duplicate        */
+   '| cms',                                      /* Issue cmds       */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~'logprefix';~ 1 1;* nw',            /* Add prefix       */
+   '| >> UPDATE LOG 'ofm                         /* Append 2 file    */
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc

@@ -1,0 +1,34 @@
+/*==============================================================*/
+/*    Program Name - XEDIT Column Editing/VM                    */
+/*    Licensed Material - Program Property of IBM               */
+/*                                                              */
+/*    Copyright              (c) IBM Corp 1992                  */
+/*    Routine to execute COLSRTDL demonstration                 */
+/*--------------------------------------------------------------*/
+/* Make sure current level of COL is 1.02 or greater after the  */
+/*  renumber to 1.0 for XCOL.                                   */
+ 
+'EXECIO 1 DISKR COL XEDIT (FINIS MARGINS 15 18 VAR VERSION'
+If version < 1.02 | version > 7 Then Do
+  Say 'The COL macro must be version 1.02 to execute the demonstration.'
+  Say 'You currently are using version' version
+  If Datatype(version) ^= 'NUM' | version > 3 Then Do
+    Say ' '
+    Say 'This version number reflects the old version        '
+    Say 'numbering scheme prior to reseting the version      '
+    Say 'number to 1.0 with the release of XCOL in July 1991.'
+  End
+  Exit
+End
+ 
+Parse Arg name .
+'GLOBALV SELECT COLMENU SET DEMONAME COLSHOW'
+'GLOBALV SELECT COLMENU SET DEMOTYPE XEDIT'
+'GLOBALV SELECT COLMENU SET DEMOID' name
+'GLOBALV SELECT COLMENU SET DEMOSTEP 1'
+'MAKEBUF'
+QUEUE 'MACRO COLSHOW'
+Queue name
+'XEDIT COLDEMO TEXT *'
+'DROPBUF'
+'GLOBALV SELECT COLMENU PURGE'

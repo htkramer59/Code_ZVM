@@ -1,0 +1,157 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+    J   (J)   Justifies the text to the column where the "J" is positioned.
+    JL  (J)   If two "J"'s are entered, then the text between the pointers
+    JR  (J)   is justified, and the text outside of is pointers are not
+    JC  (J)   moved.  If you have not used JR, JL, JC or JB, but only used
+    JB  (J)   one or two single "J"'s, then you will be prompted to specify
+              Left, Right, or Center to perform the justification.  If one
+              "J" was entered then all text to the left is justified right
+              or all text to the right is justified left as required.  For
+              a single Center command all text within the current zones is
+              centered at the "J".
+ 
+    JLn (J)   A number may be intermixed with the Justify Left, Center or Right
+    JnL (J)   command to specify the spacing between words.  For example JL1 or
+    JRn (J)   J1L will Justify Left AND respace the text with one (1) space
+    JnR (J)   between each word.  If the text is expanded with a spacing larger
+    JCn (J)   than will fit the column, then a best spacing possible is used for
+    JnC (J)   that line (same as Justify Both).  "n" may be 0.
+ 
+              NOTE:  The Justify commands may optionally all be entered as
+              follows:
+ 
+              The sequence may be ??????????J???????????JR?????????
+              where the command trailer may follow the last "J".
+              This also allows:   ??????????JJJJJJJJJJJJJR?????????
+              In both cases the last "J" is the end of the column.
+ 
+ 
+              EXAMPLES: ???????JL?????????????????????????????????????????
+                        abc         jfk           xyz
+ 
+              yields:
+                        abc    jfk           xyz
+                               |<---------------------------
+ 
+ 
+ 
+                        JL1??????????????????????????J????????????????????
+                              abc   jfk           xyz
+ 
+              yields:
+                        abc jfk xyz
+                        |<---------------------------| with one space
+                                                       between words
+ 
+ 
+                        ???????JL???????????J?????????????????????????????
+                        abc         jfk           xyz
+ 
+              yields:
+                        abc    jfk                xyz
+                               |<-----------|
+ 
+ 
+ 
+                        ??????????????????JR??????????????????????????????
+                        abc         jfk           xyz
+ 
+              yields:
+                            abc         jfk       xyz
+                         ---------------->|
+ 
+ 
+ 
+                        ???????JR???????????J?????????????????????????????
+                        abc         jfk           xyz
+ 
+              yields:
+                        abc               jfk     xyz
+                               |----------->|
+ 
+ 
+ 
+                        ??????????????????JC??????????????????????????????
+                        abc         jfk           xyz
+ 
+              yields:
+                              abc         jfk           xyz
+                          <-------------->|<---------------->
+                               Entire Line is centered at J
+ 
+ 
+ 
+                        ????????????JC??????J?????????????????????????????
+                        abc         jfk           xyz
+ 
+              yields:
+                        abc            jfk        xyz
+                                    |<----->|
+                            Text is centered within the column
+ 
+ 
+ 
+                        ????JB????????????????????????????????J???????????
+                              abc         jfk           xyz
+                                 abc   jfk           xyz
+ 
+              yields:
+                            abc             jfk             xyz
+                            abc             jfk             xyz
+                            |<------------------------------->|
+                            Text is justified both left and right in column
+                            Remaining text is also "columnized"
+ 
+ 
+ 
+                        ??????????????????????????????????????JB??????????
+                              abc         jfk           xyz
+                                 abc   jfk           xyz
+ 
+              yields:
+                        abc               jfk               xyz
+                        abc               jfk               xyz
+                        |<----------------------------------->|
+                            Text is justified both left and right in column
+                            starting at zone 1
+ 
+ 
+ 
+              AND:      ????JB???????????????????????????????????J????????
+                            The brown cow jumped over the moon
+                            while the dog ran away with the spoon
+ 
+              yields:
+                            The  brown cow  jumped  over the  moon
+                            while the dog ran  away with the spoon
+                            |<---------------------------------->|
+                            Text is justified both left and right in column
+.cs 7 on
+                     COLumn Edit Text Alignment Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL TEXTCMD3 (ALL       J      Justify Text
+COL TEXTCMDS (ALL       Q      Line up or Queue text
+COL TEXTCMD2 (ALL       B      Remove trailing blanks up to a column
+COL TEXTCMD4 (ALL       W,<,>  Wordflow text within a column as in Script
+COL TEXTCMD5 (ALL       K,L    Change text in a column to upper or lower case
+ 
+COL PREFIX (NOTE        Text Alignment prefix commands.
+COL PREFIX (NOTE          ATAB   Auto Text Alignment.
+COL PREFIX (NOTE          TS     Auto Text Spacing.
+COL PREFIX (NOTE          TAB    Manual Text Alignment.
+COL PREFIX (NOTE          COMP   Compress Text.
+COL PREFIX (NOTE          TRigh  Right justify text between all tabs.
+COL PREFIX (NOTE          TLeft  Left  justify text between all tabs.
+COL PREFIX (NOTE          TCent  Center text between all tabs.
+COL PREFIX (NOTE          Both   Justify both left and right.
+.cs 7 off

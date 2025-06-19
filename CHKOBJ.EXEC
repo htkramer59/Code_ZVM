@@ -1,0 +1,62 @@
+/*---------------------------------------------------------------+
+| Function : Check the type of an object, where object can be    |
+|            file, directory, bfs directory, etc.                |
+|                                                                |
+| File     : CHKOBJ   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : CHKOBJ   <object>                                   |
+|                                                                |
+|            <object> file: <fn> <ft> <fm>                       |
+|                     sfsdir: <filepool>:<filespace>.            |
+|                     bfsdir: <filepool>:<bfsspace>.             |
+|                                                                |
+| Return codes: 28 No input                                      |
+|               10 Normal file on SFS                            |
+|               12 Normal file on Minidisk                       |
+|               20 SFS directory                                 |
+|               21 BFS directory                                 |
+| For other return codes see: HELP ROUTINES DMSEXIST             |
+|                                                                |
+| Comments : sfsdir & bfsdir can also contain directories        |
+|            in the filespace/bfsspace.                          |
+|            CSL routine is used.                                |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220210 12:41:48                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg object
+Parse Source . . myfn myft .
+if object='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME MANY.XEDIT:172 END ?)',
+               '< 'myfn myft' *',
+               '| tolabel Parse',
+               '| cons'
+             Call Exit 0
+             End
+If object='' Then Call Exit '28 No input'
+Address CMS 'RTNLOAD * (FROM VMLIB SYSTEM GROUP VMLIB)'
+object=Strip(object) ; len=Length(object) ; workunitid='' ; wuerror='' ; buffer=''
+Call CSL 'DMSEXIST RETCODE REASCODE OBJECT LEN BUFFER 436 NOCOMMIT 8 WORKUNITID WUERROR 12'
+If retcode<>0 Then Do
+           Say 'object    : 'object
+           Say 'retcode   : 'retcode' reasoncode: 'reascode
+           Say 'workunitid: 'workunitid
+           Say 'wuerror   : 'wuerror
+           Call Exit retcode
+           End
+           Else Call Exit Substr(buffer,1,2)
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If exrc<>'' & errmsg<>'' Then Say errmsg
+Exit exrc

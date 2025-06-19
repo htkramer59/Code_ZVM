@@ -1,0 +1,398 @@
+/*---------------------------------------------------------------+
+| Function : Extract warnings from PERFSVM CONLOG* files.        |
+|                                                                |
+| File     : EXTRWNGS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.1                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : EXTRWNGS window ( long how outfn outft              |
+|                                                                |
+|            window     window in which we search in minutes     |
+|                       Default: 30 minutes                      |
+|            short      displays/writes short output (Default)   |
+|            long       displays/writes the whole log content    |
+|                       If empty only warnings are displayed or  |
+|                       written                                  |
+|            how        To CONSole, FILE or HTML                 |
+|                       Default: CONSole                         |
+|            outfn      Can be specified with file               |
+|                       Default: HOBVM701                        |
+|            outft      Can be specified with file               |
+|                       Default: CLIENT for FILE                 |
+|                       Default: HTML   for HTML                 |
+|                                                                |
+|                                                                |
+| Comments : Need to filter more? see variable filter            |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190905 15:08:38                                   |
+| Changes  : .                                                   |
+|            20190916 H.T.Kramer : Added extra summary           |
+|            20190913 H.T.Kramer : Reworked so we can make       |
+|                     HTML as well as a flat file                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg window '(' options
+Parse Source . . myfn myft .
+Call Init
+Call Check_Options
+Call Prep_CutOff
+Call Prep_Filter
+Call Read_Logs
+Call Determine_Hdr
+/*---------------------------------------------------------------+
+| Determine what to do...                                        |
++---------------------------------------------------------------*/
+If html & \show  Then Call Prep_Html
+If \show & \html Then Call Prep_File
+If show          Then Call Show_Content
+Exit
+ 
+ 
+Init:
+/*---------------------------------------------------------------+
+| Initialise and set some defaults                               |
++---------------------------------------------------------------*/
+def_window=30
+def_outfn='HOBVM701'
+def_outft_clnt='CLIENT'
+def_outft_html='HTML'
+/*---------------------------------------------------------------+
+| Keywords and their resulting vars & values                     |
++---------------------------------------------------------------*/
+keywords='LONG long 1;SHORT long 0;CONS show 1;FILE show 0;HTML html 1'
+long=0                                          /* Defaults         */
+show=1                                          /* ..to             */
+html=0                                          /* ....show         */
+/*---------------------------------------------------------------+
+| Some arrays to initialise                                      |
++---------------------------------------------------------------*/
+out.0=0
+warn.0=0
+hist.0=0
+full.0=0
+summ.0=0
+/*---------------------------------------------------------------+
+| These must be filtered from final output                       |
++---------------------------------------------------------------*/
+filter='DMSRND:FCXAPC:not available:INTERIM:FCONX    REPORTS:R;:( '
+/*---------------------------------------------------------------+
+| Some html stuff...                                             |
++---------------------------------------------------------------*/
+red='<img src="/xymon/gifs/red.gif" alt="red" width="16" height="16" border="0">'
+topline='<html><head><TITLE>Xymon - msgs status for 'node' @ 'Date() Time()'</TITLE></head>'
+botline='<center>Provided by ICU-IT</center></body></html>'
+Return
+ 
+ 
+Show_Content:
+/*---------------------------------------------------------------+
+| Show any content                                               |
++---------------------------------------------------------------*/
+Call Prep_Main
+If full.0>0 & long Then Call Add_Full
+Call Run_Filter
+'PIPE (NAME EXTRWNGS.EXEC:98 END ?)',
+   'stem out. ',                                /* Take these       */
+   '| cons'                                     /* and show them    */
+Return
+ 
+ 
+Prep_File:
+/*---------------------------------------------------------------+
+| Write the content to a file...                                 |
++---------------------------------------------------------------*/
+Call Prep_Main
+If long Then Call Add_Full
+Call Run_Filter
+Call Write_File
+Return
+ 
+ 
+Prep_Html:
+/*---------------------------------------------------------------+
+| Prepare html                                                   |
++---------------------------------------------------------------*/
+w_hdr='<table><tr><th span=5><h3>'w_hdr'</h3></th></tr>'
+h_hdr='<table><tr><th span=5><h3>'h_hdr'</h3></th></tr>'
+f_hdr='<table><tr><th span=5><h3>'f_hdr'</h3></th></tr>'
+'PIPE (NAME EXTRWNGS.EXEC:122 END ?)',
+    'stem warn.',                               /* Take these       */
+    '| specs ~<tr><td>'red'</td><td>~ 1',       /* Make table       */
+            'w1.1 n',                           /* .                */
+            '~</td><td>~ n',                    /* .                */
+            'w2.1 n',                           /* .                */
+            '~</td><td>~ n',                    /* .                */
+            'w3;* n',                           /* .                */
+            '~</td></tr>~ n',                   /* .                */
+    '| preface var w_hdr',                      /* Add hdr          */
+    '| preface var topline',                    /* Add top of doc   */
+    '| append literal </table><br><br> ',       /* Add end of table */
+    '| stem out. append'                        /* Add 2 stem       */
+'PIPE (NAME EXTRWNGS.EXEC:135 END ?)',
+    'stem hist.',                               /* Take these       */
+    '| specs ~<tr><td>~ 1',                     /* Make table       */
+            'w1.1 n',                           /* .                */
+            '~</td><td>~ n',                    /* .                */
+            'w2.1 n',                           /* .                */
+            '~</td><td>~ n',                    /* .                */
+            'w3;* n',                           /* .                */
+            '~</td></tr>~ n',                   /* .                */
+    '| preface var h_hdr',                      /* Add hdr          */
+    '| append literal </table><br><br> ',       /* Add end of table */
+    '| append literal <table><tr><td><pre>',
+    '| append var s_hdr',
+    '| append stem summ.',
+    '| append literal </pre></td></tr></table>',
+    '| stem out. append'                        /* Add 2 stem       */
+If long Then Do
+        'PIPE (NAME EXTRWNGS.EXEC:152 END ?)',
+           'var f_hdr',                         /* Take this        */
+           '| append literal <td><td><pre>',    /* Add this         */
+           '| append stem full.',               /* Take stem        */
+           '| append literal </pre></td></tr></table><br><br>',  /* Add this         */
+           '| stem out. append'                 /* Add 2 stem       */
+        End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:162 END ?)',
+    'stem out.',                                /* Take this        */
+    '| buffer',                                 /* Prevent stall    */
+    '| append var botline',                     /* Add html bot     */
+    '| stem out.'                               /* Store as         */
+Call Run_Filter
+Call Write_File
+Return
+ 
+ 
+Prep_Main:
+/*---------------------------------------------------------------+
+| Prepare main body...                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:176 END ?)',
+    'var w_hdr',                                /* Take this        */
+    '| append stem warn. ',                     /* add these        */
+    '| append literal ',                        /* add empty line   */
+    '| append var h_hdr',                       /* add hdr          */
+    '| append stem hist.',                      /* add these        */
+    '| append literal ',                        /* add empty line   */
+    '| append var s_hdr',                       /* add hdr          */
+    '| append stem summ.',                      /* add these        */
+    '| append literal ',                        /* add empty line   */
+    '| stem out. append'                        /* add to stem      */
+Return
+ 
+ 
+Add_Full:
+/*---------------------------------------------------------------+
+| Add the full logs if needed                                    |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:194 END ?)',
+   'var f_hdr',                                 /* Take hdr         */
+   '| append stem full. ',                      /* add full log     */
+   '| stem out. append'                         /* add to stem      */
+Return
+ 
+ 
+Run_Filter:
+/*---------------------------------------------------------------+
+| Filter out some stuff...                                       |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:205 END ?)',
+    'stem out.',                                /* Take these       */
+    '| buffer',                                 /* Prevent stall    */
+    filter,                                     /* actual filter    */
+    '| stem out.'                               /* Store as         */
+Return
+ 
+ 
+Write_File:
+/*---------------------------------------------------------------+
+| Finally write the file                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:217 END ?)',
+   'stem out. ',                                /* Take them        */
+   '| > 'outfn outft' A'                        /* Write as         */
+Return
+ 
+ 
+ToTime:
+/*---------------------------------------------------------------+
+| Rework to a usable timestamp                                   |
++---------------------------------------------------------------*/
+Parse Arg secs .
+hh=Right(secs%60,2,0)                           /* Rework to hours  */
+mm=Right(secs//60,2,0)                          /* Rework to minutes*/
+ss='00'                                         /* Not important    */
+return hh||mm||ss
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Make a uniform timestamp                                       |
++---------------------------------------------------------------*/
+timestamp=Date('S') Time() myfn
+Return timestamp
+ 
+ 
+Read_Logs:
+/*---------------------------------------------------------------+
+| Access the info                                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK .DIR VMSYS:PERFSVM. (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Do
+        Say TimeStamp() 'Can not continue, VMLINK rc: 'rc
+        Exit rc
+        End
+/*---------------------------------------------------------------+
+| Read the files and filter out the warnings                     |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:255 END ?)',
+    'cms LISTFILE * CONLOG* 'wfm' (NOHEADER',   /* Get the files    */
+    '| f1: fanout',                             /* Duplicate        */
+    '| specs w1.1 1.8 x40 n',                   /* Adjust           */
+    '| j: juxtapose',                           /* Label recs w fn  */
+    '| stem full.',                             /* Store rest       */
+    '| buffer',                                 /* Prevent stall    */
+    '| l: locate /FCXUSL/',                     /* Find these       */
+    '| specs w1.1 1 w3.1 nw w3;* nw',           /* Add date         */
+    '| specs w1.1 1 w2.1 n w1;* nw',            /* Make sortable    */
+    '| change w1.1 ~:~~',                       /* Remove this      */
+    '| sort w1.1 d',                            /* Sort on time     */
+    '| p: pick w1.1 >= ~'cutoft'~',             /* Keep these       */
+    '| specs w2.1 1 w4;* nw',                   /* Remove label     */
+    '| stem warn.',                             /* Store as         */
+    '? f1:',                                    /* Conn 2 fanout    */
+    '| getfiles',                               /* Read files       */
+    '| specs 3;* 1',                            /* Drop some chars..*/
+    '| strip',                                  /* Remove spaces    */
+    '| j:',                                     /* Conn 2 juxtapose */
+    '? p:',                                     /* Conn 2 pick      */
+    '| specs w2.1 1 w4;* nw',                   /* Remove label     */
+    '| stem hist.',                             /* Store as         */
+    '| specs w5.1 1 ~*~ nw',                    /* Keep this add *  */
+    '| sort w1.1',                              /* Sort on id       */
+    '| f2: fanout',                             /* Dupl. recs       */
+    '| fi: faninany',                           /* Take in more     */
+    '| sort w1.1',                              /* Sort on id       */
+    '| join keylen 8',                          /* Make 1 rec/id    */
+    '| specs w1.1 1 w3.1 nw w2.1 nw',           /* Adjust layout    */
+    '| sort w2.1 d',                            /* Sort on size     */
+    '| stem summ.',                             /* Store as         */
+    '? f2:',                                    /* Conn 2 fanout    */
+    '| unique count w1.1 pad _',                /* Count occurences */
+    '| specs 11.8 1 1.10 strip nw',             /* Adjust layout    */
+    '| specs w1.1 1 x40 n pad 0 w2.1 nw.3 right x40 n',  /* More adjusting */
+    '| fi:'                                     /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Loose access to info                                           |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK .DIR VMSYS:PERFSVM. <DET (NONAMES QUIET'
+Return
+ 
+ 
+Prep_Filter:
+/*---------------------------------------------------------------+
+| Set up the filtering...maybe externalise                       |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:303 END ?)',
+     'var filter',                              /* Take this        */
+     '| split at ~:~',                          /* Split here       */
+     '| specs ~/~ 1 w1.1 n ~/~ n',              /* Add / around     */
+     '| join * ~!~',                            /* Make 1 record    */
+     '| specs x4F 1 ~NOT ALL~ nw 1;* nw',       /* Add pipe         */
+     '| var filter'                             /* Store as         */
+Return
+ 
+ 
+Prep_CutOff:
+/*---------------------------------------------------------------+
+| Check if window is entered...or set default...and check        |
++---------------------------------------------------------------*/
+If window='' Then Do
+                  window=def_window           /* Time in minutes  */
+                  wininfo=TimeStamp() 'Window is set to default: 'window' minutes'
+                  End
+             Else Do
+             If Datatype(window,'N') Then Do
+                        wininfo=TimeStamp() 'Window is set to: 'window' minutes'
+                        End
+                        Else Do
+                        wininfo=TimeStamp() 'Value for window is invalid: 'window
+                        Exit
+                        End
+                   End
+'PIPE (NAME EXTRWNGS.EXEC:330 END ?)',
+   'var wininfo ',
+   '| append literal ',
+   '| stem out. append'
+cutof=Time('M')-window                        /* Calculate cutof  */
+/*---------------------------------------------------------------+
+| If time is below zero we go to previous day                    |
++---------------------------------------------------------------*/
+If cutof<0 Then Do
+         cutof=cutof+(24*60)                    /* .                */
+         cutofd=Date('S',Date('B')-1,'B')       /* .                */
+         cutoft=cutofd||ToTime(cutof)           /* .                */
+         End
+         Else cutoft=Date('S')||ToTime(cutof)   /* .                */
+Return
+ 
+ 
+Check_Options:
+/*---------------------------------------------------------------+
+| Process all the options                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME EXTRWNGS.EXEC:351 END ?)',
+    'var keywords',                             /* Take these       */
+    '| xlate upper',                            /* Uppercase        */
+    '| split at ~;~',                           /* Split here       */
+    '| l: lookup w1.1 w1.1 details',            /* Compare w options*/
+    '| specs ~/~ 1 w2.1 n ~/~ n w3.1 n',        /* Prep 4 varload   */
+    '| varload',                                /* Hand 2 cms       */
+    '?',                                        /* 2nd pipe         */
+    'var options',                              /* Take this        */
+    '| split',                                  /* Split            */
+    '| l:',                                     /* Conn 2 lookup    */
+    '?',                                        /* 3rd pipe         */
+    'cms IDENTIFY',                             /* Ask cms          */
+    '| specs w3.1',                             /* Keep this        */
+    '| var node',                               /* Store as         */
+    '?',                                        /* 4th pipe         */
+    '< 'myfn myft' *',                          /* Read myself      */
+    '| locate ~Version~',                       /* Find this        */
+    '| specs w4.1',                             /* Keep this        */
+    '| var version'                             /* Store as         */
+'PIPE (NAME EXTRWNGS.EXEC:371 END ?)',
+    'literal 'TimeStamp()' Version: 'version,
+    '| stem out. append'
+If html  Then Do
+              Parse Value options With . 'HTML' outfn outft
+              show=0
+              End
+If \show Then Parse Value options With . 'FILE' outfn outft
+If outfn='' Then outfn='HOBVM701'
+If outft='' & \show & \html Then outft=def_outft_clnt
+If outft='' & html & \show Then outft=def_outft_html
+Return
+ 
+ 
+Determine_Hdr:
+/*---------------------------------------------------------------+
+| Determine header content                                       |
++---------------------------------------------------------------*/
+f_hdr='_'
+If warn.0>0 Then w_hdr= TimeStamp() 'Recent warnings in the last 'window' minutes:'
+            Else w_hdr= TimeStamp() 'No warnings in last: 'window' minutes'
+If hist.0>0 Then h_hdr= TimeStamp() 'Warnings older than 'window' minutes:'
+            Else h_hdr= TimeStamp() 'No older warnings'
+If full.0>0 & long Then f_hdr= TimeStamp() 'All loglines:'
+                   Else If long Then f_hdr= TimeStamp() 'No loglines'
+If summ.0>0 Then s_hdr= TimeStamp() 'Ranking on message count'
+            Else s_hdr= TimeStamp() 'No message count'
+Return

@@ -1,0 +1,139 @@
+/*---------------------------------------------------------------+
+| Function : Compare files from multiple LPARs and show the      |
+|            deltas                                              |
+|                                                                |
+| File     : MULTICMP EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC                                       |
+|            MULTICMP DATA                                       |
+|            MULTICMP OVERVIEW                                   |
+|                                                                |
+| Called   : MULTICMP <location> <filename filetype>             |
+|                                                                |
+|            <location> is a userid/minidisk combo or            |
+|                       .dir <sfs filespace/directory>           |
+|            <filename filetype> is the filename and filetype of |
+|                       the file you want to compare             |
+| Examples: CMP MAINT 191 PROFILE EXEC                           |
+|           CMP .DIR VMUSERS:TOOLS. CONPARK NAMES                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20221116 15:59:04                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' options
+Parse Source . . myfn myft .
+If what='' | what='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME MULTICMP.EXEC:33 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show             */
+            Exit
+            End
+tgt=Subword(what,1,2)
+fnft=Subword(what,3)
+Select
+When options=''     Then Call Collect_Data
+When options='DATA' Then Call Send_Data
+Otherwise Exit 29
+End
+Exit
+ 
+ 
+Collect_Data:
+/*---------------------------------------------------------------+
+| Collect the data from all my LPARS and process it              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Start collecting the data                                      |
++---------------------------------------------------------------*/
+Address CMS 'RMCMD CMS 'myfn tgt fnft' (DATA , , , FILE , 'myfn' DATA 'wfm
+/*---------------------------------------------------------------+
+| Process the data collected                                     |
++---------------------------------------------------------------*/
+hdr='Line  Filespecs/Content in file'Copies(' ',100)'LPARs            Count'
+'PIPE (NAME MULTICMP.EXEC:64 END ?)',
+   '< 'myfn' DATA 'wfm,                          /* Take this file   */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~ ~',         /* Ignore lines     */
+          'and w4.1 \== ~RMCMD~',                /* .with these      */
+   '| specs pad space w2;* 1.130 w1.1 nw',       /* Adjust length    */
+   '| f: fanout',                                /* Duplicate records*/
+   '| specs 1.130 1.130',                        /* Chop of lpar     */
+   '| sort count 1.130',                         /* Sort and count   */
+   '| specs 11;* 1.130 1.10 strip nw.1',         /* Rework outcome   */
+   '| fi: fanin',                                /* Take in others   */
+   '| sort',                                     /* Sort lines       */
+   '| join keylen 130',                          /* Join lines       */
+   '| if1: if pick 132.2 \== ~A1~',              /* Adjust LPARs     */
+   '|     specs 1.130 1.130 ~..~ 132.2 132;* nw', /* .                */
+   '| if1:',                                     /* .                */
+   '| if2: if pick 135.2 \== ~A2~',              /* .                */
+   '|     specs 1.134 1.134 ~..~ 135.2 135;* nw', /* .                */
+   '| if2:',                                     /* .                */
+   '| if3: if pick 138.2 \== ~B1~',              /* .                */
+   '|     specs 1.137 1.137 ~..~ 138.2 138;* nw', /* .                */
+   '| if3:',                                     /* .                */
+   '| if4: if pick 141.2 \== ~B2~',              /* .                */
+   '|     specs 1.140 1.140 ~..~ 141.2 141;* nw', /* .                */
+   '| if4:',                                     /* .                */
+   '| if5: if pick 144.2 \== ~O1~',              /* .                */
+   '|     specs 1.143 1.143 ~..~ 144.2 144;* nw', /* .                */
+   '| if5:',                                     /* .                */
+   '| if6: if pick 147.2 \== ~P1~',              /* .                */
+   '|     specs 1.146 1.146 ~..~ 147.2 147;* nw', /* .                */
+   '| if6:',                                     /* .                */
+   '| if7: if pick 150.2 \== ~P2~',              /* .                */
+   '|     specs 1.149 1.149 ~..~ 150.2 150;* nw', /* .                */
+   '| if7:',                                     /* .                */
+   '| pick w-1;-1 \== ~7~',                      /* Ignore these     */
+   '| specs a: 1.5 .',                           /* Add a break      */
+           '6;* 6',                              /* .                */
+           'break a',                            /* .                */
+           'print a 1',                          /* .                */
+   '| if8: if pick 1.1 \== ~ ~',                 /* Add an extra line*/
+   '|    specs ~; ;~ 1 1;* n',                   /* .                */
+   '| if8:',                                     /* .                */
+   '| split at ;',                               /* Split here       */
+   '| drop first 1',                             /* Remove this      */
+   '| preface var hdr',                          /* Add hdr          */
+   '| > 'myfn' OVERVIEW 'wfm                     /* Write 2 file     */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| sort',                                     /* Sort lines       */
+   '| join keylen 130',                          /* Join the lines   */
+   '| fi:'                                       /* Conn 2 fanin     */
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+/*---------------------------------------------------------------+
+| Clean up                                                       |
++---------------------------------------------------------------*/
+Address CMS 'ERASE 'myfn' DATA 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+Send_Data:
+/*---------------------------------------------------------------+
+| Send the required data back to the caller                      |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'tgt' (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (NAME MULTICMP.EXEC:129 END ?)',
+   'cms LISTFILE 'fnft wfm' (NOH ISO',           /* Ask cms          */
+   '| specs ~_____~ 1 1;* nw',                   /* Prefix outcome   */
+   '| fi: fanin',                                /* Take in others   */
+   '| cons',                                     /* Show outcome     */
+   '?',                                          /* 2nd pipe         */
+   '< 'fnft wfm,                                 /* Read file        */
+   '| specs pad 0 recno 1.5 right w1;* nw',      /* Add line no      */
+   '| fi:'                                       /* Conn 2 fanin     */
+If wfm<>'A' & wfm<>'Q' Then Address CMS 'VMLINK 'tgt' <DET (NONAMES QUIET'
+Return

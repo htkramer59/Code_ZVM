@@ -1,0 +1,94 @@
+************************************************************************
+*                                                                      *
+*  NOTE THAT THERE ARE 4 FIELDS IN THIS FILE:                          *
+*                                                                      *
+*  FIELD 1:  COLUMNS 01 TO 03  --  DAYS OF THE WEEK                    *
+*  FIELD 2:  COLUMNS 10 TO 17  --  TIME OF DAY                         *
+*  FIELD 3:  COLUMNS 19 TO 26  --  LAST DATE THAT LINE WAS EXECUTED    *
+*  FIELD 4:  COLUMNS 28 TO 80  --  ANY CP/CMS/EXEC COMMAND             *
+*                                                                      *
+*  VALID PARAMETERS:                                                   *
+*                                                                      *
+*  FIELD 1:                                                            *
+*           'ALL'  -- EXECUTE THIS LINE EVERY DAY OF THE WEEK          *
+*           'MON'  -- EXECUTE THIS LINE ONLY ON MONDAYS                *
+*           'TUE'  -- EXECUTE THIS LINE ONLY ON TUESDAYS               *
+*           'WED'  -- EXECUTE THIS LINE ONLY ON WEDNESDAYS             *
+*           'THU'  -- EXECUTE THIS LINE ONLY ON THURSDAYS              *
+*           'FRI'  -- EXECUTE THIS LINE ONLY ON FRIDAYS                *
+*           'SAT'  -- EXECUTE THIS LINE ONLY ON SATURDAYS              *
+*           'SUN'  -- EXECUTE THIS LINE ONLY ON SUNDAYS                *
+*           'M-F'  -- EXECUTE THIS LINE ONLY MONDAY THRU FRIDAY        *
+*           'S-S'  -- EXECUTE THIS LINE ONLY SATURDAYS AND SUNDAYS     *
+*                                                                      *
+*  FIELD 2:                                                            *
+*                                                                      *
+*           HH:MM:SS  -- THIS FIELD CONTAINS THE TIME THAT             *
+*                        YOU WANT THE COMMAND TO BE EXECUTED           *
+*                        NOTE: DO NOT EXPECT ACTUAL SECONDS            *
+*                        ACCURACY, WILL VARY ACCORDING TO SYSTEM       *
+*                        LOAD.                                         *
+*                                                                      *
+*  FIELD 3:                                                            *
+*                                                                      *
+*           MM/DD/YY  -- THIS FIELD CONTAINS THE LAST DATE THAT        *
+*                        THE COMMAND WAS EXECUTED.  THIS IS TO         *
+*                        INSURE THAT IF IT WAS EXECUTED ONCE ON        *
+*                        THAT DAY, IT WONT BE EXECUTED AGAIN INCASE    *
+*                        'VMUTIL' MUST BE RE-STARTED.                  *
+*                        THIS FIELD IS UPDATED BY 'VMUTIL' AFTER THE   *
+*                        COMMAND LINE IS EXECUTED.                     *
+*                                                                      *
+*  FIELD 4:                                                            *
+*                                                                      *
+*          CP/CMS/EXEC COMMAND                                         *
+*                     -- PLACE ANY COMMAND TO BE EXECUTED IN THIS      *
+*                        FIELD.                                        *
+*                                                                      *
+*          NOTE:  IF THE KEY ENTRY 'MSG01' IS ENTERED IN FIELD 4       *
+*                 WHERE THE COMMAND LINE IS ENTERED, A MESSAGE         *
+*                 TO THE OPERATOR WILL BE SENT STATING THE CURRENT     *
+*                 DATE AND TIME.                                       *
+*                                                                      *
+*                 IF THE COMMAND BEING ISSUED IS A CMS COMMAND,        *
+*                 THE COMMAND MUST BE PREFIXED WITH 'CMS'              *
+*                                                                      *
+*                 IF THE COMMAND BEING ISSUED IS A CP COMMAND,         *
+*                 THE COMMAND MUST BE PREFIXED WITH 'CP'               *
+*                                                                      *
+*                 IF THE COMMAND BEING ISSUED IS AN EXEC,              *
+*                 THE COMMAND MUST BE PREFIXED WITH 'EXEC'             *
+*                                                                      *
+*                 IF THERE IS AN '*' IN COLUMN 1 OF THIS FILE, THE     *
+*                 LINE IS TREATED AS A COMMENT AND IS NOT EXECUTED.    *
+*                                                                      *
+************************************************************************
+==/==/== +5       14:05:08 EXEC HOBVARS
+==/==/== +1       14:07:12 EXEC HOBVMCPU
+ 
+==/==/== +5       14:05:10 EXEC HOBVMPRC
+==/==/== +5       14:05:11 EXEC HOBVMPRT
+==/==/== +5       14:05:11 EXEC HOBVMDSK
+==/==/== +5       14:05:11 EXEC HOBVMFLE
+==/==/== +5       14:05:11 EXEC HOBVMPOR
+==/==/== +5       14:05:12 EXEC HOBVMIFC
+==/==/== +5       14:05:12 EXEC HOB-LPAR
+==/==/== +5       14:05:12 EXEC HOBVMSTT
+==/==/== +5       14:05:13 EXEC HOBMEM
+==/==/== +5       14:05:16 EXEC HOBPARS
+==/==/== +5       14:05:16 EXEC HOB-FCP
+==/==/== +1       14:07:18 EXEC HOBGUEST
+==/==/== +1       14:07:21 EXEC HOBGWAIT
+==/==/== +5       14:05:23 EXEC HOBSPOOL
+==/==/== +1       14:07:23 EXEC HOBVNIC
+==/==/== +5       14:05:26 EXEC HOBACTIV
+==/==/== +5       14:05:26 EXEC HOBVMLOG
+==/==/== +5       14:05:27 EXEC HOBVMCD
+==/==/== +5       14:05:28 EXEC HOBOSA
+==/==/== +15      14:00:28 EXEC HOBLUNS
+==/==/== +5       14:05:28 EXEC HOBPLACE
+==/==/== +5       14:05:28 EXEC HOBGPG
+==/==/== +5       14:05:31 EXEC ALLUSERS (HTML ALLUSERS HTML .HTML
+==/==/== +01:00:0014:00:398 CP MSG * Still running
+ALL      00:00:01 12/23/21 MSG01
+ALL      23:59:55 12/22/21 MSG02

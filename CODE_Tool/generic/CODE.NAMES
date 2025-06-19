@@ -1,0 +1,93 @@
+:client.
+* :nick, the nick name used
+* :invoke, the code to be started
+* :userid, the user id that is used as server
+:nick.SERVER :invoke.CODE_S :userid.CODE :title.Server part for CODE
+* Names file for CODE
+*
+* Nickname for the CODE Client code
+* :nick, the nick name to be used
+* :product, the directory of user id/mdisk that is to be used
+* :node, the node on which the nick/product is valid
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1lb2
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1lb1
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1lo1
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1la2
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1la1
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1lp2
+:nick.CLIENT :product..dir vmusers:code. :invoke.CODE_C :node.r1lp1
+*
+* Defining beheer, ot, acceptatie and productie
+* :nick, the environment to be used
+* :nodes, the nodes/lpars which are part of the environment
+:environments.
+:nick.beheer :nodes.r1lb1 r1lb2
+:nick.ontwik :nodes.r1lo1
+:nick.accept :nodes.r1la1 r1la2
+:nick.produc :nodes.r1lp1 r1lp2
+* Defaults
+:defaults.
+:nick.def_lang :value.EXEC
+:nick.def_proj :value.SOURCE
+*
+* Here we define the projects/languages and where they are located
+*
+* :nick, the name of the project
+* :product, the directory or user id/mdisk that contains the project/code
+:projects.
+:nick.source  :product..dir vmusers:code.exec.     :title.All REXX code
+:nick.cobol    :product..dir vmusers:code.cobol.    :title.All Cobol code
+:nick.payments :product..dir vmusers:code.payments. :title.All Payments code
+*
+* distribution lists to share the code
+*
+* :nick, the name for this list
+* :list, the shot names of the distribution
+* :node, the node/lpar for which this list is valid
+:distlist.
+:nick.distlist :list.b2 o1 a1 a2 p1 p2 :node.r1lb1
+:nick.distlist :list.b1 o1 a1 a2 p1 p2 :node.r1lb2
+:nick.distlist :list.b1 b2 a1 a2 p1 p2 :node.r1lo1
+:nick.distlist :list.b1 b2 o1 a2 p1 p2 :node.r1la1
+:nick.distlist :list.b1 b2 o1 a1 p1 p2 :node.r1la2
+:nick.distlist :list.b1 b2 o1 a1 a2 p2 :node.r1lp1
+:nick.distlist :list.b1 b2 o1 a1 a2 p1 :node.r1lp2
+*
+:users.
+*
+* Definitions for who are allowed to store/maintain code
+* :nick.      identifies the userid which is allowed to store files on CODE
+*
+:nick.tjasseb
+:nick.herman
+:nick.herald
+:nick.jansen
+ 
+*
+* The control options for the server
+*
+:server.
+* 0=off, 1=on
+* test, display the output
+:nick.test            :value.0
+* debug start the trace
+:nick.debug           :value.1
+* Server reloads the control file every hh:mm:ss
+:nick.reload          :value.00:30:00
+* The interval at which wakeup is to show a pulse
+:nick.wakeup_interval :value.+00:05:00
+* The options we set on the WAKEUP commands
+:nick.wakeup_options  :value.CONS RDR IUCVMSG VMCF SMSG
+* The list of valid commands for the users in :users
+:nick.valid_commands    :value.REPLACE ADD UNDO DEPL SYNC LOCK UNLOCK CLEAN
+:nick.ignore_rdr_files  :value.DIRMAINT NEWMAIL
+:nick.ignore_dist_codes :value.DVHOURLY;DVHDAILY
+* The administrators/gods for the code
+:nick.admins          :value.HERMAN TJASSEB HERALD
+ 
+:synch_target.
+:nick.in         :product..dir vmusers:code.code_synch.in.  :node.r1lb1
+:nick.out        :product..dir vmusers:code.code_synch.out. :node.r1lb1
+:nick.in         :product..dir vmusers:code.code_synch.in.  :node.r1lb2
+:nick.out        :product..dir vmusers:code.code_synch.out. :node.r1lb2
+ 

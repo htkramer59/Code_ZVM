@@ -1,0 +1,19 @@
+RDEFINE VMMDISK &USERID.&ADDRESS OWNER(&USERID) UACC(NONE)                                                                        
+PERMIT   &USERID.&ADDRESS  CLASS(VMMDISK) ID(&MYSELF) DELETE                                                                      
+* Delete all existing permissions:                                                                                                
+*PERMIT  &USERID.&ADDRESS  CLASS(VMMDISK)   RESET                                                                                 
+*                                                                                                                                 
+* Other related RACF commands                                                                                                     
+*                                                                                                                                 
+*RDELETE VMMDISK &USERID.&ADDRESS                                                                                                 
+*PERMIT  &USERID.&ADDRESS  CLASS(VMMDISK)   ID(grantee)   ACCESS(READ)                                                            
+*PERMIT  &USERID.&ADDRESS  CLASS(VMMDISK)   ID(SYSALL)    ACCESS(ALTER)                                                           
+*PERMIT  &USERID.&ADDRESS  CLASS(VMMDISK)   ID(SYSREAD)   ACCESS(READ)                                                            
+*PERMIT  &USERID.&ADDRESS  CLASS(VMMDISK)   ID(SYSWRITE)  ACCESS(CONTROL)                                                         
+* ACCESS AUTHORITY  ===>    DELETE  - TO REMOVE ACCESS AUTHORITY                                                                  
+*                           NONE    - TO PREVENT A USER FROM ACCESSING                                                            
+*                           READ    - TO ALLOW READ/ONLY ACCESS                                                                   
+*                           UPDATE  - TO ALLOW WRITE ACCESS                                                                       
+*                           CONTROL - TO ALLOW MULTI-READ ACCESS                                                                  
+*                           ALTER   - TO ALLOW MULTI-WRITE ACCESS  (also                                                          
+*                                       allows user to assign authority)                                                          

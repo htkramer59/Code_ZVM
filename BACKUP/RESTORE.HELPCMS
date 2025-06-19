@@ -1,0 +1,62 @@
+.CS 2 ON
+ 
+ 
+›|RESTORE EXEC›%
+ 
+  This exec is used to restore files from an Archive, a complete DASD volume or
+  from a set of files.
+ 
+  The files are stored using the BACKUP EXEC.
+  The BACKUP EXEC is controlled via the BACKUP NAMES file, see the content
+  of this file for details.
+ 
+  This code relies on:
+    VMARC to create and unpack the archive files
+    PIPEDDR to create and restore DASD volume backup files
+    DCSSBKUP to create disk copies of SEGMENTS
+    VMLINK to link and access the various storage areas
+ 
+  The available displays depend on what is registered in the BACKUP NAMES file
+ 
+  Currently there are 3 selections:
+     1. 1 or more files from an archive
+     2. A complete DASD volume
+     3. 1 or more files described in the OTHER section of BACKUP NAMES
+     4. 1 SEGMENT
+ 
+  You can start the EXEC from the command line with the following syntax:
+ 
+         RESTORE--+------------+--  Will display a selection panel
+                  |            |
+                  +- <nick> ---+    Will display a selection of archives
+                  |            |
+                  +- DASD -----+    Will display a selection of DASD volumes
+                  |            |
+                  +- OTHER ----+    Will display the selection "OTHER"
+                  |            |
+                  +- SEGMENTS -+    Will display the selection "SEGMENT"
+                  |            |
+                  +- ? --------+    Will display this file
+ 
+  When the main panel display you can select one of the options by putting the
+  cursor in the field next to it and press F4 to select that section.
+  After this the generations available will be shown for the selected item on
+  the backup.
+  If you use the fastpath as specified in the above syntax diagram the main
+  panel will be skipped.
+ 
+  Select the required generation and press F6 to start the restore.
+  Or press F11 to list the contents of the VMARC file (if applicable) to
+  select one or more files to restore from the VMARC file.
+ 
+  When you pressed F6 for your selected item you will be presented
+  with a menu where you can select an alternate target for the restore.
+  If you are happy to restore to the original location pres F10 to start the
+  restore.
+ 
+  When it is required to restore to another location enter the location
+  (user id,mdisk combination) in the field below the original target and press
+  F10 to start the restore.
+  This not applicable for SEGMENTs of the OTHER sections!!
+.CS 2 OFF
+.CS 1 ON

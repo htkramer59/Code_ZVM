@@ -1,0 +1,27 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Show, Add, Delete or Change IOPRIORITY stmt         |
+|                                                                |
+| File     : DM_IOPRI EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_IOPRI <uid> <newprio> <low> <high>               |
+|          : IOPRIOR  <uid> <newprio> <low> <high>               |
+|                           QRY                                  |
+|                           DEL                                  |
+|                           RELATIVE                             |
+|                           ABSOLUTE                             |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

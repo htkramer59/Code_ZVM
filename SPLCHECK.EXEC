@@ -1,0 +1,77 @@
+/*---------------------------------------------------------------+
+| Function : Check how full the spool areas are and send a       |
+|            warning or a message                                |
+|                                                                |
+| File     : SPLCHECK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : SPLCHECK .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220627 09:38:53                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 . '(' dryrun .
+Parse Source . . myfn myft .
+If dryrun='' Then pipout=''
+             Else pipout='| cp | cons'
+/*---------------------------------------------------------------+
+| Get info and content of control file                           |
++---------------------------------------------------------------*/
+'PIPE (NAME SPLCHECK.EXEC:27 END ?)',
+   'cp QUERY ALLOC SPOOL',                       /* Ask cp           */
+   '| pick w1.1 == ~USABLE~',                    /* Take this one    */
+   '| specs w-1;-1',                             /* Keep this        */
+   '| var splperc',                              /* Hand 2 rexx      */
+   '| change ~%~~',                              /* Remove perc. sign*/
+   '| var splnum',                               /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   '< 'myfn' NAMES *',                           /* Read control file*/
+   '| pick 1.1 \== ~*~ and',                     /* Ignore these     */
+          '1.1 \== ~~',                          /* .                */
+   '| join * x40',                               /* Make 1 record    */
+   '| split before string ~:~',                  /* Split here       */
+   '| xlate fs . f1 upper',                      /* Prep 4 varload   */
+   '| change ~:~/~ 1',                           /* .idem            */
+   '| change ~.~/~ 1',                           /* .idem            */
+   '| varload'                                   /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Check the levels of urgency                                    |
++---------------------------------------------------------------*/
+Parse Value limits With limlow limmed limhigh .
+Select
+When splnum<limlow Then Say 'No problems spool is filled for: 'splperc
+When splnum>limlow & splnum<=limmed  Then Call WarnStaff 'MEDIUM'
+When splnum>limmed & splnum<=limhigh Then Call Warnstaff 'HIGH'
+When splnum>limhigh Then Call WarnStaff 'URGENT'
+Otherwise Nop
+End
+Exit
+ 
+ 
+WarnStaff:
+/*---------------------------------------------------------------+
+| Warn the staff                                                 |
++---------------------------------------------------------------*/
+Parse Upper Arg level .
+'PIPE (NAME SPLCHECK.EXEC:63 END ?)',
+   'var 'level,                                  /* Take this var    */
+   '| var text'                                  /* Move it to this  */
+'PIPE (NAME SPLCHECK.EXEC:66 END ?)',
+   'var staff',                                  /* Take this        */
+   '| split',                                    /* Split            */
+   '| specs w1.1 1 ~'text'~ nw',                 /* Add the test     */
+   '| specs w2.1 1 w1.1 nw w3;* nw',             /* Compose cmd      */
+   '| change ~$LIMLOW$~'limlow'~',               /* Replace some text*/
+   '| change ~$LIMMED$~'limmed'~',               /* .                */
+   '| change ~$LIMHIGH$~'limhigh'~',             /* .                */
+   '| change ~$SPLPERC$~'splperc'~',             /* .                */
+   '| cons',                                     /* Show             */
+   pipout
+Return

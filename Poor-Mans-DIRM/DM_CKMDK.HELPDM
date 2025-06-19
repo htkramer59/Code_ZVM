@@ -1,0 +1,21 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Check if an MDISK exists                            |
+|                                                                |
+| File     : DM_CKMDK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_CKMDK <uid> <cuu>                                |
+|                                                                |
+| Comments : Returns 1 if mdisk does NOT EXIST                   |
+|                    0 if mdisk does EXIST                       |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240623 17:27:31                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

@@ -1,0 +1,245 @@
+/* This exec analyzes the DFSMS results files send back to your RDR
+   after a DFSMS MOVE request.
+    +-----------------------------------------------------------+
+    | format:  | CHKSMS spid   ( <TYPE> <KEEP> <NODFSMS> <PURGE>|
+    +-----------------------------------------------------------+
+- if spid='' we check for all files coming from SMSMASTR
+- TYPE to type the complete contents of the file
+- KEEP to keep RDR files even if DFSMS MOVE successfull (by default, all
+  results files about a mdisk MOVE request are purged when the last file
+  tells the MOVE was succesfull)
+- PURGE to remove RDR files even if DFSMS MOVE unsuccessfull
+- NODFSMS: do not include a DFSMS STATUS overview
+  (DFSMS status is not given when querying a single file)
+ 
+7 Sep 1998: include a DFSMS QUERY STATUS overview in our output
+2 Aug 2001: Change DFSMS queued tasks message
+3 Apr 2006: Also recognize DFSMS MIGRATE & RECALL files
+19 Dec 2006: Also display SFS tasks busy & available
+23 Jun 2008: recognize DFSMS MOVE msgs when msgnbr preceedes msgtext
+ 
+Future extensione: more details of active requests can be displayed:
+DFSMS Q REQ * gives:
+FSMDPQ3268I  REQUEST  ISSUED BY    TIME          STATUS OF REQUEST  COMMAND TEXT
+FSMDPQ3269I   619143    KRIS     11:07:18                   ACTIVE  MOVE SLVMAINT 0293 VOLUME VAC025
+ 
+==== RECALL ==========================
+DFSMS Function Level 221                             04/03/06   11:42:02
+DFSMS RECALL with NOWAIT, request identifier 293565
+ 
+DFSMS RECALL processing started for FAP0004 LISTING SFSWERK:VMCOLL.LLLACPT.LISTING
+ 
+ 
+DFSMS RECALL with NOWAIT completed with no errors
+ 
+ 
+Written by: Kris Buelens IBM Belgium;  BUELENSC at BRUVMIS1 Jul 1998*/
+ 
+parse upper source . . myname mytype . syn .
+address command
+ 
+parse upper arg spid rest '('options
+if rest^='' then Call ErrExit 5,'Extraneous parm: "'rest'"'
+type=0;keep=0;dfsms=1;purge=0
+do while options^='' /* analyse requested options */
+   parse var options option options
+   select
+     when abbrev('NODFSMS',option,3) then DFSMS=0
+     when abbrev('DFSMS',option,1) then DFSMS=1
+     when abbrev('KEEP',option,1) then keep=1
+     when abbrev('PURGE',option,3) then Purge=1
+     when abbrev('TYPE',option,1) then type=1
+     Otherwise call errexit 5, 'Invalid option:' option
+   end
+end
+if purge & Keep then
+   Call ErrExit 5,'PURGE and KEEP mutually exclusive'
+OneFile=(words(spid)=1)
+ 
+if spid='' then do
+   parse value diag(0) with 25 bitmap 33
+   VM2K= bitand(left(bitmap,2),'7FFE'X)='7FFE'X
+   If Vm2K then parse value '39-57 ISODATE' with Sort DateOpt
+           else parse value '39-52'         with Sort DateOpt
+   'PIPE (end ?) CP Q RDR * ALL' dateOpt,
+       '|FIND SMSMASTR|LOCATE W10 /DFSMS/',
+       '|SORT' sort 'A',
+       '|O: FANOUT',
+       '|SPEC W2 1|APPEND LITERAL|JOIN * / /|var spids',
+       '?O:|LOCATE W7 /USER/|SPEC /CH R/ 1 W2 NW /NOHOLD/ NW|CP'
+   if spids='' then do
+      if dfsms then call DfsmsStatus
+      call ErrExit 5,'We don''t find RDR files coming from SMSMASTR'
+   end
+end
+else do
+  parse value diagrc(8,'CH RDR' spid 'NOHOLD') with rc . 17 cpans '15'x
+  if rc=3 then call ErrExit rc, 'Spool file' spid 'not found'
+  if rc^=0 then call ErrExit rc, cpans
+  spids=spid
+end
+ 
+parse value diag(8,'Q V C') with . . . . . rdrhold .
+call diag 8,'SP C HOLD'
+If Type then ToCons='|Cons' ; else ToCons=''
+ 
+SpoolFiles.=''
+Failed.=''
+Do while spids<>''
+   parse var spids spid  spids
+   If Type then Say 'Rdr file' spid '==========================='
+   'PIPE (end ?)',
+       '|READER FILE' spid,
+       '|FIND' '41'x'|SPEC 2-*|PAD 80',
+       '|DEBLOCK NETDATA|FIND' 'C0'x||'|SPEC 2-*',
+       toCons,
+       '|VAR DtLine',
+       '|O: Fanout',
+       '|DROP 10|NLOCATE 1 / /|TAKE 2',
+       '|STEM L.',
+       '?O:|R: FIND DFSMS_RECALL|RI: Fanin|STEM RC.',
+       '?R:|FIND FSM|TAKE|BUFFER|RI:',
+       '?O:|M: FIND DFSMS_MIGRAT|MI: Fanin|STEM MG.',
+       '?M:|FIND FSM|TAKE|BUFFER|MI:',
+       '?O:|STEM xx.'
+   call diag 8,'CLOSE C HOLD' || '15'x ||'CH R' spid 'NOHOLD'
+/* L.2 can hold
+FSMEMD4000I DFSMS MOVE request identifier 1623 (VMSERVS 0404) succeeded
+*/
+   If left(l.2,6)='FSMEMD' then req=subword(l.2,2,2)
+                           else req=subword(l.2,1,2)
+   Select
+    when left(l.2,10)='DFSMS MOVE' ,
+     |  subword(l.2,2,2)='DFSMS MOVE' then do
+     parse var l.2 '('user cuu ')' status
+     Failed = ( status<>'succeeded' )
+     if failed then status=status l.1
+     say subword(DtLine,5,2) req left(user,8) cuu status
+     if purge then call diag 8,'PUR R' spid
+     else if ^Keep then do
+        if OneFile & ^Failed then call diag 8,'PUR R' spid
+        else do
+          Failed.user.cuu= Failed
+          If SpoolFiles.user.cuu='' then SpoolFiles.?=SpoolFiles.? user cuu
+          SpoolFiles.user.cuu= SpoolFiles.user.cuu spid
+        end
+     end
+    end
+    when left(RC.3,12)='DFSMS RECALL' then do
+     parse var rc.3 'completed' status
+     fid=subword(rc.2,6)
+     Failed = ( status<>'with no errors' )
+     if failed then do
+        say 'RECALL failed for' fid
+        if rc.0>3 then say '  'value('rc.'rc.0)
+     end; else say 'RECALL OK for' fid
+     if purge then call diag 8,'PUR R' spid
+     if ^Keep then do
+        if OneFile & ^Failed then call diag 8,'PUR R' spid
+        else do
+          Failed.fid= Failed
+          If SpoolFiles.fid='' then SpoolFiles.?R=SpoolFiles.?R fid
+          SpoolFiles.fid= SpoolFiles.fid spid
+        end
+     end
+    end
+    when left(MG.3,13)='DFSMS MIGRATE' then do
+     parse var mg.3 'completed' status
+     fid=subword(mg.2,6)
+     Failed = ( status<>'with no errors' )
+     if failed then do
+        say 'Migrate failed for' fid
+        if mg.0>3 then say '  'value('mg.'mg.0)
+     end; else say 'Migrate OK for' fid
+     if purge then call diag 8,'PUR R' spid
+     if ^Keep then do
+        if OneFile & ^Failed then call diag 8,'PUR R' spid
+        else do
+          Failed.fid= Failed
+          If SpoolFiles.fid='' then SpoolFiles.?R=SpoolFiles.?R fid
+          SpoolFiles.fid= SpoolFiles.fid spid
+        end
+     end
+    end
+   Otherwise
+    'PIPE STEM XX.|cons'
+   end
+end
+'CP SP C' rdrhold
+ 
+If OneFile then exit 8*failed /* Checking single file */
+ 
+if dfsms then call DfsmsStatus
+if Keep then exit
+Do While SpoolFiles.?<>''
+   parse var SpoolFiles.? user cuu SpoolFiles.?
+   If ^Failed.user.cuu then /* Last status OK ? */
+      call DIAG 8, 'CP PUR R' SpoolFiles.user.cuu
+end
+Do While SpoolFiles.?R<>''
+   parse var SpoolFiles.?R n t d SpoolFiles.?R ; fid=n t d
+   If ^Failed.fid then /* Last status OK ? */
+      call DIAG 8, 'CP PUR R' SpoolFiles.fid
+end
+exit
+ 
+/*-----------------------------------------------------------------*/
+DfsmsStatus: /*                                                    */
+/*-----------------------------------------------------------------*/
+/*
+FSMDPS3161I DFSMS master is running
+FSMDPS3162I DFSMS has 0 outstanding requests
+FSMDPS3200I DFSMS server SMSSRV02 has 8 tasks available for work
+FSMDPS3200I DFSMS server SMSSRV01 has 8 tasks available for work
+FSMDPS3200I DFSMS server SMSSRV03 has 8 tasks available for work
+FSMDPS3114I Minidisk server DGTSRV03 is busy
+FSMDPS3114I Minidisk server DGTSRV01 is waiting for work
+FSMDPS3114I Minidisk server DGTSRV02 is waiting for work
+FSMDPS3114I ML1 file pool MIGLVL1 is available
+FSMDPS3200I DFSMS server SMSSRV01 has 1 tasks available for work and 7 tasks busy
+FSMDPS3200I DFSMS server SMSSRV02 has 1 tasks available for work and 7 tasks busy
+FSMDPS3200I DFSMS server SMSSRV03 has 2 tasks available for work and 6 tasks busy
+/*words:----W2----W3-----W4-------W5--W6W7----W8--------W9--W10--W11-W1W13---W14-*/
+ 
+*/
+ parse value diag(8,'Q SET') with 'EMSG' emsgset ','
+ If EmsgSet<>'ON' then 'CP SET EMSG ON'
+ 'PIPE (end ?) CMS DFSMS QUERY STATUS',
+    '|R: FIND FSMDPS3162I|SPEC W4 1|VAR queued ?R:',
+    '|S: FIND FSMDPS3114I_Minidisk_server'||,
+    '|   VAR Found',
+    '|B: LOCATE W6 /busy/|COUNT LINES|VAR busy ?B:',
+    '|   COUNT LINES|VAR waiting',
+    '?S:|FIND FSMDPS3200I_'||,
+    '|   SPEC PrintOnly EOF t: W6 . b: w12 .',
+           'Set #0+=1;#1+=t;#2+=b',
+           'EOF Print #0 1 Print #1 NW Print #2 NW|VAR CntSFS'
+ if rc<>0 then Say myname': Retcode' rc 'from DFSMS QUERY STATUS'
+ else do
+   if symbol('queued')<>'VAR'  then queued='**UNKNOWN**'
+   if symbol('found')<>'VAR'   then
+      parse value '**UNKNOWN**' with busy 0 waiting
+   parse var CntSFS SfsSrv SfsTskFree SFSTskBusy .
+   if busy=0 & queued+SFStskBusy=0  then
+      say 'All DFSMS MDISK and SFS requests have ended.'
+   else do
+      queued=queued-busy
+      hdr=myname': DFSMS:' ,
+          queued 'request'|| left('s',queued<>1) 'waiting;'
+      Say hdr,
+          busy 'MDK request'  || left('s',busy<>1) 'busy;',
+          waiting 'MDK server'|| left('s',waiting<>1) 'waiting'
+      Say left(myname':',length(hdr)),
+           SFStskbusy 'SFS request'  || left('s',SFStskbusy<>1) 'busy;',
+           SFStskFree 'SFS task'  || left('s',SFStskFree<>1) 'waiting'
+   end
+ end
+ If EmsgSet<>'ON' then 'CP SET EMSG' EmsgSet
+return
+ 
+ERREXIT: /* general errorexit routine */
+ parse upper source . . myname mytype . syn .
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)

@@ -1,0 +1,34 @@
+/*---------------------------------------------------------------+
+| Function : .                                                   |
+|                                                                |
+| File     : CODEADD  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : REPLACE  EXEC                                       |
+|                                                                |
+| Called   : CODEADD  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220324 16:26:25                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg who fn ft '(' proj .
+Parse Source . . myfn myft .
+Say myfn who fn ft proj
+reply=0
+'PIPE (NAME CODEADD.EXEC:22 END ?)',
+   'var keepfiles 1',
+   '| cons',
+   '| var keepfiles'
+Address CMS 'VMLINK 'proj' (ONLY(CODE) WRITE QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit 0
+Address CMS 'REPLACE 'fn ft' A 'wfm' (NOKEEP 'keepfiles
+If rc=0 Then reply=1
+Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) WRITE QUIET'
+Exit:
+Exit reply

@@ -1,0 +1,87 @@
+/*---------------------------------------------------------------+
+| Function : Replace copy of a directory of a user id            |
+|                                                                |
+| File     : DM_REPL  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|            <dirfnft>                                           |
+|                                                                |
+| Called   : DM_REPL  <uid>                                      |
+|          : REPL     <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 15:23:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid . sfm .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Check if the input file exists                                 |
++---------------------------------------------------------------*/
+If sfm='' Then sfm='A'
+'PIPE (NAME DM_REPL.EXEC:40 END ?)',
+   'literal 'uid' DIRECT 'ws,                    /* Compose filenm   */
+   '| statew',                                   /* Check            */
+   '| count lines',                              /* How many         */
+   '| var dirfok'                                /* Hand 2 rexx      */
+If \dirfok Then Call Exit '648'
+/*---------------------------------------------------------------+
+| Locate the userid                                              |
++---------------------------------------------------------------*/
+details=DM_INDEX('GET 'uid)
+Parse Value details With lim1 lim2 .
+/*---------------------------------------------------------------+
+| Obtain the id from the directory file                          |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If rc<>0 Then Call Exit '98'
+'PIPE (NAME DM_REPL.EXEC:56 END ?)',
+   '< 'uid' DIRECT 'ws,                         /* Get the content  */
+   '| spec 1.72 7.80',                           /* Add 7 spaces     */
+   '| stem newdir.'                              /* Hand 2 rexx      */
+'PIPE (NAME DM_REPL.EXEC:60 END ?)',
+   '< 'dirfnft wfm,                              /* Read file        */
+   '| specs pad 0 recno 1.5 right 1;72 nw',      /* Add recnos       */
+   '| t: totarget locate w1.1 ~'lim1'~',         /* To this record   */
+   '| append stem newdir.',                      /* Insert new dir   */
+   '| buffer',                                   /* Prevent stall    */
+   '| fi: fanin',                                /* Take in others   */
+   '| specs 7;* 1.80',                           /* Adjust records   */
+   '| > 'dirfnft ws' FIXED 80',                  /* Write to file    */
+   '? t:',                                       /* Conn 2 totarget  */
+   '| buffer',                                   /* Wait for all     */
+   '| frtarget locate w1.1 ~'lim2+1'~',          /* Use from here    */
+   '| fi:'                                       /* Conn 2 fanin     */
+piprc=rc
+wfm=DM_VMLNK('SOURCDIR DET')
+If piprc<>0 Then Call Exit '628'
+Address CMS 'RENAME 'uid' DIRECT 'sfm' DIRECT 'uid sfm
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

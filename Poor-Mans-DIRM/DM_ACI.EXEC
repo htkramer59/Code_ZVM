@@ -1,0 +1,111 @@
+/*---------------------------------------------------------------+
+| Function : Change the acigroup info                            |
+|                                                                |
+| File     : DM_ACI   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_ACI   <uid> <acigroup>                           |
+|          : ACI      <uid> <acigroup>                           |
+|            If <acigroup> is set to DEL the acigroup will       |
+|            be removed otherwise it will be set.                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240627 10:42:23                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid acigroup .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Simple check                                                   |
++---------------------------------------------------------------*/
+If acigroup='' | Length(acigroup)>8 Then Call Exit '201'
+/*---------------------------------------------------------------+
+| Get the location                                               |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Find the acigrp  stmt and create a new one                     |
++---------------------------------------------------------------*/
+origaci=''
+'PIPE (NAME DM_ACI.EXEC:49 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase substr 1.3 of w2.1 == ~ACI~', /* Find acct stmt   */
+   '| var origaci tracking'                      /* Hand 2 rexx      */
+If rc<>0 Then Call Exit '202'
+/*---------------------------------------------------------------+
+| Decide on which way to go                                      |
++---------------------------------------------------------------*/
+If acigroup='DEL' Then Call Remove_Aci
+                  Else Call Add_Aci
+/*---------------------------------------------------------------+
+| All ok put it online                                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+Add_Aci:
+/*---------------------------------------------------------------+
+| Find an IPL statement to which to append the new stmt          |
++---------------------------------------------------------------*/
+If origaci<>'' Then Call Exit '203'
+'PIPE (NAME DM_ACI.EXEC:80 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~IPL~',               /* Find this        */
+   '| var origipl',                              /* Hand 2 rexx      */
+   '| specs 1;* 1.50 ~;'Copies(' ',8)'ACIGROUP 'acigroup'~ nw',   /* Add new stmt     */
+   '| var newipl'                                /* Hand 2 rexx      */
+If rc<>0 Then Call Exit '128'
+/*---------------------------------------------------------------+
+| Add the ACIGROUP statement                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_ACI.EXEC:90 END ?)',
+   'stem direct.',                               /* Take this        */
+   '| buffer',                                   /* Prevent loop     */
+   '| change ~'origipl'~ ~'newipl'~',            /* Replace this     */
+   '| split at ;',                               /* Split here       */
+   '| specs 7;* 1.80',                           /* Adjust recs      */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit '128'
+Return
+ 
+ 
+Remove_Aci:
+/*---------------------------------------------------------------+
+| Remove the aci record                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_ACI.EXEC:105 END ?)',
+   'stem direct.',                               /* Take this        */
+   '| nlocate anycase ~'origaci'~',              /* Remove ACI       */
+   '| specs 7;* 1.80',                           /* Adjust recs      */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit '128'
+Return

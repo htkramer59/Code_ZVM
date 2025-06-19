@@ -1,0 +1,8 @@
+/**/
+'PIPE (end ?)',
+    'cp QUERY USERID',
+    '| specs w3.1',
+    '| var node',
+    '| specs -2;-1',
+    '| var shortnode'
+Return node shortnode

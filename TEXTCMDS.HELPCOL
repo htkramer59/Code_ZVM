@@ -1,0 +1,107 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+    Qx        This is the Queue function.  Text will be lined up
+              starting with the specified character or character string
+              (represented by the x).  This character and any following
+              text will be lined up at the Q.  Companion commands are
+              "B" and a single "JL".
+ 
+              EXAMPLE:  ?????????????????q(???????????????????????????????
+                        Smith (BH)
+                        Ho (DC)
+                        Von Lintel (AM)
+              yields:
+                        Smith            (BH)
+                        Ho               (DC)
+                        Von Lintel       (AM)
+ 
+              EXAMPLE:  ?????????????????qgary????????????????????????????
+                        Roger A. Smith
+                        Richard B. Ho
+                        Gary G. Vair
+                        Brenda
+              yields:
+                        Roger A. Smith
+                        Richard B. Ho
+                                         Gary G. Vair
+                        Brenda
+ 
+              If a Q without any subsequent text is requested then, the
+              search is for the preceding word.
+ 
+ 
+              EXAMPLE:  ?????????????????q????????????????????????????????
+                        Roger A. Smith
+                        Richard B. Ho
+                        Gary G. Vair
+                        Brenda
+              yields:
+                        Roger A.          Smith
+                        Richard B.        Ho
+                        Gary G.           Vair
+                                          Brenda
+ 
+ 
+    QQx       Line up text located BEHIND a specified character or
+              character string (represented by the x).  Text following
+              this character will be lined up at the first Q.
+ 
+              EXAMPLE:  ?????????????????qq,??????????????????????????????
+                        Smith, B. H.
+                        Ho, D. C.
+                        Von Lintel, A. M.
+              yields:
+                        Smith,            B. H.
+                        Ho,               D. C.
+                        Von Lintel,       A. M.
+ 
+              Note that the blank character following the comma was
+              also transfered and that blank character was placed
+              under the first Q.
+ 
+    The Q command honors the XEDIT zone setting.  There are times that
+    you may want to perform the Q operation on specific columns while
+    excluding other columns.  The Queue command honors the XEDIT Zone
+    setting.
+ 
+              EXAMPLE:  z????????????????q(???z?????????????????
+                        Smith (BH)             739    844
+                        Ho (DC)                       525
+                        Von Lintel (AM)        523    321
+              yields:
+                        Smith            (BH)  739    844
+                        Ho               (DC)         525
+                        Von Lintel       (AM)  523    321
+ 
+              The text outside of the zone setting is not moved.  If the
+              Zs are entered at the same time as the Q, then the zone
+              request is considered to be temporary and XEDIT zones are
+              not changed.
+.cs 7 on
+                     COLumn Edit Text Alignment Commands
+ 
+Place the cursor under any character of the task you are interested in and
+press PF1 or the ENTER key.
+ 
+ 
+COL TEXTCMD3 (ALL       J      Justify Text
+COL TEXTCMDS (ALL       Q      Line up or Queue text
+COL TEXTCMD2 (ALL       B      Remove trailing blanks up to a column
+COL TEXTCMD4 (ALL       W,<,>  Wordflow text within a column as in Script
+COL TEXTCMD5 (ALL       K,L    Change text in a column to upper or lower case
+ 
+COL PREFIX (NOTE        Text Alignment prefix commands.
+COL PREFIX (NOTE          ATAB   Auto Text Alignment.
+COL PREFIX (NOTE          TS     Auto Text Spacing.
+COL PREFIX (NOTE          TAB    Manual Text Alignment.
+COL PREFIX (NOTE          COMP   Compress Text.
+COL PREFIX (NOTE          TRigh  Right justify text between all tabs.
+COL PREFIX (NOTE          TLeft  Left  justify text between all tabs.
+COL PREFIX (NOTE          TCent  Center text between all tabs.
+COL PREFIX (NOTE          Both   Justify both left and right.
+.cs 7 off

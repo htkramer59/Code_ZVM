@@ -1,0 +1,283 @@
+/*---------------------------------------------------------------+
+| Function : Display IP addresses used by the servers            |
+|                                                                |
+| File     : VSWIP    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : VSWIP    <vswitches>  ( <how> <output>              |
+|                                                                |
+|            <vswitches> all switch-names separated by spaces    |
+|                        If ommitted all switches will be searchd|
+|            <how>       Can be LONG or COMPACT                  |
+|                        If LONG a single line per user,         |
+|                        if ommitted it will be COMPACT          |
+|            <output>    Can be CONS, XEDIT or FILE fn ft fm     |
+|                        If ommited output will be CONS,         |
+|                        If "FILE fname ftype fmode" , the output|
+|                        will be stored in the mentioned file    |
+|                        If no fname ftype fmode entered, the    |
+|                        output will be: VSWIP OUTPUT A          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200327 09:15:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Source . . myfn myft .
+Parse Upper Arg input
+Parse Value input With input '(' option
+Parse Value input With vswitches ',' ids
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If vswitches='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME VSWIP.EXEC:33 END ?)',
+               '< 'myfn myft' *',
+               '| casei tolabel PARSE',
+               '| cons'
+           Exit
+           End
+swmarker='VSR1*'
+'PIPE (NAME VSWIP.EXEC:39 END ?)',
+   'cp QUERY USERID',                           /* Ask cp           */
+   '| specs w3.1',                              /* Take this fr outp*/
+   '| var node'                                 /* Store as         */
+Call Check_Options
+Call Check_Vswitches
+Call Check_Ids
+Call Collect_Vswitch_Info
+Call Filter_Info
+Call Complete_Output
+If \xed Then Call Show_Info
+        Else Call Xedit_Setup
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Exit
+ 
+ 
+Check_Vswitches:
+/*---------------------------------------------------------------+
+| Deal with the vswitch names entered                            |
++---------------------------------------------------------------*/
+If vswitches='' Then Do
+/*---------------------------------------------------------------+
+| Prepare a query                                                |
++---------------------------------------------------------------*/
+     'PIPE (NAME VSWIP.EXEC:63 END ?)',                          /* 2nd pipe         */
+          'cp QUERY VSWITCH ALL',             /* Ask cp           */
+          '| pick w1.1 == ~VSWITCH~',         /* Select these     */
+          '| change ~ SYSTEM ~ .~',           /* Select these     */
+          '| specs w2.1',                     /* Keep this        */
+          '| specs fs . f2',                  /* ...selection     */
+          '| wildcard w1.1 ~'swmarker'~',     /* and these        */
+          '| stem vswitch.'                   /* .....store as    */
+     End
+     Else Do
+/*---------------------------------------------------------------+
+| Take these as input                                            |
++---------------------------------------------------------------*/
+     'PIPE (NAME VSWIP.EXEC:76 END ?)',
+         'var vswitches',                       /* Take this        */
+         '| split',                             /* Split into recs  */
+         '| stem vswitch.'                      /* Store as         */
+     info=''
+     End
+Return
+ 
+ 
+Check_Ids:
+/*---------------------------------------------------------------+
+| If any ids entered...                                          |
++---------------------------------------------------------------*/
+If ids<>'' Then Do
+/*---------------------------------------------------------------+
+| If it is filled split it..into picks and wildcards             |
++---------------------------------------------------------------*/
+    'PIPE (NAME VSWIP.EXEC:90 END ?)',
+        'var ids',
+        '| split',
+        '| strip',
+        '| n: nlocate ~*~',
+        '| specs ~PICK w2.1 == /~ 2 w1.1 n ~/ ~ n',
+        '| join * xFF',
+        '| change xFF ~OR~',
+        '| specs x4F 1 1;* nw',
+        '| var selection',
+        '? n:',
+        '| specs ~WILDCARD W2.1 /~ 1 w1.1 n ~/~ n',
+        '| specs x4F 1 1;* nw',
+        '| stem wildc.'
+    End
+    Else Do
+/*---------------------------------------------------------------+
+| These are the defaults                                         |
++---------------------------------------------------------------*/
+    selection=''
+    wildc.0=0
+    End
+Return
+ 
+ 
+Check_Options:
+/*---------------------------------------------------------------+
+| Prepare one column  or 2 ...                                   |
++---------------------------------------------------------------*/
+xed=0
+If option='' Then option='XEDIT'
+/*---------------------------------------------------------------+
+| Determine the output formatting                                |
++---------------------------------------------------------------*/
+If Wordpos('LONG',option)=0 &,
+   Wordpos('COMPACT',option)=0 Then option='COMPACT 'option
+If Wordpos('LONG',option)>0 Then Do
+     layout1=''
+     layout2=''
+     End
+If Wordpos('COMPACT',option)>0 Then Do
+     layout1='| specs 1;* 1.56',
+     '| snake 2'
+     layout2=''
+     End
+/*---------------------------------------------------------------+
+| Determine the output                                           |
++---------------------------------------------------------------*/
+If Wordpos('FILE',option)=0 &,
+   Wordpos('CONS',option)=0 &,
+   Wordpos('XEDIT',option)=0 Then option='XEDIT 'option
+If Wordpos('FILE',option)>0 Then Do
+/*---------------------------------------------------------------+
+| We send it to a file...extract the needed items                |
++---------------------------------------------------------------*/
+     Parse Value option With . 'FILE' fname ftype fmode .
+     If fmode='' Then fmode='A'
+     If ftype='' Then ftype='OUTPUT'
+     If fname='' Then fname=myfn
+     output='| > 'fname ftype fmode
+     End
+If Wordpos('CONS',option)>0 Then Do
+/*---------------------------------------------------------------+
+| We display it on the console                                   |
++---------------------------------------------------------------*/
+     'VMFCLEAR'
+     output='| CONS'
+     End
+If Wordpos('XEDIT',option)>0 Then Do
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+     xed=1
+     End
+Return
+ 
+ 
+Collect_Vswitch_Info:
+/*---------------------------------------------------------------+
+| Check all switches entered...                                  |
++---------------------------------------------------------------*/
+info.0=0
+stats.0=0
+Do v=1 To vswitch.0
+  'PIPE (NAME VSWIP.EXEC:157 END ?)',
+     'cp QUERY VSWITCH 'vswitch.v' DETAILS',      /* Ask cp           */
+     '| frtarget pick anycase w1.2 ==  ~Adapter Connections:~',  /* Use from here    */
+     '| f1: fanout',                              /* Dupl records     */
+     '| locate anycase ~ADAPTER OWNER~',          /* Find these       */
+     '| specs w3.1 1.8 x40 n',                    /* Adjust layout    */
+     '| j: juxtapose',                            /* Combine records  */
+     '| join keylen 8',                           /* Join recs        */
+     '| f2: fanout',
+     '| if1: if pick w4.1 \== ~~',
+     '|    specs 1;* 1 ~<<<<~ n',
+     '| if1:',
+     '| specs 1;* 1.55',
+     layout1,
+     '| specs ~'vswitch.v'~ 1.10 1;* nw',
+     '| stem info. append',
+     '? f1:',                                     /* Conn 2 fanout    */
+     '| strip',                                   /* Remove space     */
+     '| inside anycase ~UNICAST MAC~ ~MULTICAST MAC~',  /* Select these     */
+     '| specs w3.1 1.15 x40 n',                   /* Adjust layout    */
+     '| j:',                                      /* Conn 2 juxtapose */
+     '? f2:',
+     '| count lines',
+     '| specs ~* No of servers found :~ 1 w1.1 nw.4 right',
+     '| fi: faninany',
+     '| join * x40',
+     '| specs ~'vswitch.v'~ 1.10 1;* nw',
+     '| stem stats. append',
+     '? f2:',
+     '| specs w2;*',
+     '| count words',
+     '| specs ~* No of IP addresses found:~ 1 w1.1 nw.4 right',
+     '| fi:'
+End v
+Return
+ 
+ 
+Filter_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+show.0=0
+'PIPE (NAME VSWIP.EXEC:181 END ?)',
+    'stem info.',
+    selection,
+    '| stem show. append'
+Do w=1 To wildc.0
+   'PIPE (NAME VSWIP.EXEC:186 END ?)',
+       'stem info.',
+       wildc.w,
+       '| stem show. append'
+End w
+Return
+ 
+ 
+Complete_Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME VSWIP.EXEC:198 END ?)',
+    'stem show.',
+    '| buffer',
+    '| sort w1.2',
+    '| specs a: w1.1 .',
+               'w2;* 11',
+             'break a',
+               'id a 1',
+    '| if: if pick 1.1 \== ~ ~',
+    '|    specs ~;_;* Checking VSWITCH ~ 1 w1.1 nw ~on 'node';;'Copies(' ',9)'~ nw w2;* nw',
+    '| if:',
+    '| split at ~;~',
+    '| strip',
+    '| change ~_~ ~',
+    '| preface stem stats.',
+    '| preface literal * Statistics',
+    '| stem show.'
+Return
+ 
+ 
+Show_Info:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+    'stem show.',
+    output
+Return
+ 
+ 
+Xedit_Setup:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?) stem show. | > 'myfn' $OUT$ A'
+Address CMS 'XEDIT 'myfn' $OUT$ A (WIDTH 200'
+Address CMS 'ERASE 'myfn' $OUT$ A (NOTYPE'
+Return

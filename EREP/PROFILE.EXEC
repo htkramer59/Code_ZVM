@@ -1,0 +1,39 @@
+/*---------------------------------------------------------------+
+| Function : Personal profile exec                               |
+|                                                                |
+| File     : PROFILE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PROFILE  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180220 09:43:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET EMSG ON'
+Address COMMAND 'CP SET DATEFORM ISODATE USER'
+Address COMMAND 'CP SET PF1  SUBSTITU IMMED PIPE (END \) &*'
+Address COMMAND 'CP SET PF11 RETRIEVE FORWARD'
+Address COMMAND 'CP SET PF12 RETRIEVE BACKWARD'
+Address COMMAND 'CP SPOOL CONS * START EOF NAME 'Userid()' CONSLOG'
+Address COMMAND 'CP SCREEN OUT YELLOW STAT  GREEN'
+Address COMMAND 'CP TERM MORE 10 10'
+'PIPE cms IDENTIFY | specs w3.1 | spec -2;-1 | var node'
+/*
+Address CMS 'ACCESS 193 U' /** Access to ACCESSM0  **/
+Address CMS 'ACCESSM0 ON'
+*/
+Address CMS 'SYNONYM 'USERID()' SYNONYM'
+Address CMS 'ACCESS VMPS'node':TOOLS. Q'
+'PIPE cp QUERY 'userid()' | specs fs - f2 | strip | locate /DSC/ | count lines | var discon'
+If discon Then Address CMS userid()
+          Else Do
+          Say 'To start reporing type : 'userid()
+          End
+Exit

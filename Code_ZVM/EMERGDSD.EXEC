@@ -1,0 +1,675 @@
+/*---------------------------------------------------------------+
+| Function : Access DASD from an other node                      |
+|                                                                |
+| File     : EMERGDSD EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : EMERGDSD <node> <userid> <mdisk>                    |
+|                                                                |
+|                     <mdisk> defaults to 191                    |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210702 16:42:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg whichnode id mdisk .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Some checks                                                    |
++---------------------------------------------------------------*/
+If whichnode='' |,
+   whichmode='?' Then Do
+                     'VMFCLEAR'
+                     'PIPE (end ?)',
+                         '< 'myfn myft' *',
+                         '| tolabel Parse',
+                         '| cons'
+                     Exit 28
+                     End
+If id='' Then Exit 28
+If mdisk='' Then mdisk='191'
+/*---------------------------------------------------------------+
+| Ask some stuff we need later on                                |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:30 END ?)',
+   'CP QUERY USERID',                            /* Ask cp           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce 2 this    */
+   '| var shortnode',                            /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY CPUID',                             /* Ask cp           */
+   '| specs substr 7.2 of w3.1',                 /* Reduce 2 this    */
+   '| change ~98~DH~',                           /* Replace this     */
+   '| change ~A8~OM~',                           /* ..and this       */
+   '| var location'                              /* Store as         */
+/*---------------------------------------------------------------+
+| Select which data to load                                      |
++---------------------------------------------------------------*/
+Select
+When whichnode='B1' Then Call B1_Defs
+When whichnode='B2' Then Call B2_Defs
+When whichnode='O1' Then Call O1_Defs
+When whichnode='A1' Then Call A1_Defs
+When whichnode='A2' Then Call A2_Defs
+When whichnode='P1' Then Call P1_Defs
+When whichnode='P2' Then Call P2_Defs
+Otherwise Exit 99
+End
+/*---------------------------------------------------------------+
+| Do the actual access...                                        |
++---------------------------------------------------------------*/
+Call GetInfoFromDir
+Call AccessUserMdisk
+ 
+Exit
+ 
+ 
+AccessUserMdisk:
+/*---------------------------------------------------------------+
+| Access the defined user mdisk                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:68 END ?)',
+   'rexxvars toload',                            /* Take vars        */
+   '| buffer',                                   /* Prevent loop     */
+   '| pick anycase fs / substr 1.5 of f2 == ~LABEL~ and',   /* Select these     */
+                       'substr w1.1 of f3 == ~'usrlabel'~',   /* .                */
+   '| specs w-1;-1',                             /* Keep this        */
+   '| var usrlun'                                /* Store as         */
+Call ResetEdev
+Call FindFcp
+lun=usrlun
+Call GetEdev
+Call ShowContent
+Call ResetEdev
+Return
+ 
+ 
+ShowContent:
+/*---------------------------------------------------------------+
+| Access the defined mdisk and show its content                  |
++---------------------------------------------------------------*/
+Address COMMAND 'CP DEFINE MDISK 8801 'usrstart usrsize usrlabel
+If rc=0 Then Address CMS 'ACCESS 8801 'wfm
+If rc=0 Then Address CMS 'FILELIST * * 'wfm
+'PIPE (NAME EMERGDSD.EXEC:90 END ?)',
+    'cms REL 'wfm' ( DET',                       /* Talk 2 cms       */
+    '| hole'                                     /* Ignore output    */
+Return
+ 
+ 
+GetInfoFromDir:
+/*---------------------------------------------------------------+
+| Get the info from DIRMAINT from that LPAR                      |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:100 END ?)',
+   'rexxvars toload',                            /* Get all vars     */
+   '| buffer',                                   /* Prevent loop     */
+   '| p: pick anycase fs / f2 == ~label.0200~',  /* Select this one  */
+   '| specs fs / f3',                            /* Keep this        */
+   '| var info',                                 /* Store as         */
+   '? p:',                                       /* Conn 2 pick      */
+   '| pick fs / substr 1.4 of f2  == ~WWPN~',    /* Select...        */
+   '| pick fs . substr 1.2 of f2  == ~'location'~',   /* ...more detailed */
+   '| change anycase ~.'location'~~',            /* Replace this     */
+   '| varload'                                   /* Hand 2 rexx      */
+Parse Value info With label lun .
+Call ResetEdev
+Call FindFcp
+Call GetEdev
+Call AccessDirm
+Call GetInfoForId
+Call ResetEdev
+Return
+ 
+ 
+GetInfoForId:
+/*---------------------------------------------------------------+
+| Get the directory info for the id and mdisk                    |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:125 END ?)',
+    '< user direct 'wfm,                         /* Read this file   */
+    '| specs 1.72',                              /* Remove serial    */
+    '| strip',                                   /* Remove spaces    */
+    '| p: pick w3.1 == ~'id'~',                  /* Select these     */
+    '| fi: faninany',                            /* Take in others   */
+    '| specs w-3;-1',                            /* Keep this        */
+    '| stem part.',                              /* Store as         */
+    '? p:',                                      /* Conn 2 pick      */
+    '| locate ~S 'id'-~',                        /* Find subconfigs  */
+    '| fi:'                                      /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Read the cluster parts                                         |
++---------------------------------------------------------------*/
+out.0=0
+Do p=1 To part.0
+  Parse Value part.p With fn startinfile sizeinfile .
+  'PIPE (NAME EMERGDSD.EXEC:142 END ?)',
+     '< 'fn' CLUSTER 'wfm,                       /* Read these       */
+     '| specs 1.72',                             /* Remove serials   */
+     '| drop first 'startinfile-1,               /* Ignore these     */
+     '| take first 'sizeinfile,                  /* Take these       */
+     '| strip',                                  /* Remove spaces    */
+     '| stem out. append'                        /* Add to stem      */
+End p
+/*---------------------------------------------------------------+
+| Get the mdisks statements for location and sizes               |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:153 END ?)',
+   'stem out.',                                  /* Take these       */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~~',          /* Ignore these     */
+   '| pick w1.1 == ~MDISK~',                     /* Select these     */
+   '| locate w2.1 ~'mdisk'~',                    /* Filter these     */
+   '| specs w4.3',                               /* Keep loc & size  */
+   '| var info'                                  /* Store as         */
+Parse Value info With usrstart usrsize usrlabel .
+'PIPE (NAME EMERGDSD.EXEC:161 END ?)',
+    'cms REL 'wfm' ( DET',                       /* Talk 2 cms       */
+    '| hole'                                     /* Ignore output    */
+Return
+ 
+ 
+AccessDirm:
+/*---------------------------------------------------------------+
+| Access DIRMAINT 1DF of the other system                        |
+| Only works when they have not been MOVED!!                     |
++---------------------------------------------------------------*/
+wfm='W'
+'PIPE (NAME EMERGDSD.EXEC:173 END ?)',
+    'cp QUERY MDISK USER DIRMAINT 1DF DIR LOC',  /* Ask cp           */
+    '| drop first 1',                            /* Remove header    */
+    '| specs ~DEFINE MDISK 8801~ 1 w-2;-1 nw w6.1 nw',   /* Compose cmd      */
+    '| change w-1;-1 ~'shortnode'~'whichnode'~', /* Update disklabel */
+    '| var defmdisk'                             /* Store as         */
+If rc=0 Then 'CP 'defmdisk
+If rc=0 Then 'PIPE (NAME EMERGDSD.EXEC:180 END ?) CMS ACCESS 8801 'wfm' | hole'
+Return
+ 
+ 
+FindFcp:
+/*---------------------------------------------------------------+
+| Find a set of usable FCPs                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:188 END ?)',
+    'cp QUERY FCP',                              /* Ask cp           */
+    '| pick w5.1 == ~SYSTEM~',                   /* Select these     */
+    '| specs substr 3.2 of w2.1 1 w2.1 nw',      /* Add a label      */
+    '| sort',                                    /* Sort them        */
+    '| join keylen 2',                           /* Join m           */
+    '| take last 1',                             /* Take this        */
+    '| specs ~/FCP1/~ 1 w2.1 n ~/FCP2/~ nw w3.1 n',   /* Add this         */
+    '| split',                                   /* Split here       */
+    '| varload'                                  /* Load m           */
+Return
+ 
+ 
+GetEdev:
+/*---------------------------------------------------------------+
+| Define the EDEV..                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME EMERGDSD.EXEC:205 END ?)',
+   'CP SET EDEV 8800 TYPE FBA ATTRIBUTES SCSI',  /* Issue cmd        */
+       'FCP_DEV 'fcp1' WWPN 'wwpn1' LUN 'lun,    /* .                */
+       'FCP_DEV 'fcp2' WWPN 'wwpn2' LUN 'lun,    /* .                */
+   '| hole'                                      /* Suppress output  */
+If rc=0 Then 'PIPE (NAME EMERGDSD.EXEC:210 END ?)',
+                'CP VARY ON 8800',               /* Issue cmd        */
+                '| hole'                         /* Suppress output  */
+If rc=0 Then 'PIPE (NAME EMERGDSD.EXEC:213 END ?)',
+                'CP ATT 8800 SYSTEM',            /* Issu cmd         */
+                '| hole'                         /* Suppress output  */
+Return
+ 
+Exit
+ 
+ 
+ResetEdev:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+cmds='DET 8800 SYSTEM;VARY OFF 8800;SET EDEV 8800 CLEAR;DEL EDEV 8800'
+'PIPE (NAME EMERGDSD.EXEC:226 END ?)',
+    'var cmds',                                  /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| cp',                                      /* Issue cmds       */
+    '| hole'                                     /* Suppress output  */
+Return
+ 
+ 
+O1_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh='50060E8012A9AD30'
+wwpn2.dh='50060E8012A9AD21'
+wwpn1.om='50060E8012AA5530'
+wwpn2.om='50060E8012AA5521'
+label.020A='O1S003 006F000000000000'
+label.020B='O1S004 0070000000000000'
+label.0200='O1COM1 0001000000000000'
+label.0201='O1RL01 0002000000000000'
+label.0202='O1RES1 0003000000000000'
+label.0203='O1S001 0004000000000000'
+label.0204='O1W005 0005000000000000'
+label.0205='O1W001 0006000000000000'
+label.0206='O1W002 0007000000000000'
+label.0207='O1W003 0008000000000000'
+label.0208='O1W004 0009000000000000'
+label.0209='O1S002 006E000000000000'
+label.0301='LNXOS2 0056000000000000'
+label.0302='LNXOS3 0057000000000000'
+label.040A='LNX011 008A000000000000'
+label.040B='LNX012 008B000000000000'
+label.040C='LNX013 008C000000000000'
+label.040D='LNX014 008D000000000000'
+label.040E='LNX015 008E000000000000'
+label.040F='LNX016 008F000000000000'
+label.0400='LNX001 0080000000000000'
+label.0401='LNX002 0081000000000000'
+label.0402='LNX003 0082000000000000'
+label.0403='LNX004 0083000000000000'
+label.0404='LNX005 0084000000000000'
+label.0405='LNX006 0085000000000000'
+label.0406='LNX007 0086000000000000'
+label.0407='LNX008 0087000000000000'
+label.0408='LNX009 0088000000000000'
+label.0409='LNX010 0089000000000000'
+label.041A='LNX027 009A000000000000'
+label.041B='LNX028 009B000000000000'
+label.041C='LNX029 009C000000000000'
+label.041D='LNX030 009D000000000000'
+label.041E='LNX031 009E000000000000'
+label.041F='LNX032 009F000000000000'
+label.0410='LNX017 0090000000000000'
+label.0411='LNX018 0091000000000000'
+label.0412='LNX019 0092000000000000'
+label.0413='LNX020 0093000000000000'
+label.0414='LNX021 0094000000000000'
+label.0415='LNX022 0095000000000000'
+label.0416='LNX023 0096000000000000'
+label.0417='LNX024 0097000000000000'
+label.0418='LNX025 0098000000000000'
+label.0419='LNX026 0099000000000000'
+label.042A='LNX043 00AA000000000000'
+label.042B='LNX044 00AB000000000000'
+label.042C='LNX045 00AC000000000000'
+label.042D='LNX046 00AD000000000000'
+label.042E='LNX047 00AE000000000000'
+label.042F='LNX048 00AF000000000000'
+label.0420='LNX033 00A0000000000000'
+label.0421='LNX034 00A1000000000000'
+label.0422='LNX035 00A2000000000000'
+label.0423='LNX036 00A3000000000000'
+label.0424='LNX037 00A4000000000000'
+label.0425='LNX038 00A5000000000000'
+label.0426='LNX039 00A6000000000000'
+label.0427='LNX040 00A7000000000000'
+label.0428='LNX041 00A8000000000000'
+label.0429='LNX042 00A9000000000000'
+label.043A='LNX059 00BA000000000000'
+label.043B='LNX060 00BB000000000000'
+label.043C='LNX061 00BC000000000000'
+label.043D='LNX062 00BD000000000000'
+label.043E='LNX063 00BE000000000000'
+label.043F='LNX064 00BF000000000000'
+label.0430='LNX049 00B0000000000000'
+label.0431='LNX050 00B1000000000000'
+label.0432='LNX051 00B2000000000000'
+label.0433='LNX052 00B3000000000000'
+label.0434='LNX053 00B4000000000000'
+label.0435='LNX054 00B5000000000000'
+label.0436='LNX055 00B6000000000000'
+label.0437='LNX056 00B7000000000000'
+label.0438='LNX057 00B8000000000000'
+label.0439='LNX058 00B9000000000000'
+label.0440='LNX065 00C0000000000000'
+label.0441='LNX066 00C1000000000000'
+label.0442='LNX067 00C2000000000000'
+label.0443='LNX068 00C3000000000000'
+label.0444='LNX069 00C4000000000000'
+label.0445='LNX070 00C5000000000000'
+label.4040='O1P002 0052000000000000'
+label.4041='O1P003 0053000000000000'
+label.4042='O1P004 0054000000000000'
+label.4043='O1P005 0055000000000000'
+label.4044='O1P006 0026000000000000'
+Return
+ 
+ 
+A1_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh=' 50060E8012A9AD30'  x
+wwpn2.dh=' 50060E8012A9AD21'  x
+wwpn1.om='50060E8012AA5531'
+wwpn2.om='50060E8012AA5520'
+label.020A='A1S002 0044000000000000'
+label.020B='A1S003 0045000000000000'
+label.0200='A1COM1 0001000000000000'
+label.0201='A1RL01 0002000000000000'
+label.0202='A1RES1 0003000000000000'
+label.0203='A1S001 0004000000000000'
+label.0204='A1W005 0005000000000000'
+label.0205='A1W001 0006000000000000'
+label.0206='A1W002 0007000000000000'
+label.0207='A1W003 0008000000000000'
+label.0208='A1W004 0009000000000000'
+label.0209='A1S004 0043000000000000'
+label.0300='LNXOS2 001F000000000000'
+label.040A='LNX011 008A000000000000'
+label.040B='LNX012 008B000000000000'
+label.040C='LNX013 008C000000000000'
+label.040D='LNX014 008D000000000000'
+label.040E='LNX015 008E000000000000'
+label.040F='LNX016 008F000000000000'
+label.0400='LNX001 0080000000000000'
+label.0401='LNX002 0081000000000000'
+label.0402='LNX003 0082000000000000'
+label.0403='LNX004 0083000000000000'
+label.0404='LNX005 0084000000000000'
+label.0405='LNX006 0085000000000000'
+label.0406='LNX007 0086000000000000'
+label.0407='LNX008 0087000000000000'
+label.0408='LNX009 0088000000000000'
+label.0409='LNX010 0089000000000000'
+label.041A='LNX027 009A000000000000'
+label.041B='LNX028 009B000000000000'
+label.041C='LNX029 009C000000000000'
+label.041D='LNX030 009D000000000000'
+label.041E='LNX031 009E000000000000'
+label.041F='LNX032 009F000000000000'
+label.0410='LNX017 0090000000000000'
+label.0411='LNX018 0091000000000000'
+label.0412='LNX019 0092000000000000'
+label.0413='LNX020 0093000000000000'
+label.0414='LNX021 0094000000000000'
+label.0415='LNX022 0095000000000000'
+label.0416='LNX023 0096000000000000'
+label.0417='LNX024 0097000000000000'
+label.0418='LNX025 0098000000000000'
+label.0419='LNX026 0099000000000000'
+label.042A='LNX043 00AA000000000000'
+label.042B='LNX044 00AB000000000000'
+label.042C='LNX045 00AC000000000000'
+label.042D='LNX046 00AD000000000000'
+label.042E='LNX047 00AE000000000000'
+label.042F='LNX048 00AF000000000000'
+label.0420='LNX033 00A0000000000000'
+label.0421='LNX034 00A1000000000000'
+label.0422='LNX035 00A2000000000000'
+label.0423='LNX036 00A3000000000000'
+label.0424='LNX037 00A4000000000000'
+label.0425='LNX038 00A5000000000000'
+label.0426='LNX039 00A6000000000000'
+label.0427='LNX040 00A7000000000000'
+label.0428='LNX041 00A8000000000000'
+label.0429='LNX042 00A9000000000000'
+label.043A='LNX059 00BA000000000000'
+label.043B='LNX060 00BB000000000000'
+label.043C='LNX061 00BC000000000000'
+label.043D='LNX062 00BD000000000000'
+label.043E='LNX063 00BE000000000000'
+label.043F='LNX064 00BF000000000000'
+label.0430='LNX049 00B0000000000000'
+label.0431='LNX050 00B1000000000000'
+label.0432='LNX051 00B2000000000000'
+label.0433='LNX052 00B3000000000000'
+label.0434='LNX053 00B4000000000000'
+label.0435='LNX054 00B5000000000000'
+label.0436='LNX055 00B6000000000000'
+label.0437='LNX056 00B7000000000000'
+label.0438='LNX057 00B8000000000000'
+label.0439='LNX058 00B9000000000000'
+label.0440='LNX065 00C0000000000000'
+label.4040='A1P002 0024000000000000'
+label.4041='A1P003 0025000000000000'
+label.4042='A1P004 0026000000000000'
+label.4043='A1P005 0027000000000000'
+label.4044='A1P001 001A000000000000'
+label.4045='A1P006 0017000000000000'
+label.4046='A1P007 0018000000000000'
+label.4047='A1P008 0019000000000000'
+Return
+ 
+ 
+A2_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh='50060E8012A9AD30'  x
+wwpn2.dh='50060E8012A9AD21'  x
+wwpn1.om='50060E8012AA5531'
+wwpn2.om='50060E8012AA5520'
+label.020A='A2S003 0047000000000000'
+label.020B='A2S004 0048000000000000'
+label.0200='A2COM1 000C000000000000'
+label.0201='A2RL01 000D000000000000'
+label.0202='A2RES1 000E000000000000'
+label.0203='A2S001 000F000000000000'
+label.0204='A2W005 0010000000000000'
+label.0205='A2W001 0011000000000000'
+label.0206='A2W002 0012000000000000'
+label.0207='A2W003 0013000000000000'
+label.0208='A2W004 0014000000000000'
+label.0209='A2S002 0046000000000000'
+label.0301='LNXOS2 003E000000000000'
+label.0302='LNXOS3 003F000000000000'
+label.0303='LNXOS4 0040000000000000'
+label.0304='LNXOS5 0041000000000000'
+label.0305='LNXOS6 0042000000000000'
+label.4040='A2P002 0028000000000000'
+label.4041='A2P003 0029000000000000'
+label.4042='A2P004 002A000000000000'
+label.4043='A2P005 002B000000000000'
+label.4044='A2P006 004A000000000000'
+label.4045='A2P007 004B000000000000'
+label.4046='A2P008 004C000000000000'
+label.4047='A2P009 004D000000000000'
+Return
+ 
+ 
+P1_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh='50060E8012A9AD00'
+wwpn2.dh='50060E8012A9AD11'
+wwpn1.om='50060E8012AA5500'
+wwpn2.om='50060E8012AA5501'
+label.020A='P1S003 0021000000000000'
+label.020B='P1S004 0022000000000000'
+label.0200='P1COM0 0001000000000000'
+label.0201='P1REL1 0002000000000000'
+label.0202='P1RES1 0003000000000000'
+label.0203='P1S001 0004000000000000'
+label.0204='P1W005 0005000000000000'
+label.0205='P1W001 0006000000000000'
+label.0206='P1W002 0007000000000000'
+label.0207='P1W003 0008000000000000'
+label.0208='P1W004 0009000000000000'
+label.0209='P1S002 0020000000000000'
+label.0301='LNXOS2 0024000000000000'
+label.040A='LNX011 009A000000000000'
+label.040B='LNX012 009B000000000000'
+label.040C='LNX013 009C000000000000'
+label.040D='LNX014 009D000000000000'
+label.040E='LNX015 009E000000000000'
+label.040F='LNX016 009F000000000000'
+label.0400='LNX001 0090000000000000'
+label.0401='LNX002 0091000000000000'
+label.0402='LNX003 0092000000000000'
+label.0403='LNX004 0093000000000000'
+label.0404='LNX005 0094000000000000'
+label.0405='LNX006 0095000000000000'
+label.0406='LNX007 0096000000000000'
+label.0407='LNX008 0097000000000000'
+label.0408='LNX009 0098000000000000'
+label.0409='LNX010 0099000000000000'
+label.041A='LNX027 00AA000000000000'
+label.041B='LNX028 00AB000000000000'
+label.041C='LNX029 00AC000000000000'
+label.041D='LNX030 00AD000000000000'
+label.041E='LNX031 00AE000000000000'
+label.041F='LNX032 00AF000000000000'
+label.0410='LNX017 00A0000000000000'
+label.0411='LNX018 00A1000000000000'
+label.0412='LNX019 00A2000000000000'
+label.0413='LNX020 00A3000000000000'
+label.0414='LNX021 00A4000000000000'
+label.0415='LNX022 00A5000000000000'
+label.0416='LNX023 00A6000000000000'
+label.0417='LNX024 00A7000000000000'
+label.0418='LNX025 00A8000000000000'
+label.0419='LNX026 00A9000000000000'
+label.042A='LNX043 00BA000000000000'
+label.042B='LNX044 00BB000000000000'
+label.042C='LNX045 00BC000000000000'
+label.042D='LNX046 00BD000000000000'
+label.042E='LNX047 00BE000000000000'
+label.042F='LNX048 00BF000000000000'
+label.0420='LNX033 00B0000000000000'
+label.0421='LNX034 00B1000000000000'
+label.0422='LNX035 00B2000000000000'
+label.0423='LNX036 00B3000000000000'
+label.0424='LNX037 00B4000000000000'
+label.0425='LNX038 00B5000000000000'
+label.0426='LNX039 00B6000000000000'
+label.0427='LNX040 00B7000000000000'
+label.0428='LNX041 00B8000000000000'
+label.0429='LNX042 00B9000000000000'
+label.043A='LNX059 00CA000000000000'
+label.043B='LNX060 00CB000000000000'
+label.043C='LNX061 00CC000000000000'
+label.043D='LNX062 00CD000000000000'
+label.043E='LNX063 00CE000000000000'
+label.043F='LNX064 00CF000000000000'
+label.0430='LNX049 00C0000000000000'
+label.0431='LNX050 00C1000000000000'
+label.0432='LNX051 00C2000000000000'
+label.0433='LNX052 00C3000000000000'
+label.0434='LNX053 00C4000000000000'
+label.0435='LNX054 00C5000000000000'
+label.0436='LNX055 00C6000000000000'
+label.0437='LNX056 00C7000000000000'
+label.0438='LNX057 00C8000000000000'
+label.0439='LNX058 00C9000000000000'
+label.044A='LNX075 00DA000000000000'
+label.044B='LNX076 00DB000000000000'
+label.044C='LNX077 00DC000000000000'
+label.044D='LNX078 00DD000000000000'
+label.044E='LNX079 00DE000000000000'
+label.044F='LNX080 00DF000000000000'
+label.0440='LNX065 00D0000000000000'
+label.0441='LNX066 00D1000000000000'
+label.0442='LNX067 00D2000000000000'
+label.0443='LNX068 00D3000000000000'
+label.0444='LNX069 00D4000000000000'
+label.0445='LNX070 00D5000000000000'
+label.0446='LNX071 00D6000000000000'
+label.0447='LNX072 00D7000000000000'
+label.0448='LNX073 00D8000000000000'
+label.0449='LNX074 00D9000000000000'
+label.4040='P1P002 0029000000000000'
+label.4041='P1P003 002A000000000000'
+label.4042='P1P004 002B000000000000'
+label.4043='P1P005 002C000000000000'
+label.4044='P1P006 001C000000000000'
+label.4045='P1P007 001D000000000000'
+label.4046='P1P008 001E000000000000'
+label.4047='P1P009 001F000000000000'
+Return
+ 
+ 
+P2_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh='50060E8012A9AD00'
+wwpn2.dh='50060E8012A9AD11'
+wwpn1.om='50060E8012AA5500'
+wwpn2.om='50060E8012AA5501'
+label.020A='P2S003 0038000000000000'
+label.020B='P2S004 0039000000000000'
+label.0200='P2COM1 000C000000000000'
+label.0201='P2REL1 000D000000000000'
+label.0202='P2RES1 000E000000000000'
+label.0203='P2S001 000F000000000000'
+label.0204='P2W005 0010000000000000'
+label.0205='P2W001 0011000000000000'
+label.0206='P2W002 0012000000000000'
+label.0207='P2W003 0013000000000000'
+label.0208='P2W004 0014000000000000'
+label.0209='P2S002 0037000000000000'
+label.0301='LNXOS2 0016000000000000'
+label.0302='LNXOS3 0017000000000000'
+label.0303='LNXOS4 0018000000000000'
+label.0304='LNXOS5 0019000000000000'
+label.0305='LNXOS6 0015000000000000'
+label.4040='P2P002 002D000000000000'
+label.4041='P2P003 002E000000000000'
+label.4042='P2P004 002F000000000000'
+label.4043='P2P005 0030000000000000'
+label.4044='P2P006 003A000000000000'
+label.4045='P2P007 003B000000000000'
+label.4046='P2P008 003C000000000000'
+label.4047='P2P009 003D000000000000'
+Return
+ 
+ 
+B2_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh='50060E8012A9AD30'
+wwpn2.dh='50060E8012A9AD21'
+wwpn1.om='50060E8012AA5530'
+wwpn2.om='50060E8012AA5521'
+label.0200='B2COM1 0013000000000000'
+label.0201='B2RL01 0014000000000000'
+label.0202='B2RES1 0015000000000000'
+label.0203='B2S001 0016000000000000'
+label.0204='B2P001 0017000000000000'
+label.0205='B2W001 0018000000000000'
+label.0206='B2W002 0019000000000000'
+label.0207='B2W003 001A000000000000'
+label.0208='B2W004 001B000000000000'
+label.0301='B2RL71 00DD000000000000'
+/* label.0400='HERMAN 00DE000000000000' */
+/* label.0401='HERMAN 00DF000000000000' */
+/* label.0402='HERMAN 00E0000000000000' */
+/* label.0403='HERMAN 00E1000000000000' */
+/* label.0404='HERMAN 00E2000000000000' */
+/* label.0405='HERMAN 00E3000000000000' */
+Return
+ 
+ 
+B1_Defs:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+wwpn1.dh='50060E8012A9AD30'
+wwpn2.dh='50060E8012A9AD21'
+wwpn1.om='50060E8012AA5530'
+wwpn2.om='50060E8012AA5521'
+label.0200='B1COM1 000A000000000000'
+label.0201='B1REL1 000B000000000000'
+label.0202='B1RES1 000C000000000000'
+label.0203='B1S001 000D000000000000'
+label.0204='B1P001 000E000000000000'
+label.0205='B1W001 000F000000000000'
+label.0206='B1W002 0010000000000000'
+label.0207='B1W003 0011000000000000'
+label.0208='B1W004 0012000000000000'
+label.0300='LNXOS1 001E000000000000'
+label.0301='LNXOS2 001F000000000000'
+label.0302='LNXOS3 0020000000000000'
+label.0303='LNXOS4 0021000000000000'
+label.0304='LNXOS5 0022000000000000'
+label.0305='LNXOS6 0023000000000000'
+Return

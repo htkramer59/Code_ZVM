@@ -1,0 +1,27 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add a user id to the directory                      |
+|                                                                |
+| File     : DM_ADD   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <uid>    DIRECT watch the syntax!!                  |
+|            <dirfnft>                                           |
+|            DM_CHUID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_AMD   EXEC                                       |
+|                                                                |
+| Called   : DM_ADD   <uid> <filetype>                           |
+|          : ADD      <uid> <filetype>                           |
+|                           preferably DIRECT                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240626 17:13:46                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

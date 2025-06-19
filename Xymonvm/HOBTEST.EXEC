@@ -1,0 +1,14 @@
+/* Testing shell for the code */
+Parse Upper Arg testname .
+If testname='' Then Exit 28
+'PIPE (end ?)',
+   'cms EXECMAP FCX REXX',
+   '| drop first 1',
+   '| count lines',
+   '| if: if pick 1.1 == ~0~',
+   '|    specs ~EXECLOAD FCX EXEC * = REXX~ 1',
+   '|    cms',
+   '| if:',
+   '| hole'
+Address CMS 'HOBVARS'
+Address CMS testname '( testing'

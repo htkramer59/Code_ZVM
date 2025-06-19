@@ -1,0 +1,57 @@
+/*---------------------------------------------------------------+
+| Function : Personal profile exec                               |
+|                                                                |
+| File     : PROFILE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PROFILE  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180220 09:43:35                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME MANY.XEDIT:472 END ?)',
+    'cp QUERY USERID',
+    '| specs w3.1',
+    '| var node',
+    '| spec -2;-1',
+    '| var shortnode'
+Address CMS 'ACCESS . A'
+If rc=0 Then Address CMS 'RELEASE D'
+If userid()='HERMAN2' Then Address CMS 'ACCESS VMUSERS:HERMAN. A'
+Address CMS 'ACCESS VMUSERS:TOOLS. Q'
+If rc<>0 Then Address CMS 'VMLINK TOOLS 400 <200 Q (NONAMES QUIET'
+cpcmds='SET EMSG ON;',
+       'SET DATEFORM ISODATE USER;',
+       'SET PF1  SUBSTITU IMMED PIPE (END \) &*;',
+       'SET PF13  SUBSTITU IMMED PIPE (END \) &*;',
+       'SET PF11 RETRIEVE FORWARD;',
+       'SET PF23 RETRIEVE FORWARD;',
+       'SET PF12 RETRIEVE BACKWARD;',
+       'SET PF24 RETRIEVE BACKWARD;',
+       'SPOOL CONS CONPARK START EOF NAME 'Userid()' CONSLOG;',
+       'SCREEN OUT YELLOW STAT  GREEN;',
+       'TERM MORE 10 10'
+cmscmds='ACCESS 193 U;',  /** Access to ACCESSM0  **/
+        'ACCESSM0 ON;',
+        'SYNONYM 'USERID()' SYNONYM;',
+        'OPCHK;',
+        'CHECK'
+'PIPE (end ?)',
+    'var cpcmds',
+    '| split at ~;~',
+    '| strip',
+    '| cp',
+    '| hole',
+    '?',
+    'var cmscmds',
+    '| split at ~;~',
+    '| strip',
+    '| cms',
+    '| cons'

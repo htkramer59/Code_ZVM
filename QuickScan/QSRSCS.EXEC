@@ -1,0 +1,163 @@
+/*---------------------------------------------------------------+
+| Function : Check some rscs settings                            |
+|                                                                |
+| File     : QSRSCS   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSRSCS   REPORT Output                              |
+|            RSCS     REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSRSCS   <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSRSCS   REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* Stem 2 append to */
+stemname='report.'                               /* Stem of caller   */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSRSCS.EXEC:40 END ? .EXEC:41)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose header                                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME QSRSCS.EXEC:51 END ?)',
+   'literal 'TimeStamp(),                        /* Compose header   */
+   '| var qsrscs_header 1',                      /* .                */
+   '| join * x40',                               /* .                */
+   '| var qsrscs_header'                         /* .                */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK TCPMAINT 198 (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (NAME QSRSCS.EXEC:62 END ?)',
+    'cms LISTFILE *RSCS* CONFIG 'wfm' (NOH ISO', /* Ask cms          */
+    '| pick anycase w1.1 == ~RSCS~ or w1.1 == ~RSCSTCP~',   /* Look 4 these     */
+    '| stem out.',                               /* Store them       */
+    '| specs w1.3 1',                            /* Keep this        */
+    '| stem file.'                               /* For later use    */
+Call Add2Output 'out.,; ;The following files where found and checked'
+Do f=1 To file.0
+   'PIPE (NAME QSRSCS.EXEC:70 END ?)',
+      '< 'file.f,                                /* Read file        */
+      '| pick anycase w1.1 == ~AUTH~',           /* Select these     */
+      '| nlocate ~SYSTEM~',                      /* Ignore this      */
+      '| specs w4.1 1.8 w3.1 nw',                /* Keep this        */
+      '| sort w1.1',                             /* Sort on node     */
+      '| join keylen 8',                         /* Join on node     */
+      '| stem idspernode.'                       /* Store as         */
+End f
+Address CMS 'VMLINK TCPMAINT 198 <DET (NONAMES QUIET'
+Do i=1 To idspernode.0
+   Parse Value idspernode.i With node ids
+   If node='*' Then Call CheckLocal
+               Else Call CheckRemote
+End i
+/*---------------------------------------------------------------+
+| Retuning the output to the caller                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSRSCS.EXEC:88 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var qsrscs_header',               /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Return output    */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Adding stuff to an existing stem                               |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSRSCS.EXEC:108 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* Split here       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return
+ 
+ 
+CheckLocal:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+localmissing.0=0
+'PIPE (NAME QSRSCS.EXEC:121 END ?)',
+    'var ids',                                   /* Take this        */
+    '| split',                                   /* Into records     */
+    '| f: fanout',                               /* Duplicate them   */
+    '| specs w1.1 1.9',                          /* Add a space      */
+    '| j: juxtapose',                            /* Join them        */
+    '| pick w2.1 == ~HCPQMD053E~',               /* Select these     */
+    '| specs w1.1 1',                            /* Keep this        */
+    '| stem localmissing.',                      /* Store 4 later    */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~QUERY MDISK USER~ 1 w1.1 nw ~DIR LOC~ nw',   /* Compose cmds     */
+    '| cp',                                      /* Issue cmds       */
+    '| j:'                                       /* Conn 2 juxtapose */
+If localmissing.0<>0 Then Call Add2Output 'localmissing.,; ;The following ids are authorised but do not exist'
+Return
+ 
+ 
+CheckRemote:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+remotmissing.0=0
+'PIPE (NAME QSRSCS.EXEC:143 END ?)',
+    'var ids',                                   /* Take these       */
+    '| split',                                   /* Split into recs  */
+    '| specs ~RSCS 'node' CP QUERY MDISK USER~ 1 w1.1 nw ~DIR LOC~ nw',   /* Compise cmds     */
+    '| stem rscsq.',                             /* Store them       */
+    '| spec w7.1',                               /* Keep this        */
+    '| stem id.'                                 /* Stor 4 later     */
+Do r=1 To rscsq.0
+   'PIPE (NAME QSRSCS.EXEC:151 END ?)',
+       rscsq.r,                                  /* Issue cmd        */
+      '| specs ~'id.r'~ 1.8 1;* nw',             /* Take the output  */
+      '| var temp'                               /* Store            */
+    rscsq.r=temp
+End r
+'PIPE (NAME QSRSCS.EXEC:157 END ?)',
+     'stem rscsq.',                              /* Take these       */
+     '| pick w3.1 == ~HCPQMD053E~',              /* Select these     */
+     '| specs w1.1 1.8 ~'node'~ nw',             /* Add node         */
+     '| stem remotmissing.'                      /* Hand 2 rexx      */
+If remotmissing.0<>0 Then Call Add2Output 'remotmissing.,; ;The following ids are authorised but do not exist on 'node
+Return

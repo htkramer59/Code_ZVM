@@ -1,0 +1,242 @@
+/*---------------------------------------------------------------+
+| Function : Check memory and paging items                       |
+|                                                                |
+| File     : QSMEMORY EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSMEMORY REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSMEMORY <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSMEMORY REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* .                */
+vdisk.0=0                                        /* .                */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSMEMORY.EXEC:41 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSMEMORY.EXEC:52 END ?)',
+   'literal 'TimeStamp(),
+   '| append var memory_header 1',
+   '| join * x40',
+   '| var memory_header'
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| Start collecting all the info                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME QSMEMORY.EXEC:61 END ?)',
+   'cp QUERY STORAGE',                           /* Ask CP           */
+   '| specs w3.1',                               /* We need this     */
+   '| siconv w1.1 g2m 8.0',                      /* Convert to Mb    */
+   '| specs w1.1 1.8 right',                     /* Adjust           */
+   '| var memcfgd',                              /* Store as         */
+   '?',                                          /* 2nd pipe         */
+   'cp INDICATE PAGING WAIT',                    /* Ask CP           */
+   '| p: pick anycase w1.1 == ~NO~',             /* Select this      */
+   '| count lines',                              /* Count lines      */
+   '| var nowait',                               /* Store as         */
+   '? p:',                                       /* Conn 2 pick      */
+   '| stem inwait.',                             /* Create stem      */
+   '?',                                          /* 3rd pipe         */
+   'cp INDICATE PAGING ALL',                     /* Ask CP           */
+   '| drop first 2',                             /* Ignore header    */
+   '| specs w1.1 1.8 pad 0 w3.1 nw.8 right',     /* Keep these       */
+   '| sort w2.1 d',                              /* Sort on size     */
+   '| buffer',                                   /* Prevent stall    */
+   '| f: fanout',                                /* Duplic. records  */
+   '| specs printonly eof',                      /* Add up the numbrs*/
+           'a: w2.1 .',                          /* .                */
+           'set #0+=a',                          /* .                */
+           'eof',                                /* .                */
+           'print #0 1',                         /* .                */
+   '| specs b: w1.1 .',                          /* Convert to Mb    */
+           'set #1:=(b*4)/1024',                 /* .                */
+           'print #1 pict -------9 1',           /* .                */
+   '| var pagesondisk',                          /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w1.1 1.8',                           /* Rework layout    */
+           'c: w2.1 .',                          /* .                */
+           'set #2:=c',                          /* .                */
+           'print #2 pict -------9 nw',          /* .                */
+   '| stem pagesondisk.'                         /* Create stem      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSMEMORY.EXEC:99 END ?)',
+   'cp QUERY ALLOC PAGE',                        /* Ask CP           */
+   '| inside ~----~ ~    ~',                     /* Select this      */
+   '| specs w3.1 1 w4.1 nw',                     /* Keep these       */
+   '| specs printonly eof',                      /* Summing both     */
+   '        a: w1.1 .',                          /* ...numbers       */
+   '        b: w2.1 .',                          /* .                */
+   '        set #0+=a',                          /* .                */
+   '        set #1+=b',                          /* .                */
+   '        eof',                                /* .                */
+   '        print #0 1',                         /* .                */
+   '        print #1 nw',                        /* .                */
+   '| specs c: w1.1 .',                          /* Subtract them    */
+   '        d: w2.1 .',                          /* .                */
+   '        set #2:=((d-c)*4)/1024',             /* Rework to Mb     */
+   '        print #2 pict -------9 1',           /* .                */
+   '| var pagesavail',                           /* Hand 2 rexx      */
+   '?',                                          /* 2nd PIPE         */
+   'cp QUERY NAMES',                             /* Ask CP           */
+   '| split at ,',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| pick anycase w1.1 \== ~VSM~ and',          /* Ignore this      */
+                  'w3.1 \== ~TCPIP~',            /* .                */
+   '| specs w1.1 1.8 x40 n',                     /* Add a space      */
+   '| f: fanout',                                /* Duplicate recs   */
+   '| j: juxtapose',                             /* Join w other outc*/
+   '| p: pick anycase w2.1 == ~PAGES:~',         /* Select these     */
+   '| sort unique w1.1',                         /* Remove dups      */
+   '| specs w1.1 1 w3.1 nw',                     /* Keep this        */
+   '| change ~RES=~~',                           /* Remove this      */
+   '| specs w1.1 1.8',                           /* Rework to        */
+          'a: w2.1 .',                           /* ...Mb            */
+          'set #0:=(a*4)/1024',                  /* .                */
+          'print #0 pict 99999999 nw',           /* .                */
+   '| sort w2.1 d',                              /* Sort on size     */
+   '| stem mem.',                                /* Create stem      */
+   '| specs printonly eof',                      /* Summing them     */
+           'b: w2.1 .',                          /* .                */
+           'set #1+=b',                          /* .                */
+           'eof',                                /* .                */
+           'print #1 pict -------9 1',           /* .                */
+   '| var totmem',                               /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~INDICATE USER~ 1 w1.1 nw',          /* Compose cmds     */
+   '| cp',                                       /* Hand 2 cp        */
+   '| pick anycase w1.1 == ~PAGES:~ or',         /* Select these     */
+                  '1.6 == ~IPLSYS~',             /* .                */
+   '| j:',                                       /* Conn 2 juxtapose */
+   '? p:',                                       /* Conn 2 pick      */
+   '| specs w1.3',                               /* Reduce 2 this    */
+   '| pick w3.1 \== ~NONE~',                     /* Remove these     */
+   '| change ~DEV ~~',                           /* Replace this     */
+   '| specs w1.2 1',                             /* Adjust           */
+   '| specs w1.1 1.8 fs = f2 nw',                /* More adjustment  */
+   '| sort w2.1 d',                              /* Sort             */
+   '| if1: if pick substr 1.1 of  w2.1 == ~0~',  /* If this          */
+   '|     specs 1;* 1 ~ Candidate for replacement with NSS~ nw',   /* Add this         */
+   '| if1:',                                     /* Conn 2 if        */
+   '| if2: if pick w2.1 == ~CMS~',               /* If we find this  */
+   '|     specs 1;* 1 ~      Check if zCMS can be used~ nw',   /* Add this         */
+   '| if2:',                                     /* Conn 2 if        */
+   '| pick w3.1 \== ~~',                         /* Keep remarks     */
+   '| sort w1.1',                                /* Sort on id       */
+   '| stem recomm.',                             /* Hand 2 rexx      */
+   '?',                                          /* 3rd PIPE         */
+   'literal USERLIM SYSLIM',                     /* Take these       */
+   '| split',                                    /* Split them       */
+   '| specs ~QUERY VDISK~ 1 w1.1 nw',            /* Compose cmds     */
+   '| cp',                                       /* Issue cmds       */
+   '| fi: faninany',                             /* Take in others   */
+   '| stem vdisk.',                              /* Create stem      */
+   '?',                                          /* 4th PIPE         */
+   'cp QUERY VDISK',                             /* Ask CP           */
+   '| pick 1.1 \== ~ ~',                         /* Remove empties   */
+   '| specs w2;*',                               /* Keep this        */
+   '| sort',                                     /* Sort them        */
+   '| join keylen 8',                            /* Join on id       */
+   '| fi:',                                      /* Conn 2 fanany    */
+   '?',                                          /* 5th PIPE         */
+   'stem mem.',                                  /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| specs w1.1 1.8 ',                          /* Rework           */
+           'a: w2.1 .',                          /* ....numbers      */
+           'set #0:=a',                          /* .                */
+           'print #0 pict ------9 nw',           /* .                */
+   '| stem mem.'                                 /* Write 2 same stem*/
+/*---------------------------------------------------------------+
+| Check some stuff                                               |
++---------------------------------------------------------------*/
+overcomm=Format((pagesavail/memcfgd)*100,3,2)
+pageperc=Format((pagesondisk/pagesavail)*100,3,2)
+Select
+When overcomm = 0 Then pagingrec='--- You are paging in the SPOOL space, add paging space'
+When overcomm > 1  & overcomm < 50  Then pagingrec='>>> Increase paging space'
+When overcomm > 50 & overcomm < 100 Then pagingrec='=== Paging space sufficient'
+When overcomm > 100 Then pagingrec='+++ Paging over dimensioned'
+Otherwise pagingrec='??? Can not identify paging area'
+End
+/*---------------------------------------------------------------+
+| Start composing the report                                     |
++---------------------------------------------------------------*/
+text='Memory configured:            'memcfgd 'Mb;'||,
+    'Pages available on disk:      'pagesavail' Mb 'overcomm'% 'pagingrec';'||,
+    'Pages allocated on disk:      'pagesondisk' Mb 'pageperc'%;'||,
+    'Memory in use by servers/ids: 'totmem 'Mb; ;'
+Call Add2Output 'text'
+If vdisk.0<>0       Then Call Add2Output 'vdisk.,VDISK usage'
+If pagesondisk<>'0' Then Call Add2Output 'pagesondisk.,Userid   Mb on disk',
+Call Add2Output 'mem.,Userid   Memory used (Mb)'
+If nowait Then Do
+            text='; ;No users waiting for pages on disk; ;'
+            Call Add2Output 'text'
+          End
+          Else Call Add2Output 'inwait.'
+If recomm.0<>0 Then Call Add2Output 'recomm.,Userid   IPL   Remarks',
+/*---------------------------------------------------------------+
+| Get all the data and send it to....                            |
++---------------------------------------------------------------*/
+'PIPE (NAME QSMEMORY.EXEC:217 END ?)',
+   'stem work.',                                 /* .                */
+   '| split at ;',                               /* .                */
+   '| preface var memory_header',                /* .                */
+   '| preface literal ',                         /* .                */
+   '| preface literal ',                         /* .                */
+   output                                        /* .                */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg input ',' header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSMEMORY.EXEC:238 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

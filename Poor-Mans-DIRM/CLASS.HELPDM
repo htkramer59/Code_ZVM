@@ -1,0 +1,27 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Show, Add, Del, Repl CP Classes for a user          |
+|                                                                |
+| File     : DM_CLASS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_INDEX                                            |
+|            DM_VMLNK                                            |
+|            DM_ONLIN                                            |
+|                                                                |
+|                                                                |
+| Called   : DM_CLASS  <uid>                                     |
+|          : CLASS     <uid> QRY                                 |
+|                            ADD <valid cp classes>              |
+|                            DEL <valid cp classes>              |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240629 11:45:17                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

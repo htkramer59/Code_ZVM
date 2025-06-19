@@ -1,0 +1,129 @@
+/* This exec can be used to link to mdisk with the CP directory and
+   to start the DRM tool.
+    +-----------------------------------------------------------+
+    | format:  | DRMAC <RO |Readonly | RW|Write>                |
+    +-----------------------------------------------------------+
+   By default, we try to get a RW link, unless DIRMAINT seems installed
+    (if file ACCESS   DATADVH * exists, and product xVMDIRxx is enabled,
+     we asume DIRMAINT is there)
+   Other defaults are taken from the DRM NAMES file.
+ 
+30 Jan 1997: updated for DIRMAINT R5 disk addresses
+ 7 Aug 1998: Major changes to use DRM NAMES to find "constants"
+31 May 2012: Test for DIRMAINT using CP QUERY PRODUCT & use 2CC as deflt
+22 Mar 2013: Finalize z/VM 6.2 support
+ 
+(c) Copyright International Business Machines Corporation 1991, 2013.
+Written by: Kris Buelens IBM Belgium;   17 May 1991*/
+ 
+parse upper source . . myname mytype . syn .
+parse upper arg ro .
+address command
+ 
+/* Define defaults */
+dirm=0
+'PIPE CP QUERY PRODUCT|StrFIND / VMDIR/|SPEC W2 |Xlate upper|Var DVHena'
+if DVHena='ENABLED' then do
+   'STATE ACCESS   DATADVH *'
+   Dirm=(rc=0)
+end
+If Dirm then parse value 'RR DIRMAINT 1DB RDIRM MDIRM,USER BACKUP',
+                   with mode dirSource              ','dirFile
+        else parse value 'MR MAINT 2CC READ MULTIPLE,USER DIRECT',
+                   with mode dirSource             ','dirFile
+DirObject='123  MAINT 123 MSYSRES'
+DirectXA_loc='PMAINT 551 READ'
+ 
+/* Scan user parms */
+If ro<>'' then  Select
+   When ro='RO' | ro='R/O' | abbrev('READONLY',ro,1) then mode='RR'
+   When ro='RW' | ro='R/W' | abbrev('WRITE',ro,1) then mode='MR'
+   Otherwise Call ErrExit 5,'Invalid parm: "'ro'"'
+end
+ 
+/* Find user preferences */
+'STATE DRM NAMES'
+if rc=0 then do
+   'MAKEBUF'
+   'NAMEFIND :nick DRM    :DirFile              (FILE DRM STACK'
+   if rc=0 then     pull t;if t<>'' then DirFile=t
+   'NAMEFIND :nick DRMAC  :DirSource :DirObject :DirectXA_LOC',
+                                               '(FILE DRM STACK'
+   if rc=0 then do; pull t;if t<>'' then DirSource=t
+                    pull t;if t<>'' then DirObject=tl
+                    pull t;if t<>'' then DirectxA_loc=t ; end
+   'DROPBUF'
+end
+LinkDX=0
+/* Get access to the place for the object directory.*/
+if mode='MR' then do /* We want R/W, get disk for object dir & DIRECTXA*/
+   parse var DirObject vdev user cuu mpw .
+   'CP LINK' user cuu vdev 'MW' mpw
+ 
+   'STATE DIRECTXA MODULE *'
+   if rc<>0 then do
+      parse var DirectXA_loc dxuser dxcuu rpw .
+      parse value queued() with oq emsg fm
+      'EXEC VMLINK' dxuser dxcuu '(PUSH .MSG .FM LIFO PW' rpw
+      do queued()-oq                     /* format: .*user||cuu .FM X  */
+         parse pull tag rest
+         if tag='*.MSG' then emsg = rest
+                        else parse var rest . fm .
+      end
+      if fm||Emsg='' then
+         Emsg='VMLINK' dxuser dxcuu 'failed without error msg.'
+      if rc<>0 then Call ErrExit rc,'Cannot find DIRECTXA MODULE:',emsg,
+                    ,'Adapt DRM NAMES, or create it from DRM NAMESAMP'
+      LinkDX=1
+   end
+end
+ 
+/* Get access to the source directory */
+parse var DirSource user cuu ReadPw MultPw
+parse var DirFile fn ft fm
+pw=word(ReadPw MultPw,(mode='MR')+1)  /* Find pswd to use */
+ 
+'EXECSTAT LNK EXEC' /* Can we link with the LNK EXEC ? */
+if rc<=4 then do
+   'EXEC LNK' user cuu '295' mode  pw '(STACK'
+   parse pull . neworold lcuu fm .
+   if rc<>0 then exit rc
+   'EXEC DRM' fn ft fm ; erc=rc
+   if LinkDX then 'EXEC VMLINK' dxuser dxcuu '(POP'
+   'EXEC LNK' user cuu '(RESTORE'
+   exit erc
+end
+'EXECSTAT VMLINK EXEC' /* Can we link with the VMLINK EXEC ? */
+if rc<=4 then do
+   parse value queued() with oq emsg fm
+   'EXEC VMLINK' user cuu '< +295 *' mode '> (PUSH .MSG .FM LIFO PW' pw
+   do queued()-oq                       /* format: .*user||cuu .FM X  */
+      parse pull tag rest
+      if tag='*.MSG' then emsg = rest
+                     else parse var rest . fm .
+   end
+   if fm||Emsg='' then Emsg='VMLINK' user cuu 'failed without errormsg.'
+   if rc<>0 then Call ErrExit rc,emsg
+   'EXEC DRM' fn ft fm ; erc=rc
+   'EXEC VMLINK' user cuu ' (POP'
+   if LinkDX then 'EXEC VMLINK' dxuser dxcuu '(POP'
+   exit erc
+end
+/* Last resort, link by "hand" */
+'GETFMADR'
+if rc=0 then parse pull . fm lcuu .
+'CP LINK' user cuu lcuu mode pw
+if (rc>=101 & rc<=103) then rc=0 /* Means Forced R/O */
+if rc<>0 then exit rc
+'ACCESS' lcuu fm
+if rc<>0 then exit rc
+'EXEC DRM' fn ft fm ; erc=rc
+'RELEASE' lcuu '(DET'
+exit erc
+ 
+ERREXIT: /* general errorexit routine */
+ parse upper source . . myname mytype . syn .
+ do i=2 to arg()   /* give errormessages (if any) */
+    say myname':' arg(i)
+ end
+ exit arg(1)

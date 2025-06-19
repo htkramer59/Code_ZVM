@@ -1,0 +1,30 @@
+*
+* Some intervals...
+*
+* Wake up interval...
+:nick.wakeint       :value.+00:00:10
+* Reload of this file, every....
+:nick.reload        :value.+00:30:00
+*
+* CP section
+*
+* CP Settings we want
+:nick.cpsettings    :value.EMSG ON;IMSG ON;SMSG IUCV;WNG ON
+*
+* Authorization section
+*
+* The server we accept commands from
+:nick.allowedserver :value.ICUTEST
+* Commands that can be executed
+:nick.allowedcmds   :value.BUILD;NETWORK;PURGE;MEMORY;STORAGE;SPECIAL;DISABLE;TEST;STATUS
+* Admins we see
+:nick.admin         :value.HERALD;HERMAN
+*
+* Master/slave/status section
+*
+* Name of the master server..
+:nick.master        :value.HERMAN
+* Any number of workers we need
+:nick.workers       :value.
+* Number of records to keep in the status file...
+:nick.reccnt        :value.150

@@ -1,0 +1,168 @@
+/*---------------------------------------------------------------+
+| Function : Start the code and run the WAKEUP..                 |
+|                                                                |
+| File     : HOBSTART EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : HOBBIT   TIMES   timing file                        |
+|            WAKEUP   MODULE                                     |
+|                                                                |
+| Called   : HOBSTART .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211222 12:29:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 . '(' dryrun .
+Parse Source . . myfn myft .
+Address COMMAND 'CP SET DATEFORMAT SHOTDATE'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBSTART.EXEC:26 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs w3.1',                        /* Keep this        */
+   '| var lparname',                      /* Store as         */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var shortnode'                      /* Hand 2 rexx      */
+ 
+Call DoSock 'Initialize',lparname
+Call DoSock 'Socket'
+Parse Var ret rc sid .
+Call DoSock 'Gethostname'
+parse var ret . hostname .
+Call DoSock 'Getdomainname'
+Parse Var ret With . domainname .
+Call DoSock 'Close',sid
+Call DoSock 'Terminate'
+ 
+'SET FILEWAIT OFF'                            /* Do I need this?? */
+Address CMS 'HOBVARS'
+If cfgmode='CLIENT' Then client='client 'hostname'.linux linux'
+                    else client='client 'hostname'.zvm zvm'
+'PIPE (NAME HOBSTART.EXEC:47 END ?)',
+    'var client',                                /* Take this        */
+    '| > HOBVM000 CLIENT A',                     /* Write to file    */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY CPLEVEL',                          /* Ask cp           */
+    '| preface literal [osversion]',             /* Add this         */
+    '| > HOBVM008 CLIENT A'                      /* Write to file    */
+Address CMS 'HOBVM enable all'
+ 
+/*---------------------------------------------------------------+
+| Loop forever but now we can leave it..                         |
++---------------------------------------------------------------*/
+Do z=1
+/*    'WAKEUP +5 ( CONS EXT SMSG FILE(HOBBIT TIMES *)' */
+/*    'WAKEUP +5 ( EXT SMSG QUIET FILE(HOBBIT TIMES *)' */
+  'WAKEUP +5 ( EXT SMSG FILE(HOBBIT TIMES *)'
+    wrc=rc
+   'PIPE (NAME HOBSTART.EXEC:64 END ?)',
+       'stack',                                  /* Read from stack  */
+       '| var output'                            /* Store as         */
+   Select
+      When wrc=1 Then Do
+         Parse Value output With . uid text    /* get the msg details...     */
+         If Wordpos(uid,auth_users)=0 Then Do
+           'TELL 'uid' Message from unauthorized user rejected.'
+           End
+         Select
+           When text='STOP' Then Do
+             Address CMS 'TELL 'uid' STOP received for Hobbit client.'
+             Address CMS 'HOBVM disable all 1 System Maintenance'
+             If Substr(Diag(24,-1),13,1)=2 Then Address COMMAND 'CP LOGOFF'
+                                           Else Call Exit 0
+             End
+           When text='RLDDATA' Then Do
+             Address CMS 'TELL 'uid' RLDDATA received for Hobbit client.'
+             Address CMS 'HOBVARS'
+             End
+           Otherwise Nop
+         End
+      End
+      When wrc=2 Then Nop
+      when wrc=3 Then Do
+         /* parse field 4 from the stacked wakeup times file line   */
+         Parse Upper Value output With . reqno field1 field2 field3 command
+         Select
+            When command='MSG01' Then Do
+               'globalv get msgdate'          /* ???              */
+               If msgdate = date('U') Then iterate
+               'CP SPOOL CONS NAME CONLOG' date('S')
+               msgdate=date('U')              /* ??               */
+               'globalv put msgdate'          /* ??               */
+               Address CMS 'HOBVARS'
+            End
+            When command='MSG02' Then Do
+               Address COMMAND 'CP MSG OPERATOR THE TIME IS NOW:' time() 'ON' date()
+               Address COMMAND 'CP SPOOL CONS CLOSE'
+               Address COMMAND 'CP SLEEP 10 SEC'         /* sleep through midnight */
+            End
+            When command<>'' Then Do
+               If Subword(command,1,1)='CMS' Then
+                 command=Subword(command,2) /* strip off cms part  */
+                 Address CMSs command       /* execute command        */
+            End
+            Otherwise Say TimeStamp() output
+         End
+      End
+      When wrc=4 Then Nop
+      When wrc=6 Then Do
+        Say TimeStamp() 'Console interrupt...'
+        Leave z
+        End
+      When wrc=8 Then Do
+          Parse Value output With ext intcode
+          If intcode='2401' Then Address COMMAND 'CP STORE PSW 000A0000 80000FFF'
+        End
+      When wrc=28 Then Do
+        Say TimeStamp() 'File not found: HOBBIT TIMES, wait 5 seconds'
+        Address COMMAND 'CP SLEEP 5 SEC'
+        Eend
+      When wrc=270 Then Do
+        Say TimeStamp() 'Locked file: HOBBIT TIMES, wait 5 seconds'
+        Address COMMAND 'CP SLEEP 5 SEC'
+        end
+      Otherwise Say TimeStamp() '*Wakeup RC:' wc
+   End
+End z
+ 
+Exit:
+Parse Upper Arc exrc .
+If exrc='' | exrc='EXRC' Then exrc=0
+Exit exrc
+ 
+ 
+DoSock:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg spckinput
+ret=SOCKET(sockinput)
+parse var ret rc .
+If rc<>0 Then Say TimeStamp() sockinput':' ret
+Return
+ 
+ 
+TimeStamp:
+/*---------------------------------------------------------------+
+| Return a timestamp and with switch TZ a linux like one         |
++---------------------------------------------------------------*/
+Parse Upper Arg sw .
+If sw='TZ' Then Do
+   now=Date('S')
+   mm=Substr(Date('M'),1,3)
+   Parse Var now yyyy +4 . +2 dd +2 .
+   'PIPE (NAME HOBSTART.EXEC:160 END ?)',
+      'cp QUERY TIMEZONE',
+      '| pick anycase w-1;-1 == ~ACTIVE~',
+      '| specs w1.1',
+      '| var tz'
+   timest=Substr(Date('W'),1,3) mm dd time() tz yyyy
+   End
+   Else timest=Date('S') Time() myfn
+Return timest

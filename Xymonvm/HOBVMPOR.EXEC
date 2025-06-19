@@ -1,0 +1,131 @@
+/*---------------------------------------------------------------+
+| Function : Shows PORT status on z/VM systems                   |
+|                                                                |
+| File     : HOBVMPOR EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.6.0                                               |
+|                                                                |
+| Files    : HOBVM070 CLIENT    output                           |
+|            SICONV   REXX      homegrown stage                  |
+|                                                                |
+| Called   : HOBVMPOR .                                          |
+|                                                                |
+| Comments : Requires NETSTAT access/authorisation               |
+|                                                                |
+| History  :                                                     |
+| 01-11-2006 Rich Smrcina   Original V1.3                        |
+| 09-02-2009 Rich Smrcina   Changed project name to Xymon        |
+| 24-06-2019 Herald ten Dam IP6 Netstat added                    |
+|                           Issue when SSLXXXXX is used          |
+| 24-07-2020 H.T. Kramer    Rewrite to pipes                     |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+outfile='HOBVM070 CLIENT A'
+If dryrun<>'' Then test='1'
+              Else test='0'
+/*---------------------------------------------------------------+
+| The header of the output...and determine how to output         |
++---------------------------------------------------------------*/
+If test Then output='| cons'
+        Else output='| > 'outfile
+head='[ports];Active Internet connections (servers and established);'||,
+     'Proto Recv-Q     Send-Q     Local Address           Foreign Address         State        Client'
+/*---------------------------------------------------------------+
+| Change these protocols...                                      |
++---------------------------------------------------------------*/
+ch_proto='| change /FTP-C/ftp/',
+         '| change /FTP-D/ftp-data/',
+         '| change /PMAP/sunrpc/',
+         '| change /DNS/domain/',
+         '| change /REXEC/exec/',
+         '| change /TELNET/telnet/',
+         '| change /RSH/cmd/'
+/*---------------------------------------------------------------+
+| Ask TCPIP some of the info                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMPOR.EXEC:49 END ?)',
+   'cms NETSTAT CON',                            /* Ask TCPIP        */
+   '| frtarget pick w1.2 == ~Active IPv6~',      /* Take from here   */
+   '| drop first 4',                             /* Remove header    */
+   '| strip',                                    /* Remove spaces    */
+   '| pick 1.1 \== ~~',                          /* Ignore empties   */
+   '| join 2 x40',                               /* Join 3 records   */
+   '| specs w1.3 1',                             /* Keep these       */
+           'w6.1 nw',                            /* ....fields/words */
+           'w9.1 nw',                            /* .                */
+           'w6.1 nw',                            /* .                */
+           'w9.1 nw',                            /* .                */
+   '| change w-2;-1 ~*..*~0:0:0:0:*~',           /* Replace these    */
+   '| change w-2;-1 ~*..~0:0:0:0:~',             /* .                */
+   '| change w-2;-1 ~..~:~',                     /* .                */
+   '| specs w1.1 1.10',                          /* Adjust           */
+           'w2.1 nw.10',                         /* ....layout       */
+           'w4.1 nw.23',                         /* .                */
+           'w5.1 nw.23',                         /* .                */
+           'w6.1 nw.23',                         /* .                */
+           'w7.1 nw.23',                         /* .                */
+           'w3.1 nw',                            /* .                */
+   '| stem ipv6.'                                /* Store as         */
+/*---------------------------------------------------------------+
+| Ask more to complete the info..                                |
++---------------------------------------------------------------*/
+'PIPE (NAME HOBVMPOR.EXEC:75 END ?)',
+   'cms NETSTAT ALL',                            /* Ask TCPIP        */
+   '| drop first 2',                             /* Remove header    */
+   '| strip',                                    /* Remove spaces    */
+   '| join * x40',                               /* Make 1 record    */
+   '| split anycase before string ~CLIENT:~',    /* Split here       */
+   '| specs w2.1 1.10',                          /* Keep these       */
+           'w23.1 nw.10',                        /* ....fields/words */
+           'w8.1 nw.23',                         /* .                */
+           'w11.1 nw.23',                        /* .                */
+           'w15.1 nw.10 right',                  /* .                */
+           'w17.1 nw.10 right',                  /* .                */
+           'w-5;-5 nw ',                         /* .                */
+   '| append stem ipv6.',                        /* Add these        */
+   '| sort w1.3',                                /* Sort...          */
+   '| change ~*..*~0.0.0.0:*~',                  /* Replace these    */
+   '| change ~*..~0.0.0.0:~',                    /* .                */
+   '| change ~..~:~',                            /* .                */
+   '| specs w1.1 1.8',                           /* Adjust layout    */
+           'w2.1 nw.10',                         /* .                */
+           'w3.1 nw.23',                         /* .                */
+           'w4.1 nw.23',                         /* .                */
+           'w5.1 nw.10 right',                   /* .                */
+           'w6.1 nw.10 right',                   /* .                */
+           'w7.1 nw.23',                         /* .                */
+           'w8;* nw',                            /* .                */
+   '| join keylen 20',                           /* Join on thus     */
+   '| if: if pick w8.1 \== ~~',                  /* If empty         */
+   '|    specs w1.1 1.10',                       /* Rework layout    */
+              'w10.1 nw.23',                     /* ....to this      */
+              'w11.1 nw.23',                     /* .                */
+              'w5.1 nw.10 right',                /* .                */
+              'w6.1 nw.10 right',                /* .                */
+              'w7.1 nw',                         /* .                */
+   '| if:',                                      /* Conn 2 iff       */
+   '|    specs w1.1 1.10',                       /* Else rework      */
+              'w3.1 nw.15',                      /* ...to this       */
+              'w4.1 nw.15',                      /* .                */
+              'w5.1 nw.10 right',                /* .                */
+              'w6.1 nw.10 right',                /* .                */
+              'w7.1 nw',                         /* .                */
+   '| if:',                                      /* Conn 2 if        */
+   ch_proto,                                     /* Replace these    */
+   '| siconv w4.1 B2M 8.3 M',                    /* Convert 2 mb     */
+   '| siconv w5.1 B2M 8.3 M',                    /* Convert 2 mb     */
+   '| specs ~tcp~ 1.5',                          /* Final layout     */
+           'w4.1 nw.10 right',                   /* .....change...   */
+           'w5.1 nw.10 right',                   /* .                */
+           'w2.1 nw.23',                         /* .                */
+           'w3.1 nw.23',                         /* .                */
+           'w6.1 nw.12',                         /* .                */
+           'w1.1 nw',                            /* .                */
+   '| xlate w6 upper ',
+   '| preface var head',                         /* Add headers      */
+   '| split at ~;~',                             /* Split here       */
+   output                                        /* Store as         */
+Exit

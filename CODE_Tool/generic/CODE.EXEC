@@ -1,0 +1,42 @@
+/*---------------------------------------------------------------+
+| Function : Source control tool                                 |
+|                                                                |
+| File     : CODE     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CODE     NAMES   Control file                       |
+|            CODE_C   EXEC    Client code                        |
+|            CODE_S   EXEC    Server code                        |
+|            VMLINK   EXEC    CMS Code                           |
+|                                                                |
+| Called   : CODE     <cmd> <code> <language> ( <project>        |
+|                                                                |
+| Comments : If no arguments entered a list will be displayed.   |
+|            For wildcards also a list will be displayed.        |
+|            If the userid is found the contents will be shown.  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180618 11:31:52                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg cmd code lang . '(' proj .
+Parse Source . . myfn myft .
+If cmd='?' Then Do
+         'VMFCLEAR'
+         'PIPE (NAME CODE.EXEC:28 END ?)',
+             '< 'myfn myft' *',
+             '| totarget find Parse',
+             '| cons'
+         Exit
+         End
+'PIPE (NAME CODE.EXEC:34 END ?)',
+   'cms VMLINK SERVER (ONLY(CODE) QUERY',
+   '| pick anycase w1.1 == ~:USERID~',
+              'and w2.1 == ~'Userid()'~',
+   '| count lines',
+   '| var server'
+If server Then Address CMS 'VMLINK SERVER (ONLY(CODE) NOTYPE'
+          Else Address CMS 'VMLINK CLIENT (ONLY(CODE) NOTYPE'
+Exit rc

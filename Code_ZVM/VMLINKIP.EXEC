@@ -1,0 +1,161 @@
+/*---------------------------------------------------------------+
+| Function : Read VMLINK NAMES and select IP info...             |
+|                                                                |
+| File     : VMLINKIP  EXEC                                      |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK NAMES                                        |
+|                                                                |
+| Called   : VMLINKIP  <node>                                    |
+|            nodes are recorded in VMLINK NAMES                  |
+|                                                                |
+| Comments : Returns 3 stems into caller: ip., node. and lpar.   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181206 17:12:30                                   |
+| Changes  : .                                                   |
+|            20220513 H.T.Kramer : Changed so we can specify     |
+|                     Port nummers and FTP options.              |
+|                     Implemented lists so you can send stuff    |
+|                     to a list of LPARs                         |
+|            20190307 H.T.Kramer : Make it so a list from        |
+|                      VMLINK NAMES also works                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg node .
+Parse Source . how myfn myft .
+/*---------------------------------------------------------------+
+| Where am I running...need to skip...                           |
++---------------------------------------------------------------*/
+'PIPE (NAME VMLINKIP.EXEC:31 END ?)',
+   'CP QUERY USERID',                     /* Ask CP           */
+   '| specs -2;-1',                       /* Reduce to this   */
+   '| var curnode'                        /* Hand 2 rexx      */
+Call Read_Vmlink_Names
+Select
+When node='ALL'  Then Call Proc_All
+When node='LIST' Then Call Proc_List
+When node=''     Then Call Exit '28 No input specified'
+Otherwise Call Proc_Single
+End
+ 
+Call Hand_Over
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Read_Vmlink_Names:
+/*---------------------------------------------------------------+
+| Read the names file and create stems...                        |
++---------------------------------------------------------------*/
+list.0=0
+rawvml.0=0
+'PIPE (NAME VMLINKIP.EXEC:62 END ?)',
+   '< VMLINK NAMES *',                           /* Read this        */
+   '| pick 1.1 \== ~*~ and',                     /* Remove these     */
+          '1.1 \== ~ ~ and',                     /* ..and these      */
+          '1.1 \== ~~',                          /* ....and these    */
+   '| join * x40',                               /* Make 1 record    */
+   '| xlate upper',                              /* Uppercase        */
+   '| split before string ~:NICK.~',             /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| n1: nlocate ~:LIST.~',                     /* Redirect these   */
+   '| locate ~:IP.~',                            /* Select these     */
+   '| locate ~:STATUS.ACTIVE~',                  /* And these        */
+   '| change ~:STATUS.ACTIVE~~',                 /* Now remove this  */
+   '| pick w1.1 \== ~:NICK.'curnode'~',          /* Remove this one  */
+   '| if1: if locate ~:PORTNO.~',                /* If this is       */
+   '|    specs 1;* 1 x40 n',                     /* .missing         */
+   '| if1:',                                     /* Conn 2 if        */
+   '|    specs 1;* 1 ~:PORTNO.~ nw',             /* We add this      */
+   '| if1:',                                     /* Conn 2 if        */
+   '| if2: if locate ~:FTPOPTIONS.~',            /* If this is       */
+   '|    specs 1;* 1 x40 n',                     /* .missing         */
+   '| if2:',                                     /* Conn 2 if        */
+   '|    specs 1;* 1 ~:FTPOPTIONS.~ nw',         /* We add this      */
+   '| if2:',                                     /* Conn 2 if        */
+   '| specs fs . f2;* 1',                        /* Remove :NICK     */
+   '| stem rawvml.',                             /* Store 4 later    */
+   '? n1:',                                      /* Conn 2 nlocate   */
+   '| pick w1.1 == ~:NICK.'node'~',              /* Select this      */
+   '| specs fs . f3',                            /* Remove some      */
+   '| split',                                    /* .                */
+   '| stem list.'                                /* Store here       */
+If list.0=0 & rawvml.0=0 Then Call Exit '28 Entry not found in VMLINK NAMES: 'node
+If list.0<>0 Then node='LIST'
+Return
+ 
+ 
+Proc_All:
+/*---------------------------------------------------------------+
+| Code to process ALL                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME VMLINKIP.EXEC:102 END ?)',
+   'stem rawvml.',                               /* Take these       */
+   '| stem result.'                              /* Prep 4 handover  */
+Return
+ 
+ 
+Proc_Single:
+/*---------------------------------------------------------------+
+| Process Single node                                            |
++---------------------------------------------------------------*/
+'PIPE (NAME VMLINKIP.EXEC:112 END ?)',
+   'stem rawvml.',
+   '| pick w1.1 == ~'node'~',                    /* Take these       */
+   '| stem result.'                              /* Prep 4 handover  */
+Return
+ 
+ 
+Proc_List:
+/*---------------------------------------------------------------+
+| If the input was a list expand it                              |
++---------------------------------------------------------------*/
+'PIPE (NAME VMLINKIP.EXEC:123 END ?)',
+    'stem list.',                         /* Take these       */
+    '| split',                            /* Split into recs  */
+    '| l: lookup w1.1 w1.1 master',       /* Make selection   */
+    '| stem result.',                     /* Prep 4 handover  */
+    '?',                                  /* 2nd pipe         */
+    'stem rawvml.',                       /* Take these       */
+    '| l:'                                /* Conn 2 lookup    */
+Return
+ 
+ 
+Hand_Over:
+/*---------------------------------------------------------------+
+| Hand it all to our caller                                      |
++---------------------------------------------------------------*/
+If result.0<>0 Then Do
+    'PIPE (NAME VMLINKIP.EXEC:139 END ?)',
+          'stem result.',
+          '| split',                            /* Split into recs  */
+          '| n1: nlocate ~:LPAR.~',             /* Separate these   */
+          '| n2: nlocate ~:IP.~',               /* .......and these */
+          '| n3: nlocate ~:PORTNO.~',           /* .......and these */
+          '| n4: nlocate ~:FTPOPTIONS.~',       /* .......and these */
+          '| stem node. 1',                     /* Hand stem 2 callr*/
+          '? n1:',                              /* Conn2 nlocate    */
+          '| specs fs . f2',                    /* Remove :lpar     */
+          '| stem lpar. 1',                     /* Hand stem 2 callr*/
+          '? n2:',                              /* Conn2 nlocate    */
+          '| specs fs . f2;*',                  /* Remove :ip       */
+          '| stem ip. 1',                       /* Hand stem 2 callr*/
+          '? n3:',                              /* Conn2 nlocate    */
+          '| specs fs . f2;*',                  /* Remove :ip       */
+          '| stem portno. 1',                   /* Hand stem 2 callr*/
+          '? n4:',                              /* Conn2 nlocate    */
+          '| specs fs . f2;*',                  /* Remove :ip       */
+          '| stem ftpoptions. 1'                /* Hand stem 2 callr*/
+    exrc=0
+    End
+Return

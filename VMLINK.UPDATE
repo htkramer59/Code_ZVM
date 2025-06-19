@@ -1,0 +1,24 @@
+*
+* This part is for VMLINKIP/PUTFTP usage:
+* :nick.        The short name you want to use for this LPAR/NODE
+* :ip.          The ip address or the FQDN (n.nnn.nnn.nn of just.network.net)
+* :status.      If set to ACTIVE files will be sent if set to INACTIVE no files will be send
+* :lpar.        The name of the LPAR you want to identify
+* :portno.      You can specify the FTP port number
+* :ftpoptions.  You can specify any FTP options you like except NONETRC
+* Except the :nick. tag the tags can appear in any order
+*
+:nick.B2       :ip.10.35.4.16 :lpar.R1LB2 :status.active :ftpoptions.secure :portno.24
+:nick.B1       :ip.10.35.4.15 :lpar.R1LB1 :status.active :ftpoptions.secure
+:nick.O1       :ip.10.35.4.14 :lpar.R1LO1 :status.active :ftpoptions.secure
+:nick.A2       :ip.10.35.4.13 :lpar.R1LA2 :status.active :ftpoptions.secure
+:nick.A1       :ip.10.35.4.12 :lpar.R1LA1 :status.active :ftpoptions.secure
+:nick.P2       :ip.10.35.4.11 :lpar.R1LP2 :status.active :portno.25
+:nick.P1       :ip.10.35.4.10 :lpar.R1LP1 :status.active :ftpoptions.secure
+*
+* The lists that can be used by VMLINKIP. You need to specify the nicks in the list
+:nick.PROD     :list.P1 P2
+:nick.ACCP     :list.A1 A2
+:nick.ONTW     :list.O1
+:nick.BHR      :list.B1 B2
+* End of VMLINKIP usage

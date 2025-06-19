@@ -1,0 +1,12 @@
+* The userid/mdisk or .dir <filespace> we need to check on usage
+* Items are separated by a semicolon (:)
+:listusage.EREP 191;EREPRPT 191;DISKACNT 191;MONWRITE 191;
+     DIRMAINT 1AA;DIRMAINT 155;VMUTIL 191;
+     VSMREQIN 191;VSMREQIU 191;VSMREQI6 191;
+     OPERSYMP 191
+ 
+* The userid/mdisk which we have to check for packed files
+:listpacked.CONPARK 191
+ 
+* The limit for usage, are we over issue a warning
+:limit.80

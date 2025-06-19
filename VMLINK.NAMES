@@ -1,0 +1,69 @@
+:nick.config   :product.PMAINT CF0    :title.Parm disk
+:nick.cpnuc    :product.MAINT CF1     :title.CP Nuc, logo, etc.
+:nick.cputils  :product.MAINT 551     :title.Utils, CPFMTXA, etc.
+:nick.ses      :product.MAINT 5E5     :title.SES code disk
+* Networking nicks
+:nick.ftp      :product.TCPMAINT 592  :title.FTP code      :invoke.MODULE FTP      .pa
+:nick.ping     :product.TCPMAINT 592  :title.PING code     :invoke.MODULE PING     .pa
+:nick.netstat  :product.TCPMAINT 592  :title.NETSTAT code  :invoke.MODULE NETSTAT  .pa
+:nick.tracerte :product.TCPMAINT 592  :title.TRACERTE code :invoke.MODULE TRACERTE .pa
+:nick.ifconfig :product.TCPMAINT 592 <* Q-A>  :title.IFCONFIG code :invoke.EXEC   IFCONFIG .pa
+:nick.tcpip    :product.TCPMAINT 592  :title.TCPIP code
+:nick.tcpsrvr  :product.TCPMAINT 591  :title.TCPIP server code
+:nick.tcpconf  :product.TCPIP    198  :title.TCPIP configs
+:nick.gsk      :list.tcpip tcpsrvr
+*
+:nick.fcx      :product.PERFSVM 201   :title.FCONX
+*
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LB1 :title.Local tools :category.primary
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LB2 :title.Local tools :category.secondary
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LO1 :title.Local tools :category.secondary
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LA1 :title.Local tools :category.secondary
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LA2 :title.Local tools :category.secondary
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LP1 :title.Local tools :category.secondary
+:nick.tools    :product..dir vmusers:tools. <* Q :node.R1LP2 :title.Local tools :category.secondary
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LB1 :title.Local tools backup
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LB2 :title.Local tools backup
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LO1 :title.Local tools backup
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LA1 :title.Local tools backup
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LA2 :title.Local tools backup
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LP1 :title.Local tools backup
+:nick.tools_backup  :product.TOOLS 400 <* Q :node.R1LP2 :title.Local tools backup
+*
+* This part is for VMLINKIP/PUTFTP usage:
+* :nick.        The short name you want to use for this LPAR/NODE
+* :ip.          The ip address or the FQDN (n.nnn.nnn.nn of just.network.net)
+* :status.      If set to ACTIVE files will be sent if set to INACTIVE no files will be send
+* :lpar.        The name of the LPAR you want to identify
+* :portno.      You can specify the FTP port number
+* :ftpoptions.  You can specify any FTP options you like except NONETRC
+* Except the :nick. tag the tags can appear in any order
+*
+:nick.B2       :ip.10.35.4.16 :lpar.R1LB2 :status.active
+:nick.B1       :ip.10.35.4.15 :lpar.R1LB1 :status.active
+:nick.O1       :ip.10.35.4.14 :lpar.R1LO1 :status.active
+:nick.A2       :ip.10.35.4.13 :lpar.R1LA2 :status.active
+:nick.A1       :ip.10.35.4.12 :lpar.R1LA1 :status.active
+:nick.P2       :ip.10.35.4.11 :lpar.R1LP2 :status.active
+:nick.P1       :ip.10.35.4.10 :lpar.R1LP1 :status.active
+:nick.ICUTEST  :ip.10.35.4.57 :lpar.ICUTEST :status.linux
+* Settings per filetype, the last :ft. card is mandatory
+* Used by PUTFTP and GETFTP exec
+:nick.putftp   :ft.*ARC*;MODULE;TEXT;*LIB :set.TYPE E;MODE B;SITE FIXRECFM 80
+               :ft.*                      :set.
+*
+* The lists that can be used by VMLINKIP. You need to specify the nicks in the list
+:nick.PROD     :list.P1 P2
+:nick.ACCP     :list.A1 A2
+:nick.ONTW     :list.O1
+:nick.BHR      :list.B1 B2
+* End of VMLINKIP usage
+*
+:nick.VSMWORK1 :product..dir vmsys:vsmwork1.
+:nick.STATUS   :product..dir .status.
+* For the code tool
+:nick.CODE_G   :product..dir vmusers:herman.code.       <* K :title.generic code for versioning tool
+:nick.CODE_C   :product..dir vmusers:herman.code_client <* L :title.client code for versioning tool
+:nick.CODE_A   :product..dir vmusers:herman.code_admin  <* M :title.admin code for versioning tool
+:nick.CODE_S   :product..dir vmusers:herman.code_server :title.server code for versioning tool
+:nick.code4me  :list.code_g code_c code_a

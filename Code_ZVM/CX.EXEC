@@ -1,0 +1,13 @@
+/* Issue a CP/CMS command using pipes and opening an XEDIT session */
+Parse Upper Arg line
+workfile=userid() '$WORK$'
+width=500
+Queue 'RECFM V'
+Queue 'LRECL 'width
+Queue 'TRUNC *'
+Queue 'VERIFY 1 *'
+Queue 'AUTOSAVE OFF'
+Queue 'PIPE (end ?) 'line' | XEDIT'
+Queue ':1'
+Address CMS 'XEDIT 'workfile' A (WIDTH 'width
+Address CMS 'ERASE 'workfile

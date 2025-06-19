@@ -1,0 +1,144 @@
+This file contains all of the COL error and help messages.  You may
+customize this file to suit your needs.
+ 
+The %'s within the text are used by COL to insert variable information or
+screen control characters.  If you decide to modify this file, keep the
+"%" in the correct relative position in your modified text.
+ 
+Blanking the text behind COL001 - COL003 removes that information from
+the COL screen.
+ 
+COL001 Copy,Move,Xfr,Fol,Pre,Upon,Add,Ins,Del,"=Dup,Rep,Ovl,Emul_,Sort,G=descenG,Zone
+COL002  PF1=Hlp/2=CMDlist/3=Exit%<>W=Wordflow,+=Sum,Low,K=Up,Just,Nbr,Que,Blk,/=Col,Y^
+COL003 %*** COLUMN COMMANDS PENDING ***%   PF1 = Help, PF2 = List Commands, PF3 = Exit
+ 
+Lines may be added or removed from the following quick reference messages
+list (COL901+).
+ 
+COL901 **************************** COLumn Quick Reference ****************************
+COL902 /    Shift screen to this column          | K     convert column to UPPER case
+COL903 /cmd Place txt "here" not behind cmd      | L     CONVERT COLUMN TO lower CASE
+COL904 'txt Pad (overlay) blanks with text       | M     Move columns
+COL905 -txt Replace text with blanks             | N     Number (insert sequence nbrs)
+COL906 ;    Set tabs                             | Otxt  Overlay text
+COL907 "    Duplicate                            | P     Preceding target
+COL908 +    Sum numbers in the column            | Qtxt  line up text (Queue-up text)
+COL909 \    Reverse the command or column        | QQtxt line up text behind character
+COL910 A    Add (insert) a number of blanks      | Rtxt  Replace text
+COL911 B    remove trailing Blanks to this column| S     Sort
+COL912 C    Copy columns                         | T     Truncation setting
+COL913 D    Delete columns                       | U     Upon target
+COL914 E    Emulate (copy forward) data          | V     Verify setting
+COL915 _    De-emulate (blank duplicates)        | W     Flow words just left and right
+COL916 !    Insert separator line                | <     Flow words justifying left
+COL917 F    Following target                     | >     Flow words justifying right
+COL918 G    descendinG sort                      | X     Xfer columns
+COL919 H    Verify in HEX                        | Y     Column include(inverse of "^")
+COL920 Itxt Insert text                          | ^     Column exclude
+COL921 J    Justify (use with JL, JC, JR, or JB) | Z     Zone setting
+COL922      Add nbr (i.e. JL1) to specify spacing|
+COL923 ***************** Prefix Commands adjacent to COL command line *****************
+COL924 ?       Re-display last command           |  \     Reverse the line order
+COL925 =       Re-execute last command           |  Bx    Set Blank character to x
+COL926 Reset   COL command line                  |  Sx    Set command line Symbol to x
+COL927 Undo    last COL command                  |  T,Z,V Reset Truncation,Verify,Zone
+COL928 prefix  Apply prefix cmd to lines w/match |  @     Execute delayed block cmds
+COL929 prefix@ Offset the prefix command @ amount|  TSn   Set auto tab spacing to "n"
+COL930 ATABx   Auto Tab function using char "x"  |  TABx  Manual Tab using char "x"
+COL931 COMPx   Compress "tabbed" text using "x"  |  TRUNC Allow column truncation
+COL932 ALL     Block ALL using command line entry|  TLeft Left  just. text within tabs
+COL933 PICtu   Picture or display blank columns  |  TCent Center text within tabs
+COL934 ITOT    Insert line for sum if required   |  TBoth Left and Right justify
+COL935 NOTOT   No new line for sum               |  TBoth Left and Right justify
+COL    ********************* Mathematical  and Logical Operations *********************
+COL    MATH in prefix area (optional) and Enter:
+COL    Y      Above the columns to be operated upon,
+COL    =      above the column to receive the results. (==.= to specify decimal point.)
+COL    +-*/   Symbols or constants between columns to indicate the operation.
+COL    OR     Enter expression in the XEDIT command line (y1 * y2)
+ 
+COL101 Valid addition options: "L"ine total, "C"umulative line total and "S"ubtotal
+COL102 WARNING The same symbol has been specified for both the
+COL103 Command Line symbol and the Blank character symbols.
+COL104 You cannot either insert/replace blanks or do math operations.
+COL105 Target Not Found.
+COL106 The replace command requires text to use, i.e. Rabc.
+COL107 The overlay command requires text to use, i.e. Oabc.  Text must be non blank.
+COL108 Tab failed to find the request tab character "%".
+COL109 Auto tab failed to find the request tab character "%".
+COL110
+COL111 The remove command requires text to use, i.e. -abc.  Text must be non blank.
+COL112 The pad command requires text to use, i.e. 'abc.  Text must be non blank.
+COL113 UNDO = ON. You may enter "Nound" in the COL prefix area for faster response.
+COL114 Automatic tab spaces set to %.
+COL115 Invalid tab space value entered: "%".
+COL116 REXX Numeric Digits set to %.
+COL117 COL commands will be saved in COL CMDLOG A.
+COL118 COL command saves turned off.
+COL119 Decimal is now %.
+COL120  "%" The symbol used to indicate a blank character.
+COL121 UNDO option has been activated.
+COL122 A COL command has not been executed to undo or cannot be performed.
+COL123 UNDO option has been turned off.
+COL124 Undo has failed which in reality uses XEDIT GET.  GET Return Code = %.
+COL125
+COL126
+COL127 Zones set to %.
+COL128 Truncation set to %.  You may also want to reset Zones.
+COL129 Verify set to %.
+COL130 No unused character available for masking data, % used.
+COL131 New command line symbol is "%".
+COL132 New blank character symbol is "%".
+COL133 No match with the COL command line found.  Prefix "%" not applied.
+COL134 Prefix command "%" has been applied to % line(s).
+COL135 Unable to decode prefix request "%".
+COL136 Severe transmission error.  XEDIT has set terminal mode to typewriter.  COL has been aborted.
+COL137 COL command "%" not found.
+COL138 Shift RIGHT request exceeds right zone.
+COL139 ALL (or NONE) of the sort groups must be numbered.
+COL140 Unsupported Function
+COL141 % lines have been truncated.
+COL142 Use "R" to REPLACE a column with blanks.  See XEDIT manual: COVERLAY & CREPLACE
+COL143 The total was inserted in the column.
+COL144 The width of the column specified is not wide enough to contain the total.
+COL145 No blank space was found to insert the total.
+COL146 % nbrs  Total=%  Min=%  Max=%  Avg=%
+COL147 WARNING: One or more paragraphs have been flowed together.
+COL148 would be truncated due to lack of space.  Add blank lines or make column wider.
+COL149 Zones must be between the word flow window.
+COL150 Only one J or a single pair of J's allowed.
+COL151 % line(s) could not be formatted with % spaces.
+COL152 Best spacing possible has been performed on those lines.
+COL153 Binary option is not supported.
+COL154 A blank line was added at the end of the column to insert the total.
+COL155 You cannot use the "Y" and the "^" operators at the same time.
+COL156 Column(s) truncated at % line(s).
+COL157 Tab character specified was "%".
+COL158 Your disk does not have enough space to save COL changes.
+COL159 You will not be able to issue the UNDO command.
+COL160 Enter "L"eft, "C"enter, "R"ight or "B"oth (null to abort).
+COL161 Enter number of spaces desired between words
+COL162 (null to leave data with the current spacing).
+COL163 No prefix command found.
+COL164 The prefix commands have been offset by %.
+COL165 No numbers found.
+COL166 % is not supported.
+COL167 Transposed columns require a width of %.  XEDIT width setting is %.
+COL168 XEDIT command "%" has been applied to % line(s).
+COL169 Command "%" outside of XEDIT ZONE setting ignored.
+COL170 No column specified for the results.
+COL171 Invalid mathematical or logical operation on line: %.
+COL172 Unable to place answer of "%" within specified column on line: %.
+COL173 Automatic insertion of a blank line for sum when required is %.
+COL174
+COL175 ***************************************************************
+COL176 % Lines contained errors.  The text "%" was inserted.
+COL177 If one column is named, then all columns must be named.
+COL178 Profile % not found.
+COL179 COL range does not contain any lines to edit.
+COL180 COL cannot be called from a prefix macro.
+COL181 Invalid XEDIT column target "%".
+COL182 Column delete target "%" has been applied to % lines.
+COL183 Conflicting justification specifications entered.
+COL184 Invalid number specifications entered.
+COL185 Press ENTER to continue the COL session.

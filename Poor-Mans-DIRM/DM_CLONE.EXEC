@@ -1,0 +1,92 @@
+/*---------------------------------------------------------------+
+| Function : Clone an MDISK                                      |
+|                                                                |
+| File     : DM_CLONE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_CKUID EXEC                                       |
+|            DM_CHMDK EXEC                                       |
+|            DM_INDEX EXEC                                       |
+|            DM-VMLNK EXEC                                       |
+|            DM_AMD   EXEC                                       |
+|            PIPEDDR  EXEC                                       |
+|                                                                |
+| Called   : DM_CLONE <suid> <scuu> <tuid> <tcuu> <location>     |
+|          : CLONE    <suid> <scuu> <tuid> <tcuu> <location>     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 10:16:34                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg suid scuu tuid tcuu location
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Do the tests on the input                                      |
++---------------------------------------------------------------*/
+If suid='' Then Call Exit '540'
+If scuu='' Then Call Exit '541'
+If tuid='' Then Call Exit '542'
+If tcuu='' Then Call Exit '543'
+If location='' Then Call Exit '544'
+If tuid='=' Then tuid=suid
+If tcuu='=' Then tcuu=scuu
+If suid=tuid & scuu=tcuu Then Call Exit '545'
+If \DM_CKUID(suid) Then Call Exit '546'
+If \DM_CKUID(tuid) Then Call Exit '547'
+If \DM_CKMDK(suid scuu) Then Call Exit '548'
+If DM_CKMDK(tuid tcuu) Then Call Exit '549'
+/*---------------------------------------------------------------+
+| Find the source mdisk                                          |
++---------------------------------------------------------------*/
+details=DM_INDEX('GET 'suid)
+Parse Value details With lim1 lim2 .
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_CLONE.EXEC:60 END ?)',
+   '< 'dirfnft wfm,                              /* Read file        */
+   '| specs pad 0 recno 1.5 right 1.72 nw',      /* Add recnos       */
+   '| stem direct.',                             /* Hand 2 rexx      */
+   '| between ~'lim1'~ ~'lim2'~',                /* Select this      */
+   '| pick anycase w2.1 == ~MDISK~ and',         /* Find this        */
+                 '(w3.1 == ~'scuu'~ or',         /* .                */
+                  'w3.1 == ~'Right(scuu,4,'0')'~ or',   /* .                */
+                  'w3.1 == ~'Strip(scuu,'L','0')'~)',   /* .                */
+   '| specs w6.1 1 w8;* nw',                     /* Keep this        */
+   '| var mddetails'                             /* Hand 2 rexx      */
+wfm=DM_VMLNK('SOURCEDIR DET')
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Value mddetails With mdsize mddetails
+Address CMS 'DM_AMD 'tuid tcuu mdsize location mddetails
+If rc<>0 Then Call Exit rc
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'PIPEDDR COPY 'suid scuu tuid tcuu' (NOPROMPT'
+If rc<>0 Then Call Exit '550'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

@@ -1,0 +1,192 @@
+/*---------------------------------------------------------------+
+| Function : Use rscs to distribute files                        |
+|                                                                |
+| File     : PUTRSCS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <userid> NAMES  contains nick names for nodes/ids   |
+|            RMCMD    EXEC   send commands to an other node      |
+|            SENDFILE EXEC   send files over RSCS                |
+|                                                                |
+| Called   : PUTRSCS  <fn> <ft> <fm> <where> <target> ( <options>|
+|                                                                |
+| Comments : <where> needs to be specified in <userid> NAMES     |
+|                    or the correct RSCS node name               |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220121 09:50:45                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Added check of RMCMD EXEC and |
+|                     its output                                 |
+|            20220204 H.T.Kramer : Suppress some messages        |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm where target '(' options
+Parse Source . . myfn myft .
+ 
+'PIPE (NAME PUTRSCS.EXEC:28 END ?)',
+   'CP QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce to this   */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'CP QUERY SET',                               /* Ask cp           */
+   '| split at ,',                               /* Split here       */
+   '| strip',                                    /* Remove spaces    */
+   '| pick w1.1 == ~MSG~',                       /* Select this      */
+   '| specs w2.1',                               /* Reduce to this   */
+   '| var cpmsgset',                             /* Store as         */
+   '?',
+   'cms LISTFILE RMCMD EXEC * (NOH',
+   '| count lines',
+   '| var rmc'
+If rmc=0 Then Call Exit '28 Can not run: RMCMD EXEC is missing'
+ 
+If where='ALL' Then where='GDH'
+If Wordpos('CATCH',options)<>0 Then catcher=1
+                               Else catcher=0
+If catcher Then Call CatchCode
+           Else Call PitchCode
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+PitchCode:
+/*---------------------------------------------------------------+
+| Pitch the files to the other end                               |
++---------------------------------------------------------------*/
+Call Checking
+If fm<>'A' Then Call SolveTarget
+Address COMMAND 'CP SET MSG OFF'                 /* Temp. off        */
+'PIPE (NAME PUTRSCS.EXEC:69 END ?)',
+   'cms LISTFILE 'fn ft fm' (NOH',               /* Find the files   */
+   '| nfind DMSLST002E',
+   '| specs ~SENDFILE~ 1',                       /* Compose          */
+           'w1.3 nw',                            /* ..cmds           */
+           '~ 'where' (NOLOG NOTYPE~ nw',        /* .                */
+   '| cms',                                      /* Run              */
+   '| hole'                                      /* Ignore output    */
+Address COMMAND 'CP SET MSG 'cpmsgset            /* Set 2 what it was*/
+If rc<>0 Then Call Exit rc' Problem finding 'fn ft fm
+/*---------------------------------------------------------------+
+| Tell the other end what to do                                  |
++---------------------------------------------------------------*/
+If where='GDH' Then where='ALL'
+logft='LOG'Substr(Date('S'),5)
+Address CMS 'RMCMD cms 'myfn fn ft fm' . 'target' ( 'node' CATCH , 'where', , FILE, 'myfn logft 'A'
+If rc<>0 Then Call Exit '528 Can not execute RMCMD'
+Return
+ 
+ 
+SolveTarget:
+/*---------------------------------------------------------------+
+| If the source is not A-disk we need to find out where          |
++---------------------------------------------------------------*/
+target=''
+'PIPE (NAME PUTRSCS.EXEC:94 END ?)',
+   'cms QUERY ACCESSED 'fm,                      /* Ask CMS          */
+   '| specs w-2;-1 1',                           /* Keep this        */
+   '| if: if pick substr 1.3 of w1.1 == ~DIR~',  /* Check            */
+   '|     specs ~.DIR~ 1 w2.1 nw',               /* Compose record   */
+   '| if:',                                      /* Conn 2 if        */
+   '|     specs ~QUERY MDISK~ 1 w1.1 nw',        /* Ask more details */
+   '|     cp',                                   /* Hand 2 cp        */
+   '|     drop first 2',                         /* Remove hdr       */
+   '|     specs w3.2 1',                         /* Keep this        */
+   '| if:',                                      /* Conn 2 if        */
+   '| var target'                                /* Hand 2 rexx      */
+Return
+ 
+ 
+CatchCode:
+/*---------------------------------------------------------------+
+| Here we receive the stuff...                                   |
++---------------------------------------------------------------*/
+Parse Value options With part1 'CATCH' part2
+If part1<>'' Then from=Strip(part1)
+If part2<>'' Then from=Strip(part2)
+fm=Substr(fm,1,1)
+If fm='' Then fm='A'
+If fm<>'A' Then Address CMS 'VMLINK 'target' <= 'fm' (QUIET NONAMES'
+If Pos('*',fm)<>0 Then Call Exit '98 Can not deal with wildcard in filemode'
+If Pos('*',ft)>0 Then wft=1 ; Else wft=0
+If Pos('*',fn)>0 Then wfn=1 ; Else wfn=0
+/*---------------------------------------------------------------+
+| Prepare the selection/checking                                 |
++---------------------------------------------------------------*/
+sel1='';sel2=''
+out='| specs w2.1 1 w10.2 nw | stem work.'
+Select
+When \wft & \wfn  Then sel1='| pick w10.1 == ~'fn'~ and w11.1 == ~'ft'~ 'out
+When wft  & wfn   Then Do
+                  sel1='| wildcard w10.1 ~'fn'~ | stem work.'
+                  sel2='| wildcard w11.1 ~'ft'~'out
+                  End
+When \wft & wfn   Then sel1='| wildcard w10.1 ~'fn'~ | pick w11.1 == ~'ft'~'out
+When wft  & \wfn  Then sel1='| wildcard w11.1 ~'ft'~ | pick w10.1 == ~'fn'~'out
+Otherwise Call Exit '99 Can not handle wildcard state'
+End
+/*---------------------------------------------------------------+
+| We query the reader and make a selection of files              |
++---------------------------------------------------------------*/
+'PIPE (NAME PUTRSCS.EXEC:140 END ?)',
+   'cp QUERY RDR * ALL',                         /* Ask cp           */
+   sel1                                          /* Issue 1st select */
+If sel2<>'' Then Do
+   'PIPE (NAME PUTRSCS.EXEC:144 END ?)',
+      'stem work.',                              /* Take these       */
+      '| buffer',                                /* Prevent loop     */
+      sel2                                       /* Do 2nd select    */
+      End
+/*---------------------------------------------------------------+
+| We check where the files come from and if matched receive it   |
++---------------------------------------------------------------*/
+If work.0<>0 Then Do w=1 To work.0
+             'PIPE (NAME PUTRSCS.EXEC:153 END ?)',
+                'cp TAG QUERY FILE 'Word(work.w,1),     /* Ask the tag      */
+                '| if: if pick w4.1 == ~'from'~ and',   /* Check node and   */
+                              'w5.1 == ~'Userid()'~',   /* ...sender        */
+                '|     specs ~RECEIVE~ 1',       /* Compose cmd      */
+                            '~'Word(work.w,1) Subword(work.w,2) fm' (NOLOG REPLACE OLDDATE~ nw',
+                '| if:',                         /* Conn 2 if        */
+                '| cons',                        /* Show             */
+                '| cms'                          /* Run              */
+              End w
+Return
+ 
+ 
+Checking:
+/*---------------------------------------------------------------+
+| Do some checks and settings...                                 |
++---------------------------------------------------------------*/
+If fn='' Then Call Exit '128 No filename specified'
+If fn='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME PUTRSCS.EXEC:173 END ?)',
+              '< 'myfn myft' *',                 /* Read myself      */
+              '| tolabel Parse',                 /* Up to here       */
+              '| cons'                           /* Show             */
+          Call Exit
+          End
+If ft='' Then Call Exit '228 No filetype specified'
+If fm='' Then Call Exit '328 No filemode specified'
+/*---------------------------------------------------------------+
+| Determine what to do with the options                          |
++---------------------------------------------------------------*/
+If where='' Then Call Exit '428 No node specified'
+If Wordpos('QUIET',options)<>0 Then quiet=1
+                               Else quiet=0
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

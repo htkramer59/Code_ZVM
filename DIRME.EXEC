@@ -1,0 +1,804 @@
+/* Directory Edit.    Use with DIRMAINT R5
+ 
+Allows you to XEDIT a user directorty entry directly, or to XEDIT
+some selected DIRMAIT control files.
+ 
+As a PIPE stage, you can get one or more directory entries as data in
+your Pipeline.
+ 
+The format is:
+ 
+    +--------+--------------------------------------------------+
+    | Format | DIRME user < options>                            |
+    |   or   | DIRME fn ft                                      |
+    |   or   | DIRME fn PROTODIR                                |
+    |   or   | PIPE ... REXX(DIRME EXEC) <user> <(IGNore> |.... |
+    +--------+--------------------------------------------------+
+ Where the "options" can be:
+  Keep     - Keeps the directory entries on your "A" disk (default is to
+             erase them after use)
+  Lock     - Locks the directory entry to prevent concurrent update. This
+             is the default when REPLACE is specified
+  ALL      - Also grabs the SUBCONFIG(s) for the user being taken
+             and include it/them in the XEDITed "userid DIRECT"
+  NOLock   - Overrides the default LOCK when REPLACE is specified
+  NOReplace- Suppresses Replace after editing it (Implies NOLOCK)
+  REplace  - Replaces the entry after editing it (default if LOCK)
+  STEM     - Don't go to XEDIT, simply store user records in
+             caller's REXX STEM "DIRME." (STEM implies NOLOCK)
+  IGNORE   - Ignore 'user not found' condition (only if PIPE subrtn)
+  ERRORS stm. - Send error msg to stem "stm." or into variable "var".
+  ERRORS var    The stem or var is touched only if DIRME rc is not zero.
+ 
+ Where "fn ft" can be:
+   CONFIG DATADVH,  AUTHFOR CONTROL , EXTENT CONTROL  and fn PROTODIR
+ 
+ When called as PIPE subroutine, the user's records are sent in the pipe:
+  - Records are chopped at col 72; leading and trailing blanks removed.
+  - To get more than 1 userid: place wanted users in input stream instead
+    of passing them as input paremeter.
+    - When more than 1 output stream is defined we place each user in its
+      own output stream: the first asked user in stream 0, the second in
+      stream 1 etc...
+    - When only output stream 0 is defined, all users are placed there.
+      The users are ordered as in the input records.
+    What if some of the requested users is not found ?
+    - If you do NOT use the 'IGNORE' option: when some requested user is
+      not found, no output is produced.  DIRME sets RC to 29
+    - If you do use the 'IGNORE' option and have multiple output streams,
+      the streams corresponding to the not found users remain empty.
+      DIRME sets RC to 0
+    Examples:
+    - 'PIPE (end ?) LITERAL KRIS GUY|SPLIT',
+          '|USER: rexx(DIRME EXEC)|STEM KRIS.',
+          '?USER:                 |STEM GUY.'
+         if rc=29 then ...  GUY or KRIS not found, stems KRIS. nor GUY.
+                            are set.
+    - 'PIPE (end ?) LITERAL KRIS GUY|SPLIT',
+          '|USER: rexx(DIRME EXEC) (IGNORE|STEM KRIS.',
+          '?USER:                         |STEM GUY.'
+        RC remains 0 when only KRIS is not found, KRIS.0 will be 0,
+        but stem GUY. is is filled with its directory records.
+  - Just as with STEM, NOLOCK is required when DIRME runs as pipe subrtn
+ 
+You need authority to LINK to the appropriate DIRMAINT minidisk without
+password (unless you change the ACCESS subrtn).
+*//* end-of-help
+(c) Copyright International Business Machines Corporation 1993, 2005.
+    All Rights Reserved.
+17 Feb 93: Idea from AC at KB: if ^KEEP: save "user DIRECT A" in tempfile
+20 Dec 1994: Don't EXIT rc=1 if no chgs made > no rewrite of cmd in XEDIT
+ 9 Jan 1995: Hola, above change had unexpected consequences: corrected
+22 Feb 1995: Intercept DIRM's "LOCKED" message and send this into XEDIT
+ 1 Mar 1995: add some comments to the PIPELINE for above msg interception
+30 Jan 1997: More updates for DIRMAINT 1.5
+27 Feb 1997: Avoid using "DIRMCLUSTERS" from "already" accessed disk
+11 Apr 1997: Support EXTENT CONTROL for DIRM 1.5
+16 Apr 1997: Adapt the SMS LOCK & UNLOCK to R5
+21 May 1997: Improve handling of file edit requests
+18 Nov 1997: Not all "editable" files are on same DIRMAINT mdisk
+ 2 Jan 1998: Support for all PROTODIR files (on 155 mdisk)
+ 
+ 6 Jun 2001: NOLOCK becomes default option
+ 6 Jun 2001: If MDISKs changed, execute a DIRM FREE to check overlaps
+ 6 Jun 2001: Avoid removing LOCK taken by another user if our lock failed
+ 6 Jun 2001: Many lines have been rewritten
+ 7 Jun 2001: Improve the place of the information msg reserved line
+13 Dec 2002: Added STEM option
+24 Jun 2003: Allow to be called as PIPE subroutine, Remove DIRM R4 supprt
+             Avoid needless I/O, while reading USER DIRECT & DIRMPARTs
+ 6 Aug 2003: Display error if user not found
+             Support DIRME of all CONFIG* DATADVH files
+17 Jun 2004: Allow placing errmsgs in a stem
+15 Feb 2005: Use GATE iso PIPESTOP to terminate STARMSG
+27 Jan 2009: Avoid timeout if not auth to LOCK a user
+26 Apr 2012: Add ALL option, what allows to get a z/VM 6/2 IDENTITY and
+             its SUBCONFIGs.
+28 Sep 2012: Make this work a bit if no DIRMAINT (also if z/VM 6.2)
+17 Jan 2013: Remove debugging statement making eg. DIRME MAINT ALL fail
+*/
+MaxWait=9 /* Max time to wait for DIRMAINT's "locked" message, in SECs*/
+/* Kris: Trusted = wordpos(userid(),'DIRADMIN STEVE KRIS') ^= 0*/
+Trusted=1
+ErrToStem=0
+ 
+parse value 0 0 with ManyStreams msg.0 C.$added
+parse upper source . . myname mytype . syn addr .
+PipeSubr=(addr='?')
+if PipeSubr then do
+   if word(arg(1),1)='$$GetUser$$' then signal GetUser
+   /* check for input stream: it can contain users to get */
+   'STREAMSTATE INPUT'
+   if rc<>12 then do /* input stream is connected */
+      'CALLPIPE *:|STEM UsersToGet.'
+      'MAXSTREAM OUTPUT' ; ManyStreams=(rc>0)
+      if rc>0 then                 /* More than one output stream */
+         if UsersToGet.0>rc+1 then /* Not enough streams */
+            Call exit 8 'You ask to get' UsersToGet.0 'users, but only',
+                        'define' rc+1 'output streams'
+   end
+end
+ 
+Address command
+ 
+/* Define defaults */
+dirm=0
+'PIPE CP QUERY PRODUCT|StrFIND / VMDIR/|SPEC W2 |Xlate upper|Var DVHena'
+if DVHena='ENABLED' then do
+   'STATE ACCESS   DATADVH *'
+   Dirm=(rc=0)
+end
+If Dirm=0 then signal NoDirmaint
+ 
+'STATE PRODDIRM EXEC *'
+If rc = 0 then dirm = 'EXEC PRODDIRM'
+Else dirm = 'EXEC DIRMAINT'
+If abbrev('?',arg(1)) then do
+   if PipeSubr then do /* Called as pipe subrtn */
+      if symbol('UsersToGet.0')<>'VAR' then
+         call exit 5 'No userid given as input parm'
+      if UsersToGet.0=0 then
+         call exit 5 'No userid(s) found on input stream'
+   end
+   else do
+      Do I = 2 to 100 while left(sourceline(i),2) ^= '*/'
+         Say sourceline(I)
+      End
+      Call Exit 0
+   End
+End
+ 
+Arg user '(' options ; user=space(user)
+if options ='' then do
+   Arg user options
+   File = space(user options)
+end
+else file = user
+ 
+if PipeSubr & user<>'' then  /* Called as pipe subrtn */
+ if symbol('UsersToGet.0')='VAR' then
+  if UsersToGet.0>0 then call exit 5,
+     'Not allowed to pass userid both as input parm and as input records'
+ 
+if PipeSubr & UsersToGet.0=1 then User= UsersToGet.1
+ 
+if user='%%$$%%' then signal xeditProf
+ 
+parse value 0   1      0         0         0          0,
+      with Opt. dirmok dirmnolog subconf.0 NotFound.0 getAll,
+        '' FindSubConf notFound
+ 
+files='EXTENT CONTROL 1DF, CONFIG DATADVH 11F, AUTHFOR CONTROL 1DF,',
+      'DIRMAINT DATADVH 155, DVHNAMES DATADVH 11F'
+ 
+if words(file)=2 then Select
+ 
+   when wordpos(file,files)<>0 then do
+      Call efile file
+      Call exit 0
+   End
+   When word(file,2)='PROTODIR' then do  /* all PROTODIRs */
+      files=files||',' space(file) '155'
+      Call efile file
+      Call exit 0
+   End
+   When left(word(file,1),6) word(file,2)='CONFIG DATADVH' then do
+      files=files||',' space(file) '11F'
+      Call efile file
+      Call exit 0
+   End
+   Otherwise nop
+ end
+Opt.$replace = 1
+Opt.$lock = 0
+Opt.$View = (PipeSubr=0)
+Do I = 1 to words(options)
+  Option = word(options,i)
+  Select
+    When option = '(' | option = ')' then nop
+    When abbrev('IGNORE',option,3) then opt.$ignore = 1
+    When option='ERRORS' then do
+      i=i+1; ErrStem= word(options,i)
+      If symbol(ErrStem)='BAD' then
+         call Exit 56 'Invalid or missing stem for ERRORS option'
+      ErrToStem=1
+    end
+    /* All following options are invalid if running as PIPE subrtn */
+    when PipeSubr then call exit 5 'Options' option,
+                              'is invalid when DIRME runs as PIPE subrtn'
+    When abbrev('KEEP',option) then opt.$keep = 1
+    When abbrev('LOCK',option) then opt.$lock = 1
+    When abbrev('NOKEEP',option,3) then opt.$keep = 0
+    When abbrev('NOLOCK',option,3) then opt.$lock = 0
+    When abbrev('NOREPLACE',option,4) then opt.$replace = 0
+    When abbrev('REPLACE',option,2) then Opt.$replace = 1
+    When option='ALL' then getAll=1
+    When option='STEM' then do
+      if PipeSubr then
+         call Exit 5 'Option STEM cannot be used if called as PIPE subr.'
+      opt.$view = 0
+    end
+    Otherwise
+     if words(options)=1 then call exit 4 'Invalid option' option,,
+         '(if you wanted to edit a DIRMAINT file: the following are',
+         'supported:',' 'files')'
+     else call exit 4 'Invalid option' option
+    End
+  End i
+ 
+if PipeSubr & GetAll then call exit 2204 'Sorry, the ALL option cannot',
+       'be used yet as PIPE subroutine'
+if opt.$LOCK & GetAll then call exit 2204 'Sorry, LOCK is not',
+       'yet possible with the ALL option'
+ 
+If ^trusted then
+  Parse value 0 0 with opt.$lock opt.$replace
+ 
+Fm. = ''
+Fm = access('USER DIRECT DIRMAINT 1DF')
+ 
+Retc = 0
+Locked = 0
+dirmok=1
+dirmnolog=0
+LockUser='HOLE'
+LockIsOk=0
+parse value diag(8,'Q SET') with . msgset ','
+ 
+If opt.$lock & opt.$replace then
+   Call PrepareLockUser /* create vars & stages to lock user */
+if getAll then /* BUILD ON * USING SUBCONFIG MAINT-1   */
+   FindSubConf='|SubC: Fanout',
+               '|PICK W1 == /BUILD/ |PICK W5 == /SUBCONFIG/',
+               '|SPEC W6 1|STEM SUBCONF.',
+               '?SubC:'
+ 
+if user<>'' then do /* One user asked for */
+   'PIPE < USER DIRECT' fm '|' ,
+       'Locate 11-20 / 'user' / |Take|' ,
+       'STEM L.'
+   If l.0 = 0 then call exit 29 'Userid' user 'not found.'
+end; else do
+   getUsers='|L1: Locate 11-20 /' UsersToGet.1 '/|Append Literal|Take',
+            '|O: Fanin', /* Be sure users arrive in same order */
+            '|STEM L.'
+   If ^opt.$ignore then
+      getUsers=GetUsers,
+            '|LK: LOOKUP 12-19 1.8 PAD 40', /* All wanted users found ?*/
+            '?STEM UsersToGet.',
+            '|LK:',
+            '?LK:|JOIN * / /|Append Literal|Var NotFound'
+ 
+   do i=2 to UsersToGet.0
+      getUsers=GetUsers,
+        '?L'i-1': |L'i': Locate 11-20 /' UsersToGet.i '/',
+                     '|Append Literal|take|buffer|O:'
+   end i
+   'PIPE (end ?) < USER DIRECT' fm  GetUsers
+end
+if ^opt.$ignore then if NotFound<>'' then
+      call exit 29 'Some users not found:' NotFound
+ 
+Pipe=word('PIPE CALLPIPE',PipeSubr+1)
+Select
+ when PipeSubr & ManyStreams then outFile='|Chop 72|Strip'
+ when PipeSubr               then outFile='|Chop 72|Strip|*:'
+ when opt.$View              then outFile='|>' user 'DIRECT A0 F 80'
+ otherwise                        outFile='|STEM DIRME. 1'
+end
+ 
+if PipeSubr then address /* Back to PIPE addressing */
+ 
+/* Note: we can have > 1 user to get if called as PIPE subrtn or
+         when the ALL option is used to collect also SUBCONFIGs */
+do u=1 while u<=l.0
+   if u=2 then Select
+     when PipeSubr  then nop
+     when opt.$View then outFile='|>>' user 'DIRECT A0 F 80'
+     otherwise           outFile='|STEM DIRME. 1 APPEND'
+   end
+   Parse var l.u load type uid dirmpart dfm dfn start size .
+   if load='' then iterate /* User was not found (and ignored) */
+   if ManyStreams then out=outfile'|*.output.'u-1':'
+                  else out=outfile
+   If dfn = '*******' Then
+      pipe '(END ?)',
+         LockUser,  /* Send LOCK & Intercept DIRMAINT's "locked" msg */
+         '?<' uid 'DIRMPART' fm ,
+         FindSubConf, /* Maybe find the SubConfigs */
+         Out
+ 
+   Else
+      pipe '(END ?)',
+         LockUser,  /* Send LOCK & Intercept DIRMAINT's "locked" msg */
+         '?FileRand' dfn 'CLUSTER' fm start'.'size,
+         FindSubConf, /* Maybe find the SubConfigs */
+         Out
+   if subconf.0>0 then do
+      'PIPE (end ?) < USER DIRECT' fm ,
+            '|LK: LOOKUP 12-19 1.8 PAD 40 DETAIL',
+            '|STEM L. Append',
+            '?STEM Subconf.',
+            '|LK:',
+            '?LK:|STEM notFound. Append'
+   end
+end u
+if notFound.0=0 then notFound=''
+else 'PIPE STEM notFound.|join * / /|Var notFound'
+If LockUser<>'HOLE' then
+   if Word(timeout,2)='TimeOut' then
+      parse value msg.0+1 'Timeout waiting for DIRMAINT',
+            with  msg.0 . 0 m msg.m
+ 
+if PipeSubr then address command /* Back to CMS addressing */
+ 
+if LockUser<>'HOLE' then do
+   dirmnolog=(rc=45)
+   call diag 8,'SET MSG' msgSet /* Restore setting after PIPE IUCVMSG */
+   if symbol('LockFail')='VAR' then locked=0
+end; else do
+   parse value diagrc(8,'Q USER DIRMAINT') with src .
+   dirmnolog=(src=45)
+end
+If rc ^= 0 then call exit rc 'Error' rc 'creating' user 'DIRECT A0'
+ 
+if opt.$View=0 then call exit 0
+ 
+/*-----------------------------------------------------------------*/
+/* XEDIT the user's definition                                     */
+/*-----------------------------------------------------------------*/
+call time 'R'
+Call edit user 'DIRECT A0'
+If result ^= 0 then retc = result
+ 
+Replaced = 0
+Select
+  When result ^= 0 then Nop  /* "123456" means "no changes applied" */
+  When ^opt.$replace then nop
+  When ^locked then nop
+  Otherwise do
+    dirm 'FOR' user 'REPLACE'
+    Replaced = (rc=0)
+    If rc = 0 then Locked = 0
+    Call CheckMdisks /* Check if some mdisks changed */
+    End
+  End
+If ^opt.$keep then do
+   'ERASE DIRME TEMP'
+   'RENAME' user 'DIRECT A DIRME TEMP A'
+   if rc=0 then Say 'File "'user 'DIRECT A" saved as "DIRME TEMP A"'
+end
+ 
+If locked then do
+/* Kris: short cut long path in DIRMAINT EXEC for DIRM UNLOCK
+Dirm 'UNLOCK' user
+*/
+ 'CP SM DIRMAINT 199501.150A NOLOG AMENG REQUEST 1 FOR' user 'UNLOCK'
+end
+/*Kris: We run with automatic ONLINE after changes
+If replaced then if reply('Do you want to bring changes online now?', ,
+    'Yes','Yes No') = 'YES' then Dirm 'DIRECT'
+*/
+Call Exit retc*(retc<>123456)
+ 
+/*-----------------------------------------------------------------*/
+ACCESS: /*                                                         */
+/*-----------------------------------------------------------------*/
+Procedure expose c. fm. ErrToStem
+Arg fn ft user cuu .
+/* 'STATE' fn ft '*'
+If rc = 0  then return  */
+If fm.user.cuu ^= '' then fm = fm.user.cuu
+Else do
+  'GETFMADR';if rc=0 then parse pull . fm adr .
+  Parse value diagrc(8,'LINK' user cuu adr 'RR') with rc cc text
+  If rc ^= 0 then call exit rc strip(text)
+  C.$added = c.$added adr
+  Fm.user.cuu = fm
+  End
+'PIPE Command ACCESS' adr fm
+If rc ^= 0 then call exit rc 'Error' rc 'accessing' user cuu
+C.$added = c.$added fm
+'STATE' fn ft fm
+If rc ^= 0 then call exit rc 'File' fn ft 'not found on' user cuu
+Return fm
+ 
+/*-----------------------------------------------------------------*/
+PrepareLockUser: /* create vars & stages to lock user              */
+/*-----------------------------------------------------------------*/
+ dirmok=1
+ Locked = 1
+ /* Check if LOCK is possible */
+ /*DVHLOCK file: UL= KRIS * * MAINT VMKBBR01 20010606 13:06:16 */
+ 'PIPE DISK DVHLOCK  DATADVH' fm,
+   '|FIND UL=|PICK W2 == /'user'/',
+   '|SPEC w5 1 /at/ nw w6 nw /since/ nw W7-* NW',
+   '|VAR t'
+ if symbol('t')='VAR' then do /* Yes, target user is locked */
+    if word(t,1)=userid() then do
+      LockUser='LITERAL You already locked' user SubWord(t,4)'|STEM MSG.'
+       return /* Lock is OK already */
+    end
+    else call Exit 30 'Sorry, user' user 'is locked by' t,,
+          '  You can UNLOCK the user with "DIRM FOR' user 'UNLOCK"',,
+          '  but, that is dangerous |||||'
+ end
+ 
+/* Kris: short cut long path in DIRMAINT EXEC for DIRM LOCK
+   iso :  Dirm 'LOCK' user
+   use :  'CP SMSG DIRMAINT DIRMAPKB XXXXXXX AMENG LOCK' user
+Messages returned by LOCK:
+DVHREQ2288I Your LOCK request for KRIS at * has been accepted.
+DVHLOC3277E Directory entry KRIS is already locked.
+DVHREQ2289E Your LOCK request for KRIS at * has failed; with RC = 3277.
+------
+DVHREQ2288I Your LOCK request for KRIS at * has been accepted.
+DVHREQ2289I Your LOCK request for KRIS at * has completed; with RC = 0.
+------
+DVHREQ2283E Userid BUELENSC at BRUVMBRS is not authorized to issue the
+DVHREQ2283E LOCK command for BUELENSC at *.
+ 
+We no longer use PIPESTOP to end STARMSG (PIPESTOP stops too much: all
+async waiting stages, cfr Listserv Rob van der Heij.  Better is to
+use GATE to stop STARMSG.
+ Bewares: 1. if one places one extra "device driver" stage between DELAY
+             and FANINANY before the GATE, we always get a timeout.
+             Because device drivers don't stop when output gets at EOF.
+          2. the COPY near the end is required, else STALL
+*/
+ 
+ LockUser=,
+    ' Literal +'maxwait 'TimeOut',  /* Start timer                    */
+    '|DELAY',                      /* Wait elapsed time             */
+    '|J: FaninAny',                /* Stop STARMSG if DIRM msg or timer*/
+    '|VAR TIMEOUT',
+    '|G: Gate',                    /* Make STARMSG stop gracefully     */
+    '?Starmsg SET MSG IUCV|Spec 9-* 1',
+    '|G:',                         /* Make STARMSG stop gracefully     */
+    '|F: Fanout',                    /* Make second copy of the message*/
+    '|   Change 9.1 //: /',          /* Insert colon after userid      */
+    '|   Change 1.10 /DIRMAINT: //', /* Remove uid if DIRMAINT         */
+    '|   Stem MSG.',                 /* Send to STEM                   */
+    '?F:',             /* Use second copy of msg to scan for good text */
+    '|   Find DIRMAINT'||,           /* Scan only DIRMAINT's msgs      */
+    '|   Strip Trailing',            /* No trailing blanks please      */
+    '|   Specs -1;-1 1 9.10 Next',   /* Last 2289 msg has a .          */
+    '|E: Find .DVHREQ2289'||,        /* Stop waiting if command ended  */
+    '|Ei:FaninAny',
+    '|   COPY',                      /* Avoid STALL in GATE/STARMSG    */
+    '|J:',                           /* Stop STARMSG using GATE        */
+    '?E:|StrFind /.DVHREQ2283/',     /* Stop waiting if command ntAuth */
+    '|   Var LockFail    |Ei:',      /* Tell REXX & stop waiting       */
+    '?CP SM DIRMAINT 199501.150A NOLOG AMENG REQUEST 1 FOR' user 'LOCK',
+    '|   CONS'
+ 
+Return
+/*-----------------------------------------------------------------*/
+EDIT: /*                                                           */
+/*-----------------------------------------------------------------*/
+Procedure expose trusted dirmnolog dirmok msg. Changed Opt. oMdsks,
+                 locked errToStem LockFail notFound
+changed=0
+Arg fn ft fm outfm
+Olddate = filedate(fn ft fm)
+If outfm ^= '' then  Queue 'SET FM' outfm
+Else outfm = fm
+ 
+if ft='DIRECT' & Opt.$lock then do /* Did we try to lock ? */
+   msgCmd='EMSG'
+   lastMsgId=word(value('msg.'msg.0),1)
+   if LastMsgId='DVHREQ2289I' then msgCmd='MSG'
+      else if LastMsgId='DVHREQ2289E' then /* Lock failed */
+              parse value 0 0 with locked Opt.$lock
+   'PIPE STEM MSG.|CHANGE //'msgcmd' /|STACK'
+end
+If ^trusted then do
+  Queue 'SET MSGLINE ON M 12 Overlay'
+  Queue "EMSG Remember! Don't use DE to change minidisks!"
+  End
+parse value '' with t tt msg
+if ft='DIRECT' then
+ if Opt.$lock & symbol('LockFail')<>'VAR'
+  then tt='Working in R/W mode, any change will be sent to DIRMAINT'
+  else t='Working in R/O mode.  Use "DIRME' fn 'LOCK"  to apply changes.'
+select
+ when notFound<>'' then msg='YELL SUBCONFIG(s) not found:' notFound
+ when dirmnolog then msg='RED DIRMAINT not logged on,',
+                       'changes impossible.'
+ when ^dirmok   then msg='RED DIRMAINT not ready,',
+                       'changes impossible.'
+ when t<>''     then msg='RED' t
+ when tt<>''    then msg='GRE' tt
+ otherwise nop
+end
+if msg<>'' then do
+   parse upper source . . myname mytype . syn .
+   'GLOBALV SELECT' myname 'SETL MSG' msg
+   queue 'COMMAND CMS EXEC' myname '%%$$%%'
+end
+if ft='DIRECT' & Opt.$lock then
+   'PIPE DISK' fn ft fm '|STRIP LEADING|FIND MDISK|JOIN * X15|VAR oMdsks'
+'XEDIT' fn ft fm
+If rc = 0 then 'STATEW' fn ft outfm
+if rc=0 then  changed=  (filedate(fn ft outfm)<>olddate )
+ 
+If rc ^= 0 | ^Changed then do
+  Say 'No changes made'
+  return 123456
+  End
+ 
+if ft='DIRECT' then
+   If Changed & Opt.$lock=0 then
+      call Say_Col 'Your changes are **NOT** sent to DIRMAINT'|| '15'x,
+                || 'Use      "DIRME' fn 'LOCK"       to apply changes.'
+Return rc
+ 
+/*-----------------------------------------------------------------*/
+XeditProf: /* Tailor a bit                                         */
+/*-----------------------------------------------------------------*/
+ parse upper source . . myname mytype . syn .
+ 'GLOBALV SELECT' myname 'GET MSG'
+ parse var msg clr msg
+ address Xedit
+ 'COMMAND EXTRACT /CMDLINE/RESERVED/LSCREEN/FN/FT/MSGL/PREFIX'
+ 'COMMAND SUPERSET /NUM ON/V 1 72/TRUNC 72/CASE M I'
+ if prefix.1='OFF' then 'COMMAND SET PREFIX ON'
+ 
+ If CmdLine.2='2' then do
+    linNb='3'
+    select
+     when msgline.1='OFF' then
+       'COMMAND SET MSGLINE ON 4 6 OVERLAY'
+     when msgline.2=3 then
+       'COMMAND SET MSGLINE ON 4' max(6,msgline.3) msgline.4
+     Otherwise
+       'COMMAND SET MSGLINE ON' msgline.2 max(6,msgline.3) msgline.4
+    end
+ end; else do
+    linNb='2'
+    select
+     when msgline.1='OFF' then
+       'COMMAND SET MSGLINE ON 3 6 OVERLAY'
+     when msgline.2=2 then
+       'COMMAND SET MSGLINE ON 3' max(6,msgline.3) msgline.4
+     Otherwise
+       'COMMAND SET MSGLINE ON' msgline.2 max(6,msgline.3) msgline.4
+    end
+ end
+ 'SET RESERVED' LinNb clr 'REVV HI' center(msg,lscreen.6)
+ 
+exit
+SAY_COL:
+ if symbol('VMoutcolor')<>'VAR' then
+    parse value diag(8,'Q SCREEN') with  'VMOUT' VMoutcolor '15'x
+ parse arg SayMsg, color
+ if color='' then
+    if space(VmOutColor)='RED REVVIDEO'
+       then color='WHITE REVV'
+       else color='RED REVV'
+ 'CONWAIT';call diag 8,'SCREEN VMOUT' Color
+ 'PIPE VAR SayMsg|SPLIT X15|STRIP TRAILING|SPILL 79|PAD 79 41|CONS'
+ 'CONWAIT';call diag 8,'SCREEN VMOUT' VMoutcolor
+return
+/*-----------------------------------------------------------------*/
+CheckMdisks: /* If mdisks have been changed, ask DIRMAINT for info */
+/*-----------------------------------------------------------------*/
+/* MDISK 0191 3390 180 17 VTE003 MR RKRIS WKRIS MKRIS               */
+ if symbol('oMdsks')<>'VAR' then oMdsks=''
+ 'PIPE (end ?) <' user 'DIRECT A', /* New directory entry */
+    '|STRIP LEADING|FIND MDISK' ||,
+    '|SPEC PAD 0 W4  1.8 Right  W5 NW.8 Right PAD 40 W6 20.6',
+    '|S: SORT UNIQUE', /* Maybe an mdisk was duplicated */
+    '|LK: LOOKUP',
+    '? VAR oMdsks|Split X15',      /* Mdisks of old entry */
+    '|SPEC PAD 0 W4  1.8 Right  W5 NW.8 Right PAD 40 W6 20.6',
+    '|LK:',
+    '|OUT: FaninAny',              /* Duplicated or changed mdisks */
+    '|SPEC 20.6 1|SORT UNIQUE',    /* Keep volsers with changes */
+    '|JOIN * / /|VAR ChgdVols',
+    '?S:|OUT:'
+ 
+ if symbol('ChgdVols')<>'VAR' then return /* No changes */
+ call Say_Col '4015'x'You changed mdisks on' ChgdVols'1540'x,
+           || '15'x'Wait until DIRMAINT executed your REPLACE',
+                   'for' user,
+           || '15'x'then check you reader:',
+           || '15'x'  If DIRMAINT sends a  DIAGNOSE FREEXT',
+           || '15'x'  you caused overlaps'"1540"x,'YELL REVV'
+ 'CP SLEEP 10 SEC ATTN'
+ 'EXEC DIRMAINT FREEXT' ChgdVols
+ 
+return
+/*-----------------------------------------------------------------*/
+EFILE: /*                                                          */
+/*-----------------------------------------------------------------*/
+Procedure expose dirm dirmnolog dirmok msg. dirmR5 files opt. ErrToStem,
+                 notFound
+Arg fn ft .; file=fn ft
+'GETFMADR'
+Pull . fm adr .
+Cplevel = word(diag(0),1)
+parse var files (file) cuu . ','
+If cuu='' then call Exit 5 'File' file 'not found in' files
+ 
+Parse value diagrc(8,'LINK DIRMAINT' cuu adr 'RR') with rc cc msg '15'x
+if rc^=0 then call exit rc msg
+'PIPE Command ACCESS' adr fm
+'ERASE' fn ft 'A'
+Trusted = 1
+Call edit fn ft fm 'A'
+Retc = result
+'RELEASE' fm
+Call diag 8,'DET' adr
+If retc ^= 0 then call exit retc
+Dirm 'FILE' fn ft 'A'
+If rc ^= 0 then call exit rc
+If abbrev('YES',reply('Do you want to reload' fn ft'?','Yes','Yes No'))
+  Then do
+    if fn ft = 'EXTENT CONTROL' then Dirm 'RLDEXT'
+    else Dirm 'RLDD'
+  end
+Call exit 0
+ 
+/*-----------------------------------------------------------------*/
+EXIT: /* Exit, perhaps with message                                */
+/*-----------------------------------------------------------------*/
+Parse arg retc message                 /* Get return code and message */
+Parse value retc 0 with retc .         /* Default return code = 0     */
+if ErrToStem & retc<>0 then do
+   do i=2 to arg();message=message'15'x||arg(i);end i
+   If right(ErrStem,1)='.'
+      then 'PIPE VAR MESSAGE|DEBLOCK LINEND|STEM' ErrStem '1'
+      else 'PIPE VAR MESSAGE|VAR' ErrStem '1'
+end; else do
+   If message ^= '' then say message    /* If non-blank, then say so   */
+   do i=2 to arg();say arg(i);end
+end
+Do while c.$added ^= ''
+  Parse var c.$added adr fm c.$added
+  If fm ^= '' Then 'RELEASE' fm
+  Call diag 8,'DET' adr
+  End
+Exit retc                              /* Return to caller            */
+ 
+/*-----------------------------------------------------------------*/
+FILEDATE: /*                                                       */
+/*-----------------------------------------------------------------*/
+Procedure
+Arg fn ft fm .
+'PIPE COMMAND LISTFILE' fn ft fm '( DATE |' ,
+     'Drop 1 | Take 1 |' ,
+     'Specs 57-* 1 |' ,
+     'Stem l.'
+If rc ^= 0 then l.1 = ''
+Return l.1
+ 
+/*-----------------------------------------------------------------*/
+REPLY: /* Get a reply from the punter                              */
+/*-----------------------------------------------------------------*/
+Procedure expose c. ErrToStem
+Parse arg msg,default,list            /* Prompt,default,valid-list     */
+Do externals()                        /* Ignore anything entered ahead */
+  Pull line
+  Say 'Ignored:' line
+  End
+Do until reply ^= ''                  /* Insist on SOME reply....      */
+  Say '1DE8'x || msg || '1D60'x       /* Issue prompt                  */
+  If list ^= '' then say 'Valid choices are:' list
+  If default ^= '' then say 'Press ENTER for default -' default
+  Say 'Or enter QUIT to exit or SUBSET for CMS subset.'
+  Parse upper external reply          /* Get punters reply             */
+  Select
+    When reply = '' then reply = translate(default) /*Take the default */
+    When reply = 'QUIT' then call exit 4 'O.K.'  /* Quitter? Exit      */
+    When reply = 'SUBSET' then do     /* CMS subset requested?         */
+      'SUBSET'                        /* Into subset                   */
+      Reply = ''                      /* Force a re-prompt             */
+      End
+    When list ^= '' then do
+      Input = Reply
+      Do I = 1 to words(list)
+        Reply = translate(word(list,i))
+        If abbrev(Reply,input) then leave
+        Reply = ''
+        End
+      End
+    Otherwise NOP                     /* Answer is non-blank. Thats OK */
+    End
+  End
+Return reply                          /* Return the reply to caller    */
+ 
+/*-----------------------------------------------------------------*/
+NoDirmaint: /*                                                     */
+/*-----------------------------------------------------------------*/
+ parse upper Arg userID '(' options ; userID=space(userID)
+ if userID='' then call exit 6 'Userid to view missing'
+ 
+ dirfile='USER DIRECT'
+ parse value diag(0) with 9 env +2 25 bitmap 33
+ /* 7FFFFFE000000000 for z/VM Version 6 Release 1.0 */
+ /* 7FFFFFF000000000 for z/VM Version 6 Release 2.0 */
+ /*zVM52= (bitand(substr(bitmap,3,1),'FF'x)='FF'x) */
+ /*zVM61= (bitand(substr(bitmap,4,1),'E0'x)='E0'x) */
+ zVM62= (bitand(substr(bitmap,4,1),'F0'x)='F0'x)
+ if zVM62 then dirsource='PMAINT 2CC READ'
+          else dirsource='MAINT  2CC READ'
+ 
+/* Scan user preferences */
+'STATE DRM NAMES'
+if rc=0 then do
+   'MAKEBUF'
+   'NAMEFIND :nick DRM    :DirFile              (FILE DRM STACK'
+   if rc=0 then     pull t;if t<>'' then DirFile=t
+   'NAMEFIND :nick DRMAC  :DirSource :DirObject (FILE DRM STACK'
+   if rc=0 then do; pull t;if t<>'' then DirSource=t
+                    pull t;if t<>'' then DirObject=t ; end
+   'DROPBUF'
+end
+if userID=word(dirFile,1) then
+   call exit 6 'Userid' userID 'can cause troubles: it matches',
+               'the name of your directory source:' dirfile
+ 
+/* Get access to the place for the object directory.*/
+ parse var DirSource user cuu ReadPw MultPw '' option emsg
+ toLink=user cuu
+ if readPW<>'' then option='PW' readPW
+ oq=queued()
+ 'EXEC VMLINK' tolink'(.MSG .FM LIFO NOINVOKE PUSH' option,
+                         left('NONAME',7*(words(ToLink)>1))
+ parse value '' with emsg fm
+ do queued()-oq                       /* format: .*MAINT191 .FM X  */
+    parse pull tag rest
+    if tag='*.MSG' then emsg=emsg||'15'x ||rest
+                   else parse var rest . fm .
+ end
+ if fm='' then do
+    if Emsg='' then call exit word(rc 9999,(rc=0)+1),
+          '"VMLINK' space(Tolink)'" failed without errormessage... rc='rc
+    else call exit word(rc 9999,(rc=0)+1) emsg
+ end
+ 
+ 'STATE' dirFile
+ if rc<>0 then do
+    'EXEC VMLINK' tolink'(POP'
+    call Exit rc 'file' dirsource 'not found on' toLink
+ end
+ 'PIPE (end ?) <' dirFile  fm,
+     '|REXX('myname mytype') $$GetUser$$' userid,
+     '|Var found',
+     '|>' userID 'DIRECT A3'
+ 'EXEC VMLINK' tolink'(POP'
+ erc=rc
+ if symbol('found')<>'VAR' then do
+    erc=27
+    say 'USER' userID 'not found in' dirFile 'on' DirSource
+ end
+ if erc=0 then 'XEDIT' userID 'DIRECT A3'
+exit erc
+/*-----------------------------------------------------------------*/
+GetUser: /* PIPE subrtn to extract entry of USER/PROFILE/SUBCO/IDEN*/
+/*-----------------------------------------------------------------*/
+ parse arg what userid .
+ if userId='' then do
+    say myname': userid missing'; exit -9;end
+ 
+ 'CALLPIPE (end ?) *:',       /* Connect to input */
+   '|LK: LOOKUP W1 DETAIL',   /* Look for a USER-type record */
+   '|PICK W2 == /'userID'/',  /* Check if wanted userid */
+   '|Var found|TAKE',         /* If found: remember & take one */
+   '|*:',                     /* pass userid record to output */
+   '?LITERAL USER IDENTITY SUBCONFIG PROFILE|SPLIT',
+   '|LK:'
+ 
+ if symbol('Found')<>'VAR' then exit rc
+ 
+ 'CALLPIPE (end ?)',
+   '|Stop: faninany|Gate: Gate', /* Make a PIPE stop construct */
+   '?*.input:',                  /* Connect to input */
+   '|LK: LOOKUP W1 DETAIL',      /* Look for a USER-type record */
+   '|Stop:',                     /* If one found;: stop pipe */
+   '?LITERAL USER IDENTITY SUBCONFIG PROFILE|SPLIT',
+   '|LK:',                       /* all USER type keywords */
+   '|Gate:',                     /* stop if user found */
+   '|*.output:'                  /* to output */
+exit rc

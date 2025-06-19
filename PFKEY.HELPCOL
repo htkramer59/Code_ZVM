@@ -1,0 +1,30 @@
+.cs 0 on
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+ PF Key Settings:
+ ----------------
+ 
+  PF1      Help key.
+ 
+  PF2      Display a command summary screen.
+ 
+  PF3/15   Exit COL.
+.cs 0 off
+.cs 1 on
+ PF Key Settings:
+ ----------------
+ 
+  PF1   is set to a Help key.
+ 
+  PF2   is set to display a command summary screen.
+ 
+  PF3   are set to Exit COL.  If you set AUTO_EXIT = 'ON' in PROFCOL
+  and   XEDIT then pressing ENTER will exit COL, if a COL command has
+  PF15  not been entered, a screen change has not been made or a XEDIT
+        command line entry has not been made.

@@ -1,0 +1,10 @@
+/**/
+Parse Upper Arg fn ft fm ofm' ('replace
+If fn='' Then Exit 28
+If ft='' Then Exit 128
+If fm='' Then Exit 228
+If ofm='' Then Exit 328
+If replace='' Then Nop
+Address CMS 'COPYFILE 'fn ft fm' = = 'ofm' (OLDDATE 'replace
+If rc=0 Then Address CMS 'ERASE 'fn ft fm
+        Else Exit rc

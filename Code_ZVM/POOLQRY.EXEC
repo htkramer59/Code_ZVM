@@ -1,0 +1,66 @@
+/*---------------------------------------------------------------+
+| Function : Show which volumes are in a disk group              |
+|                                                                |
+| File     : POOLQRY  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : POOLQRY  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210527 10:49:42                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg poolname .
+If poolname='' Then sel=''
+               Else sel='| pick anycase w1.1 == ~'poolname'~'
+/*---------------------------------------------------------------+
+| Access EXTENT CONTROL location                                 |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRMAINT 1DF (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Read extent control and extract groups                         |
++---------------------------------------------------------------*/
+'PIPE (NAME POOLQRY.EXEC:31 END ?)',
+    '< EXTENT CONTROL 'wfm,
+    '| inside anycase ~:GROUPS.~ ~:END.~',       /* Select section   */
+    '| nlocate anycase ~ALLOCATE~',              /* Remove this      */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~',                        /* Remove comments  */
+    '| specs w1.1 1.12 w2;* nw',                 /* Rework...        */
+    '| join keylen 12',                          /* Join m           */
+    sel,                                         /* Make selection   */
+    '| stem pool.'                               /* Store as         */
+Address CMS 'VMLINK DIRMAINT 1DF <DET (NONAMES QUIET'
+/*---------------------------------------------------------------+
+| Find the volumes...                                            |
++---------------------------------------------------------------*/
+Do p=1 to pool.0
+  'PIPE (NAME POOLQRY.EXEC:46 END ?)',
+     'literal 'pool.p,                           /* Take these       */
+     '| f: fanout',                              /* Duplicate        */
+     '| specs w1.1 1.12',                        /* Keep pool name   */
+     '| j: juxtapose',                           /* Join them        */
+     '| join keylen 12',                         /* Join on poolname */
+     '| cons',                                   /* Show             */
+     '? f:',                                     /* Conn 2 fanout    */
+     '| xlate upper',                            /* Uppercase        */
+     '| specs w2;*',                             /* Keep volumenames */
+     '| split',                                  /* Split them       */
+     '| specs ~QUERY DASD~ 1 w1.1 nw',           /* Compose CP cmds  */
+     '| cp',                                     /* Issue them       */
+     '| if: if locate anycase ~NOT FOUND~',      /* Do they exist    */
+     '|    specs ~---~ 1 1;* nw',                /* ..if not rework  */
+     '| if:',                                    /* Conn 2 if        */
+     '|    specs w5.1 1 x40 n',                  /* ...else...       */
+     '| if:',                                    /* Conn 2 if        */
+     '| j:'                                      /* Conn 2 juxtapose */
+End p
+Exit

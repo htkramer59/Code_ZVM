@@ -1,0 +1,561 @@
+/*---------------------------------------------------------------+
+| Function : Create a MDISKMAP                                   |
+|                                                                |
+| File     : MAP      EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : USER     DIRECT    input                            |
+|            USER     MDISKMAP  output, depends on arguments     |
+|            USER     FREEXT    output, depends on arguments     |
+|            USER     USEDXT    output, depends on arguments     |
+|            DM_VMLNK EXEC                                       |
+|                                                                |
+|                                                                |
+| Called   : DM_MAP   <switch> ( <userfn> <userft>               |
+|                     .         Creates USER MDISKMAP            |
+|                     FREE      Creates USER FREEXT              |
+|                     USED      Creates USER USEDXT              |
+|                     ?         Shows helpd                      |
+|           <userfn> <userft>   filename of DIRECTORY            |
+|                                                                |
+| Enduser calls: MAP, FREE or USED                               |
+|                                                                |
+| Comments : Usable with a monolithic user directory             |
+|            VMLINK DIRECT requires an entry in VMLINK NAMES     |
+|            Assumes 3390 devices                                |
+|            Usable as PIPE stage when EXECLOADed with           |
+|            filetype REXX                                       |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240618 18:25:19                                   |
+| Changes  : .                                                   |
+|            20250601 H.T.Kramer : Rewrite to fix some errors    |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what . '(' dirfnft
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Act on the filetype we are called with                         |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC' Then Do
+                      pipecmd='PIPE'
+                      break='| specs a: 1.11 .',
+                                       '12;* 12',
+                                       'break a',
+                                       'id a 1.11'
+                      End
+When myft='REXX' Then Do
+                      pipecmd='CALLPIPE'
+                      break=''
+                      End
+Otherwise Call Exit '999'
+End
+/*---------------------------------------------------------------+
+| Get some stuff from caller and act accordingly                 |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting 'what
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Define the headers                                             |
++---------------------------------------------------------------*/
+statshdr='Label   Used      Used%   Free     Free%   Capacity'
+statssep='-----   --------- ------- -------- ------- --------'
+volhdr='Label  DevType Start End   Size  Owner    Vdev Status       Subconfig'
+volsep='-----  ------- ----- ----  ----  ----     ---- ------       ---------'
+hdr='; ;'Date('S') Time() myfn';'volhdr';'volsep
+/*---------------------------------------------------------------+
+| Process  the arguments                                         |
++---------------------------------------------------------------*/
+Select
+When what=''     Then Do
+                      used=0
+                      gap=0
+                      outft='MDISKMAP'
+                      End
+When what='FREE' Then Do
+                      used=0
+                      gap=1
+                      outft='FREEXT'
+                      End
+When what='USED' Then Do
+                      used=1
+                      gap=0
+                      outft='USEDXT'
+                      End
+When what='?'    Then Call Help
+Otherwise Call Exit '228' what
+End
+Select
+When pipecmd='PIPE'     Then pipout='| > USER 'outft ws
+When pipecmd='CALLPIPE' Then pipout='| *:'
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Access the location of the DIRECT file                         |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+Call Collect_Info
+/*---------------------------------------------------------------+
+| Remove access to the DIRECT file                               |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR DET')
+/*---------------------------------------------------------------+
+| M A I N - l i n e                                              |
++---------------------------------------------------------------*/
+Call Calc_EndCyl_Overlaps
+Call Find_Gaps
+Call Add_DevType
+Call Create_Statistics
+Call Add_Headers
+Call Write_Report
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General exit point                                             |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+Help:
+/*---------------------------------------------------------------+
+| Show help                                                      |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+pipecmd' (NAME DM_MAP.EXEC:136 END ?)',
+   '< 'myfn myft' *',                            /* Read myself      */
+   '| tolabel Parse',                            /* Up to here       */
+   '| cons'                                      /* ...and display   */
+Call Exit
+Return
+ 
+ 
+Move2Origin:
+/*---------------------------------------------------------------+
+| Overwrite the location. stem                                   |
++---------------------------------------------------------------*/
+pipecmd' (NAME DM_MAP.EXEC:148 END ?)',
+    'stem work.',                                /* Take these       */
+    '| buffer',                                  /* Prevent stall    */
+    '| stem location.'                           /* Hand 2 rexx      */
+Drop work.
+Return
+ 
+ 
+Collect_Info:
+/*---------------------------------------------------------------+
+| Check if the directory file is there                           |
++---------------------------------------------------------------*/
+pipecmd' (NAME DM_MAP.EXEC:160 END ?)',
+    'literal 'dirfnft' *',                       /* Input            */
+    '| state',                                   /* Does it exist    */
+    '| count lines',                             /* How many?        */
+    '| var dirok'                                /* Store as boolean */
+If \dirok Then Call Exit 299
+/*---------------------------------------------------------------+
+| Read the user direct & collect info on dasd sizes              |
++---------------------------------------------------------------*/
+pipecmd' (NAME DM_MAP.EXEC:169 END ?)',
+   '< 'dirfnft wfm,                              /* Read input       */
+   '| specs 1.72 1',                             /* Remove SEQ no's  */
+   '| strip',                                    /* Remove spacing   */
+   '| pick 1.1 \== ~*~ and',                     /* Remove comments  */
+          '1.1 \== ~ ~',                         /* .and empty recs  */
+   '| p: pick anycase w1.1 == ~USER~ or',        /* Select these     */
+                     'w1.1 == ~SUBCONFIG~ or',   /* .                */
+                     'w1.1 == ~IDENTITY~ or',    /* .                */
+                     'w1.1 == ~PROFILE~ ',       /* .                */
+   '| specs w2.1 1.8 x40 n',                     /* Keep identificat.*/
+   '| j: juxtapose',                             /* Join w mdisks    */
+   '| specs w5.1 1.6',                           /* Adjust layout    */
+           'pad 0 w3.1 nw.5 right',              /* .                */
+           'w4.1 nw.5 right pad space',          /* .                */
+           'w1.1 nw.8 pad 0',                    /* .                */
+           'w2.1 nw.4 right',                    /* .                */
+           '~;~ nw',                             /* .                */
+   '| fi: fanin',                                /* Take other info  */
+   '| sort w1.1',                                /* Sort on id       */
+   '| nlocate ~$$$$$$~',                         /* Ignore these     */
+   '| stem location.',                           /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| pick anycase substr 1.2 of w1.1 == ~MD~',  /* Select these     */
+   '| specs w2.1 1.4 right',                     /* Adjust layout    */
+           'w4.1 nw',                            /* .                */
+           'w5.1 nw',                            /* .                */
+           'w6.1 nw ',                           /* .                */
+   '| j:',                                       /* Conn 2 juxtapose */
+   '?',                                          /* 2nd pipe         */
+   'cp QUERY DASD ALL',                          /* Ask CP           */
+   '| nlocate anycase ~FREE~',                   /* Ignore these     */
+   '| nlocate anycase ~OFFLINE~',                /* .                */
+   '| specs ~QUERY DASD DETAILS~ 1 w2.1 nw',     /* Compose cmds     */
+   '| cp',                                       /* Hand 2 cp        */
+   '| change ~ = ~ ~',                           /* Remove =         */
+   '| change ~,~~',                              /* Remove ,         */
+   '| pick anycase w2.1 == ~CUTYPE~',            /* Select these     */
+   '| specs w7.1 1',                             /* Compose layout   */
+           'w1.1 nw',                            /* .                */
+           'w5.1 nw',                            /* .                */
+           'w8.1 nw',                            /* .                */
+           'w9.1 nw',                            /* .                */
+           '~;~ nw',                             /* .                */
+   '| sort w1.1',                                /* Sort on label    */
+   '| f: fanout',                                /* Hand on...       */
+   '| specs w1.1',                               /* Keep this        */
+   '| stem volume.',                             /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs w2.1',                               /* ...see above     */
+   '| stem rdev.',                               /* .                */
+   '? f:',                                       /* .                */
+   '| specs w3.1',                               /* .                */
+   '| stem devtype.',                            /* .                */
+   '? f:',                                       /* .                */
+   '| specs w4.1',                               /* .                */
+   '| stem unit.',                               /* .                */
+   '? f:',                                       /* .                */
+   '| specs w5.1',                               /* .                */
+   '| stem size.'                                /* .                */
+If rc<>0 Then Call Exit rc 'PIPE'
+Return
+ 
+ 
+Calc_EndCyl_Overlaps:
+/*---------------------------------------------------------------+
+| Calculate end cylinders for the minidisks & find overlaps      |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+  pipecmd' (NAME DM_MAP.EXEC:239 END ?)',
+    'stem location.',                            /* Take these       */
+    '| pick anycase w1.1 == ~'volume.v'~',       /* Selet these      */
+    '| change anycase ~00END~ ~'size.v'~',       /* Add max-size     */
+    '| buffer',                                  /* Prevent stall    */
+    '| specs w1;* 1',                            /* Compose          */
+            'a: w2.1 .',                         /* .      layout    */
+            'b: w3.1 .',                         /* .                */
+            'set (#0:=(a+b-1);#1:=(a+b))',       /* .                */
+            'print #0 pict 99999 nw',            /* .                */
+            'print #1 pict 99999 nw',            /* .                */
+    '| specs w1.2 1 w7.1 nw w3.3 nw w8.1 nw',    /* Adjust layout    */
+    '| sort w1.2',                               /* Sort uid/mdisk   */
+    '| u: unique w1.2 multiple',                 /* Duplicates?      */
+    '| specs 1;* nw ~**Overlap**~ nw',           /* Add tag          */
+    '| fi: fanin',                               /* Take in others   */
+    '| sort w1.2',                               /* Sort uid/mdisk   */
+    '| stem work. append',                       /* Add 2 stem       */
+    '? u:',                                      /* Conn 2 unique    */
+    '| buffer',                                  /* Prevent stall    */
+    '| fi:'                                      /* Conn 2 fanin     */
+End v
+Call Move2Origin
+/*---------------------------------------------------------------+
+| Find other overlaps                                            |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+  pipecmd' (NAME DM_MAP.EXEC:267 END ?)',
+     'stem location.',                           /* Take these       */
+     '| pick anycase w1.1 == ~'volume.v'~',      /* Select volume    */
+     '| p: pick anycase w-1;-1 \== ~**GAP**~ and',  /* Remove thse      */
+                       'w-1;-1 \== ~**OVERLAP**~ ', /* .                */
+     '| t: take first 1',                        /* Take 1 record    */
+     '| var first',                              /* Hand 2 rexx      */
+     '? p:',                                     /* Conn 2 pick      */
+     '| stem gapovlp.',                          /* Hand 2 rexx      */
+     '? t:',                                     /* Conn 2 take      */
+     '| stem rest.'                              /* Hand 2 rexx      */
+   prev=first
+/*---------------------------------------------------------------+
+| Tag the overlaps..                                             |
++---------------------------------------------------------------*/
+   Do r=1 To rest.0
+      Parse Value prev   With . strt1 end1 .
+      Parse Value rest.r With . strt2 end2 .
+      If strt2<=end1 Then rest.r=rest.r '**Overlap**'
+      If end2<=end1  Then rest.r=rest.r '**Overlap**'
+      prev=rest.r
+   End r
+   pipecmd' (NAME DM_MAP.EXEC:289 END ?)',
+       'stem rest.',                             /* Take this        */
+       '| append stem gapovlp.',                 /* Add these        */
+       '| append var first',                     /* .                */
+       '| sort w1.2',                            /* Sort uid/mdisk   */
+       '| specs 1.58 1',                         /* Adjust length    */
+       '| pick anycase w1.1 \== ~FIRST~',        /* Remove these     */
+       '| stem work. append'                     /* Add 2 array      */
+End v
+Call Move2Origin
+Return
+ 
+ 
+Find_Gaps:
+/*---------------------------------------------------------------+
+| Find the gaps at the end of the volumes                        |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+  pipecmd' (NAME DM_MAP.EXEC:308 END ?)',
+     'stem location.',                           /* Take these       */
+     '| pick anycase w1.1 == ~'volume.v'~',      /* Select volume    */
+     '| d: drop last 1',                         /* Remove last 1    */
+     '| fi: fanin',                              /* Take in others   */
+     '| split at ;',                             /* Split here       */
+     '| sort w1.2',                              /* Sort uid/mdisk   */
+     '| nlocate w4.1 ~00000~',                   /* Ignore these     */
+     '| stem work. append',                      /* Add to array     */
+     '? d:',                                     /* Conn 2 drop      */
+     '| if: if pick 14.5 < ~'size.v'~',          /* Select these     */
+     '|     specs  w1;* 1',                      /* Adjust records   */
+                  '~;'volume.v'~ nw',            /* .                */
+                  '40.5 nw',                     /* .                */
+                  '~'size.v-1'~ nw',             /* .                */
+     '|     specs 1;* 1',                        /* Calculate size   */
+                 'a: w-1;-1 .',                  /* .                */
+                 'b: w-2;-2 .',                  /* .                */
+                 'set #0:=a-b+1',                /* .                */
+                 'print #0 pict 99999 nw',       /* .                */
+                 '~-------- ---- -----   **GAP**~ nw', /* .                */
+     '| if:',                                    /* Conn 2 if        */
+     '| fi:'                                     /* Conn 2 fanin     */
+End v
+Call Move2Origin
+/*---------------------------------------------------------------+
+| Find the gaps between minidisks                                |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+   pipecmd' (NAME DM_MAP.EXEC:338 END ?)',
+      'stem location.',                          /* Take these       */
+      '| p: pick anycase w1.1 == ~'volume.v'~ and',  /* Take a selection */
+                     'w-1;-1 \== ~**OVERLAP**~ and', /* .                */
+                     'w4.1 \== w7.1',            /* .                */
+      '| stem work1.',                           /* Hand 2 rexx      */
+      '? p:',                                    /* Conn 2 pick      */
+      '| stem work2.'                            /* Hand 2 rexx      */
+    Do w=1 To work1.0
+       nextdisk=Word(work1.w,7)
+       n=w+1
+       curdisk=Word(work1.n,2)
+       If nextdisk<>curdisk &,
+          nextdisk <> '-----' Then work3.w=work3.w';' volume.v  nextdisk Right(curdisk-1,5,'0') Right(curdisk-nextdisk,5,'0'),
+                                       '-------- ---- ----- **GAP**'
+    End w
+    pipecmd' (NAME DM_MAP.EXEC:354 END ?)',
+       'stem work1.',                            /* Take these       */
+       '| append stem work2.',                   /* .and these       */
+       '| split at ;',                           /* Split here       */
+       '| strip',                                /* Remove spaces    */
+       '| sort w1.2',                            /* Sort uid/mdisk   */
+       '| stem work.'                            /* Hand 2 rexx      */
+End v
+Call Move2Origin
+Return
+ 
+ 
+Add_DevType:
+/*---------------------------------------------------------------+
+| Adding the device type                                         |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+   pipecmd' (NAME DM_MAP.EXEC:372 END ?)',
+      'stem location.',                          /* Take these       */
+      '| pick anycase w1.1 == ~'volume.v'~',     /* Select a volume  */
+      '| specs w1.1 1 ~'devtype.v'~ nw w2;* nw', /* Reword records   */
+      '| split at ;',                            /* Split here       */
+      '| stem work. append'                      /* Hand 2 rexx      */
+End v
+Call Move2Origin
+Return
+ 
+ 
+Create_Statistics:
+/*---------------------------------------------------------------+
+| Create statistics                                              |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+   pipecmd' (NAME DM_MAP.EXEC:389 END ?)',
+      'stem location.',                          /* Take these       */
+      '| pick anycase w1.1 == ~'volume.v'~',     /* Select a volume  */
+      '| sort unique w1.3',                      /* Only uniq ones   */
+      '| p: pick w-1;-1 \== ~**GAP**~',          /* Ignore these...  */
+      '| if: if pick w3.1 == ~0000000~ and',     /* Select these     */
+                    'w4.1 == ~0000000~',         /* .                */
+      '|         specs',                         /* Add size of vol  */
+                     'w1.2 1',                   /* .                */
+                     '~'size.v'~ nw',            /* .                */
+                     'w4;* nw',                  /* .                */
+      '| if:',                                   /* Conn 2 if        */
+      '| specs printonly eof',                   /* Sum this         */
+                 'a: w5.1 .',                    /* .                */
+                 'set #0+=a',                    /* .                */
+                 'eof',                          /* .                */
+                 'print #0 pict 9999999 nw',     /* .                */
+      '| fi1: fanin',                            /* Take in other    */
+      '| join * x40',                            /* Make 1 record    */
+      '| specs',                                 /* Adjust layout    */
+              '~'volume.v'~ 1',                  /* .                */
+              '1;* nw',                          /* .                */
+              '~'size.v'~ NW',                   /* .                */
+      '| buffer',                                /* Prevent stall    */
+      '| fo: fanout',                            /* Send recs away   */
+      '| buffer',                                /* Prevent stall    */
+      '| fi2: fanin',                            /* Take in others   */
+      '| join * x40',                            /* Make 1 record    */
+      '| specs',                                 /* Adjust layout    */
+              'w1.2 1',                          /* .                */
+              'w5.1 nw',                         /* .                */
+              'w3.1 nw',                         /* .                */
+              'w6.1 nw',                         /* .                */
+              'w4.1 nw',                         /* .                */
+      '| stem work. append',                     /* Add 2 stem       */
+      '? p:',                                    /* Conn 2 pick      */
+      '| specs printonly eof',                   /* Sum this part    */
+                 'b: w5.1 .',                    /* .                */
+                 'set #1+=b',                    /* .                */
+                 'eof',                          /* .                */
+                 'print #1 pict 99999999 nw',    /* .                */
+      '| fi1:',                                  /* Conn 2 fanin     */
+      '? fo:',                                   /* Conn 2 fanout    */
+      '| specs printonly eof',                   /* Calc percentages */
+              'c: w2.1 .',                       /* .                */
+              'd: w3.1 .',                       /* .                */
+              'e: w4.1 .',                       /* .                */
+              'set (#2+=(c/e)*100;#3+=(d/e)*100)', /* .                */
+              'eof',                             /* .                */
+              'print #2 pict 999.99 nw',         /* .                */
+              'print #3 pict 999.99 nw',         /* .                */
+      '| fi2:'                                   /* Conn 2 fanout    */
+End v
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+pipecmd' (NAME DM_MAP.EXEC:445 END ?)',
+    'stem work.',                                /* Take these       */
+    '| stem stats.',                             /* Hand 2 rexx      */
+    '| specs printonly eof',                     /* Calculate        */
+            'a: w2.1 .',                         /* .totals          */
+            'b: w4.1 .',                         /* .                */
+            'c: w6.1 .',                         /* .                */
+            'set (#0+=a;#1+=b;#2+=c)',           /* .                */
+            'eof',                               /* .                */
+            '~Totals:~ 1',                       /* .                */
+            'print #0 nw',                       /* .                */
+            'print #1 nw',                       /* .                */
+            'print #2 nw',                       /* .                */
+    '| spec 1;* 1',                              /* Calculate        */
+           'a: w2.1 .',                          /* .percentages     */
+           'b: w3.1 .',                          /* .                */
+           'c: w4.1 .',                          /* .                */
+           'set (#0:=(a/c)*100;#1:=(b/c)*100)',  /* .                */
+           'print #0 pict --9.99 nw',            /* .                */
+           'print #1 pict --9.99 nw',            /* .                */
+     '| specs',                                  /* Ajust layout     */
+             'w1.1 1.8',                         /* .                */
+             'w2.1 nw.8 right',                  /* .                */
+             'w5.1 nw.7 right',                  /* .                */
+             'w3.1 nw.8 right',                  /* .                */
+             'w6.1 nw.7 right',                  /* .                */
+             'w4.1 nw.8 right',                  /* .                */
+     '| var totals'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Add totals & percentages to the stats                          |
++---------------------------------------------------------------*/
+pipecmd' (NAME DM_MAP.EXEC:476 END ?)',
+     'stem stats.',                              /* Take these       */
+     '| buffer',                                 /* Prevent stall    */
+     '| sort w1.1',                              /* Sort on volume   */
+     '| change /000.00/000.01/',                 /* To prevent errors*/
+     '| specs w1.1 1.8',                         /* Adjust layout    */
+             'a: w2.1 .',                        /* .                */
+             'b: w3.1 .',                        /* .                */
+             'c: w4.1 .',                        /* .                */
+             'd: w5.1 .',                        /* .                */
+             'e: w6.1 .',                        /* .                */
+             'print a pict -------9 nw',         /* .                */
+             'print b pict ---9.99  nw',         /* .                */
+             'print c pict -------9 nw',         /* .                */
+             'print d pict ---9.99  nw',         /* .                */
+             'print e pict -------9 nw',         /* .                */
+     '| preface var statssep',                   /* Add these        */
+     '| preface var statshdr',                   /* .                */
+     '| append var statssep',                    /* .                */
+     '| append var totals',                      /* .                */
+     '| append literal  ',                       /* Add empty line   */
+     '| stem stats.'                             /* Hand 2 rexx      */
+Return
+ 
+ 
+Add_Headers:
+/*---------------------------------------------------------------+
+| Select if the FREE is used                                     |
++---------------------------------------------------------------*/
+If gap Then keepgap='| locate ~**GAP**~'
+       Else keepgap=''
+/*---------------------------------------------------------------+
+| Add headers                                                    |
++---------------------------------------------------------------*/
+work.0=0
+Do v=1 To volume.0
+   pipecmd' (NAME DM_MAP.EXEC:507 END ?)',
+      'stem location.',                          /* Take these       */
+      '| pick anycase w1.1 == ~'volume.v'~',     /* Select volume    */
+      '| if: if pick substr -2;-2 of w6.1 == ~-~ and', /* If these         */
+                    'w-1;-1 \== ~**GAP**~',      /* .                */
+      '|     specs 1;* 1 ~+~ 68',                /* Add a marker     */
+      '| if:',                                   /* Conn 2 if        */
+      '| sort w1.1 w3.1',                        /* Sort on uid/mdisk*/
+      '| specs 1.47 1 54;* n ',                  /* Remove this      */
+      '| specs w1.2 1',                          /* Adjust layou     */
+              'a: w3.1 .',                       /* .                */
+              'b: w4.1 .',                       /* .                */
+              'c: w5.1 .',                       /* .                */
+              'print a pict zzzz9 nw',           /* .                */
+              'print b pict zzzz9 nw',           /* .                */
+              'print c pict zzzz9 nw',           /* .                */
+              'w6.1 nw.8',                       /* .                */
+              'w7.1 nw.4',                       /* .                */
+              '48-70 nw.22',                     /* .                */
+    keepgap,                                     /* Free is asked    */
+      '| specs a: w1.2 .',                       /* Add breaks       */
+                 '16;* 16',                      /* .                */
+                 'break a',                      /* .                */
+                 'id a 1',                       /* .                */
+      '| preface var hdr',                       /* Add header       */
+      '| split at ;',                            /* Split here       */
+      '| stem work. append'                      /* Hand 2 rexx      */
+End v
+Call Move2Origin
+Return
+ 
+ 
+Write_Report:
+/*---------------------------------------------------------------+
+| Write the report                                               |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Action if USED is asked                                        |
++---------------------------------------------------------------*/
+If used Then removegap='| nlocate ~**GAP**~'
+        Else removegap=''
+/*---------------------------------------------------------------+
+| Write to file                                                  |
++---------------------------------------------------------------*/
+pipecmd' (NAME DM_MAP.EXEC:552 END ?)',
+    'stem location.',                            /* Take these       */
+    removegap,                                   /* Used is asked    */
+    '| preface stem stats.',                     /* Add stats        */
+    pipout                                       /* Write 2 file     */
+Return

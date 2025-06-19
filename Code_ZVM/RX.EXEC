@@ -1,0 +1,660 @@
+/*---------------------------------------------------------------+
+| Function : Analyse the rexx code given and produce a           |
+|            cross-reference                                     |
+|                                                                |
+| File     : RX       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <fn>     <ft>      A piece of Rexx code             |
+|            <fn>     XREF      Cross-reference output           |
+|            RX       CODE      Input of Rexx stmts,funcs, etc   |
+|                                                                |
+| Called   : RX       <fn> <ft> <fm>                             |
+|                     <fn>      Is mandatory                     |
+|                     <ft>      Defaults to EXEC                 |
+|                     <fm>      Defaults to *                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211008 15:40:09                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg ifn ift ifm .
+Parse Source  . . myfn myft .
+If ifn='' Then Exit 28
+If ift='' Then ift='EXEC'
+If ifm='' Then ifm='*'
+x=Time('R')                                      /* Reset timer      */
+'VMFCLEAR'
+Call Init
+Call Read_File
+Call Find_Empty_Lines
+Call Find_Comments
+Call Remove_Comments
+Call Find_Literals
+Call Remove_Literals
+Call Find_Hex_Strings
+Call Find_Subroutines
+Call Find_Rexx
+Call Find_Vars
+Call Label_Subroutines
+/* Call Label_Select */
+Call Label_Do
+/*---------------------------------------------------------------+
+| Write the cross reference and exit                             |
++---------------------------------------------------------------*/
+Call Write_Xref
+Say
+Say 'Lines analysed: 'source.0
+Say 'Analysis took:  'Format(Time('E'),3,2)' seconds'
+Exit
+ 
+ 
+Label_Select:
+/*---------------------------------------------------------------+
+| Label the select statements in the source                      |
++---------------------------------------------------------------*/
+ 
+ 
+ 
+Return
+ 
+ 
+Label_Do:
+/*---------------------------------------------------------------+
+| Label the do structures found in the source                    |
++---------------------------------------------------------------*/
+'VMFCLEAR'
+'PIPE (NAME MANY.XEDIT:472 END ?)',
+    'stem forlabel.',
+    '| specs w1.1 1 w3;* nw',
+    '| f: fanout',
+    '| specs w1.1 1.10',
+    '| j: juxtapose',
+    '| sort w2.1 a',
+    '| specs w2.1 1 w1.1 nw',
+    '| join keylen 8',
+    '| pick anycase w2.1 == ~DO~ or w2.1 == ~END~',
+    '| specs w2;* 1.20 w1.1 nw',
+    '| join * x40',
+    '| split anycase before string ~DO~',
+    '| cons',
+    '? f:',
+    '| specs w2;*',
+    '| split',
+    '| specs pad 0 w1.1 1.8 right',
+    '| j:'
+Return
+ 
+ 
+Label_Subroutines:
+/*---------------------------------------------------------------+
+| Label the subroutines in the source included                   |
++---------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:57 END ?)',
+    'stem subdet.',                              /* .                */
+    '| pick w2.1 == ~I~',                        /* .                */
+    '| change ~-~%~',                            /* .                */
+    '| specs recno 1 1;* nw',                    /* .                */
+    '| specs ~(S~ 1 w1.1 n ~)---> (S~ n w1.1 n ~)<---~ n w2;* nw',   /* .                */
+    '| specs w1.1 1 w5.1 nw w2.1 nw w6;* nw',    /* .                */
+    '| specs fs % f1 1 ~;~ nw substr w2;* of f2 nw',   /* .                */
+    '| split before string ~;~',                 /* .                */
+    '| n: nlocate ~;~',                          /* .                */
+    '| specs w2.1 1 w1.1 nw',                    /* .                */
+    '| stem point1.',                            /* .                */
+    '? n:',                                      /* .                */
+    '| specs w2;*',                              /* .                */
+    '| f: fanout',                               /* .                */
+    '| specs w1.1 1 x40 n',                      /* .                */
+    '| j: juxtapose',                            /* .                */
+    '| specs w2.1 1 w1.1 nw',                    /* .                */
+    '| stem point2.',                            /* .                */
+    '? f:',                                      /* .                */
+    '| specs w2;*',                              /* .                */
+    '| split',                                   /* .                */
+    '| j:'                                       /* .                */
+'PIPE (NAME RX.EXEC:80 END ?)',
+    'stem point1.',                              /* .                */
+    '| append stem point2.',                     /* .                */
+    '| sort w1.1',                               /* .                */
+    '| specs pad 0 w1.1 1.5 right pad _  ~1~ nw.1 w2.1 nw.12 left',   /* .                */
+    '| stem pointer.'                            /* .                */
+'PIPE (NAME RX.EXEC:86 END ?)',
+    'stem source.',                              /* .                */
+    '| buffer',                                  /* .                */
+    '| specs pad 0 w1.1 1.5 right pad space ~2~ nw.1 6;* nw',   /* .                */
+    '| append stem pointer.',                    /* .                */
+    '| sort w1.2',                               /* .                */
+    '| specs w1.1 1 9;* nw',                     /* .                */
+    '| join keylen 5',                           /* .                */
+    '| if: if pick 7.2 \== ~(S~',                /* .                */
+    '|    specs w1.1 1 7;* 20',                  /* .                */
+    '| if:',                                     /* .                */
+    '| change 1.20 ~_~ ~',                       /* .                */
+    '| specs 1.5 1 x00 nw 6;* nw',               /* .                */
+    '| strip leading ~0~',                       /* .                */
+    '| specs fs 'fs' w1.1 1.5 right f2;* nw',    /* .                */
+    '| stem source.'                             /* .                */
+Return
+ 
+ 
+ 
+ 
+Find_Vars:
+/*---------------------------------------------------------------+
+| Find the variables and stems in the remaining parts of code    |
++---------------------------------------------------------------*/
+Say 'Processing Variables & Stems'
+Call ProcRest '= .'
+Call Add_2_Output 'varfnd.' 'Variables found: 'varfnd.0';Variable name    Locations:'
+Call ProcRest '.'
+Call Add_2_Output 'varfnd.' 'Stem Variables found: 'varfnd.0';Variable name    Locations:'
+Return
+ 
+ 
+ProcRest:
+/*---------------------------------------------------------------+
+| Process the remaining parts of the code                        |
++---------------------------------------------------------------*/
+Parse Arg loc nloc .
+If nloc<>'' Then nloc='| nlocate ~'nloc'~'
+            Else nloc=''
+If loc='='  Then chop='| specs fs 'loc' f1 1 x40 n'
+            Else chop='| specs fs 'loc' f1 1 ~.~ n x40 n | nlocate x7E'
+'PIPE (NAME RX.EXEC:128 END ?)',
+   'stem rest.',                                 /* .                */
+   '| locate ~'loc'~',                           /* .                */
+   nloc,                                         /* .                */
+   '| f: fanout',                                /* .                */
+   '| specs w1.1 1',                             /* .                */
+   chop,                                         /* .                */
+   '| j: juxtapose',                             /* .                */
+   '| pick 1.1 \== ~ ~',                         /* .                */
+   '| specs w1.1 1.20 w2;* nw',                  /* .                */
+   '| sort 1.20',                                /* .                */
+   '| join keylen 20',                           /* .                */
+   '| pick 1.1 \== ~\~',
+   '| stem varfnd.',                             /* .                */
+   '? f:',                                       /* .                */
+   '| specs w2;* 1',                             /* .                */
+   '| j:'                                        /* .                */
+Do v=1 To varfnd.0
+    work=varfnd.v
+    'PIPE (NAME RX.EXEC:147 END ?)',
+       'var work',                               /* .                */
+       '| f: fanout',                            /* .                */
+       '| specs w1.1 1.20',                      /* .                */
+       '| fi: faninany',                         /* .                */
+       '| join * x40',                           /* .                */
+       '| var work',                             /* .                */
+       '? f:',                                   /* .                */
+       '| specs w2;*',                           /* .                */
+       '| split',                                /* .                */
+       '| sort unique',                          /* .                */
+       '| join * x40',                           /* .                */
+       '| fi:'                                   /* .                */
+    varfnd.v=work
+End v
+Return
+ 
+ 
+Find_Rexx:
+/*---------------------------------------------------------------+
+| Find the rexx statements...                                    |
++---------------------------------------------------------------*/
+Say 'Processing Rexx statements/functions'
+'PIPE (NAME RX.EXEC:170 END ?)',
+   'stem rxline.',                               /* .                */
+   '| f: fanout',                                /* .                */
+   '| specs fs 'fs' f2 1 x40 n',                 /* .                */
+   '| strip leading ~0~',                        /* .                */
+   '| j: juxtapose',                             /* .                */
+   '| pick substr 1.1 of w2.1 \== ~,~',          /* .                */
+   '| specs w2.1 1.20 w1.1 nw',                  /* .                */
+   '| sort 1.20',                                /* .                */
+   '| join keylen 20',                           /* .                */
+   '| stem word.',                               /* .                */
+   '? f:',                                       /* .                */
+   '| specs fs 'fs' f1 1',                       /* .                */
+   '| split',                                    /* .                */
+   '| split after anyof ~()~',                   /* .                */
+   '| j:'                                        /* .                */
+'PIPE (NAME RX.EXEC:186 END ?)',
+   'var xref',                                   /* .                */
+   '| split',                                    /* .                */
+   '| strip',                                    /* .                */
+   '| sort unique',                              /* .                */
+   '| l: lookup anycase w1.1 w1.1 master',       /* .                */
+   '| stem code.',                               /* .                */
+   '?',                                          /* .                */
+   'stem word.',                                 /* .                */
+   '| l:',                                       /* .                */
+   '? l:',                                       /* .                */
+   '| stem rest.'                                /* .                */
+Do c=1 To code.0
+   wc=Words(code.c)-1
+   code.c=wc code.c
+End c
+'PIPE (NAME RX.EXEC:202 END ?)',
+    'stem code.',                                /* .                */
+    '| buffer',                                  /* .                */
+    '| specs w2.1 1.20 w1.1 nw.2 right w3;* nw', /* .                */
+    '| stem code.',                              /* .                */
+    '| pick anycase w1.1 == ~DO~ or',
+                   'w1.1 == ~END~ or',
+                   'w1.1 == ~SELECT~ or',
+                   'w1.1 == ~WHEN~ or',
+                   'w1.1 == ~OTHERWISE~',
+    '| stem forlabel.'
+Call Add_2_Output 'code.' 'Rexx statements found: 'code.0';Rexx              Count Lines'
+Drop code.
+Return
+ 
+ 
+Find_Hex_Strings:
+/*---------------------------------------------------------------+
+| Find hex literals                                              |
++---------------------------------------------------------------*/
+Say 'Processing HEX strings'
+remhex=''
+'PIPE (NAME RX.EXEC:218 END ?)',
+    'stem rxline.',                              /* .                */
+    '| f: fanout',                               /* .                */
+    '| specs fs 'fs' f2 1 x40 n',                /* .                */
+    '| j: juxtapose',                            /* .                */
+    '| pick substr 1.2 of w2.1 == xA77D or',     /* .                */
+           'substr 1.2 of w2.1 == xA77F or',     /* .                */
+           'substr 1.2 of w2.1 == xE77D or',     /* .                */
+           'substr 1.2 of w2.1 == xE77F',        /* .                */
+    '| pick substr 3.1 of w2.1 \== x40',         /* .                */
+    '| strip leading ~0~',                       /* .                */
+    '| specs w2.1 1.20 w1.1 nw',                 /* .                */
+    '| sort 1.5',                                /* .                */
+    '| join keylen 5',                           /* .                */
+    '| reverse',                                 /* .                */
+    '| space 1',                                 /* .                */
+    '| reverse',                                 /* .                */
+    '| specs w1.1 1.20 w2;* nw',                 /* .                */
+    '| stem hxstring.',                          /* .                */
+    '| specs x4F 1 ~CHANGE x~ nw w1.1 c2x n ~x4040404040~ nw',   /* .                */
+    '| append literal ',                         /* .                */
+    '| join * x40',                              /* .                */
+    '| var remhex',                              /* .                */
+    '? f:',                                      /* .                */
+    '| specs fs 'fs' f1',                        /* .                */
+    '| split',                                   /* .                */
+    '| j:'                                       /* .                */
+Call Add_2_Output 'hxstring.' 'No of hex strings found: 'hxstring.0';Hex strings on line(s):'
+/*---------------------------------------------------------------+
+| Removing the hex strings                                       |
++---------------------------------------------------------------*/
+If remhex<>'' Then Do
+     'PIPE (NAME RX.EXEC:250 END ?)',
+        'stem rxline.',                          /* .                */
+        '| buffer',                              /* .                */
+        remhex,                                  /* .                */
+        '| stem rxline.'                         /* .                */
+     End
+Drop hxstring.
+Return
+ 
+ 
+Remove_Literals:
+/*---------------------------------------------------------------+
+| Remove the literals found                                      |
++---------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:264 END ?)',
+    'stem lit.',                                 /* .                */
+    '| specs 1.121',                             /* .                */
+    '| strip',                                   /* .                */
+    '| sort unique',                             /* .                */
+    '| specs x4F 1 ~CHANGE x~ nw 1;* c2x n ~/ /~ nw',   /* .                */
+    '| stem change.'                             /* .                */
+Do c=1 To change.0
+  'PIPE (NAME RX.EXEC:272 END ?)',
+      'stem rxline.',                            /* .                */
+      '| buffer',                                /* .                */
+      change.c,                                  /* .                */
+      '| stem rxline.'                           /* .                */
+End c
+'PIPE (NAME RX.EXEC:278 END ?)',
+    'stem rxline.',                              /* .                */
+    '| buffer',                                  /* .                */
+    '| strip',                                   /* .                */
+    '| specs fs 'fs' f1 1.121 x00 n f2 n',       /* .                */
+    '| stem rxline.'                             /* .                */
+Drop lit.
+Return
+ 
+ 
+Find_Literals:
+/*---------------------------------------------------------------+
+| Find the literal strings in the rexx code                      |
++---------------------------------------------------------------*/
+Say 'Processing LITERALS'
+'PIPE (NAME RX.EXEC:293 END ?)',
+    'stem rxline.',                              /* .                */
+    '| locate anyof x7D7F',                      /* .                */
+    '| f: fanout',                               /* .                */
+    '| specs fs 'fs' f1',                        /* .                */
+    '| stem line.',                              /* .                */
+    '? f:',                                      /* .                */
+    '| specs fs 'fs' f2',                        /* .                */
+    '| strip leading ~0~',                       /* .                */
+    '| stem lineno.'                             /* .                */
+temp.0=0
+Do l=1 To line.0
+/*---------------------------------------------------------------+
+| Find where to chop the records                                 |
++---------------------------------------------------------------*/
+   work=line.l
+   'PIPE (NAME RX.EXEC:309 END ?)',
+       'var work',                               /* .                */
+       '| deblock 1',                            /* .                */
+       '| specs pad 0 recno 1.5 right w1;* nw',  /* .                */
+       '| locate w2.1 anyof x7D7F',              /* .                */
+       '| specs w1.1 1',                         /* .                */
+       '| strip leading ~0~',                    /* .                */
+       '| join 1 /;/',                           /* .                */
+       '| join * ~ nw x00 nw ~',                 /* .                */
+       '| specs 1;* 1 ~nw~ nw',                  /* .                */
+       '| var litloc'                            /* .                */
+/*---------------------------------------------------------------+
+| Cut out the literal from the line                              |
++---------------------------------------------------------------*/
+   'PIPE (NAME RX.EXEC:323 END ?)',
+       'var work',                               /* .                */
+       '| specs 'litloc,                         /* .                */
+       '| change ~x7D407D~x7D007D~',             /* .                */
+       '| change ~x7F407F~x7F007F~',             /* .                */
+       '| split at x00',                         /* .                */
+       '| specs 1;* 1.121 x00 n ~'lineno.l'~ n', /* .                */
+       '| stem temp. append'                     /* .                */
+End l
+/*---------------------------------------------------------------+
+| Reduce the output..                                            |
++---------------------------------------------------------------*/
+litcnt=temp.0
+'PIPE (NAME RX.EXEC:336 END ?)',
+   'stem temp.',                                 /* .                */
+   '| sort fs 'fs' f1',                          /* .                */
+   '| join keylen 121',                          /* .                */
+   '| change x00 x40',                           /* .                */
+   '| stem lit.'                                 /* .                */
+Call Add_2_Output 'lit.' 'No of literal strings found: 'litcnt';Literal strings:'
+Return
+ 
+ 
+Find_Subroutines:
+/*---------------------------------------------------------------+
+| Find subroutines...where they start and end plus where called  |
++---------------------------------------------------------------*/
+Say 'Processing SUBROUTINES'
+'PIPE (NAME RX.EXEC:351 END ?)',
+   'stem rxline.',                               /* Take this        */
+   '| split anycase before string ~CALL~',       /* .                */
+   '| split anycase before string ~SIGNAL~',     /* .                */
+   '| pick anycase w1.1 == ~CALL~ or w1.1 == ~SIGNAL~',   /* .                */
+   '| specs fs 'fs' f2 nw w2.1 nw',              /* .                */
+   '| strip leading ~0~',                        /* .                */
+   '| specs w2.1 1.20 w1.1 nw x40 n',            /* .                */
+   '| sort w1.1',                                /* .                */
+   '| join keylen 20',                           /* .                */
+   '| specs w1.1 1.20 ~2~ nw w2;* nw',           /* .                */
+   '| f: fanout',                                /* .                */
+   '| stem temp2.',                              /* .                */
+   '? f:',                                       /* .                */
+   '| stem call.'                                /* .                */
+/*---------------------------------------------------------------+
+| Find the external/internal                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:369 END ?)',
+   'stem call.',                                 /* .                */
+   '| specs w1.1 1 ~:~ n',                       /* .                */
+   '| l: lookup w1.1 w1.1 master',               /* .                */
+   '| specs w1.1 1.20 ~1 I~ nw',                 /* .                */
+   '| fi: faninany',                             /* .                */
+   '| change ~:~ ~',                             /* .                */
+   '| append stem temp2.',                       /* .                */
+   '| sort w1.1',                                /* .                */
+   '| specs w1.1 1.20 w3;* 24',                  /* .                */
+   '| join keylen 20',                           /* .                */
+   '| specs 1;* 10',                             /* .                */
+   '| stem subr.',                               /* .                */
+   '?',                                          /* .                */
+   'stem rxline.',                               /* .                */
+   '| l:',                                       /* .                */
+   '| specs w1.1 1.20 ~1 E~ nw',                 /* .                */
+   '| fi:'                                       /* .                */
+/*---------------------------------------------------------------+
+| Find where the subroutine starts and ends                      |
++---------------------------------------------------------------*/
+substrt.0=0
+Do c=1 To call.0
+   srch=Word(call.c,1)
+   'PIPE (NAME RX.EXEC:393 END ?)',
+       'stem rxline.',                           /* .                */
+       '| between anycase ~'srch':~ ~Return~',   /* .                */
+       '| t: take first 1',                      /* .                */
+       '| fi: faninany',                         /* .                */
+       '| specs fs 'fs' f2',                     /* .                */
+       '| strip leading ~0~',                    /* .                */
+       '| join * /-/',                           /* .                */
+       '| specs ~'srch'~ 10.20 1;* nw',          /* .                */
+       '| stem substrt. append',                 /* .                */
+       '? t:',                                   /* .                */
+       '| take last 1',                          /* .                */
+       '| fi:'                                   /* .                */
+End c
+Drop call.
+'PIPE (NAME RX.EXEC:408 END ?)',
+   'stem subr.',                                 /* .                */
+   '| append stem substrt.',                     /* .                */
+   '| sort w1.1',                                /* .                */
+   '| join keylen 20',                           /* .                */
+   '| specs w1.1 1.20 w2.1 nw w-1;-1 nw.10 right w3;-2 nw',   /* .                */
+   '| p: pick w2.1 == ~E~',                      /* .                */
+   '| specs w1.1 1.20 w2.1 nw w3;* 35',          /* .                */
+   '| sort w3.1',                                /* .                */
+   '| preface literal _',                        /* .                */
+   '| buffer',                                   /* .                */
+   '| fi: faninany',                             /* .                */
+   '| append literal I:Internal E:External',     /* .                */
+   '| stem subdet.',                             /* .                */
+   '? p:',                                       /* .                */
+   '| sort w4.1',                                /* .                */
+   '| append literal _',                         /* .                */
+   '| fi:'                                       /* .                */
+Call Add_2_Output 'subdet.' 'No of subroutines found: 'subr.0';'||,
+                            'Subroutine         I/E Location   Called from line(s):'
+Drop subr. substrt.
+Return
+ 
+ 
+Add_2_Output:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg stemname hdr
+'PIPE (NAME RX.EXEC:437 END ?)',
+   'var hdr',                                    /* .                */
+   '| split at ;',                               /* .                */
+   '| append stem 'stemname,                     /* .                */
+   '| preface literal ',                         /* .                */
+   '| append  literal ',                         /* .                */
+   '| stem output. append'                       /* .                */
+Drop hdr
+Return
+ 
+ 
+Remove_Comments:
+/*---------------------------------------------------------------+
+| Remove the comment blocks...                                   |
++---------------------------------------------------------------*/
+Do r=1 To range.0
+   Parse Value range.r With strrec'-'endrec .
+   strrec=Right(strrec,5,'0')
+   endrec=Right(endrec,5,'0')
+   'PIPE (NAME RX.EXEC:456 END ?)',
+      'stem rxline.',                            /* Take these       */
+      '| buffer',                                /* Prevent loop     */
+      '| zone fs 'fs' f2 outside ~'strrec'~ ~'endrec'~',   /* Select these     */
+      '| sort fs 'fs' f2',                       /* .                */
+      '| stem rxline.'                           /* Store as         */
+End r
+Return
+ 
+ 
+Find_Comments:
+/*---------------------------------------------------------------+
+| Find the comments singles...                                   |
++---------------------------------------------------------------*/
+Say 'Processing COMMENTS'
+'PIPE (NAME RX.EXEC:471 END ?)',
+   'stem rxline.',                               /* Take these       */
+   '| buffer',                                   /* Prevent loop     */
+   '| a: all ~/*~ & ~*/~',                       /* Find these       */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs 1;* 1 xFF n',                        /* Add fieldsep     */
+   '| split before string ~/*~',                 /* Split here       */
+   '| split after string ~*/~',                  /* .....and here    */
+   '| nfind /*',                                 /* Drop these       */
+   '| strip',                                    /* Remove spaces    */
+   '| join *',                                   /* Make 1 rec       */
+   '| split at xFF',                             /* Split here       */
+   '| specs fs 'fs' f1 1.'reclen' x00 n f2 n',   /* Adjust layout    */
+   '| fi: faninany',                             /* Take in others   */
+   '| sort fs 'fs' f2',                          /* Sort on lineno   */
+   '| specs fs 'fs' f1 1.'reclen' x00 n f2 n',   /* Adjust layout    */
+   '| sort fs 'fs' f2',                          /* .                */
+   '| stem rxline.',                             /* Store as         */
+   '? a:',                                       /* Conn 2 all       */
+   '| fi:',                                      /* Conn 2 faninany  */
+   '? f:',                                       /* Adjust           */
+   '| count lines',                              /* .                */
+   '| var cmcnt',                                /* .                */
+   '? f:',                                       /* .                */
+   '| specs fs 'fs' f2',                         /* Keep linenos     */
+   '| strip leading ~0~',                        /* Remove zeros     */
+   '| join 10 x40',                              /* Put 10 in record */
+   '| specs 1;* 10',                             /* Prep 4 display   */
+   '| stem scom.'                                /* .                */
+Call Add_2_Output 'scom.' 'No of single comment lines: 'cmcnt';Single line comments found on line(s):'
+Drop scom.
+/*---------------------------------------------------------------+
+| Find the blocks of comments...                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:505 END ? STAGESEP %)',
+   'stem rxline.',                              /* Take these       */
+   '% buffer',                                  /* Prevent loop     */
+   '% strip',                                   /* Remove spaces    */
+   '% l: locate 1.2 ~/*~',                      /* Find these       */
+   '% specs fs 'fs' f2',                        /* Keep lineno      */
+   '% fi: faninany',                            /* Take in others   */
+   '% strip leading ~0~',                       /* Remove zeros     */
+   '% join 1 ~-~',                              /* 2 in a record    */
+   '% stem range.',                             /* Store as         */
+   '% f: fanout',                                /* .                */
+   '% join 10 x40',                              /* 10 in a record   */
+   '% specs 1;* 10',                             /* Adjust 4 display */
+   '% stem bcom.',                               /* .                */
+   '? l:',                                       /* Conn 2 locate    */
+   '% locate 1.'reclen' ~*/~',                   /* Find these       */
+   '% specs fs 'fs' f2',                         /* Keep lineno      */
+   '% fi:',                                      /* Conn 2 faninany  */
+   '? f:',                                       /* .                */
+   '% count lines',                              /* .                */
+   '% var nobcom'                                /* .                */
+Call Add_2_Output 'bcom.' 'No of block comments found: 'nobcom';Comment blocks found on:'
+Drop bcom.
+Return
+ 
+ 
+Find_Empty_Lines:
+/*---------------------------------------------------------------+
+% Find the empty lines and remove them                           %
++---------------------------------------------------------------*/
+Say 'Processing EMPTY lines'
+'PIPE (NAME RX.EXEC:536 END ? STAGESEP %)',
+   'stem rxline.',                              /* Take these       */
+   '% buffer',                                  /* Prevent loop     */
+   '% p: pick 1.'reclen' == ~'Copies(' ',reclen)'~',   /* .                */
+   '% specs fs 'fs' f2',                         /* .                */
+   '% f: fanout',                                /* .                */
+   '% count lines',                              /* .                */
+   '% var empcnt',                               /* .                */
+   '? f:',                                       /* .                */
+   '% strip leading ~0~',                        /* .                */
+   '% join 10 x40',                              /* .                */
+   '% specs 1;* 10',                             /* .                */
+   '% stem empty.',                              /* .                */
+   '? p:',                                       /* .                */
+   '% sort fs 'fs' f2',                          /* .                */
+   '% stem rxline.'                              /* .                */
+Call Add_2_Output 'empty.'  'No of empty lines found: 'empcnt';Empty lines:'
+Drop empty.
+Return
+ 
+ 
+Read_File:
+/*---------------------------------------------------------------+
+| Read the input file and add linenumbers                        |
++---------------------------------------------------------------*/
+Say 'Reading 'ifn ift
+'PIPE (NAME RX.EXEC:562 END ? STAGESEP %)',
+   '< 'ifn ift ifm,                              /* Read the input   */
+   '% f: fanout',                                /* .                */
+   '% specs 1;* 1',                              /* Adjust line      */
+   '        x00 'seploc,                         /* Add fieldseparatr*/
+   '        pad 0 recno 'seploc+1'.5 right',     /* Add record no    */
+   '% stem rxline.',                             /* Store as         */
+   '? f:',                                       /* .                */
+   '% specs pad 0 recno 1.5 1;* nw',             /* .                */
+   '% stem source.'                              /* .                */
+Return
+ 
+ 
+Write_Xref:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Say 'Writing 'ifn' XREF'
+'PIPE (NAME RX.EXEC:580 END ?)',
+    'stem output.',                              /* Take these       */
+    '| preface literal ',                        /* Add empty line   */
+    '| preface var stats',                       /* .                */
+    '| preface literal 'Date('S') Time()||,      /* Add header       */
+                       ' Cross reference of: '||,  /* .                */
+                       Left(ifn,8) Left(ift,8),    /* .                */
+    '| append literal ',                         /* .                */
+    '| append literal Sourcelines:',             /* .                */
+    '| append stem source.',                     /* .                */
+    '| > 'ifn' XREF A'                           /* Write output     */
+Return
+ 
+ 
+Init:
+/*---------------------------------------------------------------+
+| Initialise some variables                                      |
++---------------------------------------------------------------*/
+fs='00'x
+output.0=0
+'PIPE (NAME RX.EXEC:600 END ?)',
+   'literal 'ifn ift ifm,                        /* .                */
+   '| state iso',                                /* .                */
+   '| var stats',                                /* .                */
+   '| specs w5.1',                               /* .                */
+   '| var reclen'                                /* .                */
+seploc=reclen+1
+'PIPE (end ?)',
+    '< 'myfn' CODE *',                           /* .                */
+    '| strip',                                   /* .                */
+    '| pick 1.1 \== ~*~',                        /* .                */
+    '| pick 1.1 \== ~~',                         /* .                */
+    '| join * x40',                              /* .                */
+    '| var xref'                                 /* .                */
+Return

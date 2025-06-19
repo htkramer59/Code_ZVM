@@ -1,0 +1,266 @@
+/*---------------------------------------------------------------+
+| Function : Create an overview of DIRMAINT info                 |
+|                                                                |
+| File     : ALLDIRM  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC                                       |
+|            RSCS     EXEC      Pipe stage for RSCS              |
+|            SAPI     EXEC      Dirmaint interface               |
+|            SENDFILE EXEC      Sending files to...              |
+|            RECEIVE  EXEC      Receiving files from....         |
+|            ALLDIRM  *         In/output                        |
+|            ALLDIRM  OVERVIEW  Output                           |
+|                                                                |
+| Called   : ALLDIRM  <what>                                     |
+|                     DATA     collect and send data             |
+|                     empty    if empty send cmd to all nodes,   |
+|                              receive data and make overview    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210727 08:37:36                                   |
+| Changes  : .                                                   |
+|            20230328 H.T.Kramer : Changed now into separate     |
+|                     commands using RMCMD EXEC.                 |
+|            20221216 H.T.Kramer : Fixed small error with        |
+|                     poolusg                                    |
+|            20221007 H.T.Kramer : Adjusted to suppress HOLD     |
+|            20220926 H.T.Kramer : Add cleanup of RDR files      |
+|            20220628 H.T.Kramer : Check for RMCMD and its output|
+|                     is now built in                            |
+|            20220520 H.T.Kramer : Reworked the output           |
+|            20220301 H.T.Kramer : To remove dependency on the   |
+|                     A-disk we now use VMLINK                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Determine what to do with the input parms                      |
++---------------------------------------------------------------*/
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+ 
+'PIPE (NAME ALLDIRM.EXEC:47 END ?)',
+   'CP QUERY USERID',                            /* Ask CP           */
+   '| specs w3.1',                               /* Keep this        */
+   '| var node',                                 /* Store as         */
+   '| specs -2;-1',                              /* Reduce to this   */
+   '| var shortnode',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'cms LISTFILE RMCMD EXEC * (NOH',             /* Find this        */
+   '| count lines',                              /* How many         */
+   '| var rmc'                                   /* Store as boolean */
+If rmc=0 Then Call Exit '28 Can not run: RMCMD EXEC is missing'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Select
+When what=''     Then Call Start_Code
+When what='?'    Then Do
+                 'PIPE (NAME ALLDIRM.EXEC:70 END ?)',
+                     '< 'myfn myft' *',          /* Read myself      */
+                     '| tolabel Parse',          /* Up to here       */
+                     '| cons'                    /* Show             */
+                 Exit
+                 End
+Otherwise Do
+          Call Exit '99 Do not understand 'what
+          End
+End
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Start_Code:
+/*---------------------------------------------------------------+
+| This on the invoking end of the process                        |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+z=Time('R')
+/*---------------------------------------------------------------+
+| Ask the other LPARs for info                                   |
++---------------------------------------------------------------*/
+Say 'Elapsed: 'Time('E')
+/*---------------------------------------------------------------+
+| Definte the rules for cleaning input fiels                     |
++---------------------------------------------------------------*/
+clean='| pick 1.1 \== ~ ~ | nlocate anycase ~RMCMD CMS~ | nlocate anycase ~Execution~'
+/*---------------------------------------------------------------+
+| Now start processing                                           |
++---------------------------------------------------------------*/
+Call Gather_Files
+Call Proc_PoolUsg
+Call Proc_Locked
+Call Proc_DataMove
+Call Proc_WorkUnit
+Call Proc_WucFfail
+/*---------------------------------------------------------------+
+| Display the outcome                                            |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
+Return
+ 
+ 
+Proc_WucFfail:
+/*---------------------------------------------------------------+
+| Here we process the failed/stalled dirmaint workunits          |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:126 END ?)',
+   '< 'myfn' WUCFFAIL 'wfm,                      /* Read this        */
+   clean,                                        /* .                */
+   '| sort w1.1',                                /* Sort on node     */
+   '| nlocate anycase ~LISTFILE~',               /* Ignore these     */
+   '| preface literal Checking Failed/Stalled workunits',   /* Add header       */
+   '| >> 'myfn' OVERVIEW 'wfm                    /* Append to file   */
+Return
+ 
+ 
+Proc_WorkUnit:
+/*---------------------------------------------------------------+
+| Here we process the outcome of SAPI WORKUNITS ALL              |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:140 END ?)',
+   '< 'myfn' WORKUNIT 'wfm,                      /* Read this file   */
+   clean,                                        /* .                */
+   '| strip',                                    /* Remove spaces    */
+   '| join keylen 14',                           /* Join on this key */
+   '| sort w1.1',                                /* Sort on node     */
+   '| preface literal Checking WORKUNITs',       /* Add header       */
+   '| append literal ',                          /* Add separator    */
+   '| >> 'myfn' OVERVIEW 'wfm                    /* Append to file   */
+Return
+ 
+ 
+Proc_DataMove:
+/*---------------------------------------------------------------+
+| Here we process the outcome of SAPI DATAMOVE ALL               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:156 END ?)',
+   '< 'myfn' DATAMOVE 'wfm,                      /* Read this file   */
+   clean,                                        /* .                */
+   '| sort w2;*',                                /* Sort on this     */
+   '| l: locate anycase ~SYSAFFIN~',             /* Take these       */
+   '| append literal ',                          /* Add empty line   */
+   '| fi: fanin',                                /* Take in others   */
+   '| preface literal Checking DATAMOVE status', /* Add header       */
+   '| append literal ',                          /* Add empty line   */
+   '| >> 'myfn' OVERVIEW 'wfm,                   /* Append to file   */
+   '? l:',                                       /* Conn 2 locate    */
+   '| buffer',                                   /* Prevent loop/stal*/
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+Proc_Locked:
+/*---------------------------------------------------------------+
+| Processing the outcome of SAPI STATUS LOCKED ALL               |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:176 END ?)',
+   '< 'myfn' LOCKED 'wfm,                        /* Read this file   */
+   clean,                                        /* .                */
+   '| sort w2;*',                                /* Sort on this     */
+   '| l: locate anycase ~DEVICE~',               /* Select these     */
+   '| sort w1.1',                                /* Sort on node     */
+   '| append literal ',                          /* Add empty line   */
+   '| fi: fanin',                                /* Take in others   */
+   '| preface literal Checking for DEVICE and USER LOCKs',   /* Add header       */
+   '| append literal ',                          /* Add empty line   */
+   '| >> 'myfn' OVERVIEW 'wfm,                   /* Append to file   */
+   '? l:',                                       /* Conn 2 locate    */
+   '| buffer',                                   /* Prevent loop/stal*/
+   '| sort w1.1',                                /* Sort on node     */
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+Proc_Poolusg:
+/*---------------------------------------------------------------+
+| Processing the outcome of POOLUSG CMSDISKS ICUDISKS LINUXOS    |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:198 END ?)',
+   '< 'myfn' POOLUSG 'wfm,                       /* Read this file   */
+   clean,                                        /* .                */
+   '| nlocate w2.3 ~CMSDISKS LINUXOS ICUDISKS~',
+   '| p: pick anycase w2.1 == ~POOL~',           /* Select these     */
+   '| specs 4;* 4',                              /* Only want this   */
+   '| sort unique',                              /* Ignore duplicates*/
+   '| fi: fanin',                                /* Take in others   */
+   '| append literal ',                          /* Add empty line   */
+   '| change 1.1  ~_~ ~',                        /* Replace undrscore*/
+   '| > 'myfn' OVERVIEW 'wfm,                    /* Write 2 file     */
+   '? p:',                                       /* Conn 2 pick      */
+   '| if1: if locate ~CMSDISKS~',                /* Add labels       */
+   '|    specs ~CMSDISKS~ 1.11 1;* nw',          /* .                */
+   '| if1:',                                     /* .                */
+   '| if2: if locate ~ICUDISKS~',                /* .                */
+   '|    specs ~ICUDISKS~ 1.11 1;* nw',          /* .                */
+   '| if2:',                                     /* .                */
+   '| if3: if locate ~LINUXOS~',                 /* .                */
+   '|    specs ~LINUXOS~ 1.11 1;* nw',           /* .                */
+   '| if3:',                                     /* .                */
+   '| sort w1.2',                                /* Sort on lbl&node */
+   '| specs a: w1.1 .',                          /* Break on label   */
+   '        w2;* 13',                            /* .                */
+   '        break a',                            /* .                */
+   '        id a 1',                             /* .                */
+   '| change 1.11 ~ICUDISKS  ~;_;ICUDISKS~',     /* Prep 4 empty line*/
+   '| change 1.11 ~LINUXOS   ~;_;LINUXOS ~',     /* .                */
+   '| split at ;',                               /* Split here       */
+   '| change 1.11 ~CMSDISKS~~',                  /* Remove these     */
+   '| change 1.11 ~ICUDISKS~~',                  /* .                */
+   '| change 1.11 ~LINUXOS~~',                   /* .                */
+   '| specs w1;* 1',                             /* .                */
+   '| fi:'                                       /* Conn 2 fanin     */
+Return
+ 
+ 
+Gather_Files:
+/*---------------------------------------------------------------+
+| Define the commands and output files                           |
++---------------------------------------------------------------*/
+cmds='POOLUSG CMSDISKS LINUXOS ICUDISKS : POOLUSG;',
+     'SAPI STATUS LOCKED BOTH : LOCKED ;',
+     'SAPI STATUS DATAMOVE ALL : DATAMOVE ;',
+     'SAPI STATUS WORKUNIT ALL : WORKUNIT;',
+     'VMLINK DIRMAINT 1DF (NON NOT INVOKE LISTFILE * WUCFFAIL .fm (NOH ISO : WUCFFAIL'
+/*---------------------------------------------------------------+
+| Split the commands and files                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME ALLDIRM.EXEC:247 END ?)',
+   'var cmds',                                   /* Take this        */
+   '| split at ;',                               /* Split here       */
+   '| f: fanout',                                /* Dupl. records    */
+   '| specs fs : f1',                            /* Keep this part   */
+   '| stem cmd.',                                /* Hand 2 rexx      */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs fs : f2',                            /* Keep this part   */
+   '| stem outfn.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Loop thru the commands                                         |
++---------------------------------------------------------------*/
+Do c=1 To cmd.0
+   Address CMS 'RMCMD CMS 'cmd.c',,,FILE,'myfn outfn.c wfm
+End c
+Return
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

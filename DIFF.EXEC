@@ -1,0 +1,235 @@
+/*---------------------------------------------------------------+
+| Function : Compare 2 files...                                  |
+|                                                                |
+| File     : DIFF     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 2.1.0                                               |
+|                                                                |
+| Files    : DIFF     FIlE  results of the comparison            |
+|                                                                |
+| Called   : DIFF     <fn1> <ft1> <fm1> <fn2> <ft2> <fm2>        |
+|                                                                |
+| Comments : Markers are:  xBA and K xCA                        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20230222 16:58:59                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn1 ft1 fm1 fn2 ft2 fm2 .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Need help?                                                     |
++---------------------------------------------------------------*/
+If fn1='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME DIFF.EXEC:26 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+/*---------------------------------------------------------------+
+| Check the input given                                          |
++---------------------------------------------------------------*/
+If fn1=''  Then Call Exit '128 No input given'
+If ft1=''  Then Call Exit '228 ft1 is missing'
+If fm1=''  Then Call Exit '328 fm1 is missing'
+If fn2=''  Then Call Exit '428 fn2 is missing'
+If ft2=''  Then Call Exit '528 ft2 is missing'
+If fm2=''  Then Call Exit '628 fm2 is missing'
+If fn2='=' Then fn2=fn1
+If ft2='=' Then ft2=ft1
+If fm2='=' Then fm2=fm1
+If fn2='=' &,
+   ft2='=' &,
+   fm2='=' Then Call Exit '728 fn2 ft2 fm2 can not be = = ='
+/*---------------------------------------------------------------+
+| Some settings                                                  |
++---------------------------------------------------------------*/
+fs='FF'x
+hdr='     %WFn      %WFt      %WFm%WRec%WContent'
+/*---------------------------------------------------------------+
+| Get recordlenght & no of records                               |
++---------------------------------------------------------------*/
+format1=CheckFormat(fn1 ft1 fm1)
+format2=CheckFormat(fn2 ft2 fm2)
+formats=format1 format2
+reclen=Max(Word(formats,1),Word(formats,3))
+chars=Length(Max(Word(formats,1),Word(formats,3)))+1
+recs=Length(Max(Word(formats,2),Word(formats,4)))+1
+/*---------------------------------------------------------------+
+| Add lineno and columns to the input records                    |
++---------------------------------------------------------------*/
+Call AddInfo 'prim.' fn1 ft1 fm1
+Call AddInfo 'seco.' fn2 ft2 fm2
+/*---------------------------------------------------------------+
+| Compare primary and secondary file                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DIFF.EXEC:69 END ?)',
+   'stem prim.1.',                               /* Take this        */
+   '| l: lookup 1;* 1;*',                        /* Compare          */
+   '| hole',                                     /* Ignore duplicates*/
+   '?',                                          /* 2nd PIPE         */
+   'stem seco.1.',                               /* Take this        */
+   '| l:',                                       /* Conn 2 lookup    */
+   '| specs ~1~ 1 1;* nw',                       /* Add sign         */
+   '| fi: fanin',                                /* Take in others   */
+   '| sort w2.1',                                /* Sort on recno    */
+   '| if: if pick 1.1 == ~1~',                   /* If primary       */
+   '|     specs w1.2 1 xBA nw',                  /* Add this         */
+   '| if:',                                      /* Conn 2 if        */
+   '|     specs w1.2 1 xCA nw',                  /* Add this         */
+   '| if:',                                      /* Conn 2 if        */
+   '| sort w1.2',                                /* Sort on recno    */
+   '| p: pick w1.1 == ~1~',                      /* If this          */
+   '| specs w2;* 1',                             /* Keep content     */
+   '| join keylen 'recs,                         /* Join on recno    */
+   '| stem work1.',                              /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| specs w2;* 1',                             /* Keep content     */
+   '| join keylen 'recs,                         /* Join on recno    */
+   '| stem work2.',                              /* Hand 2 rexx      */
+   '? l:',                                       /* Conn 2 lookup    */
+   '| specs ~2~ 1 1;* nw',                       /* Add sign         */
+   '| fi:'                                       /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Make the lines with the pointers                               |
++---------------------------------------------------------------*/
+Call MakeNewLines 'prim. work1.'
+Call MakeNewLines 'seco. work2.'
+/*---------------------------------------------------------------+
+| Get the workspace (if available)                               |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (NOT WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Compose the output                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME DIFF.EXEC:110 END ?)',
+   'stem prim.',                                 /* Take this        */
+   '| specs ~'Substr(fn1,1,8),                   /* Add filename, etc*/
+              Substr(ft1,1,8),                   /* .                */
+              substr(fm1,1,2)'~ 1 1;* nw',       /* .                */
+   '| fi: fanin',                                /* Take others      */
+   '| sort w4.1',                                /* Sort on recno    */
+   '| split at 'fs,                              /* Split here       */
+   '| > 'myfn' FILE 'wfm,                        /* Write 2 file     */
+   '?',                                          /* 2nd pipe         */
+   'stem seco.',                                 /* Take this        */
+   '| specs ~'Substr(fn2,1,8),                   /* Add filename, etc*/
+              Substr(ft2,1,8),                   /* .                */
+              Substr(fm2,1,2)'~ 1 1;* nw',       /* .                */
+   '| fi:'                                       /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Display the output                                             |
++---------------------------------------------------------------*/
+Queue 'V 1 150'
+Queue 'SET RESERVED 4 NON NOH 'hdr
+Queue ':1'
+Address CMS 'XEDIT 'myfn' FILE 'wfm
+/*---------------------------------------------------------------+
+| Remove workspace if used                                       |
++---------------------------------------------------------------*/
+If wfm<>'A' Then Address CMS 'VMLINK STATUS (NOT WRITE'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+MakeNewLines:
+/*---------------------------------------------------------------+
+| Make lines to be used as markers where the changes are         |
++---------------------------------------------------------------*/
+Parse Upper Arg genstem workstem .
+'PIPE (NAME DIFF.EXEC:152 END ?)',
+    'stem 'workstem,                             /* Take these       */
+    '| stem work.'                               /* and move 2 these */
+Do w=1 To work.0
+   Parse Value work.w With recno '.' rest
+   'PIPE (NAME DIFF.EXEC:157 END ?)',
+       'stem 'genstem,                           /* Take this        */
+       '| pick w1.1 == ~'recno'~',               /* Select this      */
+       '| var line',                             /* Hand 2 rexx      */
+       '?',                                      /* 2nd pipe         */
+       'var rest',                               /* Take this        */
+       '| split at .',                           /* Split here       */
+       '| specs',                                /* .                */
+               'x4F 1',                          /* Compose change   */
+               '~CHANGE~ NW',                    /* .cmds            */
+               'w1.1 NW',                        /* .                */
+               '~.1 / /~ N',                     /* .                */
+               'w2.1 N',                         /* .                */
+               '~/~ N',                          /* .                */
+       '| join * x40',                           /* Make 1 record    */
+       '| var chg'                               /* Hand 2 rexx      */
+   'PIPE (NAME DIFF.EXEC:173 END ?)',
+      'literal  ',                               /* Take this        */
+      '| dupl 'reclen-1,                         /* Copy record      */
+      '| join *',                                /* Make 1 record    */
+      chg,                                       /* Run change       */
+      '| var work'                               /* Hand 2 rexx      */
+   'PIPE (NAME DIFF.EXEC:179 END ?)',
+      'stem 'genstem,                            /* Take stem        */
+      '| buffer',                                /* Prevent loop     */
+      '| if: if pick w1.1 == ~'recno'~',         /* Select this      */
+      '| specs',                                 /* .                */
+                  '1;* 1',                       /* Add marker 2     */
+                  '~'fs||Copies(' ',21)||,       /* ...end of record */
+                  recno||,                       /* .                */
+                  ' '||work'~ N',                /* .                */
+      '| if:',                                   /* Conn 2 if        */
+      '| stem 'genstem                           /* Hand 2 rexx      */
+End w
+Return
+ 
+ 
+CheckFormat:
+/*---------------------------------------------------------------+
+| Get the recordlength & no of records                           |
++---------------------------------------------------------------*/
+Parse Upper Arg fnc ftc fmc .
+'PIPE (NAME DIFF.EXEC:199 END ?)',
+    'literal 'fnc ftc fmc,                       /* Take this        */
+    '| state iso',                               /* Ask the info     */
+    '| specs w5.2 1',                            /* Keep this        */
+    '| space 1',                                 /* Reduce spacing   */
+    '| var work'                                 /* Hand 2 rexx      */
+If rc<>0 Then Call Exit rc' File 'fnc ftc fmc' not found'
+Return work
+ 
+ 
+AddInfo:
+/*---------------------------------------------------------------+
+| Make lines with char for comparison                            |
++---------------------------------------------------------------*/
+Parse Upper Arg stemname fni fti fmi .
+'PIPE (NAME DIFF.EXEC:214 END ?)',
+   '< 'fni fti fmi,                              /* Take this file   */
+   '| specs pad 0 recno 1.'recs' right 1;* nw',  /* Add record no    */
+   '| stem 'stemname,                            /* Hand 2 rexx      */
+   '| stem line.'                                /* Hand 2 rexx      */
+wstem=stemname'1.'
+Do l=1 To line.0
+   If l=1 Then stemopt=''                        /* Create stem      */
+          Else stemopt='APPEND'                  /* .append 2 stem   */
+   line=Substr(line.l,5)
+   lineno=Word(line.l,1)
+   'PIPE (NAME DIFF.EXEC:225 END ?)',
+     'var line',                                 /* Take this        */
+     '| deblock 1',                              /* Split into chars */
+     '| specs',                                  /* .                */
+             '~'lineno'.~ 1',                    /* Add lineno,      */
+             'PAD 0',                            /* Set padding      */
+             'recno N.'chars' RIGHT',            /* Add char. pos.   */
+             '1.1 NW',                           /* Add char/        */
+     '| stem 'wstem stemopt                      /* Add/create stem  */
+End l
+Return

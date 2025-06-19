@@ -1,0 +1,149 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*  This exec will perform the disk utilization test on a VM/ESA or
+    z/VM system and report the results to the Hobbit network monitor.
+ 
+    Rich Smrcina 01/28/2k+1  Original V1.0
+    Rich Smrcina 12/30/03    Revised  V1.1
+        change for new HOBVARS format
+    Rich Smrcina 06/10/05    Revised  V1.2
+        Added disk test to check SFS filepool usage
+    Thomas Kern/Rich Smrcina 02/10/07    Revised  V1.3
+        Added several cfgmode processing and several other variables
+        to handle new tests written by Thomas Kern.
+    Rich Smrcina 02/10/09
+        Changed project name to Xymon
+    Martha McConaghy 8/28/09
+        Added TCP_Serv variable to indicate default TCP/IP stack name.
+                                                                      */
+/*  Address(es) of Xymon Server(s)                          */
+bbdisplay='10.35.4.54'
+bbport=   '1984'           /*  Default Xymon port number          */
+fqdn=     'N'              /*  FQDN value, s/b same as on server  */
+vmptk=     1               /*  is VM Perf Toolkit available 1=yes */
+ptksvm=   'PERFSVM'        /*  VMPTK server name                  */
+/* The following controls where the configuration thresholds for
+   the z/VM client are kept.  'server' indicates that the z/VM
+   client is configured on the Xymon server just like the Linux
+   client.  'client' indicates that the z/VM client is configured
+   on the client itself, in this file.                            */
+cfgmode=  'SERVER'
+/* Name of TCPIP machine - default is TCPIP (Marist change) */
+TCP_Serv = 'TCPIP'
+/*------------------------------------------------------------------/
+/-   auth_users is the list of users that can send SMSGs and       -/
+/-   file replacements to the Xymon svm.                           -/
+/------------------------------------------------------------------*/
+auth_users='MAINT HERALD HERMAN OPERATOR' /* AUTHORIZED USERS */
+auth_nodes='VMA'                 /* Authorized nodes         */
+/*   Thresholds
+     E.G.  Target  yellow_value red_value
+           Where target is a predefined test performed by the script
+                 value is the value or threshold to check for.
+ 
+                 The color will be sent back to Xymon based on whether
+                 the measurement for the target had exceeded the
+                 threshold value.
+ 
+           These threshold values are only used when cfgmode='client'
+           is being used.  Otherwise threshold values are configured
+           on the Xymon server.                               */
+ 
+CPU    ='50   55'
+LPAR   ='99  200'
+PAGING='500 1000'
+SPOOL  ='80   95'
+PAGE   ='80   95'
+PROC ='40 FTPSERVE VMSERVU WAKEUP'
+MINGUESTS = 10
+/* End of client based thresholds  */
+ 
+/* DISK indicates which shared file pool disk areas are monitored.   */
+/* If no filepool disks are to be monitored, set the string to null. */
+DISK='VMSYS;2  VMSYSU;ALL;2,3  VMPSB1;ALL;ALL VMUSERS;ALL;ALL'
+ 
+/* NEW Addition because of new hobvmdsk */
+/* FLPOOLS = 'VMSYS;VMSYSU;VMPSB1' /* Filepools */ */
+FLPOOLS = 'VMSYS;VMSYSU;VMPSB1;VMUSERS' /* Filepools */
+STGRPS = 'LINUXOS;ORACLE;CMSDISKS'/* Storage groups */
+ 
+/* --------------------------------------------------------------- *
+ * MDISK indicates which minidisks are monitored                   *
+ *   MDISK=Owner Vaddr password                                    *
+ *   Owner=virtual machine that owns the minidisk                  *
+ *   Vaddr=owners minidisk address                                 *
+ *   password=read password of minidisk if needed                  *
+ * CAUTION! If a read password is required and one is not provided *
+ *          the Xymon client virtual machine will be presented     *
+ *          with a VMREAD and will be blocked.  It is important to *
+ *          verify that access to the minidisk works before adding *
+ *          it to this list!                                       *
+ * --------------------------------------------------------------- */
+MDISK.0 = 0
+/* MDISK.1 = 'RKS0  191 READ' */
+ 
+/*------------------------------------------------------------------/
+/-   FILE status checking configuration statements                 -/
+/-                                                                 -/
+/-   FILE.0  = number of files to check                            -/
+/-   FILE.n  = MDISK:Owner.Vaddr Filename FileType                 -/
+/-   FILE.n  = SFSfp:Owner.dir   Filename FileType                 -/
+/-      e.g.   file.1 = 'MDISK:OPERATOR.191 %Y%d%m CONLOG'         -/
+/-             file.2 = 'MDISK:OPERATOR.191 CURRENT CONLOG'        -/
+/------------------------------------------------------------------*/
+FILE.0 = 0
+file.1 = 'MDISK:RKS0.191     PROFILE EXEC '
+ 
+/*----------------------------------------------------------------------/
+/-    MSGS is same syntax as FILE but the header is set as logfile:    -/
+/-    instead of file:. And the content of the file is also sent       -/
+/-    to the Xymon server with a msgs: header.                         -/
+ALV SETL     STGRPS' stgrps to the pipeline for you to subset the      -/
+/-    system's master logfile.                                         -/
+/----------------------------------------------------------------------*/
+MSGS    ='VMSYS:PERFSVM. %Y%m%d EXCPLOG'
+MSGSPIPE='| specs /'Date('S')'/ 1 w2;* nw'
+MSGSPIPE=MSGSPIPE||'| nlocate  /(/ | window w1.1 w2.1 RS 30 '
+/*----The statements above are for FCONX logfiles----------------------*/
+ 
+/* Set the global variables for the rest of the execs  */
+ADDRESS COMMAND
+'GLOBALV SETL  BBDISPLAY' bbdisplay
+'GLOBALV SET  BBPORT'    bbport
+'GLOBALV SET  FQDN'      fqdn
+'GLOBALV SET  VMPTK'     vmptk
+'GLOBALV SET  PTKSVM'    ptksvm
+'GLOBALV SET CFGMODE'    cfgmode
+'GLOBALV SET TCPSRV'     TCP_Serv
+'GLOBALV SETL AUTH_USERS' auth_users
+'GLOBALV SETL        CPU' cpu
+'GLOBALV SETL       LPAR' lpar
+'GLOBALV SETL     PAGING' paging
+'GLOBALV SETL      SPOOL' spool
+'GLOBALV SETL     MEMORY' memory
+'GLOBALV SETL       PAGE' page
+'GLOBALV SETL       PROC' proc
+'GLOBALV SETL       DISK' disk
+'GLOBALV SETL    FLPOOLS' FLPOOLS
+'GLOBALV SETL     STGRPS' STGRPS
+'GLOBALV SETL       MSGS' msgs
+'GLOBALV SETL   MSGSPIPE' msgspipe
+'GLOBALV SETL    MDISK.0' mdisk.0
+do i = 1 to mdisk.0
+  ADDRESS COMMAND 'GLOBALV SETL MDISK.' || i value('mdisk.'||i)
+  end
+'GLOBALV SETL     FILE.0' file.0
+do i = 1 to file.0
+  ADDRESS COMMAND 'GLOBALV SETL FILE.' || i value('file.'||i)
+  end

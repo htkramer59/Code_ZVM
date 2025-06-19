@@ -1,0 +1,30 @@
+* Strings to look for in the logs
+:nick.search
+        :list.LOGON LOGOFF HCPJRL145I NOW
+              HCPMID6001I RESTART SHUTDOWN ABEND SIGNAL
+              DVHWAI2145I DVHREQ2290I
+*
+* Users in CONPARK to search for
+:nick.servers
+        :list.OPERATOR DIRMAINT
+*
+* Remarks/comments to be add to the header
+:nick.remarks
+        :operator.
+        :dirmaint.VSMWORKx/SMAPI details can be found in VMSYS:VSMWORK1.DATA.
+*
+* Where to store the reports
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1lb1
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1lb2
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1lo1
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1la1
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1la2
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1lp1
+:nick.output_dir
+        :product..dir VMUSERS:CONPARK.EXTR4SEC. :node.r1lp2

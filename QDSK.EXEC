@@ -1,0 +1,309 @@
+/* This exec is meant to display much information about a minidisk
+    - the CMS info (how full is it)
+    - the CP info (who's the owner of it)
+   Instead of giving errors:
+   - it also supports SFS dirs in which case it also shows your AUTH
+     (only for SFS dirs that you do not own).
+   - if you don't give a filemode, you get the info for all accessed
+     mdisks/sfsdirs.  The result is less readable than for 1 fmode.
+ +-----------------------------------------------------------+
+ | format:  | QDSK <fmode>  <(<Details> <LInks> >            |
+ |          | QDSK uid cuu  <(<Details> <LInks> >            |
+ |          | QDSK cuu      <(<Details> <LInks> >            |
+ +-----------------------------------------------------------+
+  Written by: Kris Buelens IBM Belgium;  KRIS at VMKBBR01 9 May 2006
+26 Oct 2006: Allow passing "uid cuu" as input
+26 Oct 2006: Add DETAILS option
+22 Nov 2006: Add "cuu" as valid input
+29 Nov 2006: Display - iso fmode for a disk we accessed temporaly
+19 Feb 2010: Try to use ACCESS(MODE0.  If impossible (meaning fm 0 files
+             remain invisible), we add an * in col 45 of Q DISK to signal
+             that the number of files doesn't include fmode 0 files.
+19 Feb 2010: Add LINKS option to disply who has links to the selected MDK
+             ("QLINKS" is recognized as synonym for the "LINKS" option)
+*/
+address command
+userid=userid()
+parse upper arg fm rest '(' options
+parse value 0      0      0        0    0,
+      with details linked Accessed AcRC links sendSFSaway1 sendSFSaway2
+do while options^='' /* analyse requested options */
+   parse var options option options
+   select
+     when abbrev('DETAILS',option,1) then details=1
+     when abbrev('LINKS',option,2) then links=1
+     when abbrev('QLINKS',option,2) then links=1
+     Otherwise call errexit 5, 'Invalid option:' option
+   end
+end
+If Details then do
+   if fm='' then
+      call ErrExit 7,'DETAILS option only possible when querying 1 disk'
+   'STATE RXDASD MODULE *'; RxDasd=(rc=0)
+end
+If Links & fm='' then
+   call ErrExit 7,'LINKS option only possible when querying 1 disk'
+ 
+flag=''                          /* Set the "accessMO" flag to null  */
+if rest<>'' then flag=LinkDisk() /* Suppose we must LINK to this mdisk */
+if length(fm)>1 | datatype(fm,'W') then fm=Fm_of(fm)
+ 
+sendSFSaway= '|SFS: PICK 8.3 ^== /DIR/'       /* Send SFS dirs away */
+if fm='' then sendSFSaway1=sendSFSaway
+         else sendSFSaway2=sendSFSaway
+ 
+/* If we accessed the disk, zap fmode to "-" to avoid confusion */
+if Linked|Accessed then ZapFmode='|CHANGE 13 /'fm'/-/'
+                   else ZapFmode=''
+if Flag<>''then ZapFmode= ZapFmode'|CHANGE 45 / /'flag'/'
+ 
+if AcRc<>0 then do /* Disk is not accessed */
+   Say AcMsg /* tell what ACCESS told us */
+   'CP Q MDISK' FreeCuu 'LOCATION'
+   qLinksCuu=FreeCuu
+end
+else /* Disk is accessed */
+ 'PIPE (end ? ) COMMAND QUERY DISK' fm,       /* Get CMS Q DISK info */
+  ZapFmode,                                   /* Maybe zap fm to - */
+  sendSFSaway1,                               /* Keep Mdisks here */
+  '|CONS |DROP |BUFFER',
+  sendSFSaway2,                               /* Keep Mdisks here */
+  '|S: SPEC /Q MDISK/ 1 8.4 NW /LOCATION/ NW',/* Prep Q MDISK cmd */
+      'Write OutStream 1 8.4 Strip 1',           /* Keep vaddr */
+  '|CP',
+  '|CPHD: FIND TargetID_Tdev|take',           /* Keep one header only */
+  '|iCPHD: FANINANY',
+  '|CONS',
+  '?CPHD:|iCPHD:',
+  '?S:|VAR qLinksCuu',                        /* Keep vaddr for Q LINKS*/
+  '?SFS:',                                    /* SFS dirs come here */
+  '|BUFFER',                                  /* Group them */
+  '|SPEC /CMDCALL QUERY ACCESSED/ 1 13 NW|COMMAND', /* Get full dirid */
+  '|ACCHD: FIND Mode__Stat|take',             /* Keep one header only */
+  '|iACCHD: FANINANY',
+  '|CONS',
+  '?ACCHD:',
+  '|oACC: Fanout',                            /* Copy to get Q AUTH */
+  '|iACCHD:',
+  '?oACC:',  /*                               /* Records look like */
+F      R/W       690  DIR   SFS72:KRIS.LOCAL */ /* Keep if not our own */
+  '|PICK FS : WS . SUBSTR W1 OF SUBSTR F2 OF 29-* ^== /'userid'/',
+  '|buffer',
+  '|SPEC /CMDCALL QUERY AUTH/ 1 1 NW|COMMAND', /* Prep Q AUTH command */
+  '|HD1: FIND Directory_'||,                  /* Keep one header only */
+  '|iHD1: Faninany|CONS',
+  '?HD1:|HD2: Find Grantee_|iHD1:',           /* Keep one header only */
+  '?HD2:|PICK 1.8 == /'left(userid,8)'/|iHD1:' /* Only our own AUTH */
+ 
+ if details then call GetMdiskDetails fm /* Get much info about the Mdk*/
+ if links   then call GetQLinks          /* Get Who is LINKed now      */
+Call exit rc
+ 
+/*-----------------------------------------------------------------*/
+LinkDisk: /* Suppose we must LINK to this mdisk                    */
+/*-----------------------------------------------------------------*/
+ parse value fm rest with uid cuu '' Mode0 AccM0off
+ 'GETFMADR' ; parse pull . fm FreeCuu .
+ parse value diagrc(8,'LINK' uid cuu FreeCuu 'RR') with rc . 16 emsg
+ if rc<>0 then call ErrExit rc,emsg
+ 
+ linked=1
+ 'PIPE COMMAND QUERY ACCESSM0|PICK W2 == /ON/|Count lines|VAR AccM0'
+ if AccM0 then mode0='(MODE0'
+ else do
+    trace -1;'PIPE COMMAND ACCESSM0 ON'
+    if rc=0 then parse value '(MODE0 ACCESSM0 OFF' with mode0 AccM0off
+ end
+ 'PIPE COMMAND ACCESS' FreeCuu fm mode0'|VAR ACMSG'; AcRc=rc
+ if AccM0Off<>'' then AccM0off
+return left('*',(Mode0='')) /* Return flagg telling "fm0 files hidden"*/
+ 
+/*-----------------------------------------------------------------*/
+GetMdiskDetails: /* Get much info about the Mdisk                  */
+/*-----------------------------------------------------------------*/
+ /* Code taken from DRMFRAG GUIWIRE                                  */
+ /* We use a rather long CMS Pipe to gather mdisk info               */
+ 
+ /* Record 3 on CMS mdisks has much info, it is described by ADTSECT */
+ /* Note: ADTSECT -as in the manual- has more info preceeding        */
+ /*       record 3.  We compensate for this by substracting 143.     */
+ drop MdiskDetails
+ parse arg fm .   '' FileMsg FileDateMsg listFiles
+ If acRC=0  then do
+    'PIPE MDISKBLK READ' fm 3'|VAR REC3' /*Read Mdsk blk 3*/
+    if rc<>0 then return
+    listFiles='COMMAND LISTFILE * *' fm '(NOH ISODATE'
+    Dop=C2D(substr(Rec3,160-143,4))
+    /* Get Block1 of Directory file, so we can get last R/W usage */
+    'PIPE MDISKBLK READ' fm dop '|Var DopRec'
+ end; else If RxDasd then do  /* Not accessed: use RXDASD? */
+    parse value Dasd('READCMS',freeCuu,3) with rc +4 Rec3
+    if rc<>0 then return
+    Dop=C2D(substr(Rec3,160-143,4))
+    /* Get Block1 of Directory file, so we can get last R/W usage */
+    parse value Dasd('READCMS',freeCuu,dop) with rc +4 DopRec
+ end; else do  /* Not accessed: use DDR to get volume header */
+    Signal on Syntax name MdskDetailSyntax ; Signal Off Novalue
+    'PIPE (end ?)',
+      'LITERAL SYS CONS%IN' FreeCuu 'DASD SCRATCH%PRINT 0 0 3 TO 0 0 5',
+      '|SPLIT %|PAD 80|> DRMGUI DDRINP A3 F',
+      '|TAKE LAST|COPY|SPEC /DDR DRMGUI DDRINP A/ 1',
+      '|COMMAND',
+      '|JOINCONT NOT LEADING /CYL/ X15|FIND CYL',
+      '|R3:TAKE|SPLIT X15',
+      '| StrFind /000  __00  __        _        _/',
+      '|CHOP 85|NOT CHOP 13',
+      '|SPLIT|JOIN *|SPECS 1-* X2C 1 |VAR REC3',
+      '?R3:|R4: TAKE|SPLIT X15',
+      '| StrFind /0    __0   __        _        _/',
+      '|CHOP 85|NOT CHOP 13',
+      '|SPLIT|JOIN *|SPECS 1-* X2C 1 |VAR REC4',
+      '?R4:|TAKE|SPLIT X15',
+      '| StrFind /0    __0   __        _        _/',
+      '|CHOP 85|NOT CHOP 13',
+      '|SPLIT|JOIN *|SPECS 1-* X2C 1 |VAR REC5'
+    Dop=C2D(substr(Rec3,160-143,4))
+    if dop=4 then DopRec=Rec4 ; else DopRec=Rec5
+ end /* If we had to use DDR */
+ 
+ if ListFiles='' then do /* Disk could not be ACCESSed */
+    'PIPE VAR DOPREC|CHOP 64|FMTFST ISO|SPEC 35-44|Var NbFil'
+    NbFil=NbFil-2  /* uncount Director and AllocMap files */
+    If NbFil=0 then do
+       listFiles='LITERAL *disk empty*'
+       FileMsg='|LITERAL *-> disk is empty'
+    end; else
+       listFiles='VAR DopRec|DEBLOCK 64|DROP 2|Take' NbFIl'|FMTFST ISO'
+    If NbFil>62 then do
+       FileMsg='|LITERAL *-> in first 62 files'
+       FileDateMsg='|LITERAL Unknown (>62 mode0)'
+    end
+    tBlk=C2D(substr(Rec3,172-143,4))
+    uBlk=C2D(substr(Rec3,176-143,4))
+    CurMdskFull=format(uBlk/tBlk*100,3,0)'%'
+ end /* If disk could not be ACCESSed */
+ 
+ 'PIPE (end ?) VAR REC3', /*Get Disk label info (record 3)*/
+  '|O: FANOUT',                   /* Make extra copies of the record */
+  '|COPY',                        /* Add some delay (avoid stall) */
+  '|CHANGE'  216-143'.5 X0000000000   "*n/a*" ',
+  '|S: SPEC',
+       '       /Volser: /      2'  148-143'.6      20           ',
+       'Write Select DATE 1-* 1 SELECT 0',       /* Create-date */
+       'Write Select FILE 1-* 1 SELECT 0',       /* Recent file */
+       'Write Select UPDT 1-* 1 SELECT 0',       /* Last update */
+       'Write  /BlkSize: /     2'  156-143'.4  C2D 20.4 right  ',
+       'Write  /Directory blk:/2'  160-143'.4  C2D 20.4 left   ',
+       'Write Select FRMT 1-* 1 SELECT 0',       /* Format-recomp */
+       'Write Select RSVD 1-* 1 SELECT 0',       /* Reserved disk ? */
+       'Write  /Saved seg:  /  2'  216-143'.8      20           ',
+  '|Fls: SPEC Stop AnyEof',
+      '1-* 1.50  Select 1 1-* 52',
+  '|Literal' left('-------------------------------------',50),
+       '-----------------',
+  '|Literal' left('Info as extracted from CMS disk label',50),
+       'Most recent files',
+  '|JOIN * X15',                          /* Join all lines into one */
+  '|VAR MdiskDetails',                    /* Pass all disk info to REXX*/
+ ,/* ---- Extract stuff from copies of record 3 ---------------------- */
+ ,/* Get date disk was formatted */
+ '?O:|SPEC' 194-143 'C2B 1'  188-143'.6 C2X 10',
+    '|SPEC /yyyy-mm-dd hh:mm:ss/ 1',      /* Place ISODATE mask */
+          'c: 8 . Print 19+c PIC ZZ 1',   /* put the century */
+          '10.2 3 12.2 6 14.2 9',         /* Put yymmdd */
+          '16.2 12 18.2 15 20.2 18',      /* Put time too */
+    '|SPEC /Disk create date: / 2  1-* 20   ',
+    '|ELASTIC|S.DATE:',                   /* Pass to main stream */
+ ,/* Check if disk is RESERVED (eg for SQL, SFS or ADSM) */
+ '?O:|PKR: PICK' 196-143'.4 == X00000000',
+    '|     SPEC /Disk RESERVED:/    2  /NO/ 20',
+    '|PKRI:FANINANY',
+    '|ELASTIC|S.RSVD:',
+    '?PKR:|SPEC',
+        '/Disk RESERVED:/    2  /YES/ 20',
+        '/Overhead blks:/     25'  196-143'.4  C2D NW   ',
+    '|Var DiskIsRsvd',
+    '|PKRI:',
+ ,/* Check formatted and recomped cylinders (CMS nucleus) */
+ '?O:|PK:  PICK' 164-143'.4 ==' 168-143'.4',
+    '|     SPEC /Formatted cyls:/    2'  164-143'.4  C2D 20.10 left ',
+    '|PKI: FANINANY',
+    '|ELASTIC|S.FRMT:',
+    '?PK:|SPEC',
+        '/Formatted cyls:/   2'  168-143'.4  C2D 20.10 Left',
+        '/Recomped: /  30'  164-143'.4  C2D NW.10 left',
+    '|Var DiskIsRecomp',
+    '|PKI:',
+ ,/* Get date of the CMS file directory, last R/W usage that is */
+  '?Var DopRec|Chop 64',
+     '|FMTFST ISO|SPEC "Last R/W use:" 2 57.19 20|S.UPDT:',
+  , /* Get timestamp of most recent file */
+  '?' listFiles,
+    '|SORT 57.19 D',
+    '|Ofls: Fanout',
+    '|TAKE|XLATE 68 40 0|Elastic',
+    '|SPEC 57.19 1',
+    FileDateMsg,     /* Maybe a message in list of files */
+    '|INSERT / Most recent file: /',
+    '|TAKE|S.FILE:',
+    '?Ofls:|SPEC W1.2 1',
+    FileMsg,     /* Maybe a message in list of files */
+    '|Append Literal % % % % % % % % % %||SPLIT %', /* Get enough recs*/
+    '|Fls:'
+ 
+MdskDetailSyntax: /* maybe a problem during analyze Mdisk info */
+if symbol('DiskIsRsvd')  ='VAR' then CurMdskFull='RSVD'
+if symbol('DiskIsRecomp')='VAR' then CurMdskFull='RECOMP'
+if symbol('MdiskDetails')<>'VAR' then /* Pipe could not get info */
+   MdiskDetails='** Problems getting CMS Mdisk info for' FreeCuu '('fm')'
+else if AcRc=28 then do
+   If NbFil=0 then t='it is empty'
+              else t='only fmode0 files ('NbFil')'
+   MdiskDetails='*** Disk cannot be accessed RO:' t'15'x||MdiskDetails
+end
+ 
+'PIPE VAR MdiskDetails|CONS'
+ 
+return
+GetQlinks:
+ if linked then FilterLinks=,
+        '|SPLIT AT ,|Strip Leading',
+        '|PICK 1.13 \== /'left(userid(),8) right(qLinksCuu,4,0)'/',
+        '|Join 3 /, /'
+ else FilterLinks=''
+ 'PIPE (end ?) CP Q LINKS' qLinksCuu FilterLinks,
+    '|Insert /  /',
+    '|CT: Count lines',
+    '|StrLiteral /'left('-Active LINKs to this Minidisk:',76,'-')'/',
+    '|iCT: FanIn',
+    '|CONS',
+    '?CT:|FIND 0|SPEC "*** none found at this time ***" 3|iCT:'
+return
+/*-----------------------------------------------------------------*/
+Fm_Of: /* we probably got a CUU, return the fm                     */
+/*-----------------------------------------------------------------*/
+ parse arg cuu
+ parse value diag(8,'Q V' cuu) with emsg '15'x 0 w1 addr .
+ if w1<>'DASD' then
+    call Errexit 5,'Input "'cuu'" is not an FM nor a dasd VDEV:',' 'emsg
+ if left(addr,1)='0' then addr=left(substr(addr,2),4)
+ 'PIPE COMMAND QUERY DISK|PICK 8.4 == /'addr'/|SPEC 13 1|VAR FM'
+ if symbol('fm')='VAR' then return fm
+ 'GETFMADR' ; parse pull . Freefm . ; FreeCuu=addr
+ 'PIPE COMMAND ACCESS' addr Freefm'|VAR ACMSG'; AcRc=rc
+ accessed=(rc=0)
+return FreeFm
+ 
+EXIT:
+ERREXIT: /* general errorexit routine */
+ parse upper source . . myname mytype . syn .
+ do i=2 to arg()   /* give errormessages (if any) */
+    emsg=arg(i)
+    do while emsg\=='' & emsg\=='15'x
+       parse var emsg m '15'x emsg
+       say myname':' m
+    end
+ end
+ if accessed then 'RELEASE' FreeFM
+ if linked then call diag 8,'DET' FreeCuu
+ exit arg(1)

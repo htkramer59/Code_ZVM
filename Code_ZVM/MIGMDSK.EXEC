@@ -1,0 +1,242 @@
+/*---------------------------------------------------------------+
+| Function : Migrate mdisk to a new location in a GROUP.         |
+|                                                                |
+| File     : MIGMDSK  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DIRM     EXEC                                       |
+|          : DDR      MODULE                                     |
+|                                                                |
+| Called   : MIGMDSK  <id> <mdisk> <type> <target> ( <run>       |
+| Defaults :                              CMSDISKS               |
+|                                                                |
+| <type> can be AUTOV or AUTOG                                   |
+| <target> is the volume or volumegroup                          |
+| If <run> is set to yes the commands will be executed.          |
+| If empty or something else only displays will be done.         |
+|                                                                |
+| Comments : Ignore last output from DIRMAINT                    |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190326 08:25:46                                   |
+| Changes  :                                                     |
+|            20190417 H.T.Kramer : Made it possible to move to   |
+|                                  a volume or volumegroup.      |
+|                                                                |
+|            20190415 H.T.Kramer : Changed new and save devices  |
+|                                  Added check to see if they    |
+|                                  exist.                        |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg id cuu type target '(' run
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Check the input                                                |
++---------------------------------------------------------------*/
+If id='?' Then Call Explain
+If id=''  Then Exit 128
+If cuu='' Then Exit 228
+If run='YES' Then Do
+             Say myfn' Running in executing mode'
+             run=1
+             End
+             Else Do
+             Say myfn' Running in display/checking mode'
+             run=0
+             End
+If target='' Then Do
+             target='CMSDISKS'
+             Say myfn' New group is defaulting to 'target
+             End
+If Wordpos(type,'AUTOV AUTOG')=0 Then Do
+             Say myfn 'Invalid type for target 'type
+             Exit 328
+             End
+/*---------------------------------------------------------------+
+| Compose new devices and check if they exist                    |
++---------------------------------------------------------------*/
+cuu=Right(cuu,4,'0')
+newcuu='F'||Substr(cuu,2,3)
+savcuu='7'||Substr(cuu,2,3)
+'PIPE (NAME MIGMDSK.EXEC:53 END ?)',
+    'cp QUERY MDISK USER 'id newcuu' DIR',
+    '| pick w3.2 == ~'id newcuu'~',
+    '| count lines',
+    '| var newcuuexist',
+    '?',
+    'cp QUERY MDISK USER 'id savcuu' DIR',
+    '| pick w3.2 == ~'id savcuu'~',
+    '| count lines',
+    '| var savcuuexist'
+If newcuuexist Then Do
+                 Say myfn' Can not create mdisk 'newcuu' for 'id' it exists'
+                 Exit 898
+                 End
+If savcuuexist Then Do
+                 Say myfn' Can not create mdisk 'savcuu' for 'id' it exists'
+                 Exit 998
+                 End
+/*---------------------------------------------------------------+
+| Check if user is still running and get mdisk size              |
++---------------------------------------------------------------*/
+'PIPE (NAME MIGMDSK.EXEC:74 END ?)',
+      'cp QUERY MDISK USER 'id cuu' DIR LOC',
+      '| drop first 1',
+      '| specs w-1;-1 1',
+      '| var size',
+      '?',
+      'cp QUERY 'id,
+      '| specs fs - f2',
+      '| locate ~DSC~',
+      '| count lines',
+      '| var running'
+If running Then Do
+            Say myfn id' still running, can not execute'
+            Exit 99
+            End
+If size='' | size='SIZE' Then Do
+            Say myfn' Can not determine size for 'id cuu
+            Exit 98
+            End
+ 
+/*---------------------------------------------------------------+
+| Start actual migration                                         |
++---------------------------------------------------------------*/
+mbs=blk2size(size)
+Say myfn' Migrating 'id cuu' to 'target' with size 'size' = 'mbs
+Parse Value mbs With mbs 'M' .
+ 
+reset=Time('R')
+request='AMD'
+cmd='DIRM FOR 'id' AMD 'newcuu' FB-512  'type size target
+Call Issue_Cmd
+ 
+If run Then Call DDR_Disk
+       Else Say myfn 'Here we would run DDR'
+ 
+request='CHV'
+cmd='DIRM FOR 'id' CHV 'cuu' TO 'savcuu' KEEPLINKS'
+Call Issue_Cmd
+ 
+request='CHV'
+cmd='DIRM FOR 'id' CHV 'newcuu' TO 'cuu' KEEPLINKS'
+Call Issue_Cmd
+ 
+/* request='ZAPMDISK' */
+/* cmd='DIRM FOR 'id' DMD 'savcuu */
+/* Call Issue_Cmd */
+ 
+elapsed=Time('E')
+Say myfn
+Say 'Time spent: 'elapsed
+If run Then Do
+     Say 'Mbs moved : 'mbs
+     Say 'Throughput: 'Format(mbs/elapsed,5,0)'Mbs/sec'
+     End
+     Else Say 'Supposed to move: 'mbs' Mbs'
+Exit
+ 
+ 
+Issue_Cmd:
+/*---------------------------------------------------------------+
+| Issue the cmd and capture the output...                        |
++---------------------------------------------------------------*/
+qcompl='COMPLETED;'
+qfinis='FINISHED'
+qrc=0
+line.0=0
+/*---------------------------------------------------------------+
+| Issue the command...                                           |
++---------------------------------------------------------------*/
+Say cmd
+If run Then Do
+            'CP SET MSG IUCV'
+            Address CMS cmd
+            Call Capture_Details
+            'CP SET MSG ON'
+            End
+Return
+ 
+ 
+Capture_Details:
+/*---------------------------------------------------------------+
+| Capture the details                                            |
++---------------------------------------------------------------*/
+Do endless=1
+  sw=0
+  Address CMS 'WAKEUP +00:00:05 (CONS IUCVMSG SMSG QUIET'
+  Select
+  When rc=0 Then Nop
+  When rc=1 Then Nop
+  When rc=5 Then Do
+     'PIPE (NAME MIGMDSK.EXEC:163 END ?)',
+        'stack ',
+        '| specs w3;* 1',
+        '| pick w1.1 == ~DVHREQ2289I~',
+        '| xlate upper',
+        '| stem line. append'
+     If line.0>1 Then Do
+              'PIPE (NAME MIGMDSK.EXEC:170 END ?)',
+                 'stem line. ',
+                 '| join keylen 11 ',
+                 '| var line'
+              Call CheckLine
+              if sw Then Do
+              Drop line. line
+              line.0=0
+              Leave endless
+              End
+              End
+     End
+  When rc=6 Then Leave endless
+  Otherwise Nop
+  End
+End endless
+Return
+ 
+ 
+ 
+CheckLine:
+/*---------------------------------------------------------------+
+| Check the results                                              |
++---------------------------------------------------------------*/
+reqpos=Pos(request,line)
+compos=Wordpos(qcompl,line)
+finpos=Wordpos(qfinis,line)
+Parse Value line With 'RC =' Strip(rc)'.' .
+If rc=qrc &,
+   reqpos<>0  &,
+   compos<>0  Then sw=1
+              Else sw=0
+Return
+ 
+ 
+DDR_Disk:
+/*---------------------------------------------------------------+
+| Copy old to new                                                |
++---------------------------------------------------------------*/
+'CP LINK 'id cuu cuu' RR'
+'CP LINK 'id newcuu newcuu' M';
+Queue 'SYS CONS'
+Queue 'PROMPTS OFF'
+Queue 'IN 'cuu' DASD'
+Queue 'OUT 'newcuu' DASD'
+Queue 'COPY ALL'
+Queue
+Address CMS ' DDR'
+'CP DET 'cuu
+'CP DET 'newcuu
+Return
+ 
+ 
+Explain:
+/*---------------------------------------------------------------+
+| Show some help                                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME MIGMDSK.EXEC:227 END ?)',
+   '< 'myfn myft' *',
+   '| tolabel Parse',
+   '| cons'
+   Exit 11
+Return

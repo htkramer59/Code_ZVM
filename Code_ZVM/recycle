@@ -1,0 +1,120 @@
+#! /bin/bash
+#------------------------------------------------------------------------------#
+#                                                                              #
+# Created: 20200529 Author: H.T.Kramer                                         #
+# File...: recycle                                                             #
+# Usage..: Force and xautolog myself so the new CP definitions become available#
+# Invocation: recycle                                                          #
+#             recycle ? for help                                               #
+#------------------------------------------------------------------------------#
+#                                                                              #
+# Files input.: none                                                           #
+# Files output: none                                                           #
+#                                                                              #
+#------------------------------------------------------------------------------#
+#                                                                              #
+# Last updated:                                                                #
+# yyyymmdd initials description                                                #
+#                                                                              #
+#------------------------------------------------------------------------------#
+#
+#                                     
+function Calc_Host_Time {
+#
+# Calculate the new host time 
+#
+deshh=`echo $destime | cut -d\: -f1`
+desmm=`echo $destime | cut -d\: -f2`
+desmins=$((deshh*60+desmm))
+
+lnxhh=`date +%H`
+lnxmm=`date +%m`
+lnxtz=`date +%Z`
+lnxmins=$((lnxhh*60+$lnxmm))
+
+zvmtime=`sudo vmcp q time | tr [:cntrl:] \ | cut -d\  -f3-4`
+zvmhh=`echo $zvmtime | cut -d\: -f1`
+zvmmm=`echo $zvmtime | cut -d\: -f2`
+zvmtz=`echo $zvmtime | cut -d\  -f2`
+zvmmins=$((zvmhh*60+zvmmm))
+
+extrmins=$((desmins-lnxmins))
+newmins=$((zvmmins+extrmins))
+newhh=$((newmins/60))
+newhh=`echo 00$newhh | rev | cut -b1-2 | rev`
+newmm=$((newmins%60))
+newmm=`echo 00$newmm | rev | cut -b1-2 | rev`
+echo "Linux  : $lnxhh:$lnxmm $lnxtz $lnxmins"
+echo "Desired: $destime      $desmins"
+echo "zVM    : $zvmhh:$zvmmm $zvmtz  $zvmmins"
+echo "New    : $newhh:$newmm $zvmtz"
+destime=`echo $newhh:$newmm`
+}
+
+
+function Help {
+#
+# Display some help
+#
+clear
+echo 
+echo "Syntax: $0 <option>"
+echo
+echo "<option>:"
+echo "   -t hh:mm    recycle starts at hh:mm"
+echo "   -w sssss    recycle will wait for max sssss seconds"
+echo
+echo "When the option is ommitted it will be executed immediately"
+echo
+exit
+}
+#
+# Some settings
+#
+target='RECSRV'
+msgcmd='SMSG'         # Can be msg as well
+#
+# Are we using sudo or not
+#
+if [ `whoami` = 'root' ]; then
+	suffix=''
+	else
+	suffix='sudo'
+fi
+#
+# Evaluate the input
+#
+case $1 in
+	?)
+	Help
+	;;
+	-w)
+	wait='within '$2
+	extrmsg="Within $2 seconds"
+	;;
+	-t)
+	#
+	# Note: need to convert time to time in Timezone on zVM!!			
+	#
+	destime=$2
+	Calc_Host_Time
+	wait='by '$destime
+	extrmsg="at $destime $zvmtz"
+	;;
+	*)
+	wait=''
+	extrmsg=""
+	;; 
+esac
+#
+# Get the zVM id for this server 
+#
+zvmid=`$suffix vmcp query userid | cut -d\  -f1`
+#
+# Issue the message...
+#
+$suffix vmcp $msgcmd $target recycle $zvmid $wait
+#
+#
+#
+echo "We are now rebooting at zVM level $extrmsg"

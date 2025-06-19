@@ -1,0 +1,65 @@
+/*---------------------------------------------------------------+
+| Function : Shows ifconfig info and vswitch info                |
+|                                                                |
+| File     : HOBVMIFC EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : HOBVMIFC .                                          |
+|                                                                |
+| Comments : Needs access to TCPMAINT 592 to be able to run      |
+|            IFCONFIG and needs CP CLASS D for QUERY VSWITCH     |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220124 17:11:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+ 
+If dryrun<>'' Then test=1
+              Else test=0
+ 
+If test Then output='| CONS'
+        Else output='| > HOBVM090 CLIENT A'
+ 
+'PIPE (NAME HOBVMIFC.EXEC:28 END ?)',
+    'cms IFCONFIG',                              /* Ask tcpip        */
+    '| if1: if pick anycase w2.1 == ~inet~',     /* If we find this  */
+    '|    xlate w1.1 lower',                     /* ...lowercase     */
+    '| if1:',                                    /* Conn 2 if        */
+    '| if2: if pick anycase w1.2 == ~RX bytes:~',   /* If wee find this */
+    '|    specs w1.3 1 w3.1 nw w4.3 nw w6.1 nw', /* We add some items*/
+    '|    siconv w4.1 b2m 10.2',                 /* .and convert     */
+    '|    siconv w8.1 b2m 10.2',                 /* ...to mb         */
+    '|    specs w1.3 10 ~(~ nw w4.1 n ~MB)~ nw', /* Smarten the      */
+               'w5.3 nw ~(~ nw w8.1 n ~MB)~ nw', /* .output          */
+    '| if2:',                                    /* Conn 2 if        */
+    '| preface literal [ifstat]',                /* Add hdr          */
+    '| append literal ',                         /* Add empty line   */
+    '| fi: fanin',                               /* Take in others   */
+    output,                                      /* Show or file?    */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY VSWITCH ALL DETAILS',              /* Ask CP           */
+    '| if3: if pick anycase w1.2 == ~VSWITCH SYSTEM~',   /* If we find this  */
+    '|     specs w3;* 1',                        /* ..we remove it   */
+    '| if3:',                                    /* Conn 2 if        */
+    '| if4: if pick anycase w1.1 == ~VSWITCH~',  /* If we find this  */
+    '|     specs w2;* 1',                        /* ..we remove it   */
+    '| if4:',                                    /* Conn 2 if        */
+    '| specs pad 0 recno 1.4 right 1;* nw',      /* Add record no    */
+    '| if5: if pick anycase w2.2 == ~RX bytes:~',   /* If we find this  */
+    '|     specs w1.4 1 w4.1 nw w5.3 nw w7.1 nw',   /* We add some detl */
+    '|     siconv w5.1 b2m 10.2',                /* Convert the new  */
+    '|     siconv w9.1 b2m 10.2',                /* ..to MB          */
+    '|     specs w1.1 1 w2.3 10 ~(~ nw w5.1 n ~MB)~ nw',   /* Smarten output   */
+                'w6.3 nw ~(~ nw w9.1 n ~MB)~ nw',   /* .                */
+    '| if5:',                                    /* Conn 2 if        */
+    '| sort w1.1',                               /* Sort on record no*/
+    '| specs 6;* 1',                             /* Remove record no */
+    '| fi:'                                      /* Conn 2 fanin     */
+ 
+Exit

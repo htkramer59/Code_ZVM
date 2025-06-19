@@ -1,0 +1,62 @@
+/*---------------------------------------------------------------+
+| Function : Lock the code                                       |
+|                                                                |
+| File     : CODELOCK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CODE     STATUS                                     |
+|                                                                |
+| Called   : CODELOCK .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220324 16:26:37                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg who fn ft '(' proj .
+Parse Source . . myfn myft .
+reply=0
+/*---------------------------------------------------------------+
+| Access the project and status                                  |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'proj' (ONLY(CODE) QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else Exit 0
+/*---------------------------------------------------------------+
+| Check if there is a status file if not create one              |
++---------------------------------------------------------------*/
+'PIPE (NAME CODELOCK.EXEC:31 END ?)',
+   'statew CODE STATUS 'wfm,                     /* Check fro file   */
+   '| count lines',                              /* How many         */
+   '| var statfile'                              /* Store as boolean */
+If \statfile Then Do
+      'PIPE (NAME CODELOCK.EXEC:36 END ?)',
+          'literal *',                           /* Minimal input    */
+          '| > CODE STATUS 'wfm                  /* Write file       */
+      End
+/*---------------------------------------------------------------+
+| Check if we are locked                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME CODELOCK.EXEC:43 END ?)',
+   '< CODE STATUS 'wfm,
+   '| pick w1.1 == ~'Strip(fn)'~ and w2.1 == ~'Strip(ft)'~',
+   '| count lines',
+   '| var locked'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If \locked Then Do
+   'PIPE (NAME CODELOCK.EXEC:52 END ?)',
+      'literal 'fn ft' Locked 'Date('S') Time() who,   /* Compose status   */
+      '| specs w1.1 1.8 w2.1 nw.9 w3;* nw',      /* Rework           */
+      '| >> CODE STATUS 'wfm                     /* Add 2 file       */
+    If rc=0 Then reply=1
+    End
+/*---------------------------------------------------------------+
+| Release the project                                            |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) QUIET WRITE'
+Exit reply

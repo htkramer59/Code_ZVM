@@ -1,0 +1,99 @@
+                                                                                
+MD EXEC                                                                         
+                                                                                
+This exec shows all MDISKs (accessed and non-accessed), virtual DASD and        
+filepool directories (that you have access to or are accessed)                  
+                                                                                
+                                                                                
+Quit:                                                                           
+     Exits from the EXEC.                                                       
+                                                                                
+                                                                                
+Access:                                                                         
+     You can ACCESS disks/directories by putting the cursor on the line that has
+     the disk/directory you want to ACCESS and press PF10, the filemode         
+     for ACCESS will be selected for you from the free access modes.            
+                                                                                
+     You can ACCESS a disk/directory by typing a (valid) filemode and a space in
+     the field MOD and pressing ENTER. The disk will be ACCESSed using          
+     the filemode you entered.                                                  
+                                                                                
+     You can also use this to re-shuffle ACCESS modes.                          
+                                                                                
+     Note: you can not use the S and Y modes these are CMS specific.            
+                                                                                
+                                                                                
+Filelist:                                                                       
+     To do a FILELIST of a disk or directory put the cursor on the line         
+     containing the item of your choice and press PF11.                         
+     You can FILELIST any item in the shown list as long as it is               
+     a CMS filesystem (i.e. cms minidisk or filepool directory).                
+                                                                                
+                                                                                
+Link:                                                                           
+     Enables you to LINK the Userid minidisk combination or filepool directory, 
+     which is typed in the input fields after the text "Link this:"             
+     When the necessary fields are entered you need to press PF9                
+     Note: If you need a userid minidisk linked you must enter both!            
+                                                                                
+                                                                                
+Release:                                                                        
+     Put the cursor on the line of the disk/directory you want to release       
+     and press PF4.                                                             
+                                                                                
+     To release a disk/directory you can also type a . (dot) and a space in     
+     the filemode field.                                                        
+                                                                                
+     Notes:                                                                     
+     you can only release disks/directories that have an access mode.           
+     the disks stay LINKed.                                                     
+                                                                                
+                                                                                
+Detach:                                                                         
+     Select the line on which the disk is that needs to be DETACHed             
+     and press PF5                                                              
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+Function keys:                                                                  
+     PF1   Shows HELP                                                           
+     PF2                                                                        
+     PF3   Quit                                                                 
+     PF4   Release                                                              
+     PF5                                                                        
+     PF6   Detach                                                               
+     PF7                                                                        
+     PF8                                                                        
+     PF9   Link                                                                 
+     PF10  Access                                                               
+     PF11  Filelist                                                             
+     PF12  Quit                                                                 
+                                                                                
+Fields explained:                                                               
+     Label         Label of the minidisk                                        
+     VDev          Virtual Device address within your userid                    
+                   If it contains DIR, this is a FILECONTROL directory          
+                   If it contains DIRCS, you have a DIRECTORYCONTROL directory  
+     Mod           Access mode, letter with wich the disk/directory is ACCESSed 
+     Stat          Link status, can be R/O or R/W (Read Only or Read Write)     
+     Cyl           The number of cylinders the disk exists of, contains >>> when
+                   the device is FB-512 (SCSI, eDEV)                            
+     Blk           The block size with which the minidisk is formatted,         
+                   1KB, 2KB or 4KB blocks                                       
+     Files         The number of files on the minidisk/directory                
+     Blk_Used-(%)  The number of blocks used and percentage                     
+     Blk_Left      The number of free blocks on the device                      
+     Blk_Total     The total number of blocks available on the device           
+     Type          Device type used for the minidisk                            
+     R_Blk/Cyl     The real number of fba-blocks (fb-512) or cylinders assigned 
+     OWner         The owner of the minidisk                                    
+     VCuu          Virtual Device address as the owner knows                    
+     Directory     Directories accessed and available                           
+                                                                                
+     Note: If some fields contain a - (minus-sign) these values can NOT         
+           be obtained however the directory has been ACCESSed.                 
+           If fields contain a . (dot) the minidisk/directory has NOT been      
+           ACCESSed therefor the values can not be shown.                       
+                                                                                
+                                                                                

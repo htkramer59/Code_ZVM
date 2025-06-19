@@ -1,0 +1,45 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Generate a random 8 char. password                  |
+|                                                                |
+| File     : DM_RNDOM EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_RNDOM .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240706 10:48:14                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft' Starting'
+validchars='abcdefhijklmnopqrstuvwxyz0123456789ABCDEFHIJKLMNOPQRSTUVWXYZ~`!@#$%5&*()_-+=[{]}\|:
+<,>.?/'
+calcoperands='+ - / * % //'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+newpw=''
+Do p=1 To 8
+   nr=Random(Words(calcoperands))
+   If nr='' | nr=0 Then nr=1
+   calcoperand=Word(calcoperands,nr)
+   tmppos=Random(Length(validchars))
+   Interpret 'newpos=('tmppos calcoperand p')+1'
+   newpos=Strip(Format(newpos,,0))
+   If newpos='' | newpos=0 Then newpos=Random(Length(validchars))
+   validchars=Reverse(validchars)
+   newpw=Reverse(newpw)||Substr(validchars,newpos,1)
+End p
+newpw=Translate(Reverse(newpw),'_',' ')
+'PIPE (NAME DM_RNDOM.EXEC:38 END ?)',
+   'var newpw',                                  /* Take this        */
+   '| var newpw 1'                               /* Hand 2 caller    */
+Say Date('S') Time() myfn myft' Exiting'
+Return

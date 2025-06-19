@@ -1,0 +1,32 @@
+/*---------------------------------------------------------------+
+| Function : .                                                   |
+|                                                                |
+| File     : CODEREPL EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : REPLACE  EXEC                                       |
+|                                                                |
+| Called   : CODEREPL .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220324 16:25:50                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg who fn ft '(' proj .
+Parse Source . . myfn myft .
+reply=0
+'PIPE (NAME CODEREPL.EXEC:22 END ?)',
+   'var keepfiles 1',
+   '| var keepfiles'
+Address CMS 'VMLINK 'proj' (ONLY(CODE) WRITE QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit 0
+Address CMS 'REPLACE 'fn ft' A 'wfm' (NOKEEP 'keepfiles
+If rc=0 Then reply=1
+Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) WRITE QUIET'
+Exit:
+Exit reply

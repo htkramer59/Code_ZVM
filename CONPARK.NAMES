@@ -1,0 +1,100 @@
+:client.
+:nick.CONPARK  :userid.CONPARK
+* Names file for CONPARK
+*
+* Nickname for the CONPARK Client code
+:nick.CONPARKC :product..dir vmusers:conpark. :invoke.CONPARKC :node.vm4htk
+:users.
+*
+* Definitions for who is allowed to store console logs
+* :nick.      identifies the userid which is allowed to store logs on CONPARK
+*             Wildcards are allowed but are implemented in a basic way.
+* :product.   tells where the logs will be stored for the userid in :nick.
+* :keep.      the number of days the logs need to be kept
+* :compress.  the number of days after which the logs need to be compressed
+* :frequency. shows how the logs will be stored, D=1 File per day, H=1 File hour, A=Append to 1 big file, I=As-is
+* :method.    Tells the code to store, store and forward or forward the log files
+*
+*  <shortnode> will be replaced with B1, B2, O1, etc. (last 2 chars from nodename, see IDENTIFY)
+*  <id>        will be replaced with the string from :nick. (default)
+*
+:nick.CONPARK  :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.OPERATOR :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.RSCS*    :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.TCP*     :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.SSL*     :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.PORTMAP  :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.IPGATE   :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.FTPSERVE :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.VMNFS    :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.VMUTIL   :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.AUTOLOG1 :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.*MAINT*  :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.DTCVSW*  :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.DTCSMA*  :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.PERFSVM  :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.PERSMAPI :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.VSM*     :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.EREP*    :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.GSKADMIN :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.OP1      :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.DISKACNT :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.DIRMAINT :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.DATAMOV* :keep.180 :compress.7  :frequency.H :method.STORE
+:nick.MONWRITE :keep.180 :compress.1  :frequency.H :method.STORE
+:nick.TOOLS    :keep.60  :compress.1  :frequency.H :method.STORE
+:nick.CODE     :keep.60  :compress.1  :frequency.H :method.STORE
+:nick.VMUSERS  :keep.60  :compress.7  :frequency.H :method.STORE
+:nick.DMSERVER :keep.60  :compress.1  :frequency.H :method.STORE
+:nick.HERMAN   :keep.60  :compress.1  :frequency.H :method.STORE
+* Servers for customer
+:maindir.
+* Node specific ids can be stored in CONPARK <node> file
+* See CONPARK $NODE$ in GIT
+*
+*
+* :nick     needed to identify but in the code ignored
+* :product  identifies the main directory where everything is stored
+* :node     identifies the node for which this is valid
+*
+:nick.conpmain  :product..dir vmusers:conpark. :node.vm4htk
+:SYSTEM.
+*
+* CONPARK Server code settings
+* :update_interval re-read the control file every x minutes
+* :compressiontool COPYFILE or FCOPY, copyfile is preferred
+* :test yes; testing on, no; testing is off. Testing is only displaying results
+* :debug yes; Rexx trace is switched on, no; Rexx trace is switched off
+* :forwarding_destination Tells the code were to forward the log files
+* :forwarding_tool Tells the code what to use to forward the log files, SENDFILE, FTP, etc.
+* :forwarding_opts Tells the code what options for forwarding the files (mainly FTP).
+:nick.CONPARKS
+       :update_interval.60
+       :compressiontool.COPYFILE
+       :test.no
+       :debug.no
+       :method.STORE
+* Which exit to run and when will it run in hh:mm
+* Exit can be EXEC or MODULE
+*      :exitname.EXTR4SEC :runat.00:05
+* These need to be GRANTed...
+       :authorize.PUBLIC,ANONYMOU
+:DEFAULTS.
+* Defaults for CONPARK Server code, details see below
+*      :forwarding_dest.CONPARK AT R1LB1
+*      :forwarding_tool.SENDFILE
+*      :forwarding_dest.namreh 192.168.10.111
+*      :forwarding_tool.ftp
+* NOTE: the colon is replaced by a ! for coding purposes
+*      :forwarding_opts.cwd vmusers:herman.conpark.
+*
+:nick.DEFAULTS :update_interval.5 :compressiontool.COPYFILE :test.no  :debug.no
+       :method.STORE
+       :keep.180
+       :compress.1
+       :frequency.H
+       :forwarding_dest.CONPARK AT R1LB1
+       :forwarding_tool.SENDFILE
+*      :forwarding_dest.namreh 192.168.10.111
+*      :forwarding_tool.ftp
+       :forwarding_opts.

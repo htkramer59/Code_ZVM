@@ -1,0 +1,361 @@
+/*---------------------------------------------------------------+
+| Function : Display per directory on the filepool the usage     |
+|                                                                |
+| File     : FPUSAGE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : FLBFS    EXEC    filelist for BFS                   |
+|            CHKOBJ   EXEC    Check type of object               |
+|                                                                |
+| Called   : FPUSAGE  <filepool> (  <options>                    |
+|                     <filepool>       - defaults to VMUSERS     |
+|                                                                |
+|                     CONS             - cons                    |
+|                     XEDIT            - default (menu)          |
+|                     FILE <fn> <ft>   - fn ft are optional      |
+|                     ADMIN            - access dir in write     |
+|                                                                |
+| Comments : Need to be admin for the filepools                  |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190710 12:05:04                                   |
+| Changes  : .                                                   |
+|            20220616 H.T.Kramer : Added use of filepool dir     |
+|                                  STATUS                        |
+|            20220210 H.T.Kramer : Add FLBFS to have a look at   |
+|                                  BFS stuff                     |
+|            20200326 H.T.Kramer : Changed total from Kb to Mb   |
+|            20200309 H.T.Kramer : Change input parms/options    |
+|            20191017 H.T.Kramer : Changed usability             |
+|            20191016 H.T.Kramer : Added no of files             |
+|            20190918 H.T.Kramer : Small changes                 |
+|            20190719 H.T.Kramer : Add more output options       |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fp '(' options
+Parse Source . . myfn myft .
+fp=Strip(fp)
+Select
+When myft='EXEC' Then Do
+               'PIPE (NAME FPUSAGE.EXEC:41 END ?)',
+                 'cms EXECMAP 'myfn' XEDIT',            /* Ask CMS          */
+                 '| drop first 1',                      /* Ignore header    */
+                 '| count lines',                       /* Count findings   */
+                 '| if: if pick 1.1 == ~1~',            /* Check this       */
+                 '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */
+                 '|     cms',                           /* Issue cmd      */
+                 '| if:',                               /* Comm 2 if        */
+                 '| var exldd'                          /* Hand 2 rexx      */
+               Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+               Call Run_Exec
+               Address CMS 'EXECDROP 'myfn' XEDIT'
+               End
+When myft='XEDIT' Then Call Run_Xedit
+Otherwise Exit 99
+End
+Exit
+ 
+ 
+Run_Exec:
+/*---------------------------------------------------------------+
+| Run the EXEC part, if filepool is ? show help                  |
++---------------------------------------------------------------*/
+If fp='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME FPUSAGE.EXEC:66 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show             */
+          Return
+          End
+/*---------------------------------------------------------------+
+| Process the options                                            |
++---------------------------------------------------------------*/
+If options<>'' Then Do
+               'PIPE (NAME FPUSAGE.EXEC:76 END ?)',
+                    'var options',                    /* Take this        */
+                    '| split before string ~CONS~',   /* Split at these   */
+                    '| split before string ~FILE~',   /* .                */
+                    '| split before string ~XEDIT~',  /* .                */
+                    '| split before string ~ADMIN~',  /* .                */
+                    '| strip',                        /* Remove spaces    */
+                    '| l: lookup w1.1 w1.1 details ', /* Compare          */
+                    '| specs ~/OUTPUT/~ 1 1;* n x40 n',   /* Prep 4 varload   */
+                    '| varload',                      /* Hand 2 rexx      */
+                    '?',                              /* 2nd pipe         */
+                    'literal ADMIN CONS FILE XEDIT',  /* Take these       */
+                    '| split',                        /* Split into recs  */
+                    '| l:'                            /* Conn 2 lookup    */
+               If output='ADMIN' Then Do
+                                 role='('output' ON)'
+                                 write='WRITE'
+                                 output='XEDIT'
+                                 End
+                                 Else write=''
+               End
+               Else Do
+               output=''
+               role=Copies(' ',10)
+               End
+/*---------------------------------------------------------------+
+| Select what to do...                                           |
++---------------------------------------------------------------*/
+xmenu=0
+Select
+When output=''      Then Do
+                         xmenu=1
+                         Call FindWfm
+                         output='> 'myfn' $WORK$ 'wfm
+                         Call Obtain_Info
+                         Call OutXedit
+                         Call DumpWfm
+                         End
+When output='CONS'  Then Call Obtain_Info
+When output='XEDIT' Then Do
+                         xmenu=1
+                         Call FindWfm
+                         output='> 'myfn' $WORK$ 'wfm
+                         Call Obtain_Info
+                         Call OutXedit
+                         Call DumpWfm
+                         End
+When output='FILE'  Then Do
+                         Parse Value output With 'FILE' ofn oft .
+                         Call FindWfm
+                         If ofn='' Then ofn=myfn
+                         If oft='' Then oft='OUTPUT'
+                         output='> 'ofn oft wfm
+                         Call Obtain_Info
+                         Call DumpWfm
+                         End
+Otherwise Exit 98
+End
+Return
+ 
+ 
+FindWfm:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else wfm='A'
+Return
+ 
+ 
+DumpWfm:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Return
+ 
+ 
+Obtain_Info:
+/*---------------------------------------------------------------+
+| Obtain shortnode name                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME FPUSAGE.EXEC:159 END ?)',
+   'cp QUERY USERID',                            /* Ask CP           */
+   '| specs substr -2;-1 of w3.1 ',              /* Keep this        */
+   '| var shortnode'                             /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Set up a default filepool                                      |
++---------------------------------------------------------------*/
+If fp='' Then fp='VMUSERS'
+Call Get_Dirs
+Call Get_Blocks
+Call Create_Total
+Call Create_Output
+Return
+ 
+ 
+OutXedit:
+/*---------------------------------------------------------------+
+| Output in an opened XEDIT session                              |
++---------------------------------------------------------------*/
+/* workfile=userid()' $WORK$' */
+workfile=Subword(output,2)
+/*---------------------------------------------------------------+
+| My favored XEDIT settings                                      |
++---------------------------------------------------------------*/
+width=500
+keys='SET RESERVE -1  H 1=Hlp 2=Dspc 3=End 4=Sp/Jn 5=<-> 6=Scr2 7=Bck 8=Fwd 9=Sc1 10=Top 11=LIST 12=Quit'
+Queue 'SET RESER 4 H       'heading
+Queue 'SET RESER 5 H       'separtr
+Queue 'SET RESER 6 H       'totals
+Queue 'SET RESER 7 H       'separtr
+Queue 'RECFM V'
+Queue 'LRECL 'width
+Queue 'TRUNC *'
+Queue 'VERIFY 1 *'
+Queue 'AUTOSAVE OFF'
+Queue ':1'
+Queue 'SET PF11 'myfn
+Queue keys
+Address CMS 'XEDIT 'workfile' (WI 'width
+Address CMS 'ERASE 'workfile
+Return
+ 
+ 
+ 
+Create_Total:
+/*---------------------------------------------------------------+
+| Totalise the columns created                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME FPUSAGE.EXEC:207 END ?)',
+    'stem new.',                                /* Take these       */
+    '| specs',                                  /* Start            */
+    '       printonly eof',                     /* .  calculating   */
+    '       a: w2.1 .',                         /* .                */
+    '       b: w3.1 .',                         /* .                */
+    '       c: w4.1 .',                         /* .                */
+    '       d: w5.1 .',                         /* .                */
+    '       e: w6.1 .',                         /* .                */
+    '        set (#0+=a;#1+=b;#2+=c;#3+=d;#4+=e)',  /* .                */
+    '        eof',                              /* .                */
+    '        ~>> Totals for 'fp'~ 1.50',        /* .                */
+    '        print  #4 nw.10 right',            /* Adjust layout    */
+    '        print  #0 nw.10 right',            /* .                */
+    '        print  #1 nw.10 right',            /* .                */
+    '        print  #2 nw.10 right',            /* .                */
+    '        print  #3 nw.10 right',            /* .                */
+    '| var totals',                             /* Store as         */
+    '| specs w-1;-1',
+    '| var totkb'
+Return
+ 
+ 
+Create_Output:
+/*---------------------------------------------------------------+
+| Create the output                                              |
++---------------------------------------------------------------*/
+heading='Directory 'role      '                                  Files  Data-Blks Cntrl-Blks Total-Blks   Total Kb',
+        '%ofTotKb %of_FP'
+'PIPE (NAME FPUSAGE.EXEC:236 END ?)',
+    'var heading',                               /* Take this        */
+    '| deblock 1',                               /* Split into chars */
+    '| if: if pick 1.1 \== ~ ~',                 /* Find this        */
+    '|   specs ~-~ 1',                           /* Replace this     */
+    '| if:',                                     /* Conn 2 if        */
+    '| join *',                                  /* Join them        */
+    '| var separtr',                             /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cms QUERY FILEPOOL OVERVIEW 'fp,            /* Ask cms          */
+    '| locate anycase ~Potential~',              /* Find this        */
+    '| specs w1.1',                              /* Keep this        */
+    '| var fpblks'                               /* Hand 2 rexx      */
+fpkb=fpblks*4
+Do n=1 To new.0
+  kb=Word(new.n,5)
+  percfp=Format(((kb/fpkb)*100),3,2)
+  percused=Format(((kb/totkb)*100),3,2)
+  new.n=new.n percused'%' percfp'%'
+End n
+fpmb=fpkb/1024
+totals=totals '.     'fpmb'Mb'
+'VMFCLEAR'
+If xmenu Then head=''
+       Else head='| preface var separtr',
+    '| preface var totals',                     /* Add this         */
+    '| preface var separtr',
+    '| preface var heading'                     /* ...and this      */
+'PIPE (NAME FPUSAGE.EXEC:264 END ?)',
+    'stem new.',                                /* Take these       */
+    '| specs w1.1 1.50',                        /* Adjust layout    */
+    '        pad 0',                            /* .                */
+    '        w2.1 nw.10 right',                 /* .                */
+    '        w2;* nw',                          /* .                */
+    '| specs w1.1 1.50',                        /* Remove sort col. */
+    '        pad space',                        /* .                */
+    '        w7.1 nw.10 right',                 /* .                */
+    '        w3.1 nw.10 right',                 /* .                */
+    '        w4.1 nw.10 right',                 /* .                */
+    '        w5.1 nw.10 right',                 /* .                */
+    '        w6.1 nw.10 right',                 /* .                */
+    '        w8.1 nw.7  right',                 /* .                */
+    '        w9.1 nw.7  right',                 /* .                */
+    '| specs 1;* 1 pad 0 w-2;-2 nw.10 right',   /* Add column 2 sort*/
+            'w-1;-1 nw',                         /* .                */
+    '| sort w-2;-2 d',                          /* Sort on number   */
+    '| specs w1;-3 1',                          /* Remove column    */
+    head,                                        /* .                */
+    '| 'output                                  /* Output the lot   */
+Return                    w
+ 
+ 
+Get_Blocks:
+/*---------------------------------------------------------------+
+| Get all the block counts....                                   |
++---------------------------------------------------------------*/
+new.0=0
+Do d=1 To dir.0
+   'PIPE (NAME FPUSAGE.EXEC:294 END ?)',
+      'literal QUERY BLOCKS * * 'dir.d,         /* Compose cmd      */
+      '| cms',                                  /* Ask details      */
+      '| drop first 2',                         /* Remove heading   */
+      '| f: fanout',                            /* Dupl. records    */
+      '| specs',                                /* Do calculations  */
+      '        printonly eof',                  /* .                */
+      '        a: w5.1 .',                      /* .                */
+      '        b: w6.1 .',                      /* .                */
+      '        set (#0+=a;#1+=b)',              /* Actual calcul... */
+      '        eof',                            /* .                */
+      '        /'dir.d'/ 1.30',                 /* .                */
+      '        print  #0 nw',                   /* Total datablocks */
+      '        print  #1 nw',                   /* Total systblocks */
+      '| buffer',                               /* Prevent stall    */
+      '| specs',                                /* Do calculations  */
+      '        w1.3 1',                         /* Keep these       */
+      '        c: w2.1 .',                      /* .                */
+      '        d: w3.1 .',                      /* .                */
+      '        set (#2:=c+d;#3:=(c+d)*4)',      /* Actual calcul..  */
+      '        print  #2 nw',                   /* Total     blocks */
+      '        print  #3 nw',                   /* Total 4k  blocks */
+      '| fi: faninany',                         /* Take in          */
+      '| join * x40',                           /* Make 1 record    */
+      '| stem new. append',                     /* Add to array     */
+      '? f:',                                   /* Conn 2 fanout    */
+      '| count lines',                          /* How many         */
+      '| specs w1.1 1.10 right',                /* Adjust layout    */
+      '| fi:'                                   /* Conn 2 faninany  */
+End d
+Return
+ 
+ 
+Get_Dirs:
+/*---------------------------------------------------------------+
+| Check who is enrolled and take their directories               |
++---------------------------------------------------------------*/
+'PIPE (NAME FPUSAGE.EXEC:331 END ?)',
+     'cms QUERY ENROLL USER FOR ALL 'fp,        /* Who is enrolled  */
+     '| drop first 1',                          /* Remove header    */
+     '| specs ~LISTDIR 'fp':~ 1 w1.1 n ~.~ n ', /* Get contents     */
+     '| cms',                                   /* Hand 2 cms       */
+     '| pick w1.1 == ~-~',                      /* Keep these       */
+     '| specs w2.1',                            /* This remains     */
+     '| stem dir.'                              /* Store as...      */
+Return
+ 
+ 
+Run_Xedit:
+/*---------------------------------------------------------------+
+| Run as XEDIT macro                                             |
++---------------------------------------------------------------*/
+'EXTRACT /LINE/CURSOR'                          /* Get some info    */
+oldpos=line.1                                   /* Retain cur pos   */
+':'cursor.3                                     /* Move to line     */
+'EXTRACT /CURLINE'                              /* Get content      */
+target=Word(curline.3,1)
+objstat=CHKOBJ(target)
+Select
+When objstat='20' Then Address CMS 'VMLINK .DIR 'target' (NONAMES QUIET 'write' FILELIST * * .fm'
+When objstat='21' Then Address CMS 'FLBFS 'target
+Otherwise 'EMSG Can not handle: 'target
+End
+'PIPE (NAME FPUSAGE.EXEC:357 END ?)',
+    'stack',                                     /* Take stack       */
+    '| hole'                                     /* Dump it          */
+':'oldpos                                        /* Return to pos    */
+Return

@@ -1,0 +1,94 @@
+/*---------------------------------------------------------------+
+| Function : Calculate the number of CYLINDERS needed            |
+|                                                                |
+| File     : SIZE2CYL EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called     : SIZE2CYL <size><si-unit>                          |
+| As function: out=size2cyl(<size><si-unit>)                     |
+|                                                                |
+| Comments : <size>      the size you need (in bytes)            |
+|            <si-unit>   the si unit you want                    |
+|                                                                |
+|            si-unit:    K = Kilo  1024 to the power of 1        |
+|                        M = Mega                       2        |
+|                        G = Giga                       3        |
+|                        T = Tera                       4        |
+|                        P = Peta                       5        |
+|                        E = Exa                        6        |
+|                        Z = Zetta                      7        |
+|                        Z = Yotta                      8        |
+|                                                                |
+|            When called as function the return code is the      |
+|            number of Cylinders                                 |
+|                                                                |
+| Example  : size2cyl 12g                                        |
+| Output   :                                                     |
+| 12G = 12 GigaBytes = 17476 Cylinders = 3145728 4K blocks       |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181122 17:02:51                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg size .
+Parse Source . how myfn myft .
+numeric digits 40 /* To display the full number */
+blkpcyl=180       /* Blocks per cylinder */
+blksize=4096      /* Bytes per block */
+unit=1024         /* unit size of 1 K byte */
+If size=''  Then Call Exit 28
+If size='?' Then Do
+                 'VMFCLEAR'
+                 'PIPE (end ?)',
+                      '< 'myfn myft' *',
+                      '| tolabel Parse',
+                      '| cons'
+                  Call Exit 4
+                  End
+/*---------------------------------------------------------------+
+| Split the si_unit and the size                                  |
++---------------------------------------------------------------*/
+si_unit=Substr(Reverse(size),1,1)
+size=Reverse(Substr(Reverse(size),2))
+/*---------------------------------------------------------------+
+| Determine the power factor                                     |
++---------------------------------------------------------------*/
+Select
+  When si_unit='K' Then Do ; power=1 ; si_pref='Kilo' ; End
+  When si_unit='M' Then Do ; power=2 ; si_pref='Mega' ; End
+  When si_unit='G' Then Do ; power=3 ; si_pref='Giga' ; End
+  When si_unit='T' Then Do ; power=4 ; si_pref='Tera' ; End
+  When si_unit='P' Then Do ; power=5 ; si_pref='Peta' ; End
+  When si_unit='E' Then Do ; power=6 ; si_pref='Exa'  ; End
+  When si_unit='Z' Then Do ; power=7 ; si_pref='Zetta'; End
+  When si_unit='Y' Then Do ; power=8 ; si_pref='Yotta'; End
+  Otherwise Do
+            Say 'SI unit 'si_unit' is out of our league'
+            Call Exit 99
+            End
+End
+/*---------------------------------------------------------------+
+| Actual calculations                                            |
++---------------------------------------------------------------*/
+multi=unit**power                                   /* Calculate unit to the power of.... */
+cylinders=Format((multi*size)/(blksize*blkpcyl),,0) /* Calculate the number of cylinders */
+fourkblocks=Format((multi*size)/(blksize),,0)       /* Calculate the number of 4k blocks */
+/*---------------------------------------------------------------+
+| Decide on how to present the outcome...                        |
++---------------------------------------------------------------*/
+If how='FUNCTION' Then Call Exit fbablocks
+                  Else Do
+                       Say size||si_unit' = 'size si_pref'Bytes =' cylinders' Cylinders = 'fourkblocks' 4K blocks'
+                       Call Exit
+                       End
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If exrc='' | exrc='EXRC' Then exrc=0
+Exit exrc

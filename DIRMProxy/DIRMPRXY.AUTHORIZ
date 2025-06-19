@@ -1,0 +1,47 @@
+*                                                                               
+* List of userids or wildcard which are allowed to talk to the proxy            
+*                                                                               
+:authorized_users.                                                              
+ICU*                                                                            
+CLDCONB1                                                                        
+SLD* SLB*                                                                       
+:end_authorized_users.                                                          
+                                                                                
+                                                                                
+*                                                                               
+* The commands the proxy is allowed to issue on behalf of the managers          
+*                                                                               
+:authorized_commands.                                                           
+amdisk                                                                          
+cmdisk                                                                          
+dmdisk                                                                          
+mmdisk                                                                          
+tmdisk                                                                          
+mdisk                                                                           
+chvaddr                                                                         
+clonedisk                                                                       
+chvaddr                                                                         
+dlink                                                                           
+dropby                                                                          
+nicdef                                                                          
+logonby                                                                         
+link                                                                            
+nicdef                                                                          
+option                                                                          
+pavalias                                                                        
+review                                                                          
+setacnt                                                                         
+setclass                                                                        
+setcpu                                                                          
+setmach                                                                         
+setoptn                                                                         
+storage                                                                         
+spool                                                                           
+vmrelocate                                                                      
+*                                                                               
+usedext                                                                         
+freext                                                                          
+dirmap                                                                          
+cms                                                                             
+status                                                                          
+:end_authorized_commands.                                                       

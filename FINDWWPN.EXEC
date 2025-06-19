@@ -1,0 +1,48 @@
+/**/
+Parse Source . . myfn myft .
+lun=Right('00',4,'0')Copies('0',12)
+wwpn='ALL'
+wwpn.0=0
+'PIPE (end ?)',
+    'cp q fcp all',
+    '| split at ,',
+    '| drop last 2',
+    '| strip',
+    '| specs substr -2;-1 of w2.1 1 w2.2 nw.14',
+    '| sort w1.1',
+    '| join keylen 2',
+    '| pick w3.1 == ~FREE~ and',
+           'w5.1 == ~FREE~ and',
+           'w7.1 == ~FREE~ and',
+           'w9.1 == ~FREE~',
+    '| take last 1',
+    '| f: fanout',
+    '| specs w1.1',
+    '| var subch',
+    '? f:',
+    '| specs w2;* 1',
+    '| deblock 15',
+    '| specs w1.1',
+    '| stem free.'
+Do f=1 To free.0
+  Say free.f
+  'PIPE CP ATT 'free.f' * | hole'
+  'PIPE (End ?)',
+     'CMS SCSIDISC ERASE OUTFN OUT'free.f' FCPCH 'free.f' WWPN 'wwpn' LUN 'lun,
+     '| hole'
+  'PIPE CP DET 'free.f' |hole'
+  'PIPE (End ?)',
+     '< OUT'free.f' OUT A',
+     '| pick w3.1 == ~'lun'~',
+     '| specs ~'free.f lun'~ 1 substr 5.2 of w1.1 nw w2.1 nw',
+     '| stem wwpn. append'
+   'PIPE (end ?)',
+      'literal OUT'free.f' OUT A;OUT'free.f' LOG A',
+      '| split at ;',
+      '| specs ~ERASE~ 1 w1;* nw',
+      '| cms'
+End f
+'PIPE (End ?)',
+   'stem wwpn.',
+   '| sort w-1;-1',
+   '| > 'myfn' file a'

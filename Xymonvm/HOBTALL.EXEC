@@ -1,0 +1,57 @@
+/* Run all the code thru a test */
+Parse Source . . myfn myft .
+exl_list='FCX EXEC;RSCS EXEC;TOPTEN EXEC'
+'PIPE (end ?)',
+    '< 'myfn myft' *',
+    '| inside ~/*TEST*/~ ~/*ENDTEST*/~',
+    '| specs w1.1',
+    '| strip',
+    '| stem test.',
+    '?',
+    'var exl_list',
+    '| split at ;',
+    '| specs ~EXECLOAD~ 1 w1;* nw ~* = REXX~ nw',
+    '| cms'
+Address CMS 'VMLINK VMUTIL 191 <* I (NONAMES QUIET'
+Address CMS 'HOBVARS'
+Do t=1 To test.0
+  Say 'Running test: 'test.t
+  Address CMS test.t' ( dryrun'
+  Say 'rc='rc
+  Say
+End t
+Address CMS 'VMLINK VMUTIL 191 <DET (NONAMES QUIET'
+Exit
+ 
+/** Can not be tested by this tool */
+*   HOBSTART
+*   HOBVARS
+*   HOB-SAMP
+*   HOB-CAL
+*   HOBVM
+*   HOBVMFLE this is done by HOBVMLOG
+/*TEST*/
+    HOB-FCP
+    HOB-LPAR
+    HOBACTIV
+    HOBGCONF
+    HOBGPG
+    HOBGUEST
+    HOBGWAIT
+    HOBLUNS
+    HOBMEM
+    HOBOSA
+    HOBPARS
+    HOBPLACE
+    HOBSPOOL
+    HOBVMCD
+    HOBVMCPU
+    HOBVMDSK
+    HOBVMIFC
+    HOBVMLOG
+    HOBVMPOR
+    HOBVMPRC
+    HOBVMPRT
+    HOBVMSTT
+    HOBVNIC
+/*ENDTEST*/

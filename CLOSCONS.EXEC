@@ -1,0 +1,126 @@
+/*---------------------------------------------------------------+
+| Function : Close consoles for one or more userids              |
+|                                                                |
+| File     : CLOSCONS EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : CLOSCONS <id> ( <view>                              |
+|                     Wildcards as in filelist allowed           |
+|                                                                |
+| Examples : CLOSCONS RSCS    Only RSCS                          |
+|            CLOSCONS RSCS*   All users starting w RSCS          |
+|            CLOSCONS RSCS (VIEW   Start CONPARK for RSCS        |
+|                                  after closing the console     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20191112 07:30:50                                   |
+| Changes  : .                                                   |
+|            20220316 H.T.Kramer : Now catering for OBSERVED/    |
+|                     SECUSERed servers                          |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg input '(' view .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Deal with the input                                            |
++---------------------------------------------------------------*/
+wildcard=Pos('*',input)
+If wildcard<>0 Then wildcard=1
+If view<>'' Then view=1
+            Else view=0
+Select
+When input=''   Then Do
+                     Say Date('S') Time() myfn 'No input'
+                     exrc=28
+                     End
+When input='?'  Then Do
+                     'VMFCLEAR'
+                     'PIPE (NAME CLOSCONS.EXEC:44 END ?)',
+                       '< 'myfn myft' *',          /* Read my self     */
+                       '| tolabel Parse',          /* Upto this        */
+                       '| cons'                    /* Show             */
+                     End
+When wildcard   Then Call Proc_Wildcard
+When \wildcard  Then Call Proc_Single_Id
+Otherwise Do
+          Say Date('S') Time() myfn 'Unhandled condition'
+          exrc=29
+          End
+End
+If exrc='' | exrc='EXRC' Then exrc=0
+Exit exrc
+ 
+ 
+Proc_Single_Id:
+/*---------------------------------------------------------------+
+| Process one single id                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME CLOSCONS.EXEC:64 END ?)',
+   'cp QUERY MDISK USER 'input' 0 DIR',         /* Ask cp           */
+   '| find HCPQMD040E',                         /* Look for this    */
+   '| count lines',                             /* How many         */
+   '| var id_ok'                                /* Set as boolean   */
+If id_ok Then Call CloseCons input
+         Else Do
+         Say Date('S') Time() myfn 'User does not exist: 'input
+         exrc=28
+         End
+Return
+ 
+ 
+Proc_Wildcard:
+/*---------------------------------------------------------------+
+| Process the wildcard                                           |
++---------------------------------------------------------------*/
+'PIPE (NAME CLOSCONS.EXEC:81 END ?)',
+   'cp QUERY NAMES',                            /* Ask cp           */
+   '| split at ,',                              /* Split here       */
+   '| strip',                                   /* Remove spaces    */
+   '| specs w1.1',                              /* Keep this        */
+   '| sort',                                    /* Sort them        */
+   '| wildcard w1.1 ~'input'~',                 /* Look 4...        */
+   '| stem id.'                                 /* Store as         */
+Do i=1 To id.0
+  Call CloseCons id.i
+End i
+Return
+ 
+ 
+CloseCons:
+/*---------------------------------------------------------------+
+| Actually take the observer role and close the console          |
++---------------------------------------------------------------*/
+Parse Upper Arg target_id .
+Say Date('S') Time() myfn 'Processing 'target_id
+current=''                                       /* Initialise       */
+mode=''                                          /* .                */
+'PIPE (NAME CLOSCONS.EXEC:103 END ?)',
+    'cp QUERY OBSERVER 'target_id,               /* Ask cp           */
+    '| drop first 2',                            /* Ignore these     */
+    '| specs w1.2 1 ~OBSERVER~ nw',              /* Add label        */
+    '| fi: fanin',                               /* Take in others   */
+    '| specs ~/CURRENT/~ 1 w2.1 n ~;/MODE/~ n w3.1 n',   /* Prep 4 varload   */
+    '| split at ;',                              /* Split here       */
+    '| varload',                                 /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'cp QUERY SECUSER 'target_id,                /* Ask cp           */
+    '| drop first 2',                            /* Ignore these     */
+    '| pick anycase w2.2 \== ~NOT DEFINED~',     /* ..and these      */
+    '| specs w1.2 1 ~SECUSER~ nw',               /* Add label        */
+    '| fi:'                                      /* Conn 2 fanin     */
+If current='' Then current='OFF'
+If mode=''    Then mode='OBSERVER'
+Address COMMAND 'CP SET 'mode target_id userid()
+Address COMMAND 'CP SEND CP 'target_id' CLOSE CONS'
+Address COMMAND 'CP SET 'mode target_id current
+If view Then Do
+             'CP SLEEP 2 SEC'
+             Address CMS 'CONPARK 'target_id
+             End
+Return

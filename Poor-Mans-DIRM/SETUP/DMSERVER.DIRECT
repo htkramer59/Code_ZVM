@@ -1,0 +1,11 @@
+USER DMSERVER LBYONLY 2G 2G GB                                                  
+  INCLUDE IBMDFLT                                                               
+  ACCOUNT HTK                                                                   
+  MACHINE ESA                                                                   
+  OPTION MAINTCCW LNKS LNKE LNKNOPAS DEVMAINT                                   
+  IPL ZCMS PARM AUTOCR                                                          
+  LOGONBY ......                                                                
+  LINK MAINT 193 193 RR                                                         
+  MDISK 191 3390 4239 5 HTK001 MR                                               
+  MDISK 291 3390 4119 120 HTK001 MR                                             
+*                                                                               

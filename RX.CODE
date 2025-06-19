@@ -1,0 +1,15 @@
+* All valid rexx statements/routines/funcions                                   
+ . ABBREV( ABS( APILOAD ARG BITAND( BITOR( BITXOR( B2X(                         
+ CALL CENTER( CENTRE( CHARIN( CHAROUT( CHARS(                                   
+ CMSFLAG( COMPARE( CONDITIO( COPIES( CSL( C2D( C2X(                             
+ DATATYPE( DATE( DELSTR( DELWORD( DIAG( DIAGRC( DIGITS                          
+ DO WHILE UNTIL FOR FOREVER BY END DROP D2C( D2X(                               
+ ERRORTEX( EXIT EXTERNAL FIND( FORM( FORMAT( FUZZ                               
+ IF THEN ELSE INDEX( INSERT( INTERPRET ITERATE JUSTIFY(                         
+ LASTPOS( LEAVE LEFT( LENGTH( LINEIN LINEOUT LINES LINESIZE                     
+ MAX( MIN( NOP NUMERIC OPTIONS OVERLAY PARSE VALUE WITH SOURCE                  
+ POS( PROCEDUR PULL PUSH QUEUE QUEUED( RANDOM RETURN REVERSE( RIGHT(            
+ SAY SELECT WHEN OTHERWISE SIGN SIGNAL SOCKET SOURCELI SPACE                    
+ STORAGE STREAM STRIP( STSI SUBSTR( SUBWORD( SYMBOL(                            
+ TIME( TRACE( TRANSLAT( TRUNC UPPER USERID( VALUE( VERIFY                       
+ WORD( WORDINDEX( WORDLENG( WORDPOS( WORDS( XRANGE( X2B( X2C( X2D(              

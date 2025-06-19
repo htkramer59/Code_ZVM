@@ -1,0 +1,147 @@
+/*---------------------------------------------------------------+
+| Function : Add, Delete or Query NAMESAVE stmts                 |
+|                                                                |
+| File     : DM_NMSAV EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_NMSAV <uid> <action> <segnames>                  |
+|          : NAME     <uid> <action> <segnames>                  |
+|                           QRY                                  |
+|                           ADD                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240708 10:08:20                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid action segnames
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Take from GLOBALV                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+actions='QRY ADD DEL'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Find any NAMESAVE stmts                                        |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_NMSAV.EXEC:45 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~NAMESAVE~ or',       /* Select this      */
+                  'w2.1 == ~IPL~',               /* .                */
+   '| sort w2.1',                                /* Make sure NAMESA */
+   '| take last 1',                              /* Keep this 1      */
+   '| var namestmt'                              /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Act on the request                                             |
++---------------------------------------------------------------*/
+If Wordpos(action,actions)=0 Then Call Exit 250
+Select
+When action='QRY' Then Call ShowNameSave
+When action='ADD' Then Call AddNameSave
+When action='DEL' Then Call DelNameSave
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Apply the changes                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_NMSAV.EXEC:65 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Apply changes    */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put directory online                                 |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+AddNameSave:
+/*---------------------------------------------------------------+
+| Add a NAMESAVE stmt                                            |
++---------------------------------------------------------------*/
+newsegs=Words(segnames)
+'PIPE (NAME DM_NMSAV.EXEC:92 END ?)',
+    'var segnames',                              /* Take this        */
+    '| split',                                   /* Make records     */
+    '| specs ~QUERY NSS NAME~ 1 w1.1 nw',        /* Compose cmds     */
+    '| cp',                                      /* Ask cp           */
+    '| nlocate anycase ~OWNERID~',               /* Remove hdrs      */
+    '| count lines',                             /* Count them       */
+    '| var segscnt'                              /* Hand 2 rexx      */
+If newsegs<>segscnt Then Call Exit 660
+newnames=namestmt';'Copies(' ',8)'NAMESAVE 'segnames
+chgstmt='| change ~'namestmt'~ ~'newnames'~ | split at ;'
+Return
+ 
+ 
+ShowNameSave:
+/*---------------------------------------------------------------+
+| Show the NAMESAVE stmts for the uid                            |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft 'The following NAMESAVEs for 'uid':'
+'PIPE (NAME DM_NMSAV.EXEC:111 END ?)',
+    'stem uid.',                                 /* Take these       */
+    '| pick anycase w2.1 == ~NAMESAVE~',         /* Select these     */
+    '| specs w3;* 20',                           /* Keep this        */
+    '| cons'                                     /* Display          */
+Call Exit
+Return
+ 
+ 
+DelNameSave:
+/*---------------------------------------------------------------+
+| Delete a NAMESAVE stmt                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_NMSAV.EXEC:124 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~NAMESAVE~',          /* Find these       */
+   '| stem namestmt.',                           /* Hand 2 rexx      */
+   '| stem newstmt.'                             /* .also            */
+Do s=1 To Words(segnames)
+   segname=Word(segnames,s)
+   'PIPE (NAME DM_NMSAV.EXEC:131 END ?)',
+      'stem newstmt.',                           /* Take these       */
+      '| buffer',                                /* Prevent loop     */
+      '| change anycase ~'segname'~~',           /* Remove these     */
+      '| space 1',                               /* Reduce spacing   */
+      '| specs w1.1 1 w2;* 9',                   /* Adjust records   */
+      '| stem newstmt.'                          /* Hand 2 rexx      */
+End
+/*---------------------------------------------------------------+
+| Prepare change/nlocate statements                              |
++---------------------------------------------------------------*/
+chgstmt=''
+Do n=1 To namestmt.0
+   If Words(newstmt.n)=2 Then chgstmt=chgstmt' | nlocate anycase ~'namestmt.n'~'
+   If newstmt.n<>namestmt.n Then chgstmt=chgstmt' | change anycase ~'namestmt.n'~ ~'newstmt.n'~'
+End n
+Return

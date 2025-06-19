@@ -1,0 +1,145 @@
+/*---------------------------------------------------------------+
+| Function : Add, Delete, Show crypto details for userid         |
+|                                                                |
+| File     : DM_CRYPT EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_CRYPT <uid> <action> <newcrypto>                 |
+|          : CRYPT0   <uid> <action> <newcrypto>                 |
+|                           QRY                                  |
+|                           DEL                                  |
+|                           APVIRT                               |
+|                           DOMAIN                               |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240709 12:02:13                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid action newcrypto
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Get some settings                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get the userid and other directory stmts                       |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Find any crypto stmts                                          |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CRYPT.EXEC:45 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~CRYPTO~',            /* Find this        */
+   '| var curcrypto',                            /* Hand 2 rexx      */
+   '| count lines',                              /* How many         */
+   '| var crypto'                                /* Store as boolean */
+/*---------------------------------------------------------------+
+| Act on the input                                               |
++---------------------------------------------------------------*/
+Select
+When action='QRY'     Then Call ShowCrypto
+When action='DEL'     Then Call DelCrypto
+When action='APVIRT ' Then Call AddApVirt
+When action='DOMAIN'  Then Call AddDomain
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Apply changes to the directory                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CRYPT.EXEC:64 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Apply changes    */
+   '| specs 7;* 1.80',                           /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online the USER DIRECT                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowCrypto:
+/*---------------------------------------------------------------+
+| Show the crypto stmt                                           |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft 'Current CRYPTO setting for 'uid':'
+Say Copies(' ',25)Subword(curcrypto,3)
+Call Exit
+Return
+ 
+ 
+DelCrypto:
+/*---------------------------------------------------------------+
+| Delete the crypto stmt                                         |
++---------------------------------------------------------------*/
+If \crypto Then Call Exit 760
+chgstmt='| nlocate anycase ~'curcrypto'~'
+Return
+ 
+ 
+AddApVirt:
+/*---------------------------------------------------------------+
+| Add/change a crypto stmt with ApVirtual                        |
++---------------------------------------------------------------*/
+If crypto Then Do
+               chgstmt='| change anycase ~'curcrypto'~ ~'Word(curcrypto,1,2)' 'newcrypto
+               End
+          Else Do
+               Call FindNewLoc
+               newstmt=Strip(newloc)';'Copies(' ',8)'CRYPTO APVIRTUAL '||newcrypto
+               chgstmt='| change anycase /'Strip(newloc)'/ /'newstmt'/ | split at ;'
+               End
+Return
+ 
+ 
+AddDomain:
+/*---------------------------------------------------------------+
+| Add/replace a crypto stmt with domain                          |
++---------------------------------------------------------------*/
+If crypto Then Do
+               chgstmt='| change anycase ~'curcrypto'~ ~'Word(curcrypto,1,2)' 'newcrypto
+               End
+          Else Do
+               Call FindNewLoc
+               newstmt=newloc';'Copies(' ',8)||'CRYPTO DOMAIN '||newcrypto
+               chgstmt='| change anycase ~'newloc'~ ~'newstmt'~ | split at ;'
+               End
+Return
+ 
+ 
+FindNewLoc:
+/*---------------------------------------------------------------+
+| Find a location where to add the CRYPTO stmt                   |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CRYPT.EXEC:139 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~IPL~ or',            /* Find one of      */
+                  'w2.1 == ~OPTION~',            /* ..these          */
+   '| take last 1',                              /* Take the last 1  */
+   '| var newloc'                                /* Hand 2 rexx      */
+Return

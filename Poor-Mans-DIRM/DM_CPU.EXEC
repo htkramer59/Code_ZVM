@@ -1,0 +1,164 @@
+/*---------------------------------------------------------------+
+| Function : Add or delete CPU statements                        |
+|                                                                |
+| File     : DM_CPU   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : <dirfnft>                                           |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+|                                                                |
+| Called   : DM_CPU   <uid> <action>  <cpuaddr> <parms>          |
+|          : CPU      <uid> <action>  <cpuaddr> <parms>          |
+|                           ADD    BASE/CPUID                    |
+|                           MOD    BASE/CPUID                    |
+|                           DEL                                  |
+|                           QRY    Display current CPU stmts     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240704 15:31:03                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid action cpuaddr parms
+Parse Source . . myfn myft . .
+/*---------------------------------------------------------------+
+| Obtain some settings                                           |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracecmd
+              End
+/*---------------------------------------------------------------+
+| Determine MAX number of CPUs to check validity                 |
++---------------------------------------------------------------*/
+maxcpu='3F'
+'PIPE (NAME DM_CPU.EXEC:43 END ?)',
+   'literal x40',                                /* Take this        */
+   '| dup 'x2d(maxcpu),                          /* Duplicate        */
+   '| specs pad 0 recno from 0 1.2 right',       /* Create numbers   */
+   '| specs 1;*  d2x 1',                         /* Xlate 2 hex      */
+   '| specs -2;-1 1',                            /* Take 2 chars     */
+   '| change 1.1 ~0~~',                          /* Remove leading 0 */
+   '| join * x40',                               /* Make 1 record    */
+   '| var cpuavail'                              /* Hand 2 rexx      */
+If action<>'QRY' &,
+   Wordpos(cpuaddr,cpuavail)=0 Then Call Exit 100
+/*---------------------------------------------------------------+
+| Get the stems we use                                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_GETID 'uid
+/*---------------------------------------------------------------+
+| Act on the action entered                                      |
++---------------------------------------------------------------*/
+Select
+When action='QRY' Then Call ShowCPU
+When action='DEL' Then Call DelCPU
+When action='ADD' Then Call AddCPU
+When action='MOD' Then Call ModCPU
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| Write directory                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CPU.EXEC:71 END ?)',
+   'stem direct.',                               /* Take these       */
+   chgstmt,                                      /* Make a change    */
+   '| specs 7;72 1.80',                          /* Remove recnos    */
+   '| > 'dirfnft ws' FIXED 80'                   /* Write 2 file     */
+If rc<>0 Then Call Exit 128
+/*---------------------------------------------------------------+
+| Check and put online                                           |
++---------------------------------------------------------------*/
+Address CMS 'DM_ONLIN'
+If rc<>0 Then Call Exit rc
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| Exit point                                                     |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If \Datatype(exrc,'NUM') Then exrc='0'
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc
+ 
+ 
+ShowCPU:
+/*---------------------------------------------------------------+
+| Show the CPU record                                            |
++---------------------------------------------------------------*/
+Say Date('S') Time() myfn myft 'CPU settings for 'uid':'
+'PIPE (NAME DM_CPU.EXEC:99 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~CPU~',               /* Select these     */
+   '| specs w2;* 30',                            /* Prep 4 display   */
+   '| cons'                                      /* Display          */
+Call Exit
+Return
+ 
+ 
+CheckCPU:
+/*---------------------------------------------------------------+
+| Check if there is a CPU stmt                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME DM_CPU.EXEC:112 END ?)',
+   'stem uid.',                                  /* Take this        */
+   '| pick anycase w2.1 == ~CPU~ and',           /* Find this        */
+                  'w3.1 == ~'cpuaddr'~',         /* .                */
+   '| var curcpu',                               /* Hand 2 rexx      */
+   '| count lines',                              /* How many         */
+   '| var cpufnd'                                /* Store as boolean */
+Return
+ 
+ 
+DelCPU:
+/*---------------------------------------------------------------+
+| Delete the CPU record                                          |
++---------------------------------------------------------------*/
+Call CheckCPU
+If \cpufnd Then Call Exit 130
+chgstmt='| nlocate anycase ~'curcpu'~'
+Return
+ 
+ 
+AddCPU:
+/*---------------------------------------------------------------+
+| Add a CPU record                                               |
++---------------------------------------------------------------*/
+Call CheckCPU
+If cpufnd Then Call Exit 131
+'PIPE (NAME DM_CPU.EXEC:138 END ?)',
+   'stem uid.',                                  /* Take this        */
+   '| pick anycase w2.1 == ~CPU~ or',            /* Find these       */
+                  'w2.1 == ~IPL~ or',            /* Find these       */
+                  'w2.1 == ~OPTION~ or',            /* Find these       */
+                  'w2.1 == ~MACHINE~',           /* .or this one     */
+   '| take last 1',                              /* Take the last 1  */
+   '| var stmt'                                  /* Hand 2 rexx      */
+newstmt=stmt';'Copies(' ',8)'CPU 'cpuaddr parms
+chgstmt='| change ~'stmt'~ ~'newstmt'~ | split at ;'
+Return
+ 
+ 
+ModCPU:
+/*---------------------------------------------------------------+
+| Modify a CPU record                                            |
++---------------------------------------------------------------*/
+Call CheckCPU
+If \cpufnd Then Call Exit 132
+'PIPE (NAME DM_CPU.EXEC:157 END ?)',
+   'stem uid.',                                  /* Take these       */
+   '| pick anycase w2.1 == ~CPU~ and',           /* Find this        */
+                  'w3.1 == ~'cpuaddr'~',         /* .with this one   */
+   '| var stmt'                                  /* Hand 2 rexx      */
+newstmt=Subword(stmt,1,2) cpuaddr parms
+chgstmt='| change ~'stmt'~ ~'newstmt'~'
+Return

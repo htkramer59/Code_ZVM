@@ -1,0 +1,180 @@
+/*---------------------------------------------------------------+
+| Function : Be a proxy for Linux servers to obtain data from    |
+|            DIRMAINT                                            |
+|                                                                |
+| File     : DIRMPRXY EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DIRM     output                                     |
+|            SAPI     EXEC       Tool to talk to DIRMAINT        |
+|            DIRMPRXY AUTHORIZ   Authorized servers (wildcards), |
+|                                allowed cmds, etc.              |
+|                                                                |
+| Called   : DIRMPRXY .                                          |
+|                                                                |
+| Comments : The proxy id needs to be authorized in DIRMAINT     |
+|            If you need to restrict certain commands/queries    |
+|            copy DIRMPRXY AUTHORIZE comment the items you do    |
+|            not want to share.                                  |
+|                                                                |
+|            Used by dirm shell script on a linux server         |
+|                                                                |
+| Note     : The code is basic, needs perfecting!!               |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20200707 08:35:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun
+Parse Source . . myfn myft .
+Address CMS 'EXECLOAD SAPI EXEC * = REXX'
+Address COMMAND 'CP SET SMSG IUCV'
+timer='+00:30:00'                                /* Change this if needed   */
+reload=4                                         /* Reload control file after 4 cycles */
+wakeupparms=''                                   /* Extra wakeup parms */
+/*---------------------------------------------------------------+
+| For ever loop                                                  |
++---------------------------------------------------------------*/
+Call Read_Control_File
+Do main=1
+  If (main//reload)=0 Then Call Read_Control_File
+  Address CMS 'WAKEUP 'timer' (CC SMSG CONS 'wakeupparms
+  Select
+  When rc=1    Then Call DoSapi
+  When rc=3    Then Say TimeStamp()' Timer expired'
+  When rc=6    Then Do
+                    Say TimeStamp()' Console interrupt'
+                    Leave main
+                    End
+  Otherwise Say TimeStamp()' Unhandled return code from WAKEUP 'rc
+  End
+End main
+/*---------------------------------------------------------------+
+| Clean up and exit                                              |
++---------------------------------------------------------------*/
+Address COMMAND 'CP SET SMSG OFF'
+Address CMS 'EXECDROP SAPI REXX'
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Read_Control_File:
+/*---------------------------------------------------------------+
+| Read the control file here                                     |
++---------------------------------------------------------------*/
+Say TimeStamp()' Reading control file'
+'PIPE (NAME DIRMPRXY.EXEC:71 END ?)',
+   'disk 'myfn' AUTHORIZE *',                    /* Read this file   */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~~',          /* Ignore comm&empty*/
+   '| f: fanout',                                /* Dupl. records    */
+   '| inside anycase ~:AUTHORIZED_USERS.~ ~:END_AUTHORIZED_USERS.~',   /* Select this      */
+   '| split',                                    /* Split into recs  */
+   '| strip',                                    /* Remove spaces    */
+   '| n: nlocate ~*~',                           /* Do wildcars away */
+   '| stem auth_user.',                          /* Store as         */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| stem auth_wild.',                          /* Store as         */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| inside anycase ~:AUTHORIZED_COMMANDS.~ ~:END_AUTHORIZED_COMMANDS.~',   /* Select this      */
+   '| stem auth_cmd.'                            /* Store as         */
+Return
+ 
+ 
+CheckUser:
+/*---------------------------------------------------------------+
+| Check if the server is authorized to talk to the proxy         |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking user authorisation'
+authusr=0
+authid=0
+authwild=0
+'PIPE (NAME DIRMPRXY.EXEC:96 END ?)',
+   'stem auth_user.',                            /* .                */
+   '| locate anycase ~'returnid'~',              /* Find the id      */
+   '| count lines',                              /* How many         */
+   '| stem authid'                               /* Store as         */
+/*---------------------------------------------------------------+
+| Check if the id is found in the wildcards                      |
++---------------------------------------------------------------*/
+If auth_wild.0<>0 Then Do w=1 To auth_wild.0
+        'PIPE (NAME DIRMPRXY.EXEC:105 END ?)',
+          'var returnid',                        /* Take this        */
+          '| wildcard anycase w1.1 ~'auth_wild.w'~',  /* Check if fits    */
+          '| count lines',                       /* How many         */
+          '| var authwrk'                        /* Store as         */
+        authwild=authwild+authwrk                /* Add up 4 later   */
+        End w
+        Else authwild=0
+authusr=authid+authwild
+Return authusr
+ 
+ 
+CheckCommand:
+/*---------------------------------------------------------------+
+| Check if the command is allowed..                              |
++---------------------------------------------------------------*/
+Say TimeStamp()' Checking command authorisation'
+authcmd=0
+'PIPE (NAME DIRMPRXY.EXEC:123 END ?)',
+    'stem auth_cmd.',                            /* Take these       */
+    '| l: lookup anycase w1.1 w1.1 master',      /* Compare          */
+    '| xlate upper',                             /* Upper case       */
+    '| sort unique',                             /* Remove duplicates*/
+    '| count lines',                             /* How many left?   */
+    '| var authcmd',                             /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    'var cmdline',                               /* Take this        */
+    '| split',                                   /* Split here       */
+    '| l:'                                       /* Conn 2 lookup    */
+Return authcmd
+ 
+ 
+DoSapi:
+/*---------------------------------------------------------------+
+| Analyse the output from wakeup                                 |
++---------------------------------------------------------------*/
+'PIPE (NAME DIRMPRXY.EXEC:141 END ?)',
+    'stack',                                     /* Read from stack  */
+    '| specs w2;*',                              /* Keep this        */
+    '| f: fanout',                               /* Duplicate lines  */
+    '| specs ~/RETURNID/~ 1',                    /* Compose 4        */
+            'w1.1 n ~;/OUTFT/~ n',               /* .....varload     */
+            'w2.1 n ~;/CMDLINE/~ n',             /* .                */
+            'w2;* n',                            /* .                */
+    '| split at ;',                              /* Split            */
+    '| varload',                                 /* Hand 2 rexx      */
+    '? f:',                                      /* Conn 2 fanout    */
+    '| specs ~'TimeStamp()'~ 1 1;* nw',          /* Add timestamp    */
+    '| cons'                                     /* Show             */
+/*---------------------------------------------------------------+
+| Start some checking                                            |
++---------------------------------------------------------------*/
+If \CheckUser() Then Do
+                     Say TimeStamp()' User not authorized 'returnid
+                     Return
+                     End
+If \CheckCommand() Then Do
+                     Say TimeStamp()' Command not allowed 'cmdline
+                     Return
+                     End
+/*---------------------------------------------------------------+
+| Talk to DIRMAINT                                               |
++---------------------------------------------------------------*/
+'PIPE (NAME DIRMPRXY.EXEC:168 END ?)',
+   'sapi 'cmdline' (CLEAN',                      /* Talk 2 dirmaint  */
+   '| > DIRM 'outft' A'                          /* Store as         */
+/*---------------------------------------------------------------+
+| Send the results to the caller & cleanup                       |
++---------------------------------------------------------------*/
+Say TimeStamp()' Returning results to 'returnid
+Address COMMAND 'CP SPOOL PRINT TO 'returnid
+Address CMS 'PRINT DIRM 'outft' A '
+Address COMMAND 'CP SPOOL PRINT OFF'
+Say TimeStamp()' Cleaning up'
+Address CMS 'ERASE DIRM 'outft' A '
+Return

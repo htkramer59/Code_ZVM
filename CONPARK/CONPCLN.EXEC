@@ -1,0 +1,142 @@
+/*---------------------------------------------------------------+
+| Function : Clean up CONPARK directories, remove files that     |
+|            are too old, remove directories if id gone and      |
+|            no files left.                                      |
+|                                                                |
+| File     : CONPCLN  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CONPARK  NAMES                                      |
+|                                                                |
+| Called   : CONPCLN  ( <dryrun>                                 |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220608 13:20:36                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . '(' dryrun .
+z=Time('R')
+If dryrun='' Then Do
+                  action='| cons'
+                  clndir='0'
+                  End
+             Else Do
+                  action='| cons | specs ~ERASE~ 1 w1.3 nw | cons | cms | cons'
+                  clndir='1'
+                  End
+Address CMS 'VMLINK CONPMAIN (ONLY(CONPARK) QUIET .fm .pr'
+If rc=0 Then Parse Upper Pull . . wfm . . dir .
+        Else Exit rc
+/*---------------------------------------------------------------+
+| Get the directories from the main directory                    |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPCLN.EXEC:37 END ?)',
+   'cms LISTDIR 'dir,                            /* List the main dir*/
+   '| drop first 2',                             /* Remove hdr       */
+   '| specs w2.1 1',                             /* Keep this        */
+   '| stem dir.',                                /* Store as         */
+   '| specs fs . f2',                            /* Keep id          */
+   '| stem id.',                                 /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   '< CONPARK NAMES *',                          /* Read this        */
+   '| pick 1.1 \== ~*~ and 1.1 \== ~~',          /* Ignore these     */
+   '| i: inside anycase ~:USERS.~ ~:MAINDIR.~',  /* Select this part */
+   '| specs fs . substr w1.1 of f2 1.8',         /* Keep this        */
+                'substr w1.1 of f3 nw',          /* .                */
+   '| n: nlocate ~*~',                           /* Move these       */
+   '| stem cnfid.',                              /* Hand 2 rexx      */
+   '? n:',                                       /* Conn 2 nlocate   */
+   '| stem wildc.',                              /* Keep as          */
+   '? i:',                                       /* Conn 2 inside    */
+   '| locate anycase ~:KEEP~',                   /* Select this      */
+   '| specs fs . f2',                            /* Keep value       */
+   '| var defkeep'                               /* Hand 2 rexx      */
+Address CMS 'VMLINK CONPMAIN <DET (ONLY(CONPARK) QUIET'
+/*---------------------------------------------------------------+
+| Loop thru the ids and directories                              |
++---------------------------------------------------------------*/
+Do i=1 To id.0
+   Call CalcCutoff
+   Call CheckDir
+   Call CheckId
+   If \idok & files=0 Then Do
+                      cmd='ERASE 'dir.i
+                      If clndir Then Address CMS cmd
+                                Else Say cmd
+                      End
+End i
+Say 'Elapsed: 'Time('E')
+Exit
+ 
+ 
+CalcCutoff:
+/*---------------------------------------------------------------+
+| Calculate the cutoff date                                      |
++---------------------------------------------------------------*/
+keep=''
+'PIPE (NAME CONPCLN.EXEC:81 END ?)',
+   'stem cnfid.',                                /* Take these       */
+   '| pick w1.1 == ~'id.i'~',                    /* Find this id     */
+   '| specs w2.1',                               /* Keep this        */
+   '| append literal ',                          /* Prevent no var   */
+   '| join *',                                   /* .                */
+   '| var keep'                                  /* Hand 2 rexx      */
+If keep='' Then Do w=1 To wildc.0
+      'PIPE (NAME CONPCLN.EXEC:89 END ?)',
+         'literal 'id.i,                         /* Take this        */
+         '| wildcard w1.1 ~'Word(wildc.w,1)'~',  /* Search for this  */
+         '| count lines',                        /* How many         */
+         '| var fnd'                             /* Store as boolean */
+         If fnd Then Do
+            keep=Word(wildc.w,2)
+            Leave w
+            End
+         End w
+If keep='' Then keep=defkeep                     /* If nothing use.. */
+cutoff=Date('S',(Date('B')-keep),'B')
+Return
+ 
+ 
+CheckDir:
+/*---------------------------------------------------------------+
+| Check the contents of the directory                            |
++---------------------------------------------------------------*/
+Say
+Address CMS 'VMLINK .DIR 'dir.i' (NONAMES QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm2 .
+        Else Do
+             Say 'Problem with directory: 'dir.i' for 'id.i
+             Return
+             End
+Say 'Working on: 'dir.i id.i
+Say 'Removing files before 'cutoff' these are older than 'keep' days'
+'PIPE (NAME CONPCLN.EXEC:117 END ?)',
+   'cms LISTFILE * * 'wfm2' (NOH ISO',           /* List contents    */
+   '| nfind DMSLST',                             /* Ignore this      */
+   '| change ~-~~',                              /* Remove these     */
+   '| p: pick w-2;-2 < ~'cutoff'~',              /* Select older     */
+   action,                                       /* Show? Remove?    */
+   '| count lines',                              /* How many         */
+   '| var removed',                              /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| count lines',                              /* How many         */
+   '| var files'                                 /* Hand 2 rexx      */
+Say 'Files left: 'files', files removed: 'removed
+Address CMS 'VMLINK .DIR 'dir.i' <DET (NONAMES QUIET WRITE'
+Return
+ 
+ 
+CheckId:
+/*---------------------------------------------------------------+
+| Check if the user id still exists                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CONPCLN.EXEC:137 END ?)',
+   'cp QUERY MDISK USER 'id.i' 0 DIR LOC',       /* Issue cmd        */
+   '| pick w1.1 == ~HCPQMD040E~',                /* Select this      */
+   '| count lines',                              /* How many         */
+   '| var idok'                                  /* Store as boolean */
+Return

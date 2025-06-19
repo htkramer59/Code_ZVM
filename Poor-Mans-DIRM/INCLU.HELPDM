@@ -1,0 +1,25 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add or change the INCLUde statement                 |
+|                                                                |
+| File     : DM_INCLU EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_GETID EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_INCLU <uid> <include>                            |
+|          : INCLUDE  <uid> <include>                            |
+|                           QRY                                  |
+|                           DEL                                  |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240630 13:14:19                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

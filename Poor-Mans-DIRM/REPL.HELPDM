@@ -1,0 +1,25 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Replace copy of a directory of a user id            |
+|                                                                |
+| File     : DM_REPL  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    :                                                     |
+|            DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|            <dirfnft>                                           |
+|                                                                |
+| Called   : DM_REPL  <uid>                                      |
+|          : REPL     <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240625 15:23:33                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

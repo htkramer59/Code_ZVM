@@ -1,0 +1,133 @@
+/*---------------------------------------------------------------+
+| Function : Scan the MDISK/Filepools of a user for a file       |
+|                                                                |
+| File     : SCANUSR  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|            SCAN     EXEC                                       |
+|                                                                |
+| Called   : SCANUSR  <id> <fn> <ft> <search>                    |
+|                                                                |
+|                     <id>      the userid to be checked         |
+|                     <fn>      filename or wildcard             |
+|                     <ft>      filetype or wildcard             |
+|                     <search>  a string or wildcard we are      |
+|                               searching in fn ft               |
+|                                                                |
+| Comments : Range of MDISKs search is set to 0-2000 to save     |
+|            some time and most mdisks are in that range.        |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220614 12:11:31                                   |
+| Changes  : .                                                   |
+|            20230214 H.T.Kramer : Updated so we can search      |
+|                     for strings on the mdisks as well          |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg id fn ft search
+Parse Source . . myfn myft myfm .
+If id='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME SCANUSR.EXEC:34 END ?)',
+               '< 'myfn myft' *',                /* Read myself      */
+               '| tolabel Parse',                /* Up to here       */
+               '| cons'                          /* Show             */
+             Call Exit
+             End
+If id=''     Then Call Exit '128 No id entered'
+If fn=''     Then Call Exit '228 No filename or wildcard entered'
+If ft=''     Then Call Exit '328 No filetype or wildcard entered'
+range='0-2000'                                   /* To improve speed */
+/*---------------------------------------------------------------+
+| Check if the userid is valid                                   |
++---------------------------------------------------------------*/
+'PIPE (NAME SCANUSR.EXEC:47 END ?)',
+   'cp QUERY MDISK USER 'id' 0 DIR LOC',         /* Ask cp           */
+   '| find HCPQMD040E',                          /* If this          */
+   '| count lines',                              /* Count lines      */
+   '| var idok'                                  /* Store as         */
+If \idok Then Call Exit '328 Userid 'id' does not exist'
+dir.0=0;mdisk.0=0;result.0=0
+fps='VMSYS VMSYSU VMPSFS VMUSERS'
+'PIPE (NAME SCANUSR.EXEC:55 END ?)',
+   'var fps',                                    /* Take these       */
+   '| split',                                    /* Split...         */
+   '| f: fanout',                                /* Duplicate recs   */
+   '| specs w1.1 1.9',                           /* Keep this        */
+   '| j: juxtapose',                             /* Join w other     */
+   '| pick w3.1 == ~YES~',                       /* Select this      */
+   '| specs ~LISTDIR~ 1',                        /* Compose cmds     */
+           'w1.1 nw',                            /* .                */
+           '~:~ n',                              /* .                */
+           'w2.1 n',                             /* .                */
+           '~. (ALL SUB~ n',                     /* .                */
+   '| cms',                                      /* Issue cmds       */
+   '| drop first 1',
+   '| specs ~.DIR~ 1 w2.1 nw',                   /* Prep 4 later     */
+   '| stem dir.',                                /* Hand 2 rex       */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| specs ~QUERY ENROLL USER FOR 'id'~ 1',     /* Compose cmds     */
+           'w1.1 nw',                            /* .                */
+   '| cms',                                      /* Run them         */
+   '| j:'                                        /* Conn 2 juxtapose */
+/*    '| pick w1.1 == ~-~',                         /* Select these     */ */
+/*---------------------------------------------------------------+
+| Find all the mdisks and don't use the maint CMS disks          |
++---------------------------------------------------------------*/
+'PIPE (NAME SCANUSR.EXEC:80 END ?)',
+   'cp QUERY MDISK USER 'id range' DIR LOC',     /* Ask cp           */
+   '| drop first 1',                             /* Ignore hdr       */
+   '| pick w3.1 \== ~MAINT~ and',                /* Select not these */
+          'w4.1 \== ~0190~ and',                 /* .                */
+          'w4.1 \== ~019E~ and',                 /* .                */
+          'w4 \== ~019D~',                       /* .                */
+   '| specs w3.2 1',                             /* Keep this        */
+   '| sort',                                     /* Sort them        */
+   '| append stem dir.',                         /* Add these        */
+   '| stem mdisk.'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Do m=1 To mdisk.0
+  If search<>'' Then cmd='SCAN 'fn ft '.fm 'search' (CONS'
+                Else cmd='LISTFILE 'fn ft' .fm (NOHEADER ISODATE'
+  Call SrchDisk
+End m
+'PIPE (NAME SCANUSR.EXEC:99 END ?)',
+    'stem result.',                              /* Take these       */
+    '| specs a: 1.45 .',                         /* Add breaks       */
+            '46;* 46',                           /* .                */
+            'break a',                           /* .                */
+            'print a 1',                         /* .                */
+    '| > 'myfn id' A'                            /* Write 2 file     */
+If result.0<>0 Then Address CMS 'XEDIT 'myfn id' A (WIDTH 500'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+ 
+SrchDisk:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME SCANUSR.EXEC:124 END ?)',
+    'cms VMLINK 'mdisk.m' (NONAMES NOTYPE INVOKE 'cmd,
+    '| nlocate anycase ~UNEXPECTED~',            /* Ignore these     */
+    '| if: if pick w1.1 == ~DMSLST002E~',        /* If no files      */
+    '|     specs ~Files: 'fn ft' not found~ 1',  /* ...say so        */
+    '| if:',                                     /* Conn 2 if        */
+    '| specs ~'mdisk.m'~ 1.45 1;* nw',           /* Compose output   */
+    '| append literal 'Copies('-',45),           /* Add separator    */
+    '| stem result. append'                      /* Add to stem      */
+Return

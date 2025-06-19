@@ -1,0 +1,30 @@
+:COLORS.                                                                        
+% ESCAPE                                                                        
+Y PROTECT YELLOW HIGH ;y NOPROTECT YELLOW HIGH                                  
+W PROTECT WHITE  UND  ;w NOPROTECT WHITE  UND                                   
+X PROTECT WHITE  BLINK;x NOPROTECT WHITE  BLINK                                 
+Z PROTECT WHITE  REV  ;z NOPROTECT WHITE  REV                                   
+B PROTECT BLUE   NONE ;b NOPROTECT BLUE   NONE                                  
+C PROTECT BLUE   UND  ;c NOPROTECT BLUE   UND                                   
+G PROTECT GREEN  HIGH ;g NOPROTECT GREEN  HIGH                                  
+H PROTECT GREEN  REV  ;h NOPROTECT GREEN  REV                                   
+I PROTECT GREEN  UND  ;i NOPROTECT GREEN  UND                                   
+R PROTECT RED    HIGH ;r NOPROTECT RED    HIGH                                  
+S PROTECT RED    UND  ;s NOPROTECT RED    UND                                   
+T PROTECT RED    REV  ;t NOPROTECT RED    REV                                   
+P PROTECT PINK   HIGH ;p NOPROTECT PINK   HIGH                                  
+                                                                                
+                                                                                
+:REXX.                                                                          
+z ';"                                                                           
+h /*;*/                                                                         
+t (;)                                                                           
+i If_;Then_;Else_                                                               
+t Select;When_;Otherwise_                                                       
+r Do_;End_                                                                      
+b Parse_;Source_;Value_                                                         
+p Call_;Return_;Signal_                                                         
+s Word;Wordpos;Wordlen;Right;Left;Center;Pos;Lastpos;Substr;Subword             
+p x2d;d2x;c2x;x2c;d2c;c2d;b2x;x2b                                               
+x Queue;Push                                                                    
+c Address                                                                       

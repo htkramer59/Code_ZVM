@@ -1,0 +1,76 @@
+/*---------------------------------------------------------------+
+| Function : Show who is logged on                               |
+|                                                                |
+| File     : QSNAMES  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QSNAMES  REPORT Output                              |
+|            QN       REXX   Pipe stage                          |
+|                                                                |
+| Called   : QSNAMES  <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QSNAMES  REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+stemname='report.'
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSNAMES.EXEC:38 END ?)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNAMES.EXEC:49 END ?)',
+   'literal 'TimeStamp(),                        /* Create ts        */
+   '| append var qnames_header 1',               /* Add this         */
+   '| join * x40',                               /* Make 1 record    */
+   '| var qnames_header'                         /* Hand 2 rexx      */
+If rc<>0 Then Exit rc
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME QSNAMES.EXEC:58 END ?)',
+   'qn',                                         /* Run this         */
+   '| f: fanout',                                /* Duplicate records*/
+   '| preface var qnames_header',                /* Add header       */
+   '| preface literal ',                         /* ..and 2 empties  */
+   '| preface literal ',                         /* .                */
+   output,                                       /* Hand back        */
+   '? f:',                                       /* Conn 2 fanout    */
+   '| deblock 25',                               /* Deblock          */
+   '| strip',                                    /* Remove spaces    */
+   '| pick 1.1 \== ~*~',                         /* Ignore these     */
+      'and w1.1 \== ~Results~',                  /* .                */
+   '| specs w1.1',                               /* Reduce 2 this    */
+   '| stem runningid. 1'                         /* Hand back        */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn

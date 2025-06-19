@@ -1,0 +1,66 @@
+/* Xymon Client V1.3 for VM/ESA and z/VM
+    Copyright (C) 2003-2010 Richard Smrcina
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of
+    the License, or (at your option) any later version.
+ 
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+ 
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html            */
+/*----------------------------------------------------------------------/
+/-  This exec will create a Xymon client-data section                  -/
+/-  for VMSTAT data checking by the Xymon server.                      -/
+/-                                                                     -/
+/-  Thomas Kern - 20061204 - initial version                           -/
+/-  Rich Smrcina- 20090210 - Changed project name to Xymon             -/
+/----------------------------------------------------------------------*/
+   trace off
+   parse arg argstring
+   'globalv stack VMPTK PTKSVM'
+   pull vmptk
+   pull ptksvm
+   if vmptk <> 1 then exit 4
+   rc = diagrc('8','QUERY USER' ptksvm)
+   if word(rc,1) <> 0 then notloggedon = 1
+   badrc = 0
+   lb = 'AD'x; rb = 'BD'x;
+   outfile = 'HOBVM600 CLIENT A'
+   write = 'EXECIO 1 DISKW' outfile '( STRING'
+   'ERASE' outfile
+   write lb || 'vmstat' || rb
+/*----------------------------------------------------------------------/
+/-    Comment by U8803KT AT VMHOST on MONDAY, 12/04/06                 -/
+/-                                                                     -/
+/-procs ----memory---------- -swap -io-- -sys- ----cpu----             -/
+/- r  b swpd free buff cache si so bi bo in cs us sy id wa             -/
+/- 1  0    4 1848 2176 21044  0  0 40  2  7 13  0  1 98  1             -/
+/-                                                                     -/
+/- this is the format(not spaced realistically) from SLES 9            -/
+/-                                                                     -/
+/- Format suse12 extr column st                                        -/
+/- r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st  -/
+/- 4  0   7524  84920  11312 1167760    0    0    42  1380  173  571  3  1 94  1  0 -/
+/- 0  0   7524  84820  11312 1167760    0    0     0  3129  337 1264  4  1 92  3  0 -/
+/-                                                                     -/
+/-                                                                     -/
+/-                                                                     -/
+/-                                                                     -/
+/-                                                                     -/
+/-                                                                     -/
+/----------------------------------------------------------------------*/
+   l1='procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu-----'
+   l2=' r  b   swpd   free   buff  cache   si   so    bi    bo   in    cs us sy id wa st'
+   write l1
+   write l2
+   msg = ' 0  0      0      0      0      0    0    0     0     0    0     0'
+   'pipe vmc' ptksvm 'CPU' ,
+     '| locate /P00/' ,
+     '| specs w4 1.2 right w3 nw.2 right w5 nw.2 right /00/ nw right /00/ nw ',
+     '| var cpudata'
+   write msg cpudata
+   'FINIS' outfile
+   exit

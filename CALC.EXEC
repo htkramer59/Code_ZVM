@@ -1,0 +1,26 @@
+/* Simple calculator */
+/*                   */
+/*   +  Addittion    */
+/*   -  Subtract     */
+/*   /  Division     */
+/*   *  Multiply     */
+/*   // Remainder    */
+/*   %  Mantisse     */
+/*   ** Powers       */
+/*                   */
+numeric digits 32
+Parse Upper Arg calc
+Parse Source . . myfn myft .
+If calc='?' Then Do
+       'VMFCLEAR'
+       'PIPE < 'myfn myft' * | pick 1.2 == ~/*~ | cons'
+       Exit
+       End
+Do i=1
+   cc='outcome='calc
+   Interpret cc
+   Say calc '=' outcome
+   Say 'Enter next calculation or press ENTER to QUIT'
+   Parse Upper Pull calc
+   If calc='Q' | calc='' Then Leave i
+End i

@@ -1,0 +1,105 @@
+/*---------------------------------------------------------------+
+| Function : Check if EREP is running                            |
+|                                                                |
+| File     : QS_EXEC  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : QS_EXEC  REPORT Output                              |
+|            SICONV   REXX   Pipe stage                          |
+|                                                                |
+| Called   : QS_EXEC  <how>  ( <dryrun>                          |
+|                                                                |
+|            <how>    empty  Defaults to CONS                    |
+|                     CONS   Show output on console              |
+|                     FILE   Stores output in QS_EXEC  REPORT    |
+|                     PIPE   Hands output to calling EXEC        |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20211019 12:00:55                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg how '(' dryrun .
+Parse Source . . myfn myft .
+recomm.0=0                                       /* Init some stems  */
+work.0=0                                         /* Stem 2 append to */
+stemname='report.'                               /* Stem of caller   */
+/*---------------------------------------------------------------+
+| Decide depending on the input where the output goes            |
++---------------------------------------------------------------*/
+Say TimeStamp()
+Select
+When how=''     Then output='| cons'
+When how='CONS' Then output='| cons'
+When how='FILE' Then output='| > 'myfn' REPORT A'
+When how='PIPE' Then output='| stem 'stemname' 1 append'
+When how='?'    Then Do
+                     'PIPE (NAME QSEREP.EXEC:40 END ? .EXEC:41)',
+                        '< 'myfn myft' *',
+                        '| tolabel Parse',
+                        '| cons'
+                     Exit
+                     End
+Otherwise Exit 28
+End
+/*---------------------------------------------------------------+
+| Compose the header                                             |
++---------------------------------------------------------------*/
+'PIPE (NAME QSEREP.EXEC:51 END ?)',
+   'literal 'TimeStamp(),                        /* Compose header   */
+   '| var erep_header 1',                        /* .                */
+   '| join * x40',                               /* .                */
+   '| var erep_header'                           /* .                */
+/*---------------------------------------------------------------+
+|                                                                |
++---------------------------------------------------------------*/
+'PIPE (NAME QSEREP.EXEC:59 END ?)',
+     'cp QUERY RECORDING',                       /* Ask cp           */
+     '| pick w1.1 == ~EREP~',                    /* Select this      */
+     '| var ereprec'                             /* Store as         */
+rec4erep=Word(ereprec,2)
+ereprunr=Word(ereprec,5)
+run4erep=Word(ereprec,6)
+ 
+If rec4erep='ON'     Then recmsg='Recording for EREP is ON'
+                     Else recmsg='Recording for EREP is OFF, set up EREP'
+If run4erep='ACTIVE' Then runmsg='EREP records are processed by 'ereprunr
+                     Else runmsg='EREP records are not processed, set up EREP'
+/*---------------------------------------------------------------+
+| Sample of how to add a var or a stem to an existing stem       |
++---------------------------------------------------------------*/
+Call Add2Output 'ereprec,EREP recording and status'
+Call Add2Output 'recmsg'
+Call Add2Output 'runmsg'
+/*---------------------------------------------------------------+
+| Returning output to our calllerto the caller                   |
++---------------------------------------------------------------*/
+'PIPE (NAME QSEREP.EXEC:80 END ?)',
+    'stem work.',                                /* Take these       */
+    '| preface var erep_header',                 /* Add header       */
+    '| preface literal ',                        /* Add 2 empties    */
+    '| preface literal ',                        /* .                */
+    output                                       /* Hand back        */
+Exit
+ 
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 
+ 
+Add2Output:
+/*---------------------------------------------------------------+
+| Adding stuff to an existing stem                               |
++---------------------------------------------------------------*/
+Parse Arg input','header
+If LastPos('.',input)<>0 Then input='stem 'input
+                         Else input='var 'input
+'PIPE (NAME QSEREP.EXEC:100 END ?)',
+     input,                                      /* Use input        */
+     '| preface var header',                     /* Add header       */
+     '| split at ;',                             /* Split here       */
+     '| stem work. append'                       /* Add 2 stem       */
+Return

@@ -1,0 +1,97 @@
+/*---------------------------------------------------------------+
+| Function : Calculate the number of FBA blocks needed           |
+|                                                                |
+| File     : SIZE2BLK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called     : SIZE2BLK <size> <si-unit> <outformat>             |
+| As function: out=size2blk(<size> <si-unit> <outformat>)        |
+|                                                                |
+| Comments : <size>      the size you need (in bytes)            |
+|            <si-unit>   the si unit you want                    |
+|            <outformat> the output format (default 3,2)         |
+|                                                                |
+|            si-unit:    K = Kilo  1024 to the power of 1        |
+|                        M = Mega                       2        |
+|                        G = Giga                       3        |
+|                        T = Tera                       4        |
+|                        P = Peta                       5        |
+|                        E = Exa                        6        |
+|                        Z = Zetta                      7        |
+|                        Z = Yotta                      8        |
+|                                                                |
+|            When called as function the return code is the      |
+|            number of FBA blocks                                |
+|                                                                |
+| Example  : size2blk 12g                                        |
+| Output   :                                                     |
+| 12G = 12 GigaBytes = 25165824 FBA blocks = 3145728 4K blocks   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181122 17:02:51                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg size si_unit outfmt .
+Parse Source . how myfn myft .
+numeric digits 40 /* To display the full number */
+blksize=512       /* Size of FBA block in bytes */
+unit=1024         /* unit of 1KiloBytes */
+If size=''  Then Call Exit 28
+If size='?' Then Do
+                 'VMFCLEAR'
+                 'PIPE (end ?)',
+                      '< 'myfn myft' *',
+                      '| tolabel Parse',
+                      '| cons'
+                  Call Exit 4
+                  End
+bytes=size*blksize
+If si_unit='' Then si_unit='M'
+If outfmt='' Then outfmt=' ,2'
+Parse Value outfmt With befc ',' aftc .
+/*---------------------------------------------------------------+
+| Split the si_unit and the size                                  |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Determine the power factor                                     |
++---------------------------------------------------------------*/
+Select
+  When si_unit='K' Then Do ; power=1 ; si_pref='Kilo' ; End
+  When si_unit='M' Then Do ; power=2 ; si_pref='Mega' ; End
+  When si_unit='G' Then Do ; power=3 ; si_pref='Giga' ; End
+  When si_unit='T' Then Do ; power=4 ; si_pref='Tera' ; End
+  When si_unit='P' Then Do ; power=5 ; si_pref='Peta' ; End
+  When si_unit='E' Then Do ; power=6 ; si_pref='Exa'  ; End
+  When si_unit='Z' Then Do ; power=7 ; si_pref='Zetta'; End
+  When si_unit='Y' Then Do ; power=8 ; si_pref='Yotta'; End
+  Otherwise Do
+            Say 'SI unit 'si_unit' is out of our league'
+            Call Exit 99
+            End
+End
+/*---------------------------------------------------------------+
+| Actual calculations                                            |
++---------------------------------------------------------------*/
+Do p=1 To power
+   bytes=bytes/unit
+End p
+out=Format(bytes,,2)||si_unit
+/*---------------------------------------------------------------+
+| Decide on how to present the outcome...                        |
++---------------------------------------------------------------*/
+If how='FUNCTION' Then Call Exit out
+                  Else Do
+                       Say size ' = 'out
+                       Call Exit
+                       End
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc .
+If exrc='' | exrc='EXRC' Then exrc=0
+Exit exrc

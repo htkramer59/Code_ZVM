@@ -1,0 +1,117 @@
+/*---------------------------------------------------------------+
+| Function : Scan files for a string...                          |
+|                                                                |
+| File     : SCAN     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : SCAN     <fn> <ft> <fm> <search>                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180524 15:37:21                                   |
+| Changes  : .                                                   |
+|            20220614 H.T.Kramer : Included the SCANCODE part    |
+|                     into this exec and EXECLOADed it.          |
+|            20200124 H.T.Kramer : Adjusted a bit                |
+|                                                                |
+|                                                                |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg ifn ift ifm scan '(' keep .
+Parse Source . . myfn myft .
+If ifn='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME SCAN.EXEC:26 END ?)',
+               '< 'myfn myft' *',
+               '| tolabel Parse',
+               '| cons'
+             Call Exit
+             End
+ 
+Select
+When myfn='SCAN'     Then Call ScanExec
+When myfn='SCANCODE' Then Call ScanCode
+Otherwise Exit 99
+End
+Exit:
+Exit
+ 
+ 
+ScanExec:
+/*---------------------------------------------------------------+
+| Set some defaults                                              |
++---------------------------------------------------------------*/
+If ifn=''   Then ifn='*'
+If ift=''   Then ift='*'
+If ifm=''   Then ifm='A'
+If scan=''  Then Do
+                 Say 'NO scan argument entered'
+                 Exit 28
+                 End
+If keep<>'' Then keep=1
+            Else keep=0
+Address CMS 'ERASE SCAN OUTPUT A (NOTYPE'
+Address CMS 'EXECLOAD 'myfn myft' * SCANCODE ='
+/*---------------------------------------------------------------+
+| Set the size and so on for the output and scan...              |
++---------------------------------------------------------------*/
+Queue 'RECFM V'
+Queue 'LRECL 250'
+Queue 'SET AUTOSAVE OFF'
+Queue 'SCANCODE 'ifn ift ifm scan
+Queue 'TOP'
+Queue ':1'
+Queue 'SET RESER 3 WHITE NON NOH >>>>> FileName FileType FM LineNo Col Results for: 'scan
+Queue 'SCALE OFF'
+Queue 'VERIFY 1 120'
+'XEDIT SCAN OUTPUT A (WIDTH 250'
+If \keep Then Address CMS 'ERASE SCAN OUTPUT A'
+Address CMS 'EXECDROP SCANCODE EXEC'
+Exit
+ 
+ 
+ScanCode:
+/*---------------------------------------------------------------+
+| Here we do the actual scanning of the code                     |
++---------------------------------------------------------------*/
+fnd.0=0
+'PIPE (NAME SCAN.EXEC:80 END ?)',
+    'cms LISTFILE 'ifn ift ifm' (NOHEADER',     /* list the files */
+    '| stem file.'                              /* Store..          */
+/*---------------------------------------------------------------+
+| Read all the files and search for the string                   |
++---------------------------------------------------------------*/
+Do f=1 To file.0
+   'PIPE (NAME SCAN.EXEC:87 END ?)',
+     '< 'file.f,                                /* Read file        */
+     '| unpack',                                /* Unpack...        */
+     '| specs recno 1.6 1;* nw',                /* Add record no    */
+     '| casei zone 8;* locate ~'scan'~',        /* Find the string  */
+     '| specs ~'file.f'~ 1.20 1;* nw',          /* Add filename     */
+     '| stem fnd. append'                       /* Add to stem      */
+End f
+/*---------------------------------------------------------------+
+| Loop thru the findings and add a column where string was fnd   |
++---------------------------------------------------------------*/
+Do f=1 To fnd.0
+   work=fnd.f                                   /* Move to var      */
+   'PIPE (NAME SCAN.EXEC:100 END ?)',
+     'var work',                                /* Take this        */
+     '| specs 29;*',                            /* Remove leading.. */
+     '| split before string ~'scan'~',          /* Split here       */
+     '| nlocate anycase ~'scan'~',              /* Remove...        */
+     '| take first 1',                          /* Take this        */
+     '| deblock 1',                             /* Split into chars */
+     '| count lines',                           /* Count them       */
+     '| var strt'                               /* Store as         */
+   fnd.f=Right(strt+1,3) fnd.f                  /* Add to array     */
+End f
+'PIPE (NAME SCAN.EXEC:111 END ?)',
+   'stem fnd.',                                 /* Take these       */
+   '| specs w2.4 1 w1.1 nw.3 right 33;* nw',    /* Smarten layout   */
+   '| xedit'                                    /* Insert into ring */
+Exit

@@ -1,0 +1,63 @@
+/*---------------------------------------------------------------+
+| Function : Uniform way to start VMUTIL                         |
+|                                                                |
+| File     : PROFILE  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : PROFILE  <start>                                    |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Prereqs  : .                                                   |
+|                                                                |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20181026 13:43:48                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg startup .
+'PIPE cms IDENTIFY | specs substr -2;-1 of word 3 | var node'
+Address COMMAND 'CP SPOOL CONS CONPARK START EOF NAME 'Userid()' CONSLOG'
+Address COMMAND 'CP TERM MORE 10 10 HOLD ON'
+Address CMS 'SYNONYM 'USERID()' SYNONYM'
+/* Access TOOLS */
+Address CMS 'SET FILEPOOL VMPS'node
+Address CMS 'ACC VMPS'node':TOOLS. Q'
+/* */
+pfkeys='11 RETRIEVE FORWARD;12 RETRIEVE BACKWARD;23 RETRIEVE FORWARD;24 RETRIEVE BACKWARD'
+'PIPE (end ?)',
+     'var pfkeys',                              /* Take this       */
+     '| split at ;',                            /* Split here      */
+     '| specs ~SET PF~ 1 w1;* n',               /* Compose cmds    */
+     '| cp',                                    /* Issue cmds      */
+     '?',                                       /* 2nd pipe        */
+     'CP QUERY 'userid(),                       /* Ask CP          */
+     '| specs fs - f2.1 1',                     /* Take 2nd field  */
+     '| strip',                                 /* Remove spaces   */
+     '| locate ~DSC~',                          /* Does it contain?*/
+     '| count lines',                           /* How many        */
+     '| var status'                             /* Store here      */
+/*---------------------------------------------------------------+
+| For access to SFPURGER                                         |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK MAINT 193'
+If status |,
+   startup='START' Then Call RunCode
+                   Else Do
+                   'VMFCLEAR'
+                   Say 'To start VMUTIL enter: PROFILE START'
+                   End
+Exit
+ 
+ 
+RunCode:
+/*---------------------------------------------------------------+
+| Do the actual start                                            |
++---------------------------------------------------------------*/
+Say 'Starting VMUTIL code'
+Address CMS 'VMUTIL'
+Return

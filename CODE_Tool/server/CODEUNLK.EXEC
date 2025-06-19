@@ -1,0 +1,52 @@
+/*---------------------------------------------------------------+
+| Function : Unlock the code                                     |
+|                                                                |
+| File     : CODEUNLK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : CODE     STATUS                                     |
+|                                                                |
+| Called   : CODEUNLK .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220324 16:27:00                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg who fn ft '(' proj .
+Parse Source . . myfn myft .
+reply=0
+/*---------------------------------------------------------------+
+| Access the project and status                                  |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'proj' (ONLY(CODE) QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else Exit 0
+/*---------------------------------------------------------------+
+| Check if we are locked                                         |
++---------------------------------------------------------------*/
+'PIPE (NAME CODEUNLK.EXEC:31 END ?)',
+   '< CODE STATUS 'wfm,                          /* Read file        */
+   '| pick w1.1 == ~'Strip(fn)'~ and w2.1 == ~'Strip(ft)'~',   /* Select this file */
+   '| count lines',                              /* How many         */
+   '| var locked'                                /* Locked/unlocked? */
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If locked Then Do
+   'PIPE (NAME CODEUNLK.EXEC:40 END ?)',
+      '< CODE STATUS 'wfm,                       /* Read this        */
+      '| pick w1.1 \== ~'Strip(fn)'~ and',       /* Ignore these     */
+             'w2.1 \== ~'Strip(ft)'~ and',       /* .                */
+             'w-1;-1 \== ~'who'~',               /* .                */
+      '| > CODE STATUS 'wfm                      /* Rewrite file     */
+    If rc=0 Then reply=1
+    End
+/*---------------------------------------------------------------+
+| Release the project                                            |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) QUIET WRITE'
+Exit reply

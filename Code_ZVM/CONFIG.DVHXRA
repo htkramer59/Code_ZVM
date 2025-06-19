@@ -1,0 +1,36 @@
+* Control file for DVHXRA:
+*
+* To test changes to the control file make sure you have access to:
+*     this file
+*     DVHXRA  EXEC
+*     LVL2XRA EXEC
+*     LVL1XRA EXEC
+*
+* Run LVL1XRA EXEC, this will display the results
+*
+*
+* Only for these id wildcards we do ADD fcp devices
+accept=SLD* SLB*
+*
+* Filemode where cluster & dirmpart are found, within DIRMAINT
+wfm=E
+*
+* For example we start selecting devices from xx50 & xx50 upward
+*subch=50
+subch=40
+*
+* First part of the FCP address E0xx/F0xx
+channels2=E0 F0
+channels4=E0 E5 F0 F5
+channels6=
+channels8=
+*
+* Start from the highest available down or from the lowest up
+*
+search=down
+*search=up
+*
+* The virtual addresses defined to the server that is created
+* Max 8 devices...... 5C51=SCSI
+vcuu=5c50 5c51
+*vcuu=5c50 5c51 5C52 5C53

@@ -1,0 +1,48 @@
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1991
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+    D(nn)     Deletes nn columns starting at the column where the "D" is
+              positioned.  If nn is omitted 1 column is deleted.
+ 
+    DD   DD   Deletes a block of columns starting at the position of the
+ or DDDDDDD   first "D" up to the last "D"
+ 
+ or Dcolumn-target
+              A column delete starting at the column where the "D" is
+              positioned using column targets.  The column target must be
+              adjacent to the "D".  A column target is any valid XEDIT
+              column target.  When entering a column target adjacent to
+              the "D", DO NOT enter any other column command following
+              the delete command.  Also note that the position following
+              a "D" is reserved.  It will be considered as part of the
+              column target.  Refer to XEDIT's CLOCATE for examples of
+              valid column targets.
+ 
+              Valid Examples:   D*       Delete to end of line
+                                D-*      Delete to begining of line
+                                D9       Delete 9 columns
+                                D:20     Delete to column :20
+                                D/the/   Delete to the word "the"
+                                D-/the/  Delete back to the word "the"
+.cs 7 on
+                     COLumn Edit Base Commands
+ 
+Place the cursor under any character of the task you are interested in
+and press PF1 or the ENTER key.
+ 
+ 
+COL BASECMD3 (ALL       A       Add or insert blanks into a column
+COL BASECMD5 (ALL       "       Duplicate a Column
+COL BASECMD2 (ALL       D       Delete a column
+COL BASECMDS (ALL       I       Insert text into a column
+COL BASECMD6 (ALL       /cmd    Do "here" rather than behind the command
+COL BASECMD6 (ALL       /       Shift the screen to this column
+COL BASECMD4 (ALL       O,R,',- Overlay, Replace, Pad or remove data
+ 
+COL PREFIX (PARMS       Picture the columns that contain blanks.
+.cs 7 off

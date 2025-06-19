@@ -1,0 +1,31 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Add or remove a LINK stament                        |
+|                                                                |
+| File     : DM_LINK  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DM_LINK  <tuid> <suid> <scuu> <tcuu> <mode>         |
+|          : LINK     <tuid> <suid> <scuu> <tcuu> <mode>         |
+|                                                                |
+|           <tuid> = Target uid, if specified as = it will       |
+|                                be equal to suid                |
+|           <suid> = Source uid, if specified as = it will       |
+|                                be equal to tuid                |
+|           <scuu> = Source cuu                                  |
+|           <tcuu> = Target cuu                                  |
+|           <mode> = any valid link mode, defaults to RR.        |
+|                    If specified as DEL the LINK will be        |
+|                    deleted                                     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240703 11:17:11                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/

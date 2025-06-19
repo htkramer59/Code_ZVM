@@ -1,0 +1,185 @@
+.cs 0 on
+.cm /*==============================================================*/
+                       XEDIT Column Editing/VM
+.cm /*    Licensed Material - Program Property of IBM               */
+.cm /*                                                              */
+                     Copyright (c) IBM Corp 1992
+.cm /*--------------------------------------------------------------*/
+ 
+ 
+The COL mathematical and logic operations between columns uses the "Y"
+command to mark the columns to be operated upon and the "=" command to
+locate the placement of the answer.  Any valid REXX arithmetic,
+comparison, logical or string operation may be used between the columns.
+ 
+Example:
+????????????YYYYYYY * YYYYYYYY===========?????????????
+                  5          2
+                100         50
+ 
+Yields:
+                  5          2         10
+                100         50       5000
+ 
+Example:
+????????????YYYYYYY / YYYYYYYY * 10 ====.=====?????????????
+              123.5         22
+                100          3
+ 
+Yields:
+              123.5         22        56.13636
+                100          3       333.33333
+ 
+The columns are operated upon left to right.
+The equal signs for the answer placement may be located anywhere.
+The decimal in the "=" string is optional and locates the decimal point.
+Existing text within the "=" answer column is overlaid.
+The columns themselves may include the operators.
+ 
+The columns may contain REXX functions to be evaluated.
+ 
+Mathematical expressions may be formed in three ways.
+ 
+1. The columns, answer and operators may be specified in the
+   COL command line:
+2. The column and answer may be specified in the
+   COL command line with the operators in the text.
+3. Named columns with the function entered in the XEDIT command line:
+ 
+.cs 0 off
+.cs 1 on
+Mathematical expressions may be formed in three ways.
+The following three examples give the same results:
+ 
+1. The columns, answer and operators may be specified in the
+   COL command line:
+ 
+   ????????????YYYYYYY * YYYYYYYY ==========?????????????
+                     5         32
+ 
+2. The column and answer may be specified in the
+   COL command line with the operators in the text.
+ 
+   ????????????YYYYYYYYYYYYYYYYYY ==========?????????????
+                     5    *    32
+ 
+3. Named columns with the function entered in the XEDIT command line:
+ 
+   The first column is named y.1 by default, the second column named y.2
+   and so forth. The original value located within the answer column is
+   named y.0.
+ 
+   ????????????YYYYYYY   YYYYYYYY ==========?????????????
+                     5         32
+ 
+   On the XEDIT command line enter ====> y.2 / y.1
+ 
+   You may name the columns yourself as follows:
+   ????????????YYYYYYa   YYYYYYYb ==========?????????????
+                     5         32
+ 
+On the XEDIT command line enter ====> y.a / y.b
+ 
+Any REXX operator may be used:
+ 
+Arithmetic:
+()   Parenthesis
++    Add
+-    Subtract
+*    Multiply
+/    Divide
+%    Divide and place the integer part
+//   Divide and place the remainder
+**   Raise a number to a whole-number power
+ 
+Comparative:
+True = 1, False = 0
+==   Terms are exactly equal
+=    Terms are equal
+^==  Not exactly equal
+/==  Not exactly equal
+^=   Not equal
+/=   Not equal
+>    Greater than
+<    Less than
+><   Greater than or less than
+<>   Greater than or less than
+>=   Greater than or equal to
+<=   Less    than or equal to
+^<   Not Less than
+^>   Not Greater than
+ 
+Logical:
+^    Not
+|    Or
+&    And
+&&   Exclusive OR
+ 
+String concatenation:
+(blank) Concatenate
+||      Concatenate without intervening blank
+ 
+Constants may be entered into the command string.
+ 
+Example:
+?????YY*2===????????????????????????????????
+     56
+     43
+ 
+Yields:
+     56  112
+     43   86
+ 
+ 
+You may enter any REXX function into the data itself prior to executing
+the math operation.  For example consider the REXX function Datatype:
+ 
+Example:
+?????YYYYYYYYYYYYYYYYYYYY??=====????????????
+     Datatype(   1.5    )
+     Datatype(   A      )
+ 
+Yields:
+     Datatype(   1.5    )  NUM
+     Datatype(   A      )  CHAR
+ 
+Built-in Functions
+ 
+NUMBER(variable)
+  Returns a zero for blank and non-numeric fields.  Returns the
+  numeric variable if it is a valid number.
+ 
+.cs 1 off
+.cs 5 on
+When not using named columns, the text columns marked with "Y" are
+extracted, the operators entered in the command line are interleaved into
+the text and the resulting text string passed to REXX for interpretation.
+The result is then overlaid into the "=" location.
+ 
+When using named columns, the values within the columns are placed into
+REXX Variables for evaluation within the expression as entered on the
+XEDIT command line.  The answer is then placed in the columns identified
+by the string of equal signs.  The first column is named y.1, the second
+is named y.2 and so forth.  The contents of the answer column prior to
+evaluation is named y.0.  You may also name the columns yourself as:
+ 
+   ????????????YYYYYYa   YYYYYYYb ==========?????????????
+   On the XEDIT command line enter ====> y.a / y.b
+ 
+ 
+NOTES:
+If the length of the "=" string exceeds 9, REXX's Numeric Digits setting
+is increased to match during this operation.
+ 
+Text is left justified.
+.cs 5 off
+.cs 7 on
+                         COL Mathematical Functions
+ 
+For detailed information on a command or task, place the cursor under the
+topic of your choice and press ENTER or the PF1 key.
+ 
+ 
+COL COLMCMDS (ALL       +       Add or sum numbers in a column
+COL COLMCMD5 (ALL       Y       Include columns
+.cs 7 off

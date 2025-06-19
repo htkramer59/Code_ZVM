@@ -1,0 +1,38 @@
+/*---------------------------------------------------------------+
+| Function : Start GDH servers...when autolog1 fails...          |
+|                                                                |
+| File     : GDHSTART EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : SRVSTAT LIST            on VMUTIL 191               |
+|                                                                |
+| Called   : GDHSTART                display mode                |
+|                     (RUN           execution mode              |
+|                                                                |
+| Comments : Need CP class A, B or G                             |
+|            No checking if servers are running already          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20191204 07:35:20                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg . '(' test .
+If test='RUN' Then cpout='| CP | CONS'          /* Issue cmd & show */
+              Else cpout=''                     /* Initialise       */
+Address CMS 'VMLINK VMUTIL 191 (NONAMES QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Exit rc
+'PIPE (end ?)',
+   '< SRVSTAT LIST 'wfm,                        /* Read this file   */
+   '| pick 1.1 \== ~*~',                        /* Remove comments  */
+   '| split before string ~:~',                 /* Split here       */
+   '| change anycase ~:ID.~XAUTOLOG ~',         /* Add command      */
+   '| change anycase ~:WAIT.~SLEEP ~',          /* ...and this      */
+   '| if: if pick w1.1 == ~SLEEP~',             /* Add units        */
+   '|    specs w1;* 1 ~SEC~ nw',                /* ...here          */
+   '| if:',                                     /* Conn 2 if        */
+   '| cons',                                    /* Show results     */
+   cpout                                        /* issue them??     */
+Address CMS 'VMLINK VMUTIL 191 <DET (NONAMES QUIET'

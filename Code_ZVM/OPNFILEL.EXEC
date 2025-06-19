@@ -1,0 +1,36 @@
+/**/
+Parse Arg dir2show .
+If dir2show='' Then dir2show='VMSYS:ROOT.'
+Address CMS 'VMLINK .DIR 'dir2show' (NONAMES QUIET FILEL '
+If rc=2024 | rc=2100 Then Do
+           workdir=Translate(dir2show,'/','.')
+           'OPENVM MOUNT /../VMBFS:'workdir' /'
+           'PIPE (end ?)',
+               'cms OPENVM LISTFILE / (ATTR',
+               '| specs pad 0 recno 1.4 right 1;* nw',
+               '| specs pad space 1.73 1.73 left',
+               '| fi: faninany',
+               '| sort w1.1',
+               '| join keylen 4',
+               '| spec 6;*',
+               '| stem line.',
+               '?',
+               'cms OPENVM LISTFILE / (NAMES',
+               '| specs pad 0 recno 1.4 right 1;* nw',
+               '| specs pad space 1.43 1.43 left',
+               '| fi:',
+               '?',
+               'cms OPENVM LISTFILE / (OWNER',
+               '| specs pad 0 recno 1.4 right 1;* nw',
+               '| specs pad space 1.40 1.40 left',
+               '| fi:'
+           'OPENVM UNMOUNT /'
+           End
+'PIPE (End ?)',
+      'stem line.',
+      '| preface var dir2show',
+      '| > temp file a'
+Queue 'PREF OFF'
+Queue 'V1 130'
+'XEDIT TEMP FILE A'
+'ERASE TEMP FILE A'

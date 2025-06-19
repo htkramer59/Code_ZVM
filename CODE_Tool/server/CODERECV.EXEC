@@ -1,0 +1,67 @@
+/*---------------------------------------------------------------+
+| Function : Unpack VMARC files FTP into the IN directory/mdisk  |
+|                                                                |
+| File     : CODERECV EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : many                                                |
+|                                                                |
+| Called   : CODERECV .                                          |
+|                                                                |
+| Comments : This needs to be code in CODE_S TIMES on the server |
+|            disk for example:                                   |
+|            ==/==/== +00:05:0 14:51:36    CMS CODERECV          |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20220416 12:14:01                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+Address CMS 'VMLINK IN (ONLY(CODE) QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . ifm .
+        Else Exit rc
+'PIPE (NAME CODERECV.EXEC:26 END ?)',
+   'cms LISTFILE * * 'ifm' (NOH',                /* Find files       */
+   '| stem w1.3 1',                              /* Keep this        */
+   '| sort w2.1',                                /* Sort on ft       */
+   '| specs w2.1 1.8 w1.1 nw.8                   /* Prefix with ft   */
+   '| join keylen 8',                            /* Join on ft       */
+   '| stem syncfile.'                            /* Store as         */
+If syncfile.0<>0 Then Call SyncFiles
+Address CMS 'VMLINK IN <DET (ONLY(CODE) QUIET WRITE'
+Exit exrc
+ 
+ 
+SyncFiles:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Do s=1 To syncfile.0
+   Parse Value syncfile.s With proj files
+   Address CMS 'VMLINK 'proj' (ONLY(CODE) QUIET WRITE .fm'
+   If rc=0 Then Parse Pull . . wfm .
+           Else Do
+                Say 'No access to project: 'proj
+                Iterate
+                End
+   'PIPE (NAME CODERECV.EXEC:50 END ?)',
+      'var files',                               /* Take this        */
+      '| split',                                 /* Split            */
+      '| specs w1.1 1 ~'proj ifm'~ nw',          /* Compose names    */
+      '| stem file.'                             /* Store as         */
+   Do f=1 To file.0
+      Address CMS 'VMARC UNP 'file.f' = = 'wfm' (OLDDATE REPLACE'
+      If rc<>0 Then Do
+                    Say 'VMARC UNP of 'file.f' failed with 'rc
+                    End
+                    Else Do
+                    Say 'Replace with 'file.f' succesful'
+                    Address CMS 'ERASE 'file.f
+                    End
+   End f
+   Address CMS 'VMLINK 'proj' <DET (ONLY(CODE) QUIET WRITE'
+End s
+Return

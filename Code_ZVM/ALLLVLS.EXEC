@@ -1,0 +1,128 @@
+/*---------------------------------------------------------------+
+| Function : Show the cp/cms levels and show changes             |
+|                                                                |
+| File     : ALLLVLS  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : ALLLVLS  OVERVIEW                                   |
+|          : ALLLVLS  PREVIOUS                                   |
+|                                                                |
+| Called   : ALLLVLS  .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20210908 11:37:42                                   |
+| Changes  : .                                                   |
+|            20220628 H.T.Kramer : Check for RMCMD EXEC and its  |
+|                     output are now built in                    |
+|            20220506 H.T.Kramer : Implemented QUIET optioin     |
+|            20220301 H.T.Kramer : Added VMLINK to store data    |
+|                     elsewhere                                  |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg arg1 arg2 . '(' dryrun .
+Parse Source . . myfn myft .
+If Wordpos('QUIET',dryrun)<>0 Then quiet=1
+                              Else quiet=0
+If arg1='?' Then Do
+                 'PIPE (NAME ALLLVLS.EXEC:30 END ?)',
+                 '< 'myfn myft' *',
+                 '| tolabel Parse',
+                 '| cons'
+                 Exit
+                 End
+'PIPE (NAME ALLLVLS.EXEC:36 END ?)',
+    'cms LISTFILE RMCMD EXEC * (NOH',
+    '| count lines',
+    '| var rmc'
+If rmc=0 Then Do
+              Say TimeStamp()' Can not run: RMCMD EXEC is missing'
+              Exit 28
+              End
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Preserve previous results                                      |
++---------------------------------------------------------------*/
+Address CMS 'COPY 'myfn' OVERVIEW 'wfm' = PREVIOUS = (REPLACE OLDDATE'
+/*---------------------------------------------------------------+
+| Get new data                                                   |
++---------------------------------------------------------------*/
+If \quiet Then Say TimeStamp()' Collecting info from all LPARs'
+Address CMS 'RMCMD CP QUERY CPLEVEL;CMS QUERY CMSLEVEL,,,FILE, 'myfn' OVERVIEW 'wfm
+If rc<>0 Then Do
+              Say TimeStamp() 'Can not execute RMCMD'
+              Exit 128
+              End
+'VMFCLEAR'
+line.0=0
+'PIPE (NAME ALLLVLS.EXEC:62 END ?)',
+    '< 'myfn' PREVIOUS 'wfm,                     /* Read file        */
+    '| d: drop first 2',                         /* Ignore these     */
+    '| nlocate ~RMCMD~',                         /* .and these       */
+    '| specs w1.1 1 ~; 1 ;~ nw w2;* nw ~;~ nw',  /* Add some stuff   */
+    '| fi: faninany',                            /* Take in others   */
+    '| sort w1.1',                               /* Sort ...         */
+    '| join keylen 2',                           /* Join on shortnode*/
+    '| change ~; 1 ;~;~',                        /* Remove this      */
+    '| change ~; 2 ;~;~',                        /* ..and this       */
+    '| change ~; ;~;~',                          /* Compress this    */
+    '| pick fs ; f2.4 \== f6.4',                 /* Select inequals  */
+    '| stem line.',                              /* Store as         */
+    '?',                                         /* 2nd pipe         */
+    '< 'myfn' OVERVIEW 'wfm,                     /* Read this file   */
+    '| drop first 2',                            /* Ignore these     */
+    '| nlocate ~RMCMD~',                         /* .and these       */
+    '| specs w1.1 1 ~; 2 ;~ nw w2;* nw ~;~ nw',  /* Add this         */
+    '| fi:',                                     /* Conn 2 faninany  */
+    '? d:',                                      /* Conn 2 drop      */
+    '| take first 1',                            /* Take only 1      */
+    '| specs w2.2 1',                            /* Keep this        */
+    '| var prevdate'                             /* Store as         */
+/*---------------------------------------------------------------+
+| Check all the lines...                                         |
++---------------------------------------------------------------*/
+If line.0<>0 Then Do
+     Do l=1 To line.0
+        Parse Value line.l With node ';' rest
+           'PIPE (NAME ALLLVLS.EXEC:91 END ?)',
+               'var rest',                       /* Take this        */
+               '| specs fs ; f1.4 1 ~&~ nw f5.4 nw',   /* Rework layout    */
+               '| split at &',                   /* Split here       */
+               '| t: take first 1',              /* Take 1           */
+               '| split at ;',                   /* Split here       */
+               '| strip',                        /* Remove spaces    */
+               '| specs recno 1.1 1;* nw.60',    /* Add record no    */
+               '| fi: faninany',                 /* Take in others   */
+               '| sort',                         /* Sort             */
+               '| join keylen 1',                /* Join them        */
+               '| specs 3;*',                    /* Remove 1st 3 char*/
+               '| if: if pick 1.60 \== 62;*',    /* If not equal     */
+               '|    specs ~'node'~ 1 1.57 nw ~<>~ nw 62;* nw',   /* .add marker      */
+               '| if:',                          /* Conn 2 if        */
+               '| stem out.',                    /* Show results     */
+               '? t:',                           /* Conn 2 take      */
+               '| split at ;',                   /* Split here       */
+               '| strip',                        /* Remove spaces    */
+               '| specs recno 1.1 1;* nw.60',    /* Add record no    */
+               '| fi:'                           /* Conn 2 faninany  */
+     End l
+     End
+     Else Do
+     'PIPE (NAME ALLLVLS.EXEC:115 END ?)',
+        'literal No changes since: 'prevdate,
+        '| stem out.'
+        End
+'PIPE (NAME ALLLVLS.EXEC:119 END ?)',
+   'stem out.',
+   '| > 'myfn' OUTPUT 'wfm
+Address CMS 'XEDIT 'myfn' OUTPUT 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+Exit
+ 
+TimeStamp:
+Return Date(S) Time() myfn
+ 

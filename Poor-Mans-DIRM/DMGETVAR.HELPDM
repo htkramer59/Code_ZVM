@@ -1,0 +1,38 @@
+(c) Copyright Remarkable 2024
+.mt DM 
+/*---------------------------------------------------------------+
+| Function : Get variables from our caller 2 layer up and        |
+|            return them 2 the current caller 1 layer up         |
+|                                                                |
+| File     : DMGETVAR EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DMGETVAR .                                          |
+|                                                                |
+| Comments : Can not run stand-alone                             |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250528 13:34:03                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+/*---------------------------------------------------------------+
+| Get values from our caller                                     |
++---------------------------------------------------------------*/
+'PIPE (NAME DMGETVAR.EXEC:23 END ?)',
+   'rexxvars 2 toload',                          /* Take from caller */
+   '| pick anycase fs / f2.1 == ~DIRFNFT~ or',   /* Select these     */
+                       'f2.1 == ~TEST~ or',      /* .                */
+                       'f2.1 == ~SHOW~ or',      /* .                */
+                       'f2.1 == ~TRACE~ or',     /* .                */
+                       'f2.1 == ~TRACECTL~ or',  /* .                */
+                       'f2.1 == ~TRACETARGET~ or', /* .                */
+                       'f2.1 == ~WS~ or',        /* .                */
+                       'f2.1 == ~FORMAT_NEW_DISK~', /* .                */
+   '| change anycase  ~/ON~/1~',                 /* Switch these     */
+   '| change anycase  ~/OFF~/0~',                /* .                */
+   '| varload 1'                                 /* Hand 2 rexx      */
+Return

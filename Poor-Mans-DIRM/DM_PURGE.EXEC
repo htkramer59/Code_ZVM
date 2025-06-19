@@ -1,0 +1,72 @@
+/*---------------------------------------------------------------+
+| Function : Delete a USER from the DIRECTORY                    |
+|                                                                |
+| File     : DM_PURGE EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : DM_INDEX EXEC                                       |
+|            DM_VMLNK EXEC                                       |
+|            DM_ONLIN EXEC                                       |
+|                                                                |
+| Called   : DM_PURGE <uid>                                      |
+|          : PURGE    <uid>                                      |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, home_office,                            |
+| Created  : 20240622 18:41:29                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg uid .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call DMGETVAR
+If show  Then Say Date('S') Time() myfn myft' Starting'
+If test  Then Nop
+If trace Then Do
+              If tracetarget=myfn |,
+                 tracetarget=''   Then Call Trace tracectl
+              End
+/*---------------------------------------------------------------+
+| Get info from index                                            |
++---------------------------------------------------------------*/
+details=DM_INDEX('GET 'uid)
+part1=Strip(Word(details,1),'L','0')-1
+part2=Strip(Word(details,3),'L','0')
+/*---------------------------------------------------------------+
+| Process the directory, leaving out the USER id                 |
++---------------------------------------------------------------*/
+wfm=DM_VMLNK('SOURCEDIR')
+If wfm='' Then Call Exit '98'
+'PIPE (NAME DM_PURGE.EXEC:45 END ?)',
+   '< 'dirfnft wfm,                              /* Read this        */
+   '| t: take first 'part1,                      /* Take this part   */
+   '| buffer',                                   /* Prevent stall    */
+   '| fi: fanin',                                /* Take in rest     */
+   '| > 'dirfnft ws' FIXED 80',                  /* Write to file    */
+   '? t:',                                       /* Conn 2 take      */
+   '| drop first 'part2,                         /* Remove these     */
+   '| buffer',                                   /* Prevent stall    */
+   '| fi:'                                       /* Conn 2 fanin     */
+piprc=rc
+wfm=DM_VMLNK('SOURCEDIR DET')
+If piprc=0 Then Do
+                Address CMS 'DM_ONLIN'
+                If rc<>0 Then Call Exit rc
+                End
+           Else Exit '128'
+ 
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If \Datatype(exrc,'NUM') Then exrc=0
+If show  Then Say Date('S') Time() myfn myft' Exiting'
+Exit exrc

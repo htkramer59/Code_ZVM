@@ -1,0 +1,11 @@
+*****************************
+* VMSERVP DMSPARMS (VMPSFS) *
+*****************************
+ 
+ADMIN MAINT MAINT730
+ADMIN ...... FTPSERVE
+NOBACKUP
+SAVESEGID CMSFILES
+LOCAL
+FILEPOOLID VMUSERS
+USERS 100
