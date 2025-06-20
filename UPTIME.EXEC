@@ -1,241 +1,71 @@
 /*---------------------------------------------------------------+
-| Function : Show uptime of all LPARs in the complex             |
-|            or one or more LPARs in the complex                 |
+| Function : Calculate the uptime                                |
 |                                                                |
 | File     : UPTIME   EXEC                                       |
 +----------------------------------------------------------------+
 | Version  : 1.1.0                                               |
 |                                                                |
-| Files    : RSCS     EXEC                                       |
+| Files    : .                                                   |
 |                                                                |
-| Called   : UPTIME   <nodes> ( <options>                        |
+| Called   : UPTIME   .                                          |
 |                                                                |
-|            when options contains QUIET all say statements      |
-|            will be suppressed.                                 |
-|            when options contains SSI all LPARS in the SSI      |
-|            will be queried otherwise the RSCS EXEC will be     |
-|            used                                                |
+| Comments : .                                                   |
 |                                                                |
-| Comments : To use as a PIPE stage:                             |
-|            EXECLOAD UPTIME EXEC * = REXX                       |
-|                                                                |
-|                                                                |
-| Author   : H.T.Kramer, ,                                       |
-| Created  : 20210121 16:19:24                                   |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250620 14:42:08                                   |
 | Changes  : .                                                   |
-|            20220921 H.T.Kramer : Adapted for RSCS condensed    |
-|                       output                                   |
-|            20220615 H.T.Kramer : Implemented SSI option        |
-|            20220506 H.T.Kramer : Implemented QUIET option      |
-|            20211018 H.T.Kramer : Moved non-pipe output to      |
-|                        file and XEDIT that file                |
-|                                                                |
 |                                                                |
 +---------------------------------------------------------------*/
-Parse Upper Arg nodes . '(' options
-Parse Source . . myfn myft .
+'VMFCLEAR'
+'PIPE (NAME UPT.EXEC:20 END ?)',
+   'cp QUERY CPLEVEL ISODATE',                   /* Ask cp           */
+   '| take last 1',                              /* Keep this        */
+   '| specs w3.2 1',                             /* Reduce to this   */
+   '| specs ~IPLtime~ 1 w1.2 nw',                /* Add label        */
+   '| fi: fanin',                                /* Take in CURtime  */
+   '| specs w1.3 1 w2.1 nw w3.1 nw',             /* Adjust records   */
+   '| dateconv w4.1 iso rb',                     /* Convert dates    */
+   '| specs w1.4 1',                             /* Convert time     */
+           'a: substr 1.2 of w5.1 .',            /* .to              */
+           'b: substr 4.2 of w5.1 .',            /* .  seconds       */
+           'c: substr 7.2 of w5.1 .',            /* .                */
+           'set #0:=(a*3600)+(b*60)+c',          /* .                */
+           'print #0 nw',                        /* .                */
+   '| join * x40',                               /* Make 1 record    */
+   '| var datestimes',                                /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'literal ',                                   /* Empty record     */
+   '| timestamp isodate',                        /* Current time     */
+   '| specs ~CURtime~ 1 w1.2 nw',                /* Add label        */
+   '| fi:'                                       /* Conn 2 fanin     */
 /*---------------------------------------------------------------+
-| Show help if asked                                             |
+| Split the findings into usable items                           |
 +---------------------------------------------------------------*/
-if nodes='?' Then Do
-            'VMFCLEAR'
-            'PIPE (NAME UPTIME.EXEC:40 END ?)',
-               '< 'myfn myft' *',                /* Read myself      */
-               '| tolabel Parse',                /* Up to here       */
-               '| cons'                          /* Show             */
-             Call Exit
-             End
+ipldays=Word(datestimes,4)
+ipltime=Word(datestimes,5)
+curdays=Word(datestimes,9)
+curtime=Word(datestimes,10)
+days=Right(curdays-ipldays,4)
+time_left=curtime-ipltime
 /*---------------------------------------------------------------+
-| Check the options..,,,                                         |
+| If the no of seconds is below 0 subtract 1 day and add at other|
 +---------------------------------------------------------------*/
-If Wordpos('QUIET',options)<>0 Then quiet=1
-                               Else quiet=0
-If Wordpos('SSI',options)<>0 Then ssi=1
-                             Else ssi=0
+If time_left<=0 Then Do
+                days=days-1
+                time_left=time_left+(24*3600)
+                End
 /*---------------------------------------------------------------+
-| Select what to do...and act..                                  |
+| Rework to hh:mm:ss                                             |
 +---------------------------------------------------------------*/
-Select
-When myft='EXEC' Then Do
-                      'VMFCLEAR'
-                      pipecmd='PIPE'
-                      pipout='| > 'myfn' OVERVIEW'
-                      hdr='| preface literal ........ IPL-Date/Time       Years Days Hours  Mins  Secs;',
-                          '| preface literal 'TimeStamp()
-                      file=1
-                      End
-When myft='REXX' Then Do
-                      pipecmd='CALLPIPE'
-                      pipout='| *:'
-                      hdr=''
-                      file=0
-                      End
-Otherwise Nop
-End
+hours=Right(time_left%3600,2,'0')
+time_left=time_left//3600
+mins=Right(time_left%60,2,'0')
+secs=Right(time_left//60,2,'0')
 /*---------------------------------------------------------------+
-| Some settings and preparations                                 |
+| Display the outcome                                            |
 +---------------------------------------------------------------*/
-If nodes='' Then header='ALL'
-            Else header=nodes
-If file & \quiet Then Say TimeStamp()' Collecting info from: 'header
-pipecmd' (NAME UPTIME.EXEC:79 END ?)',
-     'literal ',                                 /* Create record    */
-     '| timestamp isodate',                      /* ...as it says    */
-     '| var now'                                 /* Store as         */
-If ssi Then Call SSI_Part
-       Else Call RSCS_Part
-Call Calculate_Uptime
-Exit
- 
- 
-SSI_Part:
-/*---------------------------------------------------------------+
-| If we are on SSI we need to ask these questions                |
-+---------------------------------------------------------------*/
-out.0=0
-'PIPE (NAME UPTIME.EXEC:94 END ?)',
-  'cp QUERY SSI',                                /* Check the SSI    */
-  '| frtarget pick w1.1 == ~SLOT~',              /* Use from here    */
-  '| drop first 1',                              /* Ignore hdr       */
-  '| pick anycase w3.1 == ~Joined~',             /* Select these     */
-  '| specs w2.1 1',                              /* Keep LPAR name   */
-  '| f: fanout',                                 /* Duplicate recs   */
-  '| specs w1.1 1.9',                            /* Adjus layout     */
-  '| j: juxtapose',                              /* Add outpt fr qry */
-  '| stem out.',                                 /* Hand 2 rexx      */
-  '? f:',                                        /* Conn 2 fanout    */
-  '| specs ~AT~ 1',                              /* Compose cmds     */
-          'w1.1 nw',                             /* .                */
-          '~CMD CP QUERY CPLEVEL ISODATE~ nw',   /* .                */
-  '| cp',                                        /* Issue them       */
-  '| locate anycase ~IPL~',                      /* Keep these       */
-  '| j:'                                         /* Conn 2 juxtapose */
-Return
- 
- 
-RSCS_Part:
-/*---------------------------------------------------------------+
-| If we are on RSCS we ask the questions in an other way         |
-+---------------------------------------------------------------*/
-node.0=0
-time.0=0
-nodes=Strip(nodes)
-If nodes='' Then nodes='ALL'
-pipecmd' (NAME UPTIME.EXEC:122 END ?)',
-     'var nodes',                                /* Take this        */
-     '| split',                                  /* Split            */
-     '| stem node.'                              /* Store as         */
-If node.0=0 Then Do
-                 pipecmd' (NAME UPTIME.EXEC:127 END ?)',
-                    'literal ALL',
-                    '| stem node.' /* When nothing entr*/
-                 End
-pipecmd' (NAME UPTIME.EXEC:131 END ?)',
-   'cms EXECMAP RSCS REXX',               /* Ask CMS          */
-   '| drop first 1',                      /* Ignore header    */
-   '| count lines',                       /* Count findings   */
-   '| if: if pick 1.1 == ~1~',            /* Check this       */
-   '|     specs ~EXECDROP RSCS REXX~ 1',  /* Compose cmd    */
-   '|     cms',                           /* Issue cmd      */
-   '| if:',                               /* Comm 2 if        */
-   '| var exldd'                          /* Hand 2 rexx      */
-Address CMS 'EXECLOAD RSCS EXEC * = REXX' /* Load stage       */
-/*---------------------------------------------------------------+
-| Loop thru all the requested nodes                              |
-+---------------------------------------------------------------*/
-out.0=0
-Do n=1 To node.0
-  pipecmd' (NAME UPTIME.EXEC:146 END ?)',
-       'rscs 'node.n' CP QUERY CPLEVEL ISODATE', /* Ask rscs         */
-       '| locate anycase ~IPL~',                 /* Keep this        */
-       '| specs w1.1 1 w2;* nw',
-       '| change w1.1 ~:~~',
-       '| stem out. append'
-End n
-Address CMS 'EXECDROP RSCS REXX'
-Return
- 
- 
-Calculate_Uptime:
-/*---------------------------------------------------------------+
-| .                                                              |
-+---------------------------------------------------------------*/
-pipecmd' (NAME UPTIME.EXEC:159 END ?)',
-     'stem out.',
-     '| specs w1.1 1 w4.2 nw w4.2 nw ~'now'~ nw',
-     '| dateconv w4.1 ISO REXXB',              /* Convert to basedt*/
-     '| dateconv w6.1 ISO REXXB',              /* Convert to basedt*/
-     '| specs w1.3 1',                         /* Calculate        */
-     '        i: w4.1 .',                      /* ....days         */
-     '        n: w6.1 .',                      /* .....between     */
-     '        set #0:=n-i',                    /* ......ipl and    */
-     '        print #0 nw',                    /* .......now       */
-     '        w5.1 nw w7.1 nw',                /* .                */
-     '| change w5;* ~:~ ~',                    /* Remove these     */
-     '| specs w1;4 1',                         /* How many         */
-             'a: w5.1 .',                      /* ...seconds       */
-             'b: w6.1 .',                      /* ....is each time */
-             'c: w7.1 .',                      /* .                */
-             'd: w8.1 .',                      /* .                */
-             'e: w9.1 .',                      /* .                */
-             'f: w10.1 .',                     /* .                */
-             'set #0:=(a*3600)+(b*60)+c',      /* .                */
-             'set #1:=(d*3600)+(e*60)+f',      /* .                */
-             'print #0 nw',                    /* .                */
-             'print #1 nw',                    /* .                */
-     '| stem time.'                            /* Store as         */
-/*---------------------------------------------------------------+
-| Now calculate the uptime.... hh mm ss                          |
-+---------------------------------------------------------------*/
-Do t=1 To time.0
-  start=Substr(Word(time.t,1),1,8) Subword(time.t,2,2)
-  days=Word(time.t,4)
-  iplsec=Word(time.t,5)
-  nowsec=Word(time.t,6)
-  If iplsec>nowsec Then Do
-     days=days-1
-     nowsec=nowsec+(24*3600)
-     End
-  secs=nowsec-iplsec
-  hours=Format((secs/3600),2,0)
-  mins=(secs//3600)
-  mins=Format((mins/60),2,0)
-  rsec=Format((mins//60),2,0)
-/*---------------------------------------------------------------+
-| Is it more than a year                                         |
-+---------------------------------------------------------------*/
-  If days>365 Then Do
-                   years=days%365
-                   days=days//365
-                   warning='<< Need a restart'
-                   End
-              Else Do
-                   years='-'
-                   warning=''
-                   End
-  time.t=start Right(years,5) Right(days,4) Right(hours,5) Right(mins,5) Right(rsec,5) warning
-End t
-/*---------------------------------------------------------------+
-| Give the output to our caller                                  |
-+---------------------------------------------------------------*/
-If file Then Do
-             Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
-             If rc=0 Then Parse Upper Pull . . wfm .
-                     Else wfm='A'
-             pipout=pipout wfm
-             End
-pipecmd' (NAME UPTIME.EXEC:223 END ?)',
-    'stem time.',
-    hdr,
-    '| split at ;',
-    pipout
-If file Then Do
-      Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
-      Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
-      If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
-      End
-Return
- 
- 
-TimeStamp:
-Return Date(S) Time() myfn
+Say Subword(datestimes,1,3)
+Say Subword(datestimes,6,3)
+Say
+Say '           Days hh:mm:ss'
+Say 'Uptime is: 'days hours':'mins':'secs
