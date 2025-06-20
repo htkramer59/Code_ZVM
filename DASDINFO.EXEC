@@ -33,6 +33,8 @@ If selct='?' Then Do
 | Create header                                                  |
 +---------------------------------------------------------------*/
 hdr='Rdev Ch Label  Status    Users CtlUnit DevType Size     Start End   Size  Used  High        Space-Type'
+dev.0=0
+out.0=0
 /*---------------------------------------------------------------+
 | Get the node name                                              |
 +---------------------------------------------------------------*/
@@ -212,11 +214,12 @@ If rc=0 Then Parse Pull . . wfm .
 /*---------------------------------------------------------------+
 | Show the report                                                |
 +---------------------------------------------------------------*/
-Address CMS 'XEDIT 'myfn node wfm
+If dev.0<>0 Then Address CMS 'XEDIT 'myfn node wfm
+If out.0<>0 Then Address CMS 'XEDIT 'myfn' EDEVS 'wfm
 /*---------------------------------------------------------------+
 | Remove file and workspace                                      |
 +---------------------------------------------------------------*/
-If wfm='A' Then Address CMS 'ERASE' myfn node' A'
+If wfm='A' Then Address CMS 'ERASE' myfn node' A 'myfn' EDEVS A'
 Address CMS 'VMLINK WORK <DET (QUIET WRITE'
 Exit
  
@@ -225,7 +228,6 @@ Edev_Processing:
 /*---------------------------------------------------------------+
 | Process all EDEVICEs on the system                             |
 +---------------------------------------------------------------*/
-out.0=0
 /*---------------------------------------------------------------+
 | Check DASD against EDEVices and collect the info               |
 +---------------------------------------------------------------*/
