@@ -1,0 +1,178 @@
+/*---------------------------------------------------------------+
+| Function : Show uid/mdisks with disksize in Cyls and Mbs       |
+|                                                                |
+| File     : DIRECT2M EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : USER     DIRECT      input                          |
+|            DIRECT2M OUTPUT      output                         |
+|                                                                |
+| Called   : DIRECT2M <what>                                     |
+|                                                                |
+|                     <what> can be:                             |
+|                     ?      to display help                     |
+|                     HI-LO or empty to sort size hi-lo          |
+|                     LO-HI  sort size lo-hi                     |
+|                     A-Z    sort name A-Z                       |
+|                     Z-A    sort name Z-A                       |
+|                     CUU-D  sort mdisk descending               |
+|                     CUU-A  sort mdisk ascending                |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250704 16:08:45                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg what .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Display help                                                   |
++---------------------------------------------------------------*/
+If what='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME DIRECT2M.EXEC:36 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+/*---------------------------------------------------------------+
+| Determine the sortorder                                        |
++---------------------------------------------------------------*/
+Select
+When what=''      Then sortparm='| sort w3.1 d'
+When what='HI-LO' Then sortparm='| sort w3.1 d'
+When what='LO-HI' Then sortparm='| sort w3.1 a'
+When what='A-Z'   Then sortparm='| sort w1.1 a'
+When what='Z-A'   Then sortparm='| sort w1.1 d'
+When what='CUU-D' Then sortparm='| specs w1;* 1 pad 0 w2.1 nw.6 right| specs w1.4 1 pad 0 w5.1 x2d nw.6 right| sort w5.1 d'
+When what='CUU-A' Then sortparm='| specs w1;* 1 pad 0 w2.1 nw.6 right| specs w1.4 1 pad 0 w5.1 x2d nw.6 right| sort w5.1 a'
+Otherwise Call Exit '99 Invalid input 'what
+End
+/*---------------------------------------------------------------+
+| Access the work space                                          |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK WORK (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| Access the CP directory                                        |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK DIRECT (QUIET .fm'
+If rc=0 Then Parse Pull . . dfm .
+        Else Call Exit rc' Problem linking DIRECT'
+/*---------------------------------------------------------------+
+| Create heading                                                 |
++---------------------------------------------------------------*/
+hdr='Userid   CUU  Cyls    MB'
+/*---------------------------------------------------------------+
+| Read USER DIRECT and process the items                         |
++---------------------------------------------------------------*/
+'PIPE (NAME DIRECT2M.EXEC:74 END ?)',
+  '< USER DIRECT 'dfm,                           /* Read this        */
+  '| specs 1.70',                                /* Remove line nos  */
+  '| strip',                                     /* Remove space     */
+  '| p1:',                                       /* Make             */
+        'pick anycase',                          /* .selectoin       */
+        'w1.1',                                  /* .                */
+        '== ~USER~',                             /* .                */
+        'or w1.1',                               /* .                */
+        '== ~IDENTITY~',                         /* .                */
+        'or w1.1',                               /* .                */
+        '== ~SUBCONFIG~',                        /* .                */
+  '| specs w2.1 1.9',                            /* Keep this        */
+  '| j1: juxtapose',                             /* Add mdisk & size */
+  '| p2: pick anycase w6.1 \== ~END~',           /* Take out these   */
+  '| specs',                                     /* Adjust layout    */
+          'w1.1 1.8',                            /* .                */
+          'w3.1 NW.4 RIGHT',                     /* .                */
+          'PAD 0',                               /* .                */
+          'w6.1 NW.6 RIGHT',                     /* .                */
+  '| buffer',                                    /* Prevent stall    */
+  '| fi: fanin',                                 /* Take in others   */
+  '| specs w1.1 1.8',                            /* Calculate        */
+          'w2.1 nw.4 right',                     /* .                */
+          'w3.1 nw',                             /* .                */
+          'a: w3.1 .',                           /* .Mbs             */
+          'set #0:=(a*150*4096)/(1024*1024)',    /* .                */
+          'print #0 pict ----9.99999 nw',        /* .                */
+  sortparm,                                      /* Sort on size     */
+  '| stem content.',                             /* Hand 2 rexx      */
+  '| specs',                                     /* Totalize         */
+         'printonly eof',                        /* .the             */
+         'a: w3.1 .',                            /* ..numbers        */
+         'b: w4.1 .',                            /* .                */
+         'set (#0+=a;#1+=b)',                    /* .                */
+         'eof',                                  /* .                */
+         '~Totals:~ 1',                          /* .                */
+         'print #0 pict -------9 15',            /* .                */
+         'print #1 pict ------9.99999 nw',       /* .                */
+  '| specs 1;* 1 w3.1 nw ~M~ n',                 /* Copy Mbs         */
+  '| siconv w4.1 m2g',                           /* Convert 2 Gbs    */
+  '| var totals',                                /* Hand 2 rexx      */
+  '? p1:',                                       /* Conn 2 pick      */
+  '| pick anycase substr 1.2 of w1.1 == ~MD~',   /* Select MDISKs    */
+  '| j1:',                                       /* Conn 2 juxtapose */
+  '? p2:',                                       /* Conn 2 pick      */
+  '| buffer',                                    /* Prevent stall    */
+  '| f: fanout',                                 /* Dupl. records    */
+  '| specs',                                     /* Adjustlayout     */
+          'w1.1 1.8',                            /* .                */
+          'w3.1 NW.4 RIGHT',                     /* .                */
+          'x40 N',                               /* .                */
+  '| j2: juxtapose',                             /* Join other info  */
+  '| fi:',                                       /* Conn 2 fanin     */
+  '? f:',                                        /* Conn 2 fanout    */
+  '| specs ~QUERY DASD~ 1 w7.1 nw',              /* Compose cmds     */
+  '| cp',                                        /* Issue them       */
+  '| specs ~QUERY DASD DETAILS~ 1 w2.1 nw',      /* Compose new cmds */
+  '| cp',                                        /* Issue them       */
+  '| pick anycase w2.1 == ~CUTYPE~',             /* Select these     */
+  '| specs pad 0 w-1;-1 1.6 right',              /* Adjust layout    */
+  '| j2:'                                        /* Conn 2 juxtapose */
+/*---------------------------------------------------------------+
+| Remove access to USER DIRECT                                   |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK MAINT 2CC <DET (NON QUIET'
+/*---------------------------------------------------------------+
+| Prepare report                                                 |
++---------------------------------------------------------------*/
+hdr=Substr(hdr,1,34)
+hdr=hdr'| 'hdr'| 'hdr'| 'hdr
+'PIPE (NAME DIRECT2M.EXEC:145 END ?)',
+  'stem content.',                               /* Take these       */
+  '| specs w1.2 1',                              /* Adjust layout    */
+          'a: w3.1 .',                           /* .                */
+          'set #0:=a+0',                         /* .                */
+          'print #0 picture ------9 nw',         /* .                */
+          'w4.1 nw.11 right',                    /* .                */
+  '| specs 1;* 1 x404F40 n',                     /* Add this 2 end   */
+  '| snake 4',                                   /* Make columns     */
+  '| strip trailing anyof x404F',                /* Remove these     */
+  '| preface var hdr',                           /* Add some stuff   */
+  '| preface literal ',                          /* .                */
+  '| preface var totals',                        /* .                */
+  '| preface literal                Cyls    MB            GB',   /* .                */
+  '| > 'myfn' OUTPUT 'wfm                        /* Write 2 file     */
+/*---------------------------------------------------------------+
+| Edit the report and erase after viewing                        |
++---------------------------------------------------------------*/
+Queue ':1'
+Address CMS 'XEDIT 'myfn' OUTPUT 'wfm
+Address CMS 'ERASE 'myfn' OUTPUT 'wfm
+/*---------------------------------------------------------------+
+| Remove the workspace                                           |
++---------------------------------------------------------------*/
+If wfm<>'A' Then Address CMS 'VMLINK WORK <DET (WRITE QUIET'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc

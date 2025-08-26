@@ -1,0 +1,23 @@
+/*---------------------------------------------------------------+
+| Function : List the content of my work directory               |
+|                                                                |
+| File     : LW       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : LW       .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250709 14:32:05                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft .
+If fn='' Then fn='*'
+If ft='' Then ft='*'
+'VMLINK .DIR .WORK. (NON QUIET FILEL 'fn ft' .fm'
+'PIPE stack | hole'

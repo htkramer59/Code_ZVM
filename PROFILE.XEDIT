@@ -5,15 +5,18 @@
 +---------------------------------------------------------------------+
 | Version  : 1.1.0                                                    |
 |                                                                     |
-| Files    : .                                                        |
+| Files    : DEFAULTS XEDITSET                                        |
+|            <userid> XEDITSET                                        |
 |                                                                     |
 | Called   : N/A                                                      |
 |                                                                     |
 | Comments : .                                                        |
 |                                                                     |
-| Author   : H.T.Kramer, ICU-IT Almere                                |
+| Author   : H.T.Kramer                                               |
 | Created  : 20120316 11:16:41                                        |
 | Changes  : .                                                        |
+|            20250623 H.T.Kramer : Rework to have setting in an       |
+|                                  input file                         |
 |            20210428 H.T.Kramer : Rework of the PROFILE XEDIT        |
 |            20191108 H.T.Kramer : Update to activate FMTP from MANY  |
 |                                                                     |
@@ -21,48 +24,41 @@
 'SET LINEND OFF'
 'EXTRACT /RECFM/TRUNC/LRECL/FNAME/FTYPE/FMODE'
 /*---------------------------------------------------------------+
-| Define the control char and colors we are going to use...      |
+| Check if my personal input file exists                         |
 +---------------------------------------------------------------*/
-ctlchars='% ESCAPE;',
-         'Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;',
-         'W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;',
-         'B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;',
-         'G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;',
-         'R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;',
-         '$ OFF'
-/*--------------------------------------------------------------------+
-| Set the synonyms to use the MANY macro                              |
-+--------------------------------------------------------------------*/
-prefix='BOX COM DCM HD MC TAG PN PIPE IF DO SAV FIL NUL TR Z',
-       'PBOX T TS B N CEN LEF RIG UPP LOW ANC UL OL TBL PCM',
-       'SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT',
-       'VSPEC MARK'
+myname=Userid()
+'PIPE (NAME PROFILE.XEDIT:30 END ?)',
+  'literal 'myname' XEDITSET *',                 /* Compose name     */
+  '| state',                                     /* Does it exist    */
+  '| count lines',                               /* How many         */
+  '| var inpfound'                               /* Hand 2 rexx      */
 /*---------------------------------------------------------------+
-| commandline synonymns to use the MANY macro                    |
+| Do we use defaults or a personal input file                    |
 +---------------------------------------------------------------*/
-cmdl='HD MC PIPNM NODE START RXHLP RXEXT RXTS'
+If \inpfound Then Do
+                  myname='DEFAULTS'
+                  Say 'Using DEFAULTS XEDITSET'
+                  End
+             Else Say 'Using 'myname' XEDITSET'
 /*---------------------------------------------------------------+
-| Other synonyms                                                 |
+| Read the input file...                                         |
 +---------------------------------------------------------------*/
-othsyn='F  1 FORWARD;FI 2 FIND;BO 2 BOTTOM;B  1 BACKWARD;SYN E  1 X'
-/*---------------------------------------------------------------+
-| Settings...                                                    |
-+---------------------------------------------------------------*/
-settings='LINEND ON #;NONDISP ?;HEX ON;CMDLINE TOP;',
-         'CURLINE ON 4;MSGLINE ON 3 1 OVERLAY;',
-         'PREFIX NULLS LEFT;COLOR PREFIX BLUE;COLOR FILEAR YELLOW;',
-         'VERIFY 1 *;ZONE 1 *;REMOTE ON;NULLS ON;STAY ON;',
-         'SPILL WORD;SCALE ON 3;TEXT ON;NUMBER ON;AUTOSAVE 10;CASE MIXED IGNORE'
-/*--------------------------------------------------------------------+
-| Set my PF keys, using 1 to 12, separated by ;                       |
-+--------------------------------------------------------------------*/
-pfkeys='HELP; ;ONLY SET MSGMODE OFF#QUIT#SET MSGMODE ON#FILE;SPLTJOIN;RGTLEFT;SCREEN 2;BACKWARD;FORWARD; ;',
-       'TOP#NEXT;BOT#BACKWARD#NEXT 2;ONLY QUIT'
-pfkeyline='Help;_;File;Sp/Jn;<->;Scr2;Back;Forw;_;Top;Bot;Quit'
+'PIPE (NAME PROFILE.XEDIT:46 END ?)',
+    '< 'myname' XEDITSET *',                     /* Read the file    */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~ and',                    /* Ignore these     */
+           '1.1 \== ~~',                         /* .                */
+    '| join * ~;~',                              /* Make 1 record    */
+    '| change ~;;~;~',                           /* Replace these    */
+    '| split before string ~:~',                 /* Split here       */
+    '| xlate fs . f1',                           /* Uppercase 1st prt*/
+    '| change ~:~/~ 1',                          /* Replace these    */
+    '| change ~.~/~ 1',                          /* and these        */
+    '| varload'                                  /* Hand 2 rexx      */
 /*---------------------------------------------------------------+
 | Do the PF key settings                                         |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME PROFILE.XEDIT:64 END ?)',
+Address CMS 'PIPE (NAME PROFILE.XEDIT:61 END ?)',
     'var pfkeys',                                /* Take these       */
     '| dup 1',                                   /* Duplicate        */
     '| split at ;',                              /* Split here       */
@@ -76,8 +72,8 @@ Address CMS 'PIPE (NAME PROFILE.XEDIT:64 END ?)',
     '| split at ;',                              /* Split here       */
     '| specs ~SET CTLCHAR~ 1 1;* nw',            /* Compose cmds     */
     '| fi:'                                      /* Conn 2 faninany  */
-Address CMS 'PIPE (NAME PROFILE.XEDIT:93 END ?)',
-     'var pfkeyline',                            /* Take this        */
+Address CMS 'PIPE (NAME PROFILE.XEDIT:75 END ?)',
+     'var pfkeylabels',                          /* Take this        */
      '| split at ;',                             /* Split here       */
      '| specs recno 1.2',                        /* Compose          */
              '~=%G~ n',                          /* ...setting       */
@@ -90,16 +86,23 @@ Address CMS 'PIPE (NAME PROFILE.XEDIT:93 END ?)',
 /*---------------------------------------------------------------+
 | Do the settings...synonyms and others                          |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME PROFILE.XEDIT:107 END ?)',
-     'var prefix',                               /* Take this        */
-     '| split',                                  /* Split in records */
-     '| specs ~SET PREFIX SYNONYM~ 1 w1.1 nw ~MANY~ nw',
+Address CMS 'PIPE (NAME PROFILE.XEDIT:89 END ?)',
+     'var synonyms_4_prefix',                    /* Take this        */
+     '| split at ;',                             /* Split in records */
+     '| specs',                                  /* .                */
+             '~SET PREFIX',                      /* Compose cmds     */
+             'SYNONYM~',                         /* .                */
+             '1 w1.1 NW',                        /* .                */
+             '~MANY~ NW',                        /* .                */
      '| fi: faninany',                           /* Take in others   */
      '| subcom xedit',                           /* Hand it to XEDIT */
      '?',                                        /* Start 2nd PIPE   */
-     'var cmdl',                                 /* Take this        */
-     '| split',                                  /* Split in records */
-     '| specs ~SET SYNONYM~ 1 w1.1 nw ~MANY~ nw',  /* Compose setting  */
+     'var synonyms_4_commandline',               /* Take this        */
+     '| split at ;',                             /* Split in records */
+     '| specs',                                  /* Compose setting  */
+             '~SET SYNONYM~ 1',                  /* .                */
+             'w1.1 NW',                          /* .                */
+             '~MANY~ NW',                        /* .                */
      '| fi:',                                    /* Conn. 2 faninany */
      '?',                                        /* 3rd PIPE         */
      'var settings',                             /* Take this        */
@@ -107,7 +110,7 @@ Address CMS 'PIPE (NAME PROFILE.XEDIT:107 END ?)',
      '| specs ~SET~ 1 1;* nw',                   /* Compose setcmds  */
      '| fi:',                                    /* Conn 2 faninany  */
      '?',                                        /* 4th PIPE         */
-     'var othsyn',                               /* Take this        */
+     'var synonyms_other',                       /* TAKE THIS        */
      '| split at ;',                             /* Split here       */
      '| specs ~SET SYNONYM~ 1 1;* nw',           /* Compose cmds     */
      '| fi:'                                     /* Conn 2 faninany  */

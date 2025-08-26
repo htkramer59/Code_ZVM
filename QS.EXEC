@@ -43,6 +43,7 @@
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20180220 11:17:02                                   |
 | Changes  : .                                                   |
+|            20250630 H.T.Kramer : Fixed counting error          |
 |            20220316 H.T.Kramer : Fixed problem with split      |
 |                 lines when adding a marker, removed the        |
 |                 need to EXECLOAD multiple times.               |
@@ -240,7 +241,7 @@ If work.0<>0  Then Do
                  'append literal ',              /* Add empty        */
                  '| append literal Queue  Percentages',   /* Add header       */
                  '| append stem q.',             /* Insert data      */
-                 '| append literal Total 'Right(totperc,14) Format(totperc,,0),   /* Add total        */
+                 '| append literal Total 'Right(totperc,14) Format(totperc,,0)'%', /* Add total        */
                  '| append literal ',            /* Add empty        */
                  '| append stem work.',          /* Insert overview  */
                  '| xedit 'myfn' $TEMP$ A'       /* Into xedit       */
@@ -410,10 +411,10 @@ Address CMS 'PIPE (NAME QS.EXEC:395 END ?)',
  
 Address CMS 'PIPE (NAME QS.EXEC:411 END ?)',
     'literal ',                                  /* Add empty        */
-    '| append literal No files: 'main.0-1||,     /* Add some details */
-                    ' Open files: 'openfiles||,  /* .                */
-                    ' Closed files: 'main.0-openfiles-1||,   /* .                */
-                    ' Available space: 'availblks,   /* .                */
+    '| append literal No files: 'main.0-2||,     /* Add some details */
+                    '. Open files: 'openfiles||,  /* .                */
+                    '. Closed files: 'main.0-openfiles-2||,   /* .                */
+                    '. Available space: 'availblks,   /* .                */
     '| append literal ',                         /* Add empty        */
     '| append stem sum.',                        /* Take summary     */
     '| append literal ',                         /* Add empty        */

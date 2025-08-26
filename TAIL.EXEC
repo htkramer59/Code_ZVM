@@ -1,0 +1,75 @@
+/*---------------------------------------------------------------+
+| Function : Mimic linux TAIL                                    |
+|                                                                |
+| File     : TAIL     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TAIL     <switch> <count> <file>                    |
+|                                                                |
+|                     <switch> If -n you specify the no of       |
+|                              lines to display/return,          |
+|                              if -c you specify the no if       |
+|                              bytes to display/return           |
+|                     <count>  A positive number                 |
+|                     <file>   A valid filename/filetype/filemode|
+|                                                                |
+| Comments : Issue EXECLOAD TAIL EXEC * = REXX and this          |
+|            can be used as a PIPE stage                         |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250711 13:45:17                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg switch count file
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Value file With fn ft fm .
+If fm='' Then fm='A'
+If ft='' Then Call Exit '128 No valid filetype entered'
+If fn='' Then Call Exit '28 No valid filename entered'
+/*---------------------------------------------------------------+
+| Choose actions depending on how we are called                  |
++---------------------------------------------------------------*/
+Select
+When myft='REXX' Then Do
+                      pipecmd='CALLPIPE'
+                      pipout='| *:'
+                      End
+When myft='EXEC' Then Do
+                      pipecmd='PIPE'
+                      pipout='| cons'
+                      End
+Otherwise Call Exit '99 Can not handle 'myft
+End
+/*---------------------------------------------------------------+
+| Do we return bytes or lines/records                            |
++---------------------------------------------------------------*/
+Select
+When switch='-C' Then switch='BYTES'
+When switch='-N' Then switch=''
+Otherwise Call Exit '98 Can not handle 'switch
+End
+/*---------------------------------------------------------------+
+| Read the file and show what was asked                          |
++---------------------------------------------------------------*/
+pipecmd' (NAME TAIL.EXEC:61 END ?)',
+  '< 'file,
+  '| take last 'count switch,
+  pipout
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 

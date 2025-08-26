@@ -3,7 +3,7 @@
 |                                                                |
 | File     : DM_DMD   EXEC                                       |
 +----------------------------------------------------------------+
-| Version  : 1.1.0                                               |
+| Version  : 1.2.0                                               |
 |                                                                |
 | Files    : DM_VMLNK EXEC     To link items in DM NAMES         |
 |            VMLINK   EXEC     To link other disks               |

@@ -1,4 +1,21 @@
-/**/
+/*---------------------------------------------------------------+
+| Function : List the content of my status directory             |
+|                                                                |
+| File     : LS       EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : LS       .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250709 14:32:24                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
 Parse Upper Arg fn ft .
 If fn='' Then fn='*'
 If ft='' Then ft='*'

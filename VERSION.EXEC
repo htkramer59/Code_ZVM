@@ -1,0 +1,133 @@
+/*---------------------------------------------------------------+
+| Function : Change the version.release.level of code            |
+|                                                                |
+| File     : VERSION  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINK   EXEC                                       |
+|            REPLACE  EXEC                                       |
+|                                                                |
+| Called   : VERSION  <fn> <ft> <fm> <version> '(' <test>        |
+|                     <fn>    filename, can be a wildcard        |
+|                     <ft>    filetype, can be a wildcard,       |
+|                             defaults to EXEC                   |
+|                     <fm>    filemode, can be a wildcard        |
+|                             defaults to A                      |
+|                     <version> format is v.r.l                  |
+|                               v can be numeric, =, - or +      |
+|                               r can be numeric, =, - or +      |
+|                               l can be numeric, =, - or +      |
+|                     when = is specified the current nr         |
+|                            will be kept                        |
+|                     when - is specified it will be the         |
+|                            current nr minus 1                  |
+|                     when + is specified it will be the         |
+|                            current nr plus  1                  |
+|                     <test> switches from test to working       |
+|                                                                |
+|                                                                |
+| Comments : Need a header like found in this exec               |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250701 12:48:32                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg fn ft fm  version '(' test
+Parse Source . . myfn myft .
+If fn='?' Then Do
+            'VMFCLEAR'
+             'PIPE (NAME VERSION.EXEC:41 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+If fn='' Then Exit 28
+If ft='' Then ft='EXEC'
+If fm='' Then fm='A'
+fm=Substr(fm,1,1)
+If version='' Then version='=.+.='
+If test<>'' Then test=0
+            Else test=1
+Address CMS 'VMLINK WORK (QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+rw_disk=0
+'PIPE (NAME VERSION.EXEC:61 END ?)',
+  'cms QUERY DISK 'fm,
+  '| drop first 1',
+  '| pick w4.1 == ~R/W~',
+  '| count lines',
+  '| var rw_disk tracking'
+If \rw_disk Then Call Exit 99 'Mdisk 'fm' is readonly'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME VERSION.EXEC:71 END ?)',
+  'cms LISTFILE 'fn ft fm' (NOH ISODATE',
+  '| specs w1.3 1',
+  '| stem file.'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Do f=1 To file.0
+  curversion=''
+  'PIPE (NAME VERSION.EXEC:80 END ?)',
+     '< 'file.f,
+     '| stem content.',
+     '| pick anycase w1.1 == x4F and',
+                    'w2.1 == ~Version~ and',
+                    'w3.1 == ~:~',
+     '| specs w4.1 1',
+     '| var curversion tracking'
+  If curversion<>'' Then Do
+                          Parse Value version With nv'.'nr'.'nl .
+                          Parse Value curversion With v'.'r'.'l .
+                          If nv='=' Then nv=v
+                          If nv='+' Then nv=v+1
+                          If nv='-' Then nv=v-1
+                          If nr='=' Then nr=r
+                          If nr='+' Then nr=r+1
+                          If nr='-' Then nr=r-1
+                          If nl='=' Then nl=l
+                          If nl='+' Then nl=l+1
+                          If nl='-' Then nl=l-1
+  Say file.f curversion' >> 'newversion
+                          newversion=nv'.'nr'.'nl
+                          If \test Then Call Update_Version
+                                   Else Say 'Test: 'file.f ':' curversion '>>' newversion
+                          End
+                   Else Say 'No version info in 'file.f
+End f
+If wfm<>'A' Then Address CMS 'VMLINK WORK <DET (QUIET'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Update_Version:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+ Say file.f curversion' >> 'newversion
+'PIPE (NAME VERSION.EXEC:125 END ?)',
+  'stem content.',
+  '| change ~'curversion'~'newversion'~ 1',
+  '| > 'subword(file.f,1,2) wfm
+Address CMS 'REPLACE 'Subword(file.f,1,2) wfm fm' (NOKEEP'
+Return
+ 
+ 
+ 

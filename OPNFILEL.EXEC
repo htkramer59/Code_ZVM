@@ -1,4 +1,21 @@
-/**/
+/*---------------------------------------------------------------+
+| Function : Filelist for OPENVM                                 |
+|                                                                |
+| File     : OPNFILEL EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : OPNFILEL <dir2show>                                 |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250706 14:37:51                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
 Parse Arg dir2show .
 If dir2show='' Then dir2show='VMSYS:ROOT.'
 Address CMS 'VMLINK .DIR 'dir2show' (NONAMES QUIET FILEL '

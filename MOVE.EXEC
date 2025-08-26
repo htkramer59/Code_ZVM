@@ -1,4 +1,21 @@
-/**/
+/*---------------------------------------------------------------+
+| Function : Move a file from 1 filemode to an other             |
+|                                                                |
+| File     : MOVE     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : MOVE     <fn> <ft> <fm> <newfm>                     |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250706 14:37:01                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
 Parse Upper Arg fn ft fm ofm' ('replace
 If fn='' Then Exit 28
 If ft='' Then Exit 128

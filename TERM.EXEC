@@ -1,4 +1,22 @@
-/**/
+/*---------------------------------------------------------------+
+| Function : Switch TERM setting between MORE 10 and MORE 0,     |
+|            HOLD ON and HOLD OFF                                |
+|                                                                |
+| File     : TERM     EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.0.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : TERM     .                                          |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250706 14:38:42                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
 'PIPE (end ?)',
      'cp Q TERM',
      '| split at ,',

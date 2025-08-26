@@ -1,4 +1,0 @@
-/* Closes the console and opens the lastest file in CONPARK for me */
-Address COMMAND 'CP CLOSE CONS'
-Address COMMAND 'CP SLEEP 2 SEC'
-Address CMS 'CONPARK * 1'

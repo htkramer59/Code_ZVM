@@ -3,7 +3,7 @@
 |                                                                |
 | File     : CLNNETLG EXEC                                       |
 +----------------------------------------------------------------+
-| Version  : 1.1.0                                               |
+| Version  : 1.2.0                                               |
 |                                                                |
 | Files    : .                                                   |
 |                                                                |
@@ -14,28 +14,52 @@
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20220523 15:51:04                                   |
 | Changes  : .                                                   |
+|            20250805 H.T.Kramer : Changed so we only write      |
+|                     the netlog when we remove items.           |
 |                                                                |
 +---------------------------------------------------------------*/
 Parse Upper Arg days . '(' dryrun .
 Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Default no of days to keep the content                         |
++---------------------------------------------------------------*/
 If days='' Then days=90
+Say TimeStamp()' No of days netlog to keep: 'days
+/*---------------------------------------------------------------+
+| Are we testing or are we doing it for real                     |
++---------------------------------------------------------------*/
 If dryrun='' Then cmsout='| cons'
              Else cmsout='| > 'Userid()' NETLOG A'
+/*---------------------------------------------------------------+
+| Calculate the cut-off date                                     |
++---------------------------------------------------------------*/
 cutoff=Date('B',Date('S'),'S')-days
 cutoff=Date('S',cutoff,'B')
+/*---------------------------------------------------------------+
+| Read the file and put stuff to keep and remove in a stem       |
++---------------------------------------------------------------*/
 remove.0=0
-'PIPE (NAME CLNNETLG.EXEC:27 END ?)',
+'PIPE (NAME CLNNETLG.EXEC:42 END ?)',
    '< 'Userid()' NETLOG A',                      /* Read this        */
    '| specs w11.1 1 w1;* nw',                    /* Copy date        */
    '| change w1.1 ~-~~',                         /* Shorten date     */
    '| p: pick w1.1 > ~'cutoff'~',                /* Select older ones*/
    '| specs w2;* 1',                             /* Remove short date*/
-   cmsout,                                       /* Show or wrtie    */
+   '| stem keep.',                               /* Show or wrtie    */
    '? p:',                                       /* Conn 2 pick      */
    '| stem remove.'
  
-If remove.0<>0 Then 'PIPE (NAME CLNNETLG.EXEC:37 END ?)',
-   'stem remove.',
-   '| preface literal 'myfn' Removing entries older than 'cutoff,   /* Add hdr          */
-   '| cons'                                      /* Show             */
+If remove.0<>0 Then Do
+   'PIPE (NAME CLNNETLG.EXEC:53 END ?)',
+     'stem remove.',                             /* Take these       */
+     '| preface literal 'TimeStamp()' Removing entries older than 'cutoff,   /* Add hdr          */
+     '| cons',                                   /* Show             */
+     '?',                                        /* 2nd pipe         */
+     'stem keep.',                               /* Take these       */
+     cmsout                                      /* Write/Display    */
+   End
+   Else Say TimeStamp()' Nothing to remove'
 Exit
+ 
+TimeStamp:
+Return Date('S') Time() myfn

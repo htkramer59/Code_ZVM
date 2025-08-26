@@ -20,7 +20,7 @@
 |                        P = Peta                       5        |
 |                        E = Exa                        6        |
 |                        Z = Zetta                      7        |
-|                        Z = Yotta                      8        |
+|                        Y = Yotta                      8        |
 |                                                                |
 |            When called as function the return code is the      |
 |            number of Cylinders                                 |
@@ -32,6 +32,7 @@
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20181122 17:02:51                                   |
 | Changes  : .                                                   |
+|            20250630 H.T.Kramer : Small textual error           |
 |                                                                |
 +---------------------------------------------------------------*/
 Parse Upper Arg size .
@@ -43,7 +44,7 @@ unit=1024         /* unit size of 1 K byte */
 If size=''  Then Call Exit 28
 If size='?' Then Do
                  'VMFCLEAR'
-                 'PIPE (end ?)',
+                 'PIPE (NAME SIZE2CYL.EXEC:47 END ?)',
                       '< 'myfn myft' *',
                       '| tolabel Parse',
                       '| cons'

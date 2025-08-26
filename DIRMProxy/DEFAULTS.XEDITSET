@@ -1,0 +1,42 @@
+** Default XEDIT settings
+**---------------------------------------------------------------*
+* Define the control char and colors we are going to use...      *
+*---------------------------------------------------------------**
+:ctlchars.% ESCAPE;
+         Y PROTECT   YELLOW HIGH;y NOPROTECT YELLOW HIGH;
+         W PROTECT   WHITE  HIGH;w NOPROTECT WHITE  HIGH;
+         B PROTECT   BLUE   HIGH;b NOPROTECT BLUE   HIGH;
+         G PROTECT   GREEN  HIGH;g NOPROTECT GREEN  HIGH;
+         R PROTECT   RED    HIGH;r NOPROTECT RED    HIGH;
+         $ OFF
+ 
+**---------------------------------------------------------------*
+* Set the synonyms to use the MANY macro                         *
+*---------------------------------------------------------------**
+:synonyms_4_prefix.BOX COM DCM HD MC TAG PN PIPE IF DO SAV FIL NUL TR Z
+       PBOX T TS B N CEN LEF RIG UPP LOW ANC UL OL TBL PCM
+       SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT
+       VSPEC MARK
+ 
+**---------------------------------------------------------------*
+* commandline synonymns to use the MANY macro                    *
+*---------------------------------------------------------------**
+:synonyms_4_commandline.HD MC PIPNM NODE START RXHLP RXEXT RXTS
+**---------------------------------------------------------------*
+* Other synonyms                                                 *
+*---------------------------------------------------------------**
+:synonyms_other.F  1 FORWARD;FI 2 FIND;BO 2 BOTTOM;B  1 BACKWARD;SYN E  1 X
+**---------------------------------------------------------------*
+* Settings...                                                    *
+*---------------------------------------------------------------**
+:settings.LINEND ON #;NONDISP ?;HEX ON;CMDLINE TOP;
+         CURLINE ON 4;MSGLINE ON 3 1 OVERLAY;
+         PREFIX NULLS LEFT;COLOR PREFIX BLUE;COLOR FILEAR YELLOW;
+         VERIFY 1 *;ZONE 1 *;REMOTE ON;NULLS ON;STAY ON;
+         SPILL WORD;SCALE ON 3;TEXT ON;NUMBER ON;AUTOSAVE 10;CASE MIXED IGNORE
+**---------------------------------------------------------------*
+* Set my PF keys, using 1 to 12, separated by ;                  *
+*---------------------------------------------------------------**
+:pfkeys.HELP; ;ONLY SET MSGMODE OFF#QUIT#SET MSGMODE ON#FILE;SPLTJOIN;RGTLEFT;SCREEN 2;BACKWARD;FORWARD; ;
+       TOP#NEXT;BOT#BACKWARD#NEXT 2;ONLY QUIT
+:pfkeylabels.Help;_;File;Sp*Jn;<->;Scr2;Back;Forw;_;Top;Bot;Quit

@@ -31,6 +31,8 @@ If rc=0 Then Parse Pull . . ofm .
              Else Call Exit rc 'Tools DISK not accessible'
 If what='RUN' Then cmsout='| cms | cons'
               Else cmsout=''
+If what='' Then Say 'Running in explorative mode'
+           Else Say 'Executing copy'
  
 'PIPE (NAME TOOLS2DS.EXEC:35 END ?)',
     'cms LISTFILE * * 'ifm' (NOH ISODATE',

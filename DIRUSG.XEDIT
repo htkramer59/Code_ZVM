@@ -9,7 +9,7 @@
 |                                                                |
 | Called   : DIRUSG   .                                          |
 |                                                                |
-| Comments : .                                                   |
+| Comments : Can only be used from DIRLIST                       |
 |                                                                |
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20190719 12:37:05                                   |
@@ -22,6 +22,11 @@
 /*---------------------------------------------------------------+
 | Get all the lines from the dirlist                             |
 +---------------------------------------------------------------*/
+Address CMS 'PIPE var execname 1 | var calledfrom'
+If calledfrom<>'DIRLIST' Then Do
+                              Say 'Can only run from DIRLIST'
+                              Exit 99
+                              End
 Address CMS 'PIPE (NAME DIRUSG.XEDIT:25 END ?)',
    'xedit ',                                    /* Read all lines   */
    '| specs substr w1.1 of 10;*',               /* Keep only dirname*/

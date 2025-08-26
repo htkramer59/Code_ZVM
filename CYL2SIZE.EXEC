@@ -20,18 +20,19 @@
 |                        P = Peta                       5        |
 |                        E = Exa                        6        |
 |                        Z = Zetta                      7        |
-|                        Z = Yotta                      8        |
+|                        Y = Yotta                      8        |
 |                                                                |
 |            When called as function the return code is the      |
 |            number of Cylinders                                 |
 |                                                                |
-| Example  : size2cyl 12g                                        |
+| Example  : cyl2size 3000                                       |
 | Output   :                                                     |
-| 12G = 12 GigaBytes = 17476 Cylinders = 3145728 4K blocks       |
+| 3000 cyls=2109.375M                                            |
 |                                                                |
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20181122 17:02:51                                   |
 | Changes  : .                                                   |
+|            20250701 H.T.Kramer : Small correction to text      |
 |                                                                |
 +---------------------------------------------------------------*/
 Parse Upper Arg size si_unit .
@@ -43,7 +44,7 @@ unit=1024         /* unit size of 1 K byte */
 If size=''  Then Call Exit 28
 If size='?' Then Do
                  'VMFCLEAR'
-                 'PIPE (end ?)',
+                 'PIPE (NAME CYL2SIZE.EXEC:47 END ?)',
                       '< 'myfn myft' *',
                       '| tolabel Parse',
                       '| cons'

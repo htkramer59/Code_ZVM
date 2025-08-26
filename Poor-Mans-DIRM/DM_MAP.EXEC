@@ -3,7 +3,7 @@
 |                                                                |
 | File     : MAP      EXEC                                       |
 +----------------------------------------------------------------+
-| Version  : 1.1.0                                               |
+| Version  : 1.2.0                                               |
 |                                                                |
 | Files    : USER     DIRECT    input                            |
 |            USER     MDISKMAP  output, depends on arguments     |

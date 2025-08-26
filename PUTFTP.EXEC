@@ -1,0 +1,254 @@
+/*---------------------------------------------------------------+
+| Function : Shell around FTP put/mput...                        |
+|                                                                |
+| File     : PUTFTP   EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : VMLINKIP EXEC  Determine IP address                 |
+|            VMLINK   NAMES Control file 4 VMLINKIP & this       |
+|            NETRC    DATA  FTP related file                     |
+|                                                                |
+| Called   : PUTFTP   <fn>.<ft>.<fm> <node> <nwfn>.<nwft>.<nwfm> |
+|                     ( <options>                                |
+|                                                                |
+|            <fn>      file name                                 |
+|            <ft>      file type                                 |
+|            <fm>      file mode, can be a single letter,        |
+|                      filespace/dir combo or <user>.<mdisk>     |
+|            <node>    the node where the file resides           |
+|            <nwfn>    new file name if ommited <fn> is used     |
+|            <nwft>    new file type if ommited <ft> is used     |
+|            <nwfm>    new file mode if ommited defaults to A    |
+|            <options> options for the ftp get command           |
+|                      can be VERBOSE for more details and/or    |
+|                      REPLACE to replace the new file           |
+|                                                                |
+|                                                                |
+| Comments : Wildcards are allowed and will invoke MPUT          |
+|            <node> can be any item from VMLINK NAMES or         |
+|            ALL.                                                |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20190205 07:45:51                                   |
+| Changes  : .                                                   |
+|            20250709 H.T.Kramer : Made this work for Linux      |
+|                     targets as well                            |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Arg fnftfm tonode locfnftfm '(' options
+Parse Source . how myfn myft .
+Say TimeStamp()
+who=Userid()
+'PIPE (NAME PUTFTP.EXEC:43 END ?) var who | xlate low | var who'
+Call Checks
+Call DetermSetting
+/*---------------------------------------------------------------+
+| Where to....and complete the ip                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINKIP 'tonode
+If ip.0=0 | ip.0='IP.0' Then Exit 928
+Call CreateNetRc
+/*---------------------------------------------------------------+
+| Now start copying...                                           |
++---------------------------------------------------------------*/
+Do i=1 To ip.0
+  Say TimeStamp() 'Sending file: 'fn ft 'to 'lpar.i
+  ip=ip.i                                       /* Prep for FTP     */
+  portno=portno.i
+  ftpoptions=ftpoptions.i
+  ostype=ostype.i
+  Call RunFtp
+End i
+/*---------------------------------------------------------------+
+| Clean up and exit                                              |
++---------------------------------------------------------------*/
+Address CMS 'ERASE NETRC DATA A (NOTYPE'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Checks:
+/*---------------------------------------------------------------+
+| Do some checks and settings...                                 |
++---------------------------------------------------------------*/
+If fnftfm='' Then Call Exit '128 No filename specified'
+If fnftfm='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME PUTFTP.EXEC:85 END ?)',
+             '< 'myfn myft' *',                  /* Read myself      */
+             '| tolabel Parse',                  /* Up to here       */
+             '| cons'                            /* Show             */
+          Call Exit
+          End
+/*---------------------------------------------------------------+
+| Is it a filemode, directory or mdisk                           |
++---------------------------------------------------------------*/
+Parse Value fnftfm With fn '.' ft '.' fm .
+If fm='' Then fm='A'
+Select
+When Length(fm)=1 Then Do
+     'PIPE (NAME PUTFTP.EXEC:98 END ?)',
+        'cms QUERY ACCESSED 'fm,                 /* Check this       */
+        '| drop first 1',                        /* Remove hdr       */
+        '| specs w4.2',                          /* Keep this        */
+        '| if: if pick w1.1 == ~DIR~',           /* If dir then      */
+        '|      specs ~CD~ 1 w2.1 nw',           /* .compose CD cmd  */
+        '| if:',                                 /* Else             */
+        '|      specs ~QUERY MDISK~ 1 w1.1 nw',  /* Ask this         */
+        '|      cp',                             /* .                */
+        '|      drop first 1',                   /* Remove hdr       */
+        '|      specs ~CD~ 1',                   /* .compose CD cmd  */
+                     'w-2;-2 nw',                /* .                */
+                     '~.~ n',                    /* .                */
+                     'w-1;-1 n',                 /* .                */
+        '| if:',                                 /* Conn 2 if        */
+        '| var cdcmd'                            /* Hand 2 rexx      */
+     End
+When Length(fm)>1 &,
+     Pos(':',fm)<>0 Then Do
+     cdcmd='CD 'fm
+     End
+When Length(fm)>1 &,
+     Pos(':',fm)=0 Then Do
+     cdcmd='CD 'fm
+     End
+Otherwise Call Exit '118 Can not handle: 'fm
+End
+fnftfm=fn'.'ft
+/*---------------------------------------------------------------+
+| If there is a wildcard...go MPUT otherwise use PUTFTP          |
++---------------------------------------------------------------*/
+If Pos('*',fn)<>0 Then ftpcmd='MPUT'
+If Pos('*',ft)<>0 Then ftpcmd='MPUT'
+If ftpcmd='' | ftpcmd='FTPCMD' Then ftpcmd='PUT'
+If Pos('VERB',options)<>0 Then quiet=0
+                          Else quiet=1
+getopt=''
+If Pos('REPL',options)<>0 Then getopt=getopt' REPLACE'
+Return
+ 
+ 
+RunFTP:
+/*---------------------------------------------------------------+
+| Run the ftp command                                            |
++---------------------------------------------------------------*/
+Address CMS 'MAKEBUF'
+bufno=rc
+If ostype='LINUX' Then Do
+   path=''
+   If Pos('/',locfnftfm)=0 Then cdcmd='cd /home/'who
+                           Else Do
+                                Parse Value Reverse(locfnftfm) With tmpfnftfm '/' path
+                                locfnftfm=Reverse(tmpfnftfm)
+                                path=Reverse(path)
+                                If path='' Then path='/home/'who
+                                cdcmd='cd 'path
+                                End
+'PIPE (NAME PUTFTP.EXEC:155 END ?) var fnftfm | xlate low | var fnftfm'
+   If locfnftfm='' Then locfnftfm=fnftfm
+End
+Address CMS 'VMLINK TCPIP (QUIET'               /* Link FTP         */
+If quiet Then Address CMS 'SET CMSTYPE HT'      /* Supress FTP noise*/
+x=Time('R')                                     /* Reset timer      */
+/*---------------------------------------------------------------+
+| Stack some commands for ftp                                    |
++---------------------------------------------------------------*/
+If ftpset<>'' Then 'PIPE (NAME PUTFTP.EXEC:164 END ?)',
+                  'var ftpset',                  /* Take these       */
+                  '| split at ;',                /* Split here       */
+                  '| stack'                      /* Put on stack     */
+If getopt<>'' Then getopt='('getopt
+If \quiet Then Do
+          Say   cdcmd
+          Say   ftpcmd fnftfm locfnftfm getopt
+          End
+Queue cdcmd
+Queue ftpcmd fnftfm locfnftfm getopt
+Queue 'QUIT'
+Address CMS 'FTP 'ip portno' ( 'ftpoptions
+elapsed=Time('E')                               /* Calc elapsed time*/
+If quiet Then Address CMS 'SET CMSTYPE RT'      /* Resume FTP noise */
+Say TimeStamp() 'Transfer took: 'elapsed' seconds'          /* Show some info   */
+Address CMS 'VMLINK TCPIP <DET (QUIET'          /* Release FTP      */
+Address CMS 'DROPBUF 'bufno
+Return
+ 
+ 
+CreateNetRc:
+/*---------------------------------------------------------------+
+| Create NETRC DATA                                              |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Password:'                                 /* Ask ....         */
+'PIPE (NAME PUTFTP.EXEC:190 END ?)',
+   'cons dark',                                  /* Ask....        */
+   '| var pw'                                    /* Hand 2 rexx    */
+'PIPE (NAME PUTFTP.EXEC:193 END ?)',
+   'stem ip.',                                   /* Take these       */
+   '| specs ~machine~ 1 w1.1 nw ~login 'who' password 'pw'~ nw',
+   '| > netrc data a'                            /* Store as         */
+Return
+ 
+ 
+DetermSetting:
+/*---------------------------------------------------------------+
+| Determine the settings based on filetype                       |
++---------------------------------------------------------------*/
+ftpset=''
+'PIPE (NAME PUTFTP.EXEC:205 END ?)',
+    '< VMLINK NAMES *',                          /* Read this file   */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~ and',                    /* Ignore these     */
+           '1.1 \== ~~',                         /* .                */
+    '| join * x40',                              /* Make 1 record    */
+    '| split anycase before string ~:NICK.~',    /* Split here       */
+    '| pick anycase fs . substr w1.1 of f2 == ~'myfn'~',   /* Select this      */
+    '| split anycase before string ~:FT.~',      /* Split here       */
+    '| pick anycase 1.4 == ~:FT.~',              /* Select these     */
+    '| stem ft.'                                 /* Hand 2 rexx      */
+Do f=1 To ft.0
+   extra=0
+   'PIPE (NAME PUTFTP.EXEC:218 END ?)',
+      'literal 'ft.f,                            /* Take this        */
+      '| split anycase before string ~:SET.~',   /* Split here       */
+      '| t: take first 1',                       /* Keep this        */
+      '| specs fs . f2',                         /* Remove label     */
+      '| split at ;',                            /* Split here       */
+      '| n: nlocate ~*~',                        /* Move these away  */
+      '| join * x40',                            /* Make 1 record    */
+      '| var fts',                               /* Hand 2 rexx      */
+      '? n:',                                    /* Conn 2 nlocate   */
+      '| strip',                                 /* Remove spaces    */
+      '| stem wc.',                              /* Hand 2 rexx      */
+      '? t:',                                    /* Conn 2 take      */
+      '| specs fs . f2',                         /* Remove label     */
+      '| var ftpset'                             /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Check the full filetypes                                       |
++---------------------------------------------------------------*/
+   If Wordpos(ft,fts)<>0 Then extra=1
+/*---------------------------------------------------------------+
+| Check the wildcards                                            |
++---------------------------------------------------------------*/
+   If \extra Then Do w=1 To wc.0
+       'PIPE (NAME PUTFTP.EXEC:241 END ?)',
+          'var ft',                              /* Take this        */
+          '| wildcard ~'wc.w'~',                 /* Check wildcard   */
+          '| count lines',                       /* How many         */
+          '| var extra'                          /* Hand 2 rexx      */
+       If extra Then Leave w
+       End w
+   If extra Then Leave f
+End f
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

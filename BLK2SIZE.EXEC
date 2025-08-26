@@ -21,18 +21,19 @@
 |                        P = Peta                       5        |
 |                        E = Exa                        6        |
 |                        Z = Zetta                      7        |
-|                        Z = Yotta                      8        |
+|                        Y = Yotta                      8        |
 |                                                                |
 |            When called as function the return code is the      |
 |            number of FBA blocks                                |
 |                                                                |
-| Example  : size2blk 12g                                        |
+| Example  : blk2size 3000                                       |
 | Output   :                                                     |
-| 12G = 12 GigaBytes = 25165824 FBA blocks = 3145728 4K blocks   |
+| 3000 fba blocks=1.46M                                          |
 |                                                                |
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20181122 17:02:51                                   |
 | Changes  : .                                                   |
+|            20250701 H.T.Kramer : Small correction to text      |
 |                                                                |
 +---------------------------------------------------------------*/
 Parse Upper Arg size si_unit outfmt .
@@ -43,7 +44,7 @@ unit=1024         /* unit of 1KiloBytes */
 If size=''  Then Call Exit 28
 If size='?' Then Do
                  'VMFCLEAR'
-                 'PIPE (end ?)',
+                 'PIPE (NAME BLK2SIZE.EXEC:47 END ?)',
                       '< 'myfn myft' *',
                       '| tolabel Parse',
                       '| cons'

@@ -3,7 +3,7 @@
 |                                                                |
 | File     : CLOSCONS EXEC                                       |
 +----------------------------------------------------------------+
-| Version  : 1.1.0                                               |
+| Version  : 1.2.0                                               |
 |                                                                |
 | Files    : .                                                   |
 |                                                                |
@@ -117,6 +117,7 @@ mode=''                                          /* .                */
 If current='' Then current='OFF'
 If mode=''    Then mode='OBSERVER'
 Address COMMAND 'CP SET 'mode target_id userid()
+Address COMMAND 'CP SEND CP 'target_id' SPOOL CONS CONPARK START'
 Address COMMAND 'CP SEND CP 'target_id' CLOSE CONS'
 Address COMMAND 'CP SET 'mode target_id current
 If view Then Do

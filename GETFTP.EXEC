@@ -34,26 +34,31 @@
 | Changes  : .                                                   |
 |                                                                |
 +---------------------------------------------------------------*/
-Parse Upper Arg fnftfm fromnode locfnftfm '(' options
+Parse Arg fnftfm fromnode locfnftfm '(' options
 Parse Source . how myfn myft .
 Say TimeStamp()
 who=Userid()
-Call Checks
 Call DetermSetting
 /*---------------------------------------------------------------+
 | Where to....and complete the ip                                |
 +---------------------------------------------------------------*/
 Address CMS 'VMLINKIP 'fromnode
 If ip.0=0 | ip.0='IP.0' Then Exit 928
+'PIPE (NAME GETFTP.EXEC:47 END ?)',
+    'var who',
+    '| xlate lower',
+    '| var who'
 Call CreateNetRc
 /*---------------------------------------------------------------+
 | Now start copying...                                           |
 +---------------------------------------------------------------*/
 Do i=1 To ip.0
-  Say TimeStamp() 'Sending file: 'fn ft 'to 'lpar.i
+  Say TimeStamp() 'Retrieving file: 'fn ft 'from 'lpar.i
   ip=ip.i                                       /* Prep for FTP     */
   portno=portno.i
   ftpoptions=ftpoptions.i
+  ostype=ostype.i
+  Call Checks
   Call RunFtp
 End i
 /*---------------------------------------------------------------+
@@ -78,7 +83,7 @@ Checks:
 If fnftfm='' Then Call Exit '128 No filename specified'
 If fnftfm='?' Then Do
           'VMFCLEAR'
-          'PIPE (NAME GETFTP.EXEC:75 END ?)',
+          'PIPE (NAME GETFTP.EXEC:86 END ?)',
              '< 'myfn myft' *',                  /* Read myself      */
              '| tolabel Parse',                  /* Up to here       */
              '| cons'                            /* Show             */
@@ -88,10 +93,17 @@ If fnftfm='?' Then Do
 | Is it a filemode, directory or mdisk                           |
 +---------------------------------------------------------------*/
 Parse Value fnftfm With fn '.' ft '.' fm .
-If fm='' Then fm='A'
 Select
+When fm='' &,
+     ostype='LINUX' Then Do
+     Say 'Linux directories'
+     Parse Value Reverse(fnftfm) With fnft '/' path
+     fnftfm=Reverse(fnft)
+     path=Reverse(path)
+     cdcmd='CD 'path
+     End
 When Length(fm)=1 Then Do
-     'PIPE (NAME GETFTP.EXEC:86 END ?)',
+     'PIPE (NAME GETFTP.EXEC:106 END ?)',
         'cms QUERY ACCESSED 'fm,                 /* Check this       */
         '| drop first 1',                        /* Remove hdr       */
         '| specs w4.2',                          /* Keep this        */
@@ -111,14 +123,23 @@ When Length(fm)=1 Then Do
 When Length(fm)>1 &,
      Pos(':',fm)<>0 Then Do
      cdcmd='CD 'fm
+fnftfm=fn'.'ft
      End
 When Length(fm)>1 &,
-     Pos(':',fm)=0 Then Do
+     Pos('.',fm)=0 Then Do
      cdcmd='CD 'fm
+fnftfm=fn'.'ft
      End
 Otherwise Call Exit '118 Can not handle: 'fm
 End
-fnftfm=fn'.'ft
+/*---------------------------------------------------------------+
+| Create LCD command...                                          |
++---------------------------------------------------------------*/
+lcdcmd=''
+Parse Value locfnftfm With lfn '.' lft '.' lfm
+If lfm='' Then lfm='A'
+lcdcmd='lcd 'lfm
+locftfndm=lfn'.'lft
 /*---------------------------------------------------------------+
 | If there is a wildcard...go MGET otherwise use GETFTP          |
 +---------------------------------------------------------------*/
@@ -137,21 +158,23 @@ RunFTP:
 | Run the ftp command                                            |
 +---------------------------------------------------------------*/
 Address CMS 'VMLINK TCPIP (QUIET'               /* Link FTP         */
-If quiet Then Address CMS 'SET CMSTYPE HT'      /* Supress FTP noise*/
+/* If quiet Then Address CMS 'SET CMSTYPE HT'      /* Supress FTP noise*/ */
 x=Time('R')                                     /* Reset timer      */
 /*---------------------------------------------------------------+
 | Stack some commands for ftp                                    |
 +---------------------------------------------------------------*/
-If ftpset<>'' Then 'PIPE (NAME GETFTP.EXEC:123 END ?)',
+If ftpset<>'' Then 'PIPE (NAME GETFTP.EXEC:166 END ?)',
                   'var ftpset',                  /* Take these       */
                   '| split at ;',                /* Split here       */
                   '| stack'                      /* Put on stack     */
 If getopt<>'' Then getopt='('getopt
 If \quiet Then Do
           Say   cdcmd
+          Say   lcdcmd
           Say   ftpcmd fnftfm locfnftfm getopt
           End
 Queue cdcmd
+If lcdcmd<>'' Then Queue lcdcmd
 Queue ftpcmd fnftfm locfnftfm getopt
 Queue 'QUIT'
 Address CMS 'FTP 'ip portno' ( 'ftpoptions
@@ -167,10 +190,11 @@ CreateNetRc:
 | Create NETRC DATA                                              |
 +---------------------------------------------------------------*/
 Say TimeStamp() 'Password:'                                 /* Ask ....         */
-'PIPE (NAME GETFTP.EXEC:143 END ?)',
+'PIPE (NAME GETFTP.EXEC:193 END ?)',
    'cons dark',                                  /* Ask....        */
    '| var pw'                                    /* Hand 2 rexx    */
-'PIPE (NAME GETFTP.EXEC:146 END ?)',
+ 
+'PIPE (NAME GETFTP.EXEC:197 END ?)',
    'stem ip.',                                   /* Take these       */
    '| specs ~machine~ 1 w1.1 nw ~login 'who' password 'pw'~ nw',
    '| > netrc data a'                            /* Store as         */
@@ -182,7 +206,7 @@ DetermSetting:
 | Determine the settings based on filetype                       |
 +---------------------------------------------------------------*/
 ftpset=''
-'PIPE (NAME GETFTP.EXEC:187 END ?)',
+'PIPE (NAME GETFTP.EXEC:209 END ?)',
     '< VMLINK NAMES *',                          /* Read this file   */
     '| strip',                                   /* Remove spaces    */
     '| pick 1.1 \== ~*~ and',                    /* Ignore these     */
@@ -195,7 +219,7 @@ ftpset=''
     '| stem ft.'                                 /* Hand 2 rexx      */
 Do f=1 To ft.0
    extra=0
-   'PIPE (NAME GETFTP.EXEC:200 END ?)',
+   'PIPE (NAME GETFTP.EXEC:222 END ?)',
       'literal 'ft.f,                            /* Take this        */
       '| split anycase before string ~:SET.~',   /* Split here       */
       '| t: take first 1',                       /* Keep this        */
@@ -218,7 +242,7 @@ Do f=1 To ft.0
 | Check the wildcards                                            |
 +---------------------------------------------------------------*/
    If \extra Then Do w=1 To wc.0
-       'PIPE (NAME GETFTP.EXEC:223 END ?)',
+       'PIPE (NAME GETFTP.EXEC:245 END ?)',
           'var ft',                              /* Take this        */
           '| wildcard ~'wc.w'~',                 /* Check wildcard   */
           '| count lines',                       /* How many         */

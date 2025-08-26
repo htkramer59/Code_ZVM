@@ -1,0 +1,207 @@
+/*---------------------------------------------------------------+
+| Function : Show memory/storage usage                           |
+|                                                                |
+| File     : QSTOR    EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : QSTOR    <sortcolin> <sortdir>                      |
+|                                                                |
+|            <sortcolin> can be:                                 |
+|            NAME or empty   Output sorted on NAME               |
+|            STATUS                        on STATUS DSC or other|
+|            IPL                           on IPL device/nss     |
+|            STORAGE                       on STORAGE size       |
+|            PAGES                         on No of PAGES used   |
+|            WS                            on Working Set Size   |
+|            RDR                           on records in RDR     |
+|            PRT                           on records in PRT     |
+|            PCH                           on records in PCH     |
+|            IO                            on IO's done upto now |
+|            PERC                          on PERC memory used   |
+|                                                                |
+|            <sortdir> is A for Ascending or D for Descending    |
+|                      default is D                              |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250815 15:47:23                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg sortcolin sortdir .
+Parse Source . . myfn myft .
+If sortcolin='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME QSTOR.EXEC:39 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+ 
+'VMFCLEAR'
+/*---------------------------------------------------------------+
+| Access the work space is available                             |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK WORK (QUIET .fm'
+If rc=0 Then Parse Pull . . ws .
+        Else ws='A'
+/*---------------------------------------------------------------+
+| Prepare the sorting conditions                                 |
++---------------------------------------------------------------*/
+Select
+When sortcolin='' |,
+     sortcolin='NAME'    Then sortcol='| sort w1.1'
+When sortcolin='STATUS'  Then sortcol='| sort w2.1'
+When sortcolin='IPL'     Then sortcol='| sort w3.1'
+When sortcolin='STORAGE' Then sortcol='| specs w1.3 1 pad 0  w4.1 nw.5 right pad space w5;* nw.78 right | sort w4.1'
+When sortcolin='PAGES'   Then sortcol='| specs w1.5 1 pad 0  w6.1 nw.5 right pad space w7;* nw.66 right | sort w6.1'
+When sortcolin='WS'      Then sortcol='| specs w1.7 1 pad 0  w8.1 nw.6 right pad space w9;* nw.51 right | sort w8.1'
+When sortcolin='RDR'     Then sortcol='| specs w1.9 1 pad 0  w10.1 nw.8 right pad space w11;* nw.35 right | sort w10.1'
+When sortcolin='PRT'     Then sortcol='| specs w1.10 1 pad 0  w11.1 nw.8 right pad space w12;* nw.26 right | sort w11.1'
+When sortcolin='PCH'     Then sortcol='| specs w1.11 1 pad 0  w12.1 nw.8 right pad space w13;* nw.17 right | sort w12.1'
+When sortcolin='IO'      Then sortcol='| specs w1.12 1 pad 0  w13.1 nw.8 right pad space w14;* nw.8 right | sort w13.1'
+When sortcolin='PERC'    Then sortcol='| sort w14.1'
+Otherwise Call Exit '81 Invalid sortcolumn: 'sortcolin
+End
+/*---------------------------------------------------------------+
+| Determine the sort direction Ascending or Descending           |
++---------------------------------------------------------------*/
+Select
+When sortdir=''  |,
+     sortdir='D' Then sortdir='D'
+When sortdir='A' Then Nop
+Otherwise Call Exit '82 Invalid sort direction: 'sordir
+End
+Say sortcolin sortdir
+/*---------------------------------------------------------------+
+| Find all the users active on the system                        |
++---------------------------------------------------------------*/
+'PIPE (NAME QSTOR.EXEC:84 END ?)',
+  'cp QUERY NAMES',                              /* Ask cp           */
+  '| split at ,',                                /* Split here       */
+  '| strip',                                     /* Remove spaces    */
+  '| pick w1.1 \== ~VSM~',                       /* Ignore this one  */
+  '| sort fs - f1',                              /* Sort on name     */
+  '| f: fanout',                                 /* Dupl. records    */
+  '| specs fs - f1 1.8',                         /* Keep the id      */
+  '| stem id.',                                  /* Hand to rexx     */
+  '? f:',                                        /* Conn 2 fanout    */
+  '| specs fs - f2 1.10',                        /* Keep the status  */
+  '| stem stat.',                                /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'cp QUERY STORAGE',                            /* Ask cp           */
+  '| specs w3.1 1',                              /* Keep this        */
+  '| var size',                                  /* Hand 2 rexx      */
+  '| siconv w1.1 g2k 8.0',                       /* Convert 2 kb     */
+  '| var realstor'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Run through all the users and ask for their info               |
++---------------------------------------------------------------*/
+Do i=1 To id.0
+   'PIPE (NAME QSTOR.EXEC:106 END ?)',
+       'cp INDICATE USER 'id.i' EXPANDED',       /* Ask cp           */
+       '| strip',                                /* Remove spaces    */
+       '| pick anycase substr 1.7 of w1.1 == ~IPLSYS=~ or',   /* Keep lines with  */
+                      'w1.1 == ~DEFINED~ or',                 /* .these           */
+                      'substr 1.5 of w2.1 ==  ~MAIN=~ or',    /* .                */
+                      'substr 1.3 of w1.1 == ~WS=~ or',       /* .                */
+                      'substr 1.4 of w1.1 == ~RDR=~',         /* .                */
+       '| join * x40',                           /* Make 1 record    */
+       '| change ~DEV ~~',                       /* Reduce details   */
+       '| change anycase ~IPLSYS=~~',            /* .                */
+       '| change anycase ~XSTORE=---~~',         /* .                */
+       '| change anycase ~PAGES:~~',             /* .                */
+       '| change anycase ~SIZE=~~',              /* .                */
+       '| change anycase ~LIMIT=~~',             /* .                */
+       '| change anycase ~MAIN=~~',              /* .                */
+       '| change anycase ~DASD=~~',              /* .                */
+       '| change anycase ~RESERVED=~~',          /* .                */
+       '| change anycase ~WS=~~',                /* .                */
+       '| change anycase ~RDR=~~',               /* .                */
+       '| change anycase ~PRT=~~',               /* .                */
+       '| change anycase ~PCH=~~',               /* .                */
+       '| change anycase ~IO=~~',                /* .                */
+       '| specs w1.1 1.10 w4.1 nw right w6;* nw',   /* Adjust layout    */
+       '| specs ~'id.i stat.i'~ 1 1;* nw',       /* Compose record   */
+       '| var temp'                              /* Hand 2 rexx      */
+   id.i=temp                                     /* Overwrite stem   */
+End i
+/*---------------------------------------------------------------+
+| Convert some stuff and prepare the display                     |
++---------------------------------------------------------------*/
+numeric digits 64
+'PIPE (NAME QSTOR.EXEC:138 END ?)',
+   'stem id.',                                   /* Take these       */
+   '| siconv w4.1 g2m 6.0 M',                    /* Convert 2 Mb     */
+   '| siconv w5.1 g2m 6.0 M',                    /* .                */
+   '| specs',                                    /* Adjust layout    */
+           'w1.1 1.8',                           /* .                */
+           'w2.1 nw.8',                          /* .                */
+           'w3.1 nw.4 right',                    /* .                */
+           'w4.1 nw.5 right',                    /* .                */
+           'w5.1 nw.5 right',                    /* .                */
+           'w6.1 nw.6 right',                    /* .                */
+           'w7.1 nw.6 right',                    /* .                */
+           'w8.1 nw.6 right',                    /* .                */
+           'w9.1 nw.6 right',                    /* .                */
+           'w12.1 nw.8 right',                   /* .                */
+           'w13.1 nw.8 right',                   /* .                */
+           'w14.1 nw.8 right',                   /* .                */
+           'w15.1 nw.8 right',                   /* .                */
+   '| buffer',                                   /* Prevent stall    */
+   '| spec 1;* 1',                               /* Convert pages    */
+          'a: w8.1 .',                           /* .2 Kb            */
+          'set #0:=a*4',                         /* ...add at end    */
+          'print #0 nw',                         /* ....of record    */
+   '| specs 1;* 1',                              /* Calculate        */
+           'a: w-1;-1 .',                        /* .percentage      */
+           'set #0:=(a/'realstor')*100',         /* ..Add at end     */
+           'print #0 pict --9.99 nw.6',          /* ...of record     */
+           '~%~ n',                              /* .                */
+   '| specs 1.99 1 w-1;-1 nw.7 right',           /* Adjust layout    */
+   sortcol sortdir,                              /* Sort the records */
+   '| specs 1;* 1',                              /* Adding           */
+           'a: w8.1 .',                          /* ..total          */
+           'set #0+=a',                          /* ...at end of     */
+           'eof',                                /* ....range        */
+           '~Total:~ 38',                        /* .                */
+           'print #0 nw',                        /* .                */
+   '| d: drop last 1',                           /* Move last record */
+   '| append  literal ------   ------   ---- ----- ----- ------ ------ ------ ------ -------- -------- -------- -------- --------',
+   '| fi: fanin',                                /* Take in last rec */
+   '| preface literal ------   ------   ---- ----- ----- ------ ------ ------ ------ -------- -------- -------- -------- --------',
+   '| preface literal Userid   Status   IPL  Storg Storg in MEM on DSD Set Sz Pages  in RDR   in PRT   in PCH   Requests MEMory',
+   '| preface literal                        Deflt &DCSS Pages  Pages  Workng Resrvd Cards    Lines    Cards    IO       Perc. ',
+   '| > 'myfn' DETAILS 'ws,                      /* Write 2 file     */
+   '? d:',                                       /* Conn 2 drop      */
+   '| specs 1;* 1',                              /* Calculate        */
+           'a: w2.1 .',                          /* .total           */
+           'set #0:=(a/'realstor')*100',         /* ..percentage     */
+           '~=~ n',                              /* ...add at end of */
+           'print #0 pict --9.99 n',             /* ....record       */
+           '~% of MEMory~ n',                    /* .                */
+   '| fi:'                                       /* Conn 2 fanin     */
+/*---------------------------------------------------------------+
+| Display the output                                             |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'myfn' DETAILS 'ws
+/*---------------------------------------------------------------+
+| CLean up and remove the work space (if accessed)               |
++---------------------------------------------------------------*/
+Address CMS 'ERASE 'myfn' DETAILS 'ws
+If ws<>'A' Then Address CMS 'VMLINK WORK <DET (QUIET'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
