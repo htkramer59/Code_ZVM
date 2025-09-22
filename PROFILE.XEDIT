@@ -27,7 +27,7 @@
 | Check if my personal input file exists                         |
 +---------------------------------------------------------------*/
 myname=Userid()
-'PIPE (NAME PROFILE.XEDIT:30 END ?)',
+Address CMS 'PIPE (NAME PROFILE.XEDIT:30 END ?)',
   'literal 'myname' XEDITSET *',                 /* Compose name     */
   '| state',                                     /* Does it exist    */
   '| count lines',                               /* How many         */
@@ -43,7 +43,7 @@ If \inpfound Then Do
 /*---------------------------------------------------------------+
 | Read the input file...                                         |
 +---------------------------------------------------------------*/
-'PIPE (NAME PROFILE.XEDIT:46 END ?)',
+Address CMS 'PIPE (NAME PROFILE.XEDIT:46 END ?)',
     '< 'myname' XEDITSET *',                     /* Read the file    */
     '| strip',                                   /* Remove spaces    */
     '| pick 1.1 \== ~*~ and',                    /* Ignore these     */
@@ -89,6 +89,7 @@ Address CMS 'PIPE (NAME PROFILE.XEDIT:75 END ?)',
 Address CMS 'PIPE (NAME PROFILE.XEDIT:89 END ?)',
      'var synonyms_4_prefix',                    /* Take this        */
      '| split at ;',                             /* Split in records */
+     '| split',                                  /* .                */
      '| specs',                                  /* .                */
              '~SET PREFIX',                      /* Compose cmds     */
              'SYNONYM~',                         /* .                */
@@ -99,6 +100,7 @@ Address CMS 'PIPE (NAME PROFILE.XEDIT:89 END ?)',
      '?',                                        /* Start 2nd PIPE   */
      'var synonyms_4_commandline',               /* Take this        */
      '| split at ;',                             /* Split in records */
+     '| split',                                   /* .                */
      '| specs',                                  /* Compose setting  */
              '~SET SYNONYM~ 1',                  /* .                */
              'w1.1 NW',                          /* .                */

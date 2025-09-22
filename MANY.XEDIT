@@ -10,7 +10,7 @@
 |                                                                     |
 | Called   : By setting SYNONYMS in PROFILE XEDIT                     |
 |            for the following prefix items:                          |
-|            BOX COM DCM HD MC TAG PN PIPE SPVER IF DO SAV FIL NUL    |
+|            BOX COM DCM HD MC TAG PN PIPE IF DO SAV FIL NUL          |
 |            PBOX T TS B N CEN LEF RIG UPP LOW ANC UL OL TBL PCM TR Z |
 |            SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT   |
 |            CKLDD VSPEC MARK                                         |
@@ -28,6 +28,7 @@
 | Author   : H.T.Kramer, DYN 7 West,  +31 20 513 3857                 |
 | Created  : 19951215 14:45:44                                        |
 | Changes  : .                                                        |
+|            20250903 H.T.Kramer : Added creation of PIPE IF.         |
 |            20250829 H.T.Kramer : Smartened the select, did          |
 |                     away some obsolete functions.                   |
 |            20250826 H.T.Kramer : Update so that more than 1         |
@@ -67,14 +68,14 @@ where=''
 /*---------------------------------------------------------------+
 | Author details...                                              |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MANY.XEDIT:70 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:71 END ?)',
     'literal MANY 'Userid(),                     /* Take this        */
     '| state',                                   /* Check if exists  */
     '| sort unique w1.2',                        /* Remove duplicate */
     '| count lines',                             /* How many         */
     '| var profile_exists'                       /* Store as boolean */
 If profile_exists Then Do
-Address CMS 'PIPE (NAME MANY.XEDIT:77 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:78 END ?)',
      '< MANY 'Userid()' *',                      /* Read the file    */
      '| pick 1.1 \== ~~ and 1.1 \== ~*~',        /* Ignore comm&empty*/
      '| strip',                                  /* Remove spaces    */
@@ -97,7 +98,7 @@ column = '1'
 'SET PF2 ONLY RESET'
 Call Colors
 'EXTRACT /CURLINE/CURSOR/NULLS/FNAME/FTYPE/LINEND/CTLCHAR/RESERVED *'
-Address CMS 'PIPE (NAME MANY.XEDIT:100 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:101 END ?)',
     'stem ctlchar.',                             /* Take these       */
     '| take last 1',                             /* Remove rest      */
     '| split at x40',                            /* Split here       */
@@ -136,15 +137,15 @@ Select
 /*--------------------------------------------------------------------+
 | Pipes related items                                                 |
 +--------------------------------------------------------------------*/
-  When cmd = 'PIPE'   Then Call Make_Pipe
-  When cmd = 'PIPNM'  Then Call Make_Pipe_Names
-  When cmd = 'PCM'    Then Call Make_Pipe_Comm
-  When cmd = 'SPVER'  Then Call Specs_Vertical
-  When cmd = 'PN'     Then Call Make_PN
-  When cmd = 'CONS'   Then Call Make_Cons
-  When cmd = 'FMTP'   Then Call Make_FMTP
-  When cmd = 'PBOX'   Then Call Make_Pbox
-  When cmd = 'VSPEC'  Then Call VSpec
+  When cmd = 'PIPE'   Then Call Make_Pipe       /* Create PIPE stmt */
+  When cmd = 'PIPNM'  Then Call Make_Pipe_Names /* Give all PIPEs a NAME */
+  When cmd = 'PCM'    Then Call Make_Pipe_Comm  /* Comment a PIPE */
+  When cmd = 'PN'     Then Call Make_PN         /* Add a name */
+  When cmd = 'PIF'    Then Call Make_Pipe_If    /* Add a IF */
+  When cmd = 'CONS'   Then Call Make_Cons       /* Add cons */
+  When cmd = 'FMTP'   Then Call Make_FMTP       /* Format a PIPE */
+  When cmd = 'PBOX'   Then Call Make_Pbox       /* Add a comment box */
+  When cmd = 'VSPEC'  Then Call VSpec           /* Verticalise SPEC */
 /*--------------------------------------------------------------------+
 | End Pipes related items                                             |
 +--------------------------------------------------------------------*/
@@ -173,7 +174,7 @@ Select
   When cmd = 'MC'     Then Call Add_Changelog
   When cmd = 'COM'    Then Call Make_Com
   When cmd = 'DCM'    Then Call Make_Dcm
-  When cmd = 'TR'     Then Call Make_Trace
+  When cmd = 'TR'     Then Call Make_Trace            /* or switch trace  */
   When cmd = 'N'      Then Call Make_Date
   When cmd = 'NODE'   Then Call Make_Node
   When cmd = 'START'  Then Call Make_Start
@@ -210,7 +211,7 @@ Make_Help_Code:
 "INPUT Parse Source . . myfn myft ."
 "INPUT If arg1='?' Then Do"
 "INPUT             'VMFCLEAR'"
-"INPUT 'PIPE (NAME MANY.XEDIT:213 END ?)',"
+"INPUT 'PIPE (NAME MANY.XEDIT:214 END ?)',"
 "INPUT                '< 'myfn myft' *',            /* Read myself */"
 "INPUT                '| tolabel Parse',            /* Up to here  */"
 "INPUT                '| cons'                      /* Show        */"
@@ -229,7 +230,7 @@ Make_Node:
 ':'line
 'EXTRACT /CURLINE/CURSOR'
 "INPUT  "
-"INPUT 'PIPE (NAME MANY.XEDIT:232 END ?)',"
+"INPUT 'PIPE (NAME MANY.XEDIT:233 END ?)',"
 "INPUT    'CP QUERY USERID',                     /* Ask CP           */"
 "INPUT    '| specs w3.1',                        /* Keep this        */"
 "INPUT    '| var node',                          /* Store as         */"
@@ -249,7 +250,7 @@ Check_Loaded:
 ':'line
 'EXTRACT /CURLINE/CURSOR'
 "INPUT  "
-"INPUT 'PIPE (NAME MANY.XEDIT:252 END ?)',"
+"INPUT 'PIPE (NAME MANY.XEDIT:253 END ?)',"
 "INPUT    'cms EXECMAP 'myfn' REXX',             /* Ask CMS          */"
 "INPUT    '| drop first 1',                      /* Ignore header    */"
 "INPUT    '| count lines',                       /* Count findings   */"
@@ -512,7 +513,7 @@ Adjust_Layout:
 Parse Arg which .
 ':'line
 'EXTRACT /CURLINE/CURSOR'
-Address CMS 'PIPE (NAME MANY.XEDIT:515 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:516 END ?)',
     'var CURLINE.3',
     '| specs pad _ 1;* 1.72 'which,
     '| var newline'
@@ -558,6 +559,23 @@ column = '1'
 Return
  
  
+Make_Pipe_If:
+/*--------------------------------------------------------------------+
+| Create an if in PIPEs                                               |
++--------------------------------------------------------------------*/
+':'line;'EXTRACT /CURLINE/CURSOR'
+spacing=(Index(curline.3,'7D'x))+(Index(curline.3,'7F'x))
+spaces=Copies(' ',spacing)
+"INPUT"spaces"'| if1: if pick anycase w1.1 == xx',"
+"INPUT"spaces"'|      --true statement--',"
+"INPUT"spaces"'| if1:',"
+"INPUT"spaces"'|      --not true statement--',"
+"INPUT"spaces"'| if1:',"
+line   = cursor.5+1
+column = 17+spacing
+Drop spaces spacing
+Return
+ 
 Make_Pipe_Names:
 /*---------------------------------------------------------------+
 | Add/replace the NAME on all PIPEs and also add ENDCHAR         |
@@ -570,7 +588,7 @@ autosavecount=autosave.1;fn=Strip(fname.1);ft=Strip(ftype.1)
 /*---------------------------------------------------------------+
 | Deal with underscores in the filename                          |
 +---------------------------------------------------------------*/
-'PIPE (NAME MANY.XEDIT:573 END ?)',
+'PIPE (NAME MANY.XEDIT:591 END ?)',
     'var fn',
     '| change ~_~ xFF',
     '| var fn'
@@ -578,7 +596,7 @@ autosavecount=autosave.1;fn=Strip(fname.1);ft=Strip(ftype.1)
 /*---------------------------------------------------------------+
 | Get all PIPE statements...                                     |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MANY.XEDIT:581 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:599 END ?)',
    'xedit',                                     /* Read this file   */
    '| specs pad 0 recno 1.5 right 1;* nw',      /* Add lineno       */
    '| casei all /"PIPE / !',                    /* Select these     */
@@ -600,7 +618,7 @@ Address CMS 'PIPE (NAME MANY.XEDIT:581 END ?)',
 Do g=1 To globop.0
    work=Substr(globop.g,7)
    lineno=Strip(Substr(globop.g,1,5),'L','0')
-   Address CMS 'PIPE (NAME MANY.XEDIT:603 END \)',
+   Address CMS 'PIPE (NAME MANY.XEDIT:621 END \)',
       'var work',                               /* Take this        */
       '| f: fanout',                            /* Dupl record      */
       '| split',                                /* Split into words */
@@ -658,7 +676,7 @@ End g
 +---------------------------------------------------------------*/
 Do n=1 To noglobop.0
    work=noglobop.n
-     Address CMS 'PIPE (NAME MANY.XEDIT:661 END \)',
+     Address CMS 'PIPE (NAME MANY.XEDIT:679 END \)',
       'var work',                               /* Take this        */
       '| split',                                /* Split...         */
       '| specs recno 1.1 1;* nw',               /* Add recno        */
@@ -675,7 +693,7 @@ End n
 | Combine the new PIPE statements                                |
 +---------------------------------------------------------------*/
 ':1'                                            /* Go to top        */
-Address CMS 'PIPE (NAME MANY.XEDIT:678 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:696 END ?)',
      'stem noglobop.',                          /* Take these       */
      '| append stem globop.',                   /* and these        */
      '| sort w1.1',                             /* Sort on lineno   */
@@ -708,11 +726,11 @@ Make_Pipe:
 newname=Strip(fname.1)||.||Strip(ftype.1)||':'||cursor.3+1
 Select
 When ftype.1='EXEC' Then
-         "INPUT 'PIPE (NAME MANY.XEDIT:711 END ?)',"
+         "INPUT 'PIPE (NAME MANY.XEDIT:729 END ?)',"
 When ftype.1='REXX' Then
-         "INPUT 'CALLPIPE (NAME MANY.XEDIT:713 END ?)',"
+         "INPUT 'CALLPIPE (NAME MANY.XEDIT:731 END ?)',"
 When ftype.1='XEDIT' Then
-         "INPUT Address CMS 'PIPE (NAME MANY.XEDIT:715 END ?)',"
+         "INPUT Address CMS 'PIPE (NAME MANY.XEDIT:733 END ?)',"
 Otherwise NOP
 End
 "INPUT     '.     ',"
@@ -733,7 +751,9 @@ Make_Cons:
 +--------------------------------------------------------------------*/
 ':'line
 'EXTRACT /CURLINE/CURSOR'
-"INPUT    '| cons'"
+spacing=(Index(curline.3,'7D'x))+(Index(curline.3,'7F'x))
+spaces=Copies(' ',spacing)
+"INPUT"spaces"'| cons'"
 line   = cursor.5+1
 column = '18'
 Return
@@ -749,7 +769,7 @@ wline=cursor.3
 ":"wline
 "EXTRACT /CURLINE"
 label=Strip(fname.1)':'Strip(ftype.1)':'wline
-Address CMS "PIPE (NAME MANY.XEDIT:752 END @ STAGESEP })",
+Address CMS "PIPE (NAME MANY.XEDIT:772 END @ STAGESEP })",
      "literal "curline.3,                       /* Take content of line */
      "} specs w2;* 1",                          /* Remove 1st word */
      "} split before string x4F",               /* Split here */
@@ -907,7 +927,7 @@ Make_Box:
 | Create a comment box                                                |
 +--------------------------------------------------------------------*/
 ':'line
-Address CMS 'PIPE (NAME MANY.XEDIT:910 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:930 END ?)',
     'var dotline',                              /* Take this        */
     '| dup 'times-1,                            /* Duplicate...     */
     '| preface var topline',                    /* Add top          */
@@ -994,7 +1014,6 @@ Do i = '1' To Times
   line=line+1
 End
 line=cursor.5
-/* column=cursor.6 */
 column=1
 Return
  
@@ -1082,7 +1101,7 @@ Change_Details:
 /*---------------------------------------------------------------+
 | Change some known details                                      |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MANY.XEDIT:1085 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:1104 END ?)',
     'var content',                               /* Take this        */
     '| space 1',                                 /* Compress spacing */
     '| change ~ ~'hival'~ 1',                    /* Replace this     */
@@ -1118,7 +1137,7 @@ Prep_Conversions:
 /*---------------------------------------------------------------+
 | Work on the conversions                                        |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MANY.XEDIT:1121 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:1140 END ?)',
     'var conversion',                            /* Take these       */
     '| split',                                   /* Split into recs  */
     '| specs',                                   /* Compose          */
@@ -1139,7 +1158,7 @@ Prepare_for_Change:
 | Preparing for the changes in the file                          |
 +---------------------------------------------------------------*/
 modcontent=Word(modcontent,1) specdef
-Address CMS 'PIPE (NAME MANY.XEDIT:1142 END ? STAGESEP !)',
+Address CMS 'PIPE (NAME MANY.XEDIT:1161 END ? STAGESEP !)',
        'literal 'modcontent,                     /* Take this        */
        '! split',                                /* Split into words */
        '! strip',                                /* Remove spaces    */
@@ -1205,7 +1224,7 @@ Change_SpecDef:
 /*---------------------------------------------------------------+
 | Change the content of the specdef variable                     |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MANY.XEDIT:1208 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:1227 END ?)',
     'var specdef',                               /* Take thss        */
     cmd,                                         /* Issue change     */
     '| var specdef'                              /* Hand 2 rexx      */
@@ -1217,7 +1236,7 @@ Split_Into_Words:
 | Split the variable into words                                  |
 +---------------------------------------------------------------*/
 Parse Upper Arg varname .
-Address CMS 'PIPE (NAME MANY.XEDIT:1220 END ?)',
+Address CMS 'PIPE (NAME MANY.XEDIT:1239 END ?)',
    'var 'varname,                                /* Take this        */
    '| split',                                    /* Split into words */
    '| stem specdet.'                             /* Hand 2 rexx      */

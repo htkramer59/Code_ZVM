@@ -14,11 +14,11 @@
 :synonyms_4_prefix.BOX COM DCM HD MC TAG PN PIPE IF DO SAV FIL NUL TR Z
        PBOX T TS B N CEN LEF RIG UPP LOW HTML ANC UL OL TBL IMG PCM
        HH SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT
-       VSPEC MARK
+       VSPEC MARK PIF
 **---------------------------------------------------------------+
 * commandline synonymns to use the MANY macro                    |
 *---------------------------------------------------------------*/
-:synonyms_4_cmdline.HD MC PIPNM NODE START RXHLP RXEXT RXTS
+:synonyms_4_commandline.HD MC PIPNM NODE START RXHLP RXEXT RXTS
 **---------------------------------------------------------------+
 * Other synonyms                                                 |
 *---------------------------------------------------------------*/
