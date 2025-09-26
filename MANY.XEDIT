@@ -13,7 +13,7 @@
 |            BOX COM DCM HD MC TAG PN PIPE IF DO SAV FIL NUL          |
 |            PBOX T TS B N CEN LEF RIG UPP LOW ANC UL OL TBL PCM TR Z |
 |            SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT   |
-|            CKLDD VSPEC MARK                                         |
+|            CKLDD VSPEC MARK PIF                                     |
 |                                                                     |
 |            for the following cmdline items:                         |
 |            HD MC PIPNM NODE START RXHLP RXEXT RXTS                  |
@@ -575,6 +575,7 @@ line   = cursor.5+1
 column = 17+spacing
 Drop spaces spacing
 Return
+ 
  
 Make_Pipe_Names:
 /*---------------------------------------------------------------+

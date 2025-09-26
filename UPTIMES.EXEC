@@ -52,6 +52,7 @@ If Wordpos('QUIET',options)<>0 Then quiet=1
                                Else quiet=0
 If Wordpos('SSI',options)<>0 Then ssi=1
                              Else ssi=0
+rscs=0
 /*---------------------------------------------------------------+
 | Select what to do...and act..                                  |
 +---------------------------------------------------------------*/
@@ -81,9 +82,28 @@ If file & \quiet Then Say TimeStamp()' Collecting info from: 'header
 pipecmd' (NAME UPTIMES.EXEC:81 END ?)',
      'literal ',                                 /* Create record    */
      '| timestamp isodate',                      /* ...as it says    */
-     '| var now'                                 /* Store as         */
-If ssi Then Call SSI_Part
-       Else Call RSCS_Part
+     '| var now',                                /* Store as         */
+     '?',
+     'cp QUERY RSCS',
+     '| locate anycase ~RSCS~',
+     '| count lines',
+     '| var rscs',
+     '?',
+     'CP QUERY USERID',                     /* Ask CP           */
+     '| specs w3.1',                        /* Keep this        */
+     '| var node',                          /* Store as         */
+     '| specs -2;-1',                       /* Reduce to this   */
+     '| var shortnode'                      /* Hand 2 rexx      */
+Select
+When \rscs Then nodes=node
+When rscs  Then nodes=node nodes
+Otherwise Nop
+End
+Select
+When ssi   Then Call SSI_Part
+When \ssi  Then Call RSCS_Part
+Otherwise Exit 28
+End
 Call Calculate_Uptime
 Exit
  
@@ -219,7 +239,7 @@ End t
 | Give the output to our caller                                  |
 +---------------------------------------------------------------*/
 If file Then Do
-             Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+             Address CMS 'VMLINK WORK (QUIET WRITE .fm'
              If rc=0 Then Parse Upper Pull . . wfm .
                      Else wfm='A'
              pipout=pipout wfm
@@ -232,7 +252,7 @@ pipecmd' (NAME UPTIMES.EXEC:227 END ?)',
 If file Then Do
       Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm
       Address CMS 'ERASE 'myfn' OVERVIEW 'wfm
-      If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+      If wfm<>'A' Then Address CMS 'VMLINK WORK <DET (QUIET WRITE'
       End
 Return
  
