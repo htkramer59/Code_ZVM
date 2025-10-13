@@ -52,6 +52,10 @@ delchar='6A'x
 /*--------------------------------------------------------------------+
 | Exec part of this code                                              |
 +--------------------------------------------------------------------*/
+If fn='?'     Then Do
+                   Address CMS 'HELP 3270'
+                   Call Exit
+                   End
 If fn=''      Then Call Exit '128 No input file'
 If ft=''      Then ft='3270'
 If fm=''      Then fm='*'
@@ -271,7 +275,7 @@ Process_Field_Lengths:
 | Take the lines one by one                                           |
 +--------------------------------------------------------------------*/
 Do l=1 To line.0
-  'PIPE (NAME 3270.EXEC:279 END ?)',
+  'PIPE (NAME 3270.EXEC:278 END ?)',
      'literal 'line.l,                                /* Take this        */
      '| change x40 x00',                              /* Replace spaces   */
      '| split before string ~%~',                     /* Split here       */
@@ -290,7 +294,7 @@ Do l=1 To line.0
 /*--------------------------------------------------------------------+
 | Replace the fields with the required length                         |
 +--------------------------------------------------------------------*/
-  'PIPE (NAME 3270.EXEC:298 END ?)',
+  'PIPE (NAME 3270.EXEC:297 END ?)',
       'literal 'line.l,                               /* Take this        */
       changeline,                                     /* Make changes     */
       '| var temp'                                    /* Hand 2 rexx      */

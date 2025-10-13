@@ -30,3 +30,5 @@ All field definitions and colors will start with percent sign (%)
                                                                                 
 .X   Send all input fields/variables to Caller, all variable-names start        
      with @-sign                                                                
+                                                                                
+Run 3270IVP to see the results of 3270IVP1 3270 and 3270IVP2 3270               
