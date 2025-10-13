@@ -1,0 +1,32 @@
+Copyright 2025 Remarkable                                                       
+                                                                                
+All commands start with a dot (.)                                               
+All variable names you want to use start with the at sign (@)                   
+All field definitions and colors will start with percent sign (%)               
+   For example %G will start an unprotected GREEN colored field                 
+   For example %y will start a protected YELLOW colored field                   
+                                                                                
+*    Comment lines                                                              
+@<variable> is a variable name for example: @input                              
+                                                                                
+.F   Syntax: .F <location> <pfkno color> <prktxt color> <keyno:assignment:label>
+     defines function keys for example:                                         
+        .F top %W %B 1:Help 3270:Help 3:QQUIT:Quit 12:FILE:Save                 
+     location: can be TOP,BOT or a LINENnr                                      
+     colors are taken from 3270 CTLCHARS                                        
+     undefined keys will the disabled                                           
+                                                                                
+.Sn  Space n lines, if n is not specified it will be set to 1                   
+                                                                                
+.C   Put the cursor on this location, row column                                
+                                                                                
+.I   Will imbed a file with definitions, fn ft fm, 1 level supported            
+                                                                                
+.D   Secondary input, fn ft fm, will be stored in @input.                       
+                                                                                
+.R   Read one or more lines from secondary input, fn ft fm (@input.)            
+                                                                                
+.W   Write all variables to a file, fn ft fm                                    
+                                                                                
+.X   Send all input fields/variables to Caller, all variable-names start        
+     with @-sign                                                                

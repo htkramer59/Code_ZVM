@@ -1,0 +1,5 @@
+/**/
+@input='test file *'
+3270 3270IVP
+Say 'R3turned variables'
+'PIPE rexxvars toload | cons'

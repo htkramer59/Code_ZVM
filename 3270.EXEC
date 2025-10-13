@@ -1,0 +1,457 @@
+/*--------------------------------------------------------------------+
+| Function : Display a screen from input files using XEDIT            |
+|                                                                     |
+| File     : 3270     EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : 3270     CTLCHARS  Defines control characters            |
+|            <input>  3270      Panel definition                      |
+|                                                                     |
+| Called   : 3270     <input file> <startlabel> <endlabel> (          |
+|                         <options>                                   |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20250908 10:52:11                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg fn ft fm fromlabel tolabel '(' options
+Parse Source . . myfn myft .
+/*--------------------------------------------------------------------+
+| Determine how we are running                                        |
++--------------------------------------------------------------------*/
+Select
+When myft='EXEC'  Then Call RunExec
+When myft='XEDIT' Then Call RunXedit
+When myft='REXX'  Then Call RunRexx
+Otherwise Call Exit
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') &,
+   exrc<>myfn           Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+RunExec:
+/*--------------------------------------------------------------------+
+| Some settings we need                                               |
++--------------------------------------------------------------------*/
+pipestmt='PIPE'
+arbchar='8F'x
+delchar='6A'x
+/*--------------------------------------------------------------------+
+| Exec part of this code                                              |
++--------------------------------------------------------------------*/
+If fn=''      Then Call Exit '128 No input file'
+If ft=''      Then ft='3270'
+If fm=''      Then fm='*'
+If options='' Then Nop
+/*--------------------------------------------------------------------+
+| Load myself as XEDIT Macro                                          |
++--------------------------------------------------------------------*/
+pipestmt '(NAME 3270.EXEC:67 END ?)',
+   'cms EXECMAP 'myfn' XEDIT',            /* Ask CMS          */
+   '| drop first 1',                      /* Ignore header    */
+   '| count lines',                       /* Count findings   */
+   '| if: if pick 1.1 == ~1~',            /* Check this       */
+   '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */
+   '|     cms',                           /* Issue cmd      */
+   '| if:',                               /* Comm 2 if        */
+   '| var exldd'                          /* Hand 2 rexx      */
+If \exldd Then Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+/*--------------------------------------------------------------------+
+| Determine the screen size                                           |
++--------------------------------------------------------------------*/
+maxl=0
+maxc=0
+pipestmt '(NAME 3270.EXEC:82 END ?)',
+   'cms QUERY DISPLAY',                               /* Ask cp           */
+   '| specs w2.2 1',                                  /* Keep these       */
+   '| f: fanout',                                     /* Send away        */
+   '| specs w1.1 1',                                  /* Keep this        */
+   '| var maxlines',                                  /* Hand 2 rexx      */
+   '? f:',                                            /* Conn 2 fanout    */
+   '| specs w2.1 1',                                  /* Keep this        */
+   '| var maxcols'                                    /* Hand 2 rexx      */
+If maxl<>'0' Then maxlines=maxl
+If maxc<>'0' Then maxcols=maxc
+/*--------------------------------------------------------------------+
+| If labels are entered define the boundaries                         |
++--------------------------------------------------------------------*/
+If fromlabel<>'' Then fromlabel='| fromtarget pick anycase w1.1 == ~;'fromlabel'~ | drop first 1'
+If tolabel<>''   Then tolabel='| totarget pick anycase w1.1 ==  ~;'tolabel'~'
+/*--------------------------------------------------------------------+
+| Read the input file                                                 |
++--------------------------------------------------------------------*/
+imbed.0=0
+Address CMS pipestmt '(NAME 3270.EXEC:102 END ?)',
+          '< 'fn ft fm,                               /* Read file        */
+          '| pick 1.1 \== ~*~',                       /* Remove comments  */
+          '| strip trailing',                         /* Remove spaces    */
+          '| specs',                                  /* .                */
+                  'pad 0',                            /* Set padding      */
+                  'recno 1.3 right',                  /* Add record nr    */
+                  '1;* nw',                           /* Take record      */
+                  '~'arbchar'~ n',                    /* Add end char     */
+          fromlabel,                                  /* Read from here   */
+          tolabel,                                    /* Upto here        */
+          '| p: pick anycase 5.2 \== ~.I~',           /* Select cmds      */
+          '| specs 5;* 1',                            /* Remove recno     */
+          '| stem line.',                             /* Hand 2 rexx      */
+          '? p:',                                     /* Conn 2 pick      */
+          '| stem imbed.'                             /* Hand 2 rexx      */
+If imbed.0<>0 Then Call Process_Imbeds
+Drop imbed.
+/*--------------------------------------------------------------------+
+| Look for field lengths specified and honor them                     |
++--------------------------------------------------------------------*/
+Call Process_Field_Lengths
+/*--------------------------------------------------------------------+
+| Access the workspace... if available                                |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK WORK (QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+/*--------------------------------------------------------------------+
+| Create a work file the width of the screen                          |
++--------------------------------------------------------------------*/
+pipestmt '(NAME 3270.EXEC:129 END ?)',
+    'literal _',                                      /* Take this        */
+    '| dupl 'maxcols-1,                               /* Duplicate n times*/
+    '| join *',                                       /* Make 1 record    */
+    '| space 0',                                      /* Remove spaces    */
+    '| > 'myfn' WORK 'wfm' V'                         /* Write 2 file     */
+Address CMS 'XEDIT 'myfn' WORK 'wfm' (PROFILE 'myfn' WIDTH 'maxcols
+/*--------------------------------------------------------------------+
+| Remove work file and workspace                                      |
++--------------------------------------------------------------------*/
+Address CMS 'ERASE 'myfn' WORK 'wfm
+If wfm<>'A' Then Address CMS 'VMLINK WORK <DET (QUIET'
+Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+RunXedit:
+/*--------------------------------------------------------------------+
+| Xedit macro part of this code                                       |
++--------------------------------------------------------------------*/
+pipestmt='PIPE'
+Address CMS pipestmt '(NAME 3270.EXEC:149 END ?)',
+     'rexxvars 1 nomsg233 toload',                    /* Take vars 1 lvls */
+     '| varload',                                     /* Load them        */
+     '?',                                             /* 2nd pipe         */
+     'rexxvars 2 nomsg233 toload',                    /* Take vars 2 lvls */
+     '| varload',                                     /* Load them        */
+     '?',                                             /* 3rd pipe         */
+     '< 'myfn' CTLCHARS *',                           /* Read this        */
+     '| pick 1.1 \== ~*~',                            /* Remove comments  */
+     '| subcom xedit'                                 /* Hand 2 xedit     */
+/*--------------------------------------------------------------------+
+| Switch these settings OFF                                           |
++--------------------------------------------------------------------*/
+'SET PREFIX  OFF'
+'SET TOFEOF  OFF'
+'SET CMDLINE OFF'
+'SET MSGLINE OFF'
+'SET CURLINE ON 'maxlines-1
+'SET SCALE   OFF'
+/*--------------------------------------------------------------------+
+| Do some initial settings                                            |
++--------------------------------------------------------------------*/
+lineno=0
+tofile=0                                              /* Not to file      */
+tocall=0                                              /* Not to caller    */
+/*--------------------------------------------------------------------+
+| Take action on the content of the input file                        |
++--------------------------------------------------------------------*/
+Do l=1 To line.0
+   instr=Translate(Substr(line.l,1,2))
+   Select
+   When instr='.I' Then Call Imbed_File
+   When instr='.F' Then Call Set_Pfk
+   When instr='.S' Then Call Add_Empty_lines
+   When instr='.C' Then Call Move_Cursor
+   When instr='.D' Then Call Open_Input
+   When instr='.R' Then Call Read_Input
+   When instr='.W' Then Do
+                          tofile=1
+                          outfile=Subword(line.l,2)
+                          outfile=Translate(outfile,'',arbchar)
+                          line.l=delchar
+                        End
+   When instr='.X' Then Do
+                          tocall=1
+                          line.l=delchar
+                        End
+   Otherwise Call Add_Line
+   End
+End l
+/*--------------------------------------------------------------------+
+| Prepare the replacement of variables                                |
++--------------------------------------------------------------------*/
+replvars=''
+Address CMS pipestmt '(NAME 3270.EXEC:203 END ?)',
+    'rexxvars nomsg233 toload',                       /* Take these       */
+    '| pick 1.2 == ~/@~',                             /* Find these       */
+    '| specs x4F 1 ~CHANGE ANYCASE~ nw 1;* nw ~/~n',  /* Compose change   */
+    '| join * x40',                                   /* Make 1 record    */
+    '| var replvars tracking'                         /* Hand 2 rexx      */
+/*--------------------------------------------------------------------+
+| Take records and convert them 2 set reserved cmds                   |
++--------------------------------------------------------------------*/
+Address CMS pipestmt '(NAME 3270.EXEC:212 END ?)',
+    'stem line.',                                     /* Take these       */
+    '| pick 1.1 \== ~;~',                             /* Remove labels    */
+    replvars,                                         /* Replace variables*/
+    '| split at xFF',                                 /* Split here       */
+    '| change ~'arbchar'~ ~',                         /* Replace arbchar  */
+    '| pick 1.1 \== ~'delchar'~',                     /* Ignore delchars  */
+    '| specs',                                        /* Compose          */
+            '~SET RESERVED~ 1',                       /* .SET             */
+            'pad 0',                                  /* ...RESERVED      */
+            'recno nw.2 right',                       /* ....cmds         */
+            '~non noh~ nw',                           /* .                */
+            '1;* nw',                                 /* .                */
+    '| append var pfkline',                           /* Add this         */
+    '| subcom xedit'                                  /* Hand 2 xedit     */
+rc=0
+/*--------------------------------------------------------------------+
+| Read the results from the composed screen                           |
++--------------------------------------------------------------------*/
+@output=''
+'READ NOCHANGE TAG'
+Address COMMAND pipestmt '(NAME 3270.EXEC:233 END ?)',
+          'stack',                                    /* Read fr stack    */
+          '| stem result.'                            /* Hand 2 rexx      */
+'DESBUF'
+/*--------------------------------------------------------------------+
+| Look at the results and deal with them                              |
++--------------------------------------------------------------------*/
+Do r=result.0 To 1 By -1
+   Parse Value result.r With lbl action
+   Select
+   When lbl = 'ETK' Then Nop
+   When lbl = 'CMD' Then Nop
+   When lbl = 'FIL' Then Nop
+   When lbl = 'PAK' Then Nop
+   When lbl = 'PRF' Then Nop
+   When lbl = 'RES' Then Do
+                           Address CMS pipestmt '(End ?)',
+                                'literal /@FIELD.'Word(action,1)'.'Word(action,2)'/'Subword(action,3),
+                                '| varload'
+                         End
+   When lbl = 'PFK' Then Do
+                           @pfkaction=Subword(action,2)
+                           'QQUIT'
+                           Leave r
+                         End
+   Otherwise Nop
+   End
+End r
+/*--------------------------------------------------------------------+
+| End of Xedit                                                        |
++--------------------------------------------------------------------*/
+If tofile Then Call Write_2 '| > 'outfile
+If tocall Then Call Write_2 '| varload 2 nomsg233'
+Return
+ 
+ 
+Process_Field_Lengths:
+/*--------------------------------------------------------------------+
+| Take the lines one by one                                           |
++--------------------------------------------------------------------*/
+Do l=1 To line.0
+  'PIPE (NAME 3270.EXEC:279 END ?)',
+     'literal 'line.l,                                /* Take this        */
+     '| change x40 x00',                              /* Replace spaces   */
+     '| split before string ~%~',                     /* Split here       */
+     '| pick 1.1 == ~%~  and  3.1 == ~.~',            /* If there is a .  */
+     '| stem field.'                                  /* Hand 2 rexx      */
+/*--------------------------------------------------------------------+
+| Change the fields with field lenghts and honor them                 |
++--------------------------------------------------------------------*/
+  changeline=''
+  Do f=1 To field.0
+     Parse Value field.f With col1 '.' fldlen
+     fldchar=Substr(Reverse(fldlen),1,1)
+     fldlen=Strip(Translate(fldlen,'',fldchar))
+     changeline=changeline'| CHANGE /'field.f'/'col1||Copies(fldchar,fldlen)'/'
+  End f
+/*--------------------------------------------------------------------+
+| Replace the fields with the required length                         |
++--------------------------------------------------------------------*/
+  'PIPE (NAME 3270.EXEC:298 END ?)',
+      'literal 'line.l,                               /* Take this        */
+      changeline,                                     /* Make changes     */
+      '| var temp'                                    /* Hand 2 rexx      */
+  line.l=temp                                         /* Adjust content   */
+End l
+Return
+ 
+ 
+RunRexx:
+/*--------------------------------------------------------------------+
+| PIPE stage part of this code                                        |
++--------------------------------------------------------------------*/
+pipestmt='CALLPIPE'
+Call RunExec
+Return
+ 
+ 
+Set_Pfk:
+/*--------------------------------------------------------------------+
+| Reset all 24 keys                                                   |
++--------------------------------------------------------------------*/
+Do p=1 To 24
+   'SET PF'p
+End p
+/*--------------------------------------------------------------------+
+| Get the line of keys set them and create a line explaning settings  |
++--------------------------------------------------------------------*/
+Parse Value line.l With . loc pfkno pfktxt pfkeys
+Address CMS pipestmt '(NAME 3270.EXEC:284 END ?)',
+    'var pfkeys',                                     /* Take this        */
+    '| f: fanout',                                    /* Dupl. records    */
+    '| split at ;',                                   /* Split here       */
+    '| specs fs : f1 1 f2 nw',                        /* compose setting  */
+    '| stem pfk.',                                    /* Hand 2 rexx      */
+    '? f:',                                           /* Conn 2 fanout    */
+    '| split at ;',                                   /* Split here       */
+    '| specs',                                        /* Compose          */
+            '~'pfkno'~ 1',                            /* .content         */
+            'fs :',                                   /* ..of             */
+            'f1 n',                                   /* ...pfkey line    */
+            '~='pfktxt'~ n',                          /* .                */
+            'f3 n',                                   /* .                */
+    '| change ~'arbchar'~~',                          /* Remove arbchar   */
+    '| join * x40',                                   /* Make 1 record    */
+    '| specs ~'pfkno'Pfkeys:~ 1 1;* nw',              /* Add some text    */
+    '| var pfkline'                                   /* Hand 2 rexx      */
+Select
+When Translate(loc)='BOT' Then loc=maxlines
+When Translate(loc)='TOP' Then loc='1'
+Otherwise Nop
+End
+pfkline='SET RESERVED 'loc' NON NOH 'Center(pfkline,maxcols-10)
+/*--------------------------------------------------------------------+
+| Do the actual setting of the keys                                   |
++--------------------------------------------------------------------*/
+Do p=1 To pfk.0
+   'SET PF'pfk.p
+End p
+line.l=delchar
+Return
+ 
+ 
+Write_2:
+/*--------------------------------------------------------------------+
+| Write all variables defined in the panel to a file or caller        |
++--------------------------------------------------------------------*/
+Parse Arg outstmt
+Address CMS pipestmt '(NAME 3270.EXEC:323 END ?)',
+        'rexxvars nomsg233 toload',                   /* Take these       */
+        '| pick 1.2 == ~/@~',                         /* Select these     */
+        outstmt                                       /* Write 2 file/calr*/
+Return
+ 
+ 
+Open_Input:
+/*--------------------------------------------------------------------+
+| Open input file and store results in @input.                        |
++--------------------------------------------------------------------*/
+line.l=Translate(Subword(line.l,2),'',arbchar)
+Address CMS pipestmt '(NAME 3270.EXEC:289 END ?)',
+     '< 'line.l,                                      /* Take these       */
+     '| stem @input.'                                 /* Hand 2 rexx      */
+line.l=delchar
+Return
+ 
+ 
+Add_Empty_lines:
+/*--------------------------------------------------------------------+
+| Implement the .S instruction                                        |
++--------------------------------------------------------------------*/
+times=Substr(line.l,3)
+times=Translate(times,'',arbchar)
+pipestmt '(NAME 3270.EXEC:348 END ?)',
+    'literal 'arbchar,                                /* Take this        */
+    '| dup 'times,                                    /* Dupl n times     */
+    '| strip',                                        /* Remove spaces    */
+    '| join * xFF',                                   /* Make 1 record    */
+    '| specs 1;* 1 xFF n',                            /* Add 1 more       */
+    '| var temp'                                      /* Hand 2 rexx      */
+line.l=temp
+Return
+ 
+ 
+Move_Cursor:
+/*--------------------------------------------------------------------+
+| Put the cursor on the desired location                              |
++--------------------------------------------------------------------*/
+line.l=Translate(line.l,'',arbchar)
+Parse Value line.l With . row column .
+'CURSOR SCREEN 'row column
+line.l=delchar
+Return
+ 
+ 
+Read_Input:
+/*--------------------------------------------------------------------+
+| Take a number of lines from the input file                          |
++--------------------------------------------------------------------*/
+start=10
+number=2
+Address CMS pipestmt '(NAME 3270.EXEC:376 END ?)',
+        'stem @input.',                               /* Take these       */
+        '| buffer',                                   /* Prevent stall    */
+        '| drop first 'start-1,                       /* Remove           */
+        '| take first 'number,                        /* ..these          */
+        '| stem @input.'                              /* Hand 2 rexx      */
+Return
+ 
+ 
+Add_Line:
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+line.l=line.l
+Return
+ 
+ 
+Process_Imbeds:
+/*--------------------------------------------------------------------+
+| Work on the imbeds found                                            |
++--------------------------------------------------------------------*/
+Do i=imbed.0 To 1 By -1
+  Parse Value imbed.i With recno . imbfn imbft imbfm .
+  imbfm=Translate(imbfm,'',arbchar)
+  pipestmt '(NAME 3270.EXEC:400 END ?)',
+     '< 'imbfn imbft imbfm,                           /* Read the file    */
+     '| strip trailing',                              /* Remove spaces    */
+     '| specs 1;* 1 ~'arbchar'~ n',                   /* Add the arbchar  */
+     '| stem temp.'                                   /* Hand 2 rexx      */
+  /*--------------------------------------------------------------------+
+  | Add to the lines of the existing file                               |
+  +--------------------------------------------------------------------*/
+  pipestmt '(NAME 3270.EXEC:408 END ?)',
+     'stem line.',                                    /* Take these       */
+     '| buffer',                                      /* Prevent stall    */
+     '| t: take first 'recno-1,                       /* Take part 1      */
+     '| append stem temp.',                           /* Add the imbed    */
+     '| buffer',                                      /* Prevent stall    */
+     '| f: fanin',                                    /* Take in rest     */
+     '| stem line.',                                  /* Hand 2 rexx      */
+     '? t:',                                          /* Conn 2 take      */
+     '| f:'                                           /* Conn 2 fanout    */
+End i
+Return

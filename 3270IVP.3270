@@ -1,0 +1,56 @@
+.f%YBOT %W %G 1:Help 3270:Help;3:QQUIT:Qquit;12:QQUIT:Qquit                     
+%Y                                                                              
+%Y                                                                              
+%Y***********************************************************************       
+%BCopyright%Y2025 Remarkable                                                    
+%Y                                                                              
+%YAll%Ycommands start with a dot (.)                                            
+%YAll%Yvariable names you want to use start with the at sign (@)                
+%YAll%Yfield definitions and colors will start with percent sign (%)            
+%Y  For example %?G%G will start an unprotected GREEN colored field             
+%Y  For example %?t%T will start a protected TURQOISE colored field             
+%Y                                                                              
+%Y*    Comment lines                                                            
+%Y @<variable> is a variable name for example: @input                           
+%Y                                                                              
+%Y .F   Syntax: .F <location> <pfkno color> <prktxt color>                      
+%Y        <keyno:assignment:label                                               
+%Y      defines function keys for example:                                      
+%Y       .F top %W %B 1:Help 3270:Help 3:QQUIT:Quit 12:FILE:Save                
+%Y      location: can be TOP,BOT or a LINENnr                                   
+%Y      colors are taken from 3270 CTLCHARS                                     
+%Y      undefined keys will the disabled                                        
+%Y                                                                              
+%Y .Sn  Space n lines, if n is not specified it will be set to 1                
+%Y                                                                              
+%Y .C   Put the cursor on this location, row column                             
+%Y                                                                              
+%Y .I   Will imbed a file with definitions, fn ft fm, 1 level supported         
+%Y                                                                              
+%Y .D   Secondary input, fn ft fm, will be stored in @input.                    
+%Y                                                                              
+%Y .R   Read one or more lines from secondary input, fn ft fm (@input.)         
+%Y                                                                              
+%Y .W   Write all variables to a file, fn ft fm                                 
+%Y                                                                              
+%Y .X   Send all input fields/variables to Caller, all variable-names start     
+%Y    with @-sign                                                               
+%Y                                                                              
+%Y*****************************************************************             
+%Y                                                                              
+%Y*                                                                             
+%Y* Set ctlchars, attributes and colors                                         
+%Y* For details see: HELP XEDIT SET                                             
+%Y*                                                                             
+SET CTLCHAR % ESCAPE                                                            
+SET CTLCHAR Y PROTECT   YELLOW HIGH                                             
+SET CTLCHAR y NOPROTECT YELLOW HIGH                                             
+SET CTLCHAR W PROTECT   WHITE  HIGH                                             
+SET CTLCHAR w NOPROTECT WHITE  HIGH                                             
+SET CTLCHAR B PROTECT   BLUE   HIGH                                             
+SET CTLCHAR b NOPROTECT BLUE   HIGH                                             
+SET CTLCHAR G PROTECT   GREEN  HIGH                                             
+SET CTLCHAR g NOPROTECT GREEN  HIGH                                             
+SET CTLCHAR $ OFF                                                               
+ ** pfkno %W                                                                    
+ ** pfktext %G                                                                  
