@@ -5,6 +5,7 @@ All variable names you want to use start with the at sign (@)
 All field definitions and colors will start with percent sign (%)               
    For example %G will start an unprotected GREEN colored field                 
    For example %y will start a protected YELLOW colored field                   
+   Color definitions are stored in 3270 CTLCHARS                                
                                                                                 
 *    Comment lines                                                              
 @<variable> is a variable name for example: @input                              
