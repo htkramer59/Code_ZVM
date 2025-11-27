@@ -37,12 +37,6 @@ runx=0
 If role<>'' Then role='(' role
 Select
 When myft='EXEC' Then Do
-           'PIPE (NAME CNPUSAGE.EXEC:40 END ?)',
-              'cms EXECMAP 'myfn' XEDIT',            /* Ask CMS          */
-              '| drop first 1',                      /* Ignore header    */
-              '| count lines',                       /* Count findings   */
-              '| var exldd'                          /* Hand 2 rexx      */
-           If exldd Then Address CMS 'EXECDROP 'myfn' XEDIT'
            Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
            Call Run_Exec
            Address CMS 'EXECDROP 'myfn' XEDIT'
@@ -83,7 +77,7 @@ When output='FILE'  Then Do
                          Call Obtain_Info
                          End
 When output='?'     Then Do
-          'PIPE (NAME CNPUSAGE.EXEC:86 END ?)',
+          'PIPE (NAME CNPUSAGE.EXEC:80 END ?)',
                '< 'myfn myft' *',               /* Read myself      */
                '| tolabel Parse',               /* To here          */
                '| cons'                         /* Display          */
@@ -105,7 +99,7 @@ If rc=0 Then Parse Pull . . target
 Parse Value target With '.DIR' target
 target=Strip(target)
 Parse Value target With . ':' cnp_id '.' .
-'PIPE (NAME CNPUSAGE.EXEC:108 END ?)',
+'PIPE (NAME CNPUSAGE.EXEC:102 END ?)',
     'cms QUERY LIMITS FOR 'cnp_id,
     '| drop first 1',
     '| specs w3.2',
@@ -118,7 +112,7 @@ Parse Value target With . ':' cnp_id '.' .
 /*---------------------------------------------------------------+
 | Get the list of sub-directories to query                       |
 +---------------------------------------------------------------*/
-'PIPE (NAME CNPUSAGE.EXEC:121 END ?)',
+'PIPE (NAME CNPUSAGE.EXEC:115 END ?)',
    'cms LISTDIR 'target,                        /* List this        */
    '| drop first 1',                            /* Remove header    */
    '| specs w2.1',                              /* Keep this        */
@@ -129,7 +123,7 @@ Parse Value target With . ':' cnp_id '.' .
 +---------------------------------------------------------------*/
 new.0=0                                         /* Initialise array */
 Do d=1 To dir.0
-   'PIPE (NAME CNPUSAGE.EXEC:132 END ?)',
+   'PIPE (NAME CNPUSAGE.EXEC:126 END ?)',
       'literal QUERY BLOCKS * * 'dir.d,         /* Compose cmd      */
       '| cms',                                  /* Ask details      */
       '| drop first 2',                         /* Remove heading   */
@@ -162,7 +156,7 @@ End d
 /*---------------------------------------------------------------+
 | Totalise the columns created                                   |
 +---------------------------------------------------------------*/
-'PIPE (NAME CNPUSAGE.EXEC:165 END ?)',
+'PIPE (NAME CNPUSAGE.EXEC:159 END ?)',
     'stem new.',                                /* Take these       */
     '| specs',                                  /* Start            */
     '       printonly eof',                     /* .  calculating   */
@@ -186,7 +180,7 @@ End d
 | Format the output and show also add header                     |
 +---------------------------------------------------------------*/
 heading='Directory                           Files  Data-Blks Cntrl-Blks Total-Blks   Total Kb      %'
-'PIPE (NAME CNPUSAGE.EXEC:189 END ?)',
+'PIPE (NAME CNPUSAGE.EXEC:183 END ?)',
    'var heading',                               /* Take this        */
    '| deblock 1',                               /* Split into...    */
    '| if: if pick 1.1 \== ~ ~',                 /* When non blank   */
@@ -199,7 +193,7 @@ If runx Then headings=''
                       '| preface var totals',
                       '| preface var separtr',
                       '| preface var heading'
-'PIPE (NAME CNPUSAGE.EXEC:202 END ?)',
+'PIPE (NAME CNPUSAGE.EXEC:196 END ?)',
    'stem new. ',                                /* Take these       */
    '| specs w1.1 1.30 pad 0',                   /* Keep this        */
            'w2.1 nw.10 right',                  /* Adjust this      */

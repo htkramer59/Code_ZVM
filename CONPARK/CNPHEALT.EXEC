@@ -1,0 +1,88 @@
+/*--------------------------------------------------------------------+
+| Function : Check the health of the files in the CONPARK directories |
+|                                                                     |
+| File     : CNPHEALT EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : CNPHEALT .  ( <clean>                                    |
+|                        If <clean> is empty only checking else       |
+|                        the corrupt files will be erased             |
+|                                                                     |
+| Comments : Need ADMIN right to the filepool/filespace               |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20251127 13:53:01                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg . '(' clean .
+/*--------------------------------------------------------------------+
+| Check if we need to clean or not                                    |
++--------------------------------------------------------------------*/
+If clean<>'' Then clean=1
+             Else clean=0
+/*--------------------------------------------------------------------+
+| Get the name of the main directory                                  |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK CONPMAIN (NOTYPE ONLY(CONPARK) .CU'
+If rc=0 Then Parse Pull . . . maindir .
+        Else Call Exit '28 Not found'
+Address CMS 'VMLINK CONPMAIN <DET (NOTYPE ONLY(CONPARK)'
+/*--------------------------------------------------------------------+
+| Find the directories in the CONPARK assigned area                   |
++--------------------------------------------------------------------*/
+'PIPE (end ?)',
+   'cms listdir 'maindir,                             /* Find the dirs    */
+   '| drop first 1',                                  /* Ignore headers   */
+   '| specs w2.1 1',                                  /* Keep this        */
+   '| stem dir.'                                      /* Hand 2 rexx      */
+/*--------------------------------------------------------------------+
+| Loop thru the directories                                           |
++--------------------------------------------------------------------*/
+'VMFCLEAR'
+Do d=1 To dir.0
+  Say 'Checking: 'dir.d
+/*--------------------------------------------------------------------+
+| Find the files in the directories                                   |
++--------------------------------------------------------------------*/
+  'PIPE (end ?)',
+      'cms QUERY FILEATTR * * 'dir.d,                 /* Ask cms          */
+      '| drop first 2',                               /* Ignore headers   */
+      '| pick w4.1 == ~BASE~',                        /* Select these     */
+      '| specs w1.2 1 ~'dir.d'~ nw',                  /* Add dirname      */
+      '| stem file.'                                  /* Hand 2 rexx      */
+/*--------------------------------------------------------------------+
+| Loop thru the files found in the directories                        |
++--------------------------------------------------------------------*/
+   Do f=1 To file.0
+     Address CMS 'SET CMSTYPE HT'                     /* Suppres output   */
+     'PIPE (end ?)',
+        '<sfs 'file.f,                                /* Read the file    */
+        '| hole'                                      /* Dump results     */
+     piprc=rc                                         /* Move the rc      */
+     Address CMS 'SET CMSTYPE RT'                     /* Resume output    */
+/*--------------------------------------------------------------------+
+| If there is an error display and if needed erase the file           |
++--------------------------------------------------------------------*/
+     If piprc<>0 Then Do
+                      Say 'Error: 'file.f
+                      If clean Then Do
+                                    Say 'ERASEing: 'file.f
+                                    Address CMS 'ERASE 'file.f
+                                    End
+                      End
+   End f
+End d
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
