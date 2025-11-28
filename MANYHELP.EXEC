@@ -1,0 +1,126 @@
+/*--------------------------------------------------------------------+
+| Function : Create the help file for MANY XEDIT                      |
+|                                                                     |
+| File     : MANYHELP EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : myfn     myft     Partial input from myself              |
+|            MANY     XEDIT    For all the synonym                    |
+|            <userid> XEDITSET For all cmdline synonyms               |
+|            MANY     HELPCMS  Help file for the MANY macro           |
+|                                                                     |
+| Called   : MANHLP   .                                               |
+|                                                                     |
+| Comments : hi on=›|  hi off=›%                                      |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20251128 15:35:03                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Source . . myfn myft .
+hi_on ='4A4F'x ; hi_off='4A6C'x
+/*--------------------------------------------------------------------+
+| Read various file and process them                                  |
++--------------------------------------------------------------------*/
+'PIPE (NAME MANYHELP.EXEC:27 END ?)',
+   '< MANY XEDIT *',                                  /* Read file        */
+   '| pick anycase w1.2 == ~WHEN CMD~',               /* Select these     */
+   '| specs w4.1 10 ~Prefix~ 25 w7;* 45',             /* Rework           */
+   '| change x7D ~~',                                 /* Change this      */
+   '| if1: if locate ~/*~',                           /* If comment       */
+   '|     specs fs / f1 1.65 ~/~ 75 f2;* n',          /* Adjust records   */
+   '| if1:',                                          /* Conn 2 if        */
+   '| sort w1.1',                                     /* Sort on name     */
+   '| specs a: substr 1.1 of w1.1 .',                 /* Create           */
+           '1;* 1',                                   /* .break           */
+           'break a',                                 /* ..on             */
+           'id a 5',                                  /* ...alfabet       */
+   '| change ~*/~~',                                  /* Remove these     */
+   '| specs 1;* 1 ~*/~ 100',                          /* Add at end       */
+   '| if2: if pick 5.1 \== ~ ~',                      /* If this          */
+   '|   specs ~; ;~ 1 x4A4F 6 5.1 n x4A6C n 6;* n',   /* Add newline&hilig*/
+   '| if2:',                                          /* Conn 2 iff       */
+   '| split at ;',                                    /* Split here       */
+   '| stem work.',                                    /* Hand 2 rexx      */
+   '?',                                               /* 2nd pipe         */
+   '< 'Userid()' XEDITSET *',                         /* Read this        */
+   '| pick anycase fs . f1 == ~:SYNONYMS_4_COMMANDLINE~',   /* Find this        */
+   '| specs fs . f2;*',                               /* Remove label     */
+   '| split',                                         /* Split            */
+   '| stem cmdl.',                                    /* Hand 2 rexx      */
+   '?',                                               /* 3rd pipe         */
+   '< 'myfn myft' *',                                 /* Read myself      */
+   '| inside ~:help_top.~ ~:end_top.~',               /* Take this part   */
+   '| stem top.'                                      /* Hand 2 rexx      */
+/*--------------------------------------------------------------------+
+| Loop thru the commandline synonyms                                  |
++--------------------------------------------------------------------*/
+Do c=1 To cmdl.0
+    l=Length(cmdl.c)
+    'PIPE (NAME MANYHELP.EXEC:62 END ?)',
+        'stem work.',                                 /* Take these       */
+        '| buffer',                                   /* Prevent loop     */
+        '| if: if pick anycase 10.'l' == ~'cmdl.c'~', /* If we find this  */
+        '|    specs 1.30 1 ~Cmdline~ n.11 42;* n',    /* We add this      */
+        '| if:',                                      /* Conn 2 if        */
+        '| stem work.'                                /* Hand 2 rexx      */
+End c
+/*--------------------------------------------------------------------+
+| Create the final help file                                          |
++--------------------------------------------------------------------*/
+hdr='›|        Name         Prefix  Cmdline     Subroutine & Switch              Description›%'
+'PIPE (NAME MANYHELP.EXEC:74 END ?)',
+   'stem work.',                                      /* Take these       */
+   '| preface var hdr',                               /* Add header       */
+   '| preface literal ',                              /* Add empty line   */
+   '| preface stem top.',                             /* Add top lines    */
+   '| append literal .cs 4 off',                      /* Append this      */
+   '| append literal  ',                              /* Add 2 empty lines*/
+   '| append literal  ',                              /* .                */
+   '| > MANY HELPCMS A'                               /* Write 2 file     */
+Exit
+ 
+/*--------------------------------------------------------------------+
+| The top of the help file is below here                              |
++--------------------------------------------------------------------*/
+/**
+:help_top.
+.cs 1 on
+(c) Copyright HTK 2025
+ 
+.cm MANY XEDIT macro
+ 
+ 
+›|MANY XEDIT macro›%
+ 
+ 
+.cs 1 off
+.cs 2 on
+ 
+›|Purpose:›%
+  Create some user and prefix commands to make your editing easier.
+ 
+›|How to implement MANY:›%
+ 
+  To use the MANY XEDIT macro you need to set prefix synonyms in
+  your XEDIT PROFILE.
+  Using the SET PREFIX command SET PREFIX SYNONYM <synonym> MANY.
+  Also you need some commandline synonyms. Use SET SYNONYM <synonym> MANY.
+ 
+  If you are getting to many commands you can use CMS PIPE and a list
+  to do you settings.
+ 
+  You need to create a file MANY <userid> to contain settings about:
+  name, initials, location and phone nr. Also it sets the length
+  of the comments that are created by MANY XEDIT.
+  See: MANY SAMPLE as a template
+ 
+ 
+  Note: not all items are mentioned below see MANY XEDIT for actual
+  synonyms and details.
+.cs 2 off
+.cs 4 on
+:end_top.
+**/

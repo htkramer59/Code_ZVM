@@ -1,144 +1,106 @@
-.cm
-MANY XEDIT macro
+.cs 1 on
+(c) Copyright HTK 2025
  
-Purpose:
-Create some user and prefix commands to make your editing easier.
- 
-How to implement MANY:
- 
-To use the MANY XEDIT macro you need to set prefix synonyms in
-your XEDIT PROFILE.
-Using the SET PREFIX command SET PREFIX SYNONYM <synonym> MANY.
-Also you need some commandline synonyms. Use SET SYNONYM <synonym> MANY.
- 
-If you are getting to many commands you can use CMS PIPE and a list
-to do you settings.
- 
-You need to create a file MANY <userid> to contain settings about:
-name, initials, location and phone nr. Also it sets the length
-of the comments that are created by MANY XEDIT.
-See: MANY SAMPLE as a template
+.cm MANY XEDIT macro
  
  
-Note: not all items are mentioned below see MANY XEDIT for actual
-synonyms.
- 
- prefix=
-       'BOX COM DCM HD MC TAG PN PIPE IF DO DEL SAV FIL NUL TR Z'
-       'PBOX T TS TSRX B N CEN LEF RIG UPP LOW PTF ANC UL OL TBL PCM'
-       'SEL SUB CONS FMTP PIPNM NODE START HLP'
- 
- commandline"
-       'HD MC PIPNM NODE START HLP'
- 
- Description of the COMMANDLINE synonyms:
-        HD        Adds a header in a simple format, see MANY XEDIT.
- 
-        MC        Make Comment, adds a comment/update statement to
-                  the header as shown in MANY XEDIT.
- 
-        PIPNM     This labels all the PIPE/CALLPIPE statements in your code
-                  with the name of the exec and the linenumber where the PIPE
-                  is found. For example: PIPE (NAME MANY.XEDIT:50 END ?).
- 
-        NODE      Inserts a PIPE which gives you node and shortnode values.
-                  Needs to be adapted to your needs.
- 
-        START     Insert a basic start for a Rexx EXEC. Contains the
-                  Start comment, Parse Upper Arg and Parse Source.
- 
-        HLP       Inserts a PIPE which shows the header that was created before.
-                  Also adds a few REXX statements.
+›|MANY XEDIT macro›%
  
  
- Description of the PREFIX synonyms:
-        BOX        Creates a Rexx comment box, if you enter a number after BOX
-                   it makes a box with that number of empty lines for you.
+.cs 1 off
+.cs 2 on
  
-        COM        Makes comment of Rexx statements enter a number after COM
-                   and that ammount of lines will be commented.
+›|Purpose:›%
+  Create some user and prefix commands to make your editing easier.
  
-        DCM        Removes the comment strings from that line or number of
-                   lines.
+›|How to implement MANY:›%
  
-        HD         See commandline section.
+  To use the MANY XEDIT macro you need to set prefix synonyms in
+  your XEDIT PROFILE.
+  Using the SET PREFIX command SET PREFIX SYNONYM <synonym> MANY.
+  Also you need some commandline synonyms. Use SET SYNONYM <synonym> MANY.
  
-        MC         See commandline section.
+  If you are getting to many commands you can use CMS PIPE and a list
+  to do you settings.
  
-        TAG        Creates a small comment line with timestamp for you
- 
-        PN         Create a PIPE label on the statement you are at.
-                   See commandline section on PIPNM.
- 
-        PIPE       Inserts a PIPE skeleton for you.
- 
-        IF         Inserts an IF/THEN/ELSE skeleton for you.
- 
-        DO         A DO/END prototype is inserted.
- 
-        SEL        Inserts a Rexx select prototype.
- 
-        SAV        Enables you to save the file from the prefix.
- 
-        FIL        Enables you to FILE the file from the prefix.
- 
-        NUL        Flips the SET NULLS settings for you.
- 
-        TR         If no trace statement on the line it will insert
-                   Trace(I) for you, if present it will flip the
-                   trace on or of.
- 
-        Z          Move the cursor to the end of the line.
- 
-        PBOX       Inserts a Rexx comment box in a PIPE
- 
-        T          Go to the top of the file.
- 
-        B          Go to the bottom of the file
- 
-        TS         Insert a timestamp.
- 
-        TSRX       Insert a timestamp subroutine.
- 
-        N          Insert Rexx Date Sorted.
- 
-        CEN        Center the content of the line.
- 
-        LEF        Move the content of the line to the left.
- 
-        RIG        Move the content of the line to the right.
- 
-        UPP        Uppercase the content of the line.
- 
-        LOW        Lowercase the content of the line.
- 
-        ANC        Insert a html anchor framework.
- 
-        UL         Insert a html unordered list framework.
- 
-        OL         Insert a html ordered list framework.
- 
-        TBL        Insert a html table framework
- 
-        PCM        Add rexx comment at the end of the line, mostly pipe.
-                   Add a number and on that number of lines a comment
-                   will be added. If you enter PCM* comments will be
-                   generated until the last part of the PIPE.
- 
-        SUB        Inserts a Ress subroutine framework.
- 
-        CONS       Insert a PIPE cons statement for you.
- 
-        FMTP       Formats a PIPE on 1 line to a PIPE over several lines.
- 
-        PIPNM      See the commandline section.
- 
-        NODE       See the commandline section.
- 
-        START      See the commandline section.
- 
-        HLP        See the commandline section.
+  You need to create a file MANY <userid> to contain settings about:
+  name, initials, location and phone nr. Also it sets the length
+  of the comments that are created by MANY XEDIT.
+  See: MANY SAMPLE as a template
  
  
+  Note: not all items are mentioned below see MANY XEDIT for actual
+  synonyms and details.
+.cs 2 off
+.cs 4 on
  
+›|        Name         Prefix  Cmdline     Subroutine & Switch              Description›%
  
+  ›|A›%    ADDCM        Prefix              Add_Address CMS                 /* Add Address CMS       */
+         ADDCP        Prefix              Add_Address CP                  /* Add Address Comm      */
+         ANC          Prefix              HTML_Anchor                     /* Anchor creation       */
+ 
+  ›|B›%    B            Prefix              BOT                             /* Go to BOTtom          */
+         BOX          Prefix              Make_Box                        /* Make comment box      */
+ 
+  ›|C›%    CEN          Prefix              Adjust_Layout center            /* Center text           */
+         CKLDD        Prefix              Check_Loaded                    /* Add checking code     */
+         COM          Prefix              Make_Com                        /* Comment line(s)       */
+         CONS         Prefix              Make_Cons                       /* Add cons in PIPE      */
+ 
+  ›|D›%    DCM          Prefix              Make_Dcm                        /* De-comment line(s)    */
+         DO           Prefix              Make_Do                         /* Create simple do      */
+ 
+  ›|F›%    FIL          Prefix              FILE                            /* File the file         */
+         FMTP         Prefix              Make_FMTP                       /* Format a PIPE         */
+ 
+  ›|H›%    HD           Prefix              Make_Heading                    /* Creat std heading     */
+         HH           Prefix              HTML_Hdr times                  /* Create H1-H5          */
+         HTML         Prefix              HTML                            /* HTML top of page      */
+ 
+  ›|I›%    IF           Prefix              Make_If                         /* Create if stmt        */
+         IMG          Prefix              HTML_Image                      /* Add image stmt        */
+ 
+  ›|L›%    LEF          Prefix              Adjust_Layout left              /* Left adjust text      */
+         LOW          Prefix              Switch_Case lower               /* Lower case            */
+ 
+  ›|M›%    MC           Prefix              Add_Changelog                   /* Add changelog         */
+ 
+  ›|N›%    N            Prefix              Make_Date                       /* Add a date            */
+         NODE         Prefix  Cmdline     Make_Node                       /* Create NODE code      */
+         NUL          Prefix              Switch_Nulls                    /* Adj. nulls setting    */
+ 
+  ›|O›%    OL           Prefix              HTML_List ol                    /* Ordered list          */
+ 
+  ›|P›%    PBOX         Prefix              Make_Pbox                       /* Add a comment box     */
+         PCM          Prefix              Make_Pipe_Comm                  /* Comment a PIPE        */
+         PIF          Prefix              Make_Pipe_If                    /* Add PIPE IF           */
+         PIPE         Prefix              Make_Pipe                       /* Create PIPE stmt      */
+         PIPNM        Prefix  Cmdline     Make_Pipe_Names                 /* Give all PIPEs a NAME */
+         PN           Prefix              Make_PN                         /* Add PIPE name         */
+ 
+  ›|R›%    RIG          Prefix              Adjust_Layout right             /* Right adj text        */
+         RXEXT        Prefix  Cmdline     Make_Exit_Code                  /* Uniform exit code     */
+         RXHLP        Prefix  Cmdline     Make_Help_Code                  /* Add HELP section      */
+         RXTS         Prefix  Cmdline     Make_TimeStamp_Code             /* Add timestamp code    */
+ 
+  ›|S›%    SAV          Prefix              SAVE                            /* Save file             */
+         SEL          Prefix              Make_Select                     /* Create select st      */
+         START        Prefix  Cmdline     Make_Start                      /* Start of EXEC         */
+         SUB          Prefix              Make_SubRoutine                 /* Make subroutine       */
+ 
+  ›|T›%    T            Prefix              TOP                             /* Go to TOP             */
+         TAG          Prefix              Make_Tag                        /* My own tag            */
+         TBL          Prefix              HTML_Table times                /* Create a table        */
+         TR           Prefix              Make_Trace                      /* or switch trace       */
+         TS           Prefix              Make_TimeStamp                  /* Create timestamp      */
+ 
+  ›|U›%    UL           Prefix              HTML_List ul                    /* UN-ordered list       */
+         UPP          Prefix              Switch_Case upper               /* Upper case            */
+ 
+  ›|V›%    VSPEC        Prefix              VSpec                           /* Verticalise SPEC      */
+ 
+  ›|Z›%    Z            Prefix              Go_To_End                       /* Go end of line        */
+.cs 4 off 
+  
+  
