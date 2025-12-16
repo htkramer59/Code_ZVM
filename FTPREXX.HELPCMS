@@ -2,10 +2,10 @@
 .cm FTP - Rexx Pipeline stage that implements the FTP protocol.
 .cm From http://www.vm.ibm.com/download/packages/descript.cgi?ftprexx
  
-›|FTP REXX Pipeline Stage›%
+|FTP REXX Pipeline Stage%
  
 .CS 1 ON
-›|Description›%
+|Description%
  
  "ftp" connects to a remote system using the TCP/IP File Transfer Protocol
  (FTP).  Data may be copied between the pipeline and the remote system's file
@@ -13,26 +13,26 @@
  
  Examples:
  
-   ù  PIPE < test file a | rexx ftp userid@host.domain/test.file
+   y  PIPE < test file a | rexx ftp userid@host.domain/test.file
  
-   ù  PIPE rexx ftp userid@host.domain/test.file | > test file a
+   y  PIPE rexx ftp userid@host.domain/test.file | > test file a
  
-   ù  PIPE rexx ftp host.domain | browse
+   y  PIPE rexx ftp host.domain | browse
  
-›|Attention: ›%CMS Pipelines in z/VM 7.1 with APAR VM66365 and 7.2 or later
+|Attention: %CMS Pipelines in z/VM 7.1 with APAR VM66365 and 7.2 or later
  includes a built in ftp stage.  You must specify "rexx ftp" explicitly to
  bypass the built-in program.  Enter "HELP PIPE FTP" to learn about the built
  in ftp stage.
  
-›|Note: ›%Even though this code has been available for quite awhile, it has not
+|Note: %Even though this code has been available for quite awhile, it has not
  had extensive testing.  Therefore, this package remains as beta code.  There
  are no guarantees that it works with all FTP servers or that it properly
  follows all of the RFCs.  Not all options have been tested and it is likely
  that some parts may not work with modern networks and ftp servers.
  
-›|Type:  Device driver.›%
+|Type:  Device driver.%
  
-›|Warning: ›%"ftp" behaves differently when it is a first stage and when it is
+|Warning: %"ftp" behaves differently when it is a first stage and when it is
  not a first stage.  Existing data can be overlaid when "ftp" is
  unintentionally run other than as a first stage.  To use "ftp" to read data
  into the pipeline at a position that is not a first stage, specify "rexx ftp"
@@ -42,79 +42,79 @@
  
 .CS 1 OFF
 .CS 2 ON
-›|Syntax:›%
+|Syntax:%
  
               (1)
- >>ÄÄREXX FTPÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄ><
-                  |                            <ÄÄÄÄÄÄÄÄÄÄÄÄ¿ |
-                  ÀÄ Ä ÄÄÄÄÄÄ ÄÄÑ ftp-url äÄ ÄÄÄÄÑ option äÄ…ÄÙ
+ >>DDREXX FTPDDDDD DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD DDDDDDDDDDDDD><
+                  |                            <DDDDDDDDDDDD? |
+                  @D D DDDDDD DDQ ftp-url dD DDDDQ option dDDY
                     | |   (3)|              |
-                    | äÄ<ÄÄÄÄÑ              |
-                    | äÄ>ÄÄÄÄÑ              |
-                    | äÄ<ÄÄÄÄÑ              |
-                    | äÄ>>ÄÄÄÑ              |
-                    | äÄLISTÄÑ              |
-                    | ÀÄNLSTÄÙ              |
-                    ÀÄÑ host äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+                    | dD<DDDDQ              |
+                    | dD>DDDDQ              |
+                    | dD<DDDDQ              |
+                    | dD>>DDDQ              |
+                    | dDLISTDQ              |
+                    | @DNLSTDY              |
+                    @DQ host dDDDDDDDDDDDDDDY
  
-›|ftp-url:›%
-    ÚÄFTP://Ä¿
- äÄÄ…ÄÄÄÄÄÄÄÄ…ÄÄÑ open äÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-                          ÀÄ/ÄÄÑ ftp-url-path äÄÙ
+|ftp-url:%
+    ZDFTP://D?
+ dDDDDDDDDDDDDQ open dDD DDDDDDDDDDDDDDDDDDDDD DDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+                          @D/DDQ ftp-url-path dDY
  
-›|open:›%
- äÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÑ host äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    ÀÄÑ login äÄÄ@ÄÙ
+|open:%
+ dDD DDDDDDDDDDDDDD DDQ host dDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    @DQ login dDD@DY
  
-›|host:›%
-      <Ä.ÄÄÄÄ¿     ÚÄ:21ÄÄÄ¿
- äÄÄ ÄÄÄwordÄ…ÄÄ ÄÄÅÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    ÀÄipaddressÄÙ  ÀÄ:portÄÙ
+|host:%
+      <D.DDDD?     ZD:21DDD?
+ dDD DDDwordDDD DDEDDDDDDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    @DipaddressDY  @D:portDY
  
-›|login:›%
-    ÚÄANONYMOUS:mailboxÄÄÄÄÄÄÄÄÄÄÄ¿
- äÄÄ…ÄuseridÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ Ä…ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-              ÀÄ:ÄÄ ÄÄÄÄÄÄÄÄÄÄ ÄÙ
-                   ÀÄpasswordÄÙ
+|login:%
+    ZDANONYMOUS:mailboxDDDDDDDDDDD?
+ dDDDuseridDD DDDDDDDDDDDDDDDDD DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+              @D:DD DDDDDDDDDD DY
+                   @DpasswordDY
  
-›|ftp-url-path:›%
- äÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄ ÄÄÄÄÄÄ ÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | <Ä/ÄÄÄ¿    |  ÀÄnameÄÙ  ÀÄ;TYPE=ÄÄ ÄEÄ ÄÙ
-    ÀÄÄÄcwdÄ…ÄÄ/ÄÙ                      äÄAÄÑ
-                                        äÄIÄÑ
-                                        ÀÄDÄÙ
+|ftp-url-path:%
+ dDD DDDDDDDDDDDD DD DDDDDD DD DDDDDDDDDDDDDDD DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    | <D/DDD?    |  @DnameDY  @D;TYPE=DD DED DY
+    @DDDcwdDDD/DY                      dDADQ
+                                        dDIDQ
+                                        @DDDY
  
-›|option:›%
+|option:%
                                         (2)
- äÄÄ Ä ÄEBcdicÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | äÄASciiÄÄÑ                      |
-    | äÄBinaryÄÑ                      |
-    | ÀÄImageÄÄÙ                      |
-    äÄ ÄRECordÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | ÀÄFILeÄÄÄÙ                      |
-    äÄ ÄBLOckÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | ÀÄSTReamÄÙ                      |
-    | ÚÄQUIETÄ¿                       |
-    äÄ…ÄNOISYÄ…ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄPASSIVEÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄEPASSIVEÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄANYDATAportÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄPROXYÄÄÑ ftp-url äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄSITEÄÄdstringÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄTIMEOutÄÄnnnÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄUSERidÄÄtcpidÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄPASSWORDVarÄÄvariablenameÄÄÄÄÄÄÄÑ
-    |              ÚÄ1047ÄÄ819ÄÄÄÄ¿   |
-    |              |      ÚÄ819Ä¿ |   |
-    | ÚÄCODEPagesÄÄ…ÄnnnÄÄÅÄÄÄÄÄÅÄ…Ä¿ |
-    | |                   ÀÄnnnÄÙ   | |
-    | | <ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿     | |
-    äÄ…ÄÄ ÄE2AtableÄÄdstringÄ …ÄÄÄÄÄ…ÄÑ
-    |    ÀÄA2EtableÄÄdstringÄÙ        |
-    ÀÄ ÄTOLerantÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
-      ÀÄINTOLerantÄÙ
+ dDD D DEBcdicD DDDDDDDDDDDDDDDDDDDDDD DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    | dDASciiDDQ                      |
+    | dDBinaryDQ                      |
+    | @DImageDDY                      |
+    dD DRECordD DDDDDDDDDDDDDDDDDDDDDDQ
+    | @DFILeDDDY                      |
+    dD DBLOckDD DDDDDDDDDDDDDDDDDDDDDDQ
+    | @DSTReamDY                      |
+    | ZDQUIETD?                       |
+    dDDNOISYDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDPASSIVEDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDEPASSIVEDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDANYDATAportDDDDDDDDDDDDDDDDDDDDDQ
+    dDPROXYDDQ ftp-url dDDDDDDDDDDDDDDQ
+    dDSITEDDdstringDDDDDDDDDDDDDDDDDDDQ
+    dDTIMEOutDDnnnDDDDDDDDDDDDDDDDDDDDQ
+    dDUSERidDDtcpidDDDDDDDDDDDDDDDDDDDQ
+    dDPASSWORDVarDDvariablenameDDDDDDDQ
+    |              ZD1047DD819DDDD?   |
+    |              |      ZD819D? |   |
+    | ZDCODEPagesDDDnnnDDEDDDDDEDD? |
+    | |                   @DnnnDY   | |
+    | | <DDDDDDDDDDDDDDDDDDDDD?     | |
+    dDDD DE2AtableDDdstringD DDDDDDQ
+    |    @DA2EtableDDdstringDY        |
+    @D DTOLerantDDD DDDDDDDDDDDDDDDDDDY
+      @DINTOLerantDY
  
-›|Notes:›%
+|Notes:%
  (1)  CMS Pipelines in z/VM 7.1 with APAR VM66365 and 7.2 or later includes a
       built in ftp stage.  You must specify "rexx ftp" explicitly to bypass
       the built-in program.
@@ -127,7 +127,7 @@
  
 .CS 2 OFF
 .CS 3 ON
-›|Operands:›%
+|Operands:%
  
  Syntax Description:
  
@@ -141,7 +141,7 @@
  
  The following rules apply in detail to this stage:
  
-›|When the secondary input is not connected:›%
+|When the secondary input is not connected:%
  
  Only a URL is permitted, not a host.  The "ftp://" part of the URL may be
  omitted.
@@ -161,7 +161,7 @@
  is not connected.  If the secondary stream is connected then the URL must
  refer to a directory and TYPE= must not be specified.
  
-›|When the secondary input is connected:›%
+|When the secondary input is connected:%
  
  The first token must be omitted.  The next is either a URL or a host.  The
  ftp:// part of a URL may be omitted only if the remainder of the URL is not
@@ -170,13 +170,13 @@
  
  If a URL is specified, it must refer to a directory.
  
-›|The components of the URL are as follows:›%
+|The components of the URL are as follows:%
  
-›|user›%
+|user%
      Specify a user ID on the remote system.  The default user ID is
      "anonymous".
  
-›|password›%
+|password%
      The password for the user ID.  If the user ID is "anonymous" the password
      defaults to the virtual machine's SMTP mailbox address (e-mail address).
      The mailbox address is determined as follows:
@@ -195,28 +195,28 @@
      PASSWORDVAR option.  This prevents the password from appearing in trace
      output.
  
-›|word›%
+|word%
      Enter the host name of the remote system followed by the elements of the
      domain name delimited by dots.
  
-›|ipaddress›%
+|ipaddress%
      The remote system may also be identified by the dotted decimal IP address
      of one of its network interfaces.
  
-›|port›%
+|port%
      specify the port number of the FTP server's control stream as a decimal
      number between 1 and 65535.  The default is 21.
  
-›|cwd›%
+|cwd%
      Enter a sequence of path specifications to be used as the arguments to a
      series of CWD (Change Working Directory) commands.  To specify a path
      containing multiple directories separated by slashes on a single CWD
      command, encode each "/" as "%2F".
  
-›|name›%
+|name%
      The target file or directory.
  
-›|E, A, I, D›%
+|E, A, I, D%
      The TYPE of the transfer:  EBCDIC, ASCII or IMAGE.  D specifies DIRECTORY
      and is only valid when "ftp" is writing to the pipeline.  When the type
      is D, the NLST (Name LiST) command is used instead of the RETR (RETRieve)
@@ -225,41 +225,41 @@
  
 .CS 3 OFF
 .CS 4 ON
-›|Options:›%
+|Options:%
  
  The following options modify the behaviour of FTP:
  
-›|QUIET›%
-›|NOISY›%
+|QUIET%
+|NOISY%
      Turns off and on the echoing of the FTP commands and responses to the
      console.
  
-›|TOLERANT›%
-›|INTOLERANT›%
+|TOLERANT%
+|INTOLERANT%
      Specifies whether FTP is to continue after an error is reported by the
      server.  The default behaviour depends on whether the secondary output is
      connected when FTP starts:  it is TOLERANT if the stream is connected.
  
-›|PROXY›%
+|PROXY%
      Specifies an FTP host in URL form (without any path information to serve
      as a PROXY.  After logging in FTP REXX issues SITE hostname to open a
      connection to the real host and proceeds as normal.  HTTP: style proxies
      are not yet supported (because I don't quite know how they work yet.)
  
-›|CODEPages›%
+|CODEPages%
      Specify codepages used for ASCII/EBCDIC translation.  This is used for
      translating encoded ASCII characters in the URL specification and for
      converting ASCII type transfers to and from EBCDIC.  The EBCDIC codepage
      is specified first, and the ASCII codepage second.  CODEPAGE sets both
      E2ATABLE and A2ETABLE.
  
-›|E2Atable›%
+|E2Atable%
      Specify the EBCDIC-ASCII translation table.
  
-›|A2Etable›%
+|A2Etable%
      Specify the ASCII-EBCDIC translation table.
  
-›|PASSWORDVar›%
+|PASSWORDVar%
      Specify the name of a variable in the host program (probably the one with
      the PIPE command in it) that contains the password for the ftp user ID
      that is part of the URL.  If there is no Rexx environment "above" this
@@ -272,10 +272,10 @@
  not connected.  When the secondary input stream is connected, the equivalent
  FTP command should be issued via that stream.
  
-›|EBcdic›%
-›|AScii›%
-›|Binary›%
-›|IMage›%
+|EBcdic%
+|AScii%
+|Binary%
+|IMage%
      Specify the initial type for the transfer.  If no type is specified,
      EBCDIC will be tried, and if this fails the FTP default of ASCII will be
      used.  If the remote host rejects the requested type, an error is
@@ -285,27 +285,27 @@
      to either EBCDIC or ASCII for the duration of the transfer to comply with
      RFC 959.  That is, they are effectively ignored.
  
-›|RECord›%
-›|FILe›%
+|RECord%
+|FILe%
      Specify the initial structure for the transfer.  If no structure is
      specified, RECORD will be tried, and this fails the FTP default of FILE
      will be used.  If the remote host rejects the requested structure, an
      error is reported.
  
-›|BLOck›%
-›|STReam›%
+|BLOck%
+|STReam%
      Specify the initial mode for the transfer.  If no mode is specified,
      BLOCK will be tried, and if this fails, the FTP default of FILE will be
      used.  If the remote host rejects the requested structure, an error is
      reported.
  
-›|PASSIVE›%
+|PASSIVE%
      Default to PASV mode instead of PORT mode.
  
-›|EPASSIVE›%
+|EPASSIVE%
      Default to EPSV mode instead of PORT mode.
  
-›|SITE›%
+|SITE%
      Specify a SITE command to be issued to the remote system after the login
      is complete.  The SITE option is not recognised if the secondary input
      stream is connected.
@@ -327,9 +327,9 @@
  
 .CS 4 OFF
 .CS 5 ON
-›|Usage Notes:›%
+|Usage Notes:%
  
-›|Operation:›%
+|Operation:%
  
  "ftp" operates in one of two modes depending on the number of connected input
  streams.  When there is a single stream, the URL specifies a file or
@@ -355,7 +355,7 @@
  tertiary before the partly built record and so will be in the "wrong place."
  Not sure what to do about this yet.
  
-›|Premature termination:›%
+|Premature termination:%
  
  If the secondary output is connected when "ftp" is started, it terminates if
  it discovers that the secondary output is not connected.  Otherwise, it
@@ -367,25 +367,25 @@
  connected when it is about to issue a command which reads data from the
  pipeline.
  
-›|Using the COMMAND stream›%
+|Using the COMMAND stream%
  
  Any FTP command (as defined by RFC 959) may be entered on the command stream
  and will be passed on to the server.  There are three commands which have
  different syntax and behaviour.
  
-›|PORT›%
+|PORT%
      specify the keyword PORT only.  FTP will obtain a data port, listen for a
      connection from the current server's default data port and issue the PORT
      command to the server.  A subsequent accept() is done when the server
      connects back.  PORT closes any previously defined data stream.
  
-›|PASV›%
+|PASV%
      FTP issues a PASV command to the server, parses the 227 response and
      connects to the server's data port.  PASV closes any currently defined
      data stream.  Note that PASV does not change the local data port, just
      the remote port.  To change both, issue PORT then PASV.
  
-›|EPSV›%
+|EPSV%
      FTP issues an EPSV command to the server, parses the 229 response and
      connects to the server's data port.  EPSV closes any currently defined
      data stream.
@@ -427,11 +427,11 @@
  There are also a number of "user" commands which result in FTP command
  sequences.
  
-›|OPEN›%
+|OPEN%
      The argument is the hostname optionally followed by a a port.  FTP opens
      a control connection.
  
-›|LOGIN›%
+|LOGIN%
      The argument is a user ID.  FTP executes a USER command on receipt of a
      3xx reply; if the user ID is "anonymous" then FTP will issue a PASS
      command giving the user's email e-mail address.  For all other user IDs,
@@ -441,19 +441,19 @@
      command on the secondary will have to be ACCT to complete the login
      sequence.
  
-›|RENAME›%
+|RENAME%
      The argument is two delimited strings giving the old and new names.  FTP
      executes the RNFR-RNTO sequence.  The RNTO is only issued if the RNFR
      completes normally (ie.  with a 3xx response.)
  
-›|CODEPAGES›%
+|CODEPAGES%
      Change Codepages:  arguments are the same as for the CODEPAGE options.
      Specify CHCP without arguments to reset the codepages to the defaults
      (1047 & 819).  The codepages apply to new connections and not existing
      ones, i.e. you cannot change the codepages for an existing control
      connection.
  
-›|PROXY›%
+|PROXY%
      Change the PROXY information.  Argument is a URL as for PROXY option.
      Specify PROXY with no argument to disable the use of the PROXY.  Changes
      to the PROXY information have no effect until the next OPEN.
@@ -461,7 +461,7 @@
  A null command is ignored.  Null records on the command line can be used to
  identify EoF for each file on the primary input stream
  
-›|Additional Usage Notes:›%
+|Additional Usage Notes:%
  
    1.  Arbitrary characters may be encoded in the URL by using the RFC 1738
        rules encoding rules.  Specify %xx where xx is the hexadecimal
@@ -473,7 +473,7 @@
  
 .CS 5 OFF
 .CS 6 ON
-›|Errors:›%
+|Errors:%
  
  -- Not implemented --
  The three commands which are allowed to execute asynchronously during a data
@@ -485,7 +485,7 @@
  
 .CS 6 OFF
 .CS 7 ON
-›|See also:›%
+|See also:%
  
  Please send any comments or problems to the current author:
  bjhayden@us.ibm.com
@@ -510,16 +510,16 @@
  
  Versions:
  
-   ù 0.99.1 - Fix parsing bugs and typos.  Change ";TYPE=B" to ";TYPE=I".
-   ù 0.99.2 - With PASSIVE option, don't send PORT command unless using proxy.
-   ù 0.99.3 - Fix deblocking of record structure (from mailing list.)
-   ù 0.99.4 - Implement extended passive (EPSV).
-   ù 0.99.5 - Avoid message when TCPIP DATA not available.
-   ù 0.99.6 - Option to supply password via variable.
-   ù 0.99.7 - Allow 14 digit byte counts (about 90 TB) in messages.
-   ù 0.99.8 - Remove the documentation comments that duplicated the help file
+   y 0.99.1 - Fix parsing bugs and typos.  Change ";TYPE=B" to ";TYPE=I".
+   y 0.99.2 - With PASSIVE option, don't send PORT command unless using proxy.
+   y 0.99.3 - Fix deblocking of record structure (from mailing list.)
+   y 0.99.4 - Implement extended passive (EPSV).
+   y 0.99.5 - Avoid message when TCPIP DATA not available.
+   y 0.99.6 - Option to supply password via variable.
+   y 0.99.7 - Allow 14 digit byte counts (about 90 TB) in messages.
+   y 0.99.8 - Remove the documentation comments that duplicated the help file
      and the document.
-   ù 0.99.9 - Encoded ASCII characters in the url did not work.
+   y 0.99.9 - Encoded ASCII characters in the url did not work.
  
  
  PIPE MENU               Help for CMS Pipelines

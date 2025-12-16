@@ -45,17 +45,17 @@ For other DRM and related information:
    place the cursor under the topic of your choice and press ENTER or PF1
  
  
-DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
+DRM DYNFLTR (ALL        Filtering&- Dynamic GAP & MDISKMAP filtering details
 DRM DYNFLTR (ALL
-DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
-DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
-DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
-DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
-DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
-DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips, README
+DRM DRM     (ALL        DRM      &- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   &- How to allocate a new minidisk with DRM
+DRM FINDUSER(ALL        FINDUSER &- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP &- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  &- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  &- Genaral usage notes, remarks, tips, README
  
-XEDIT ALL (ALL          ALL          ›%XEDIT's ALL macro; "Selective Line Editing"
-SET SELECT  (ALL         SET SELECT  ›%- Assign nbrs for "Selective Line Editing"
-SET DISPLAY (ALL         SET DISPLAY ›%- Which lines will be displayed
-SET SCOPE  (ALL          SET SCOPE   ›%- To which lines apply commands
+XEDIT ALL (ALL          ALL          %XEDIT's ALL macro; "Selective Line Editing"
+SET SELECT  (ALL         SET SELECT  %- Assign nbrs for "Selective Line Editing"
+SET DISPLAY (ALL         SET DISPLAY %- Which lines will be displayed
+SET SCOPE  (ALL          SET SCOPE   %- To which lines apply commands
 .cs 7 off

@@ -1,0 +1,198 @@
+/*---------------------------------------------------------------+
+| Function : Standard profile exec which uses 3 levels of input  |
+|                                                                |
+| File     : STDPROF  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : STDPROF  SYSTEM   input, generic profile            |
+|          : STDPROF  <node>   input, node specific profile      |
+|          : STDPROF  <userid> input, user specific profile      |
+|                                                                |
+| Called   : STDPROF  <startparm>                                |
+|                                                                |
+| Comments : Obtaining variables in the underlying execs, for    |
+|            example in pre_exit and post_exit:                  |
+|                PIPE var <varname> 1 | ....                     |
+|                PIPE rexxvars 1 toload | varload                |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20180128 16:00:04                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg startparm
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Call Init
+'PIPE (NAME STDPROF.EXEC:26 END ?)',
+   'cp QUERY USERID',
+   '| specs w3.1 1',
+   '| var node',
+   '?',
+   'cp QUERY USER 'Userid(),
+   '| specs fs - f2.1 1',
+   '| pick w1.1 == ~DSC~',
+   '| count lines',
+   '| var disc'
+/*---------------------------------------------------------------+
+| Check if the files needed exist                                |
++---------------------------------------------------------------*/
+systinp=Checkfile(myfn' SYSTEM')
+nodeinp=CheckFile(myfn node)
+userinp=CheckFile(myfn Userid())
+/*---------------------------------------------------------------+
+| If the files exist load them                                   |
++---------------------------------------------------------------*/
+If systinp Then Call LoadFile(myfn' SYSTEM')
+If nodeinp Then Call LoadFile(myfn node)
+If userinp Then Call LoadFile(myfn Userid())
+/*---------------------------------------------------------------+
+| Here we start running the various items found                  |
++---------------------------------------------------------------*/
+If pre_exit<>''     Then Do
+                         Say TimeStamp() 'Running pre-exit: 'pre_exit
+                         Address CMS pre_exit
+                         End
+If access_items<>'' Then Call Do_Access
+If tooling<>''      Then Call Do_Tooling
+If cpcmds<>''       Then Call Do_Cmds 'CP'
+If cmscmds<>''      Then Call Do_Cmds 'CMS'
+If run<>''          Then Address CMS run
+If post_exit<>''    Then Do
+                         Say TimeStamp() 'Running post-exit: 'post_exit
+                         Address CMS post_exit
+                         End
+/* If disc &, */
+/*    servercode<>''   Then Address serverenv servercode */
+/*                     Else Say TimeStamp()' To start servercode 'servercode' type: 'servercode */
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Do_Access:
+/*---------------------------------------------------------------+
+| Access filepools or minidisks                                  |
++---------------------------------------------------------------*/
+'PIPE (NAME STDPROF.EXEC:73 END ?)',
+  'var access_items',                            /* Take this        */
+  '| split at ;',                                /* Split here       */
+  '| strip',                                     /* Remove spaces    */
+  '| stem access.',                              /* Hand 2 rexx      */
+  '?',                                           /* 2nd pipe         */
+  'var ifrc0',                                   /* Take this        */
+  '| split at ;',                                /* Split here       */
+  '| strip',                                     /* Remove spaces    */
+  '| stem ifrc.'                                 /* Hand 2 rexx      */
+Do a=1 To access.0
+   Address CMS access.a
+   If rc=0 &,
+      ifrc.a<>'' Then Do
+                      Address CMS ifrc.a
+                      End
+                 Else Say TimeStamp() 'Non-zero rc on: ACCESS 'access.a
+End a
+Return
+ 
+ 
+Do_Tooling:
+/*---------------------------------------------------------------+
+| Access the tooling you need                                    |
++---------------------------------------------------------------*/
+Address CMS tooling
+If rc<>0 &,
+   alt_tooling<>'' Then Do
+                        Say TimeStamp()' Accessing alternate tooling'
+                        Address CMS alt_tooling
+                        End
+Return
+ 
+ 
+Do_Cmds:
+/*---------------------------------------------------------------+
+| Issue the CP and CMS commands when offered                     |
++---------------------------------------------------------------*/
+Parse Upper Arg switch .
+If switch='CP'  Then Do
+                cmds=cpcmds
+                switch='change anycase ~userid()~'Userid()'~ | 'switch' | hole'
+                End
+If switch='CMS' Then Do
+                cmds=cmscmds
+                switch='change anycase ~userid()~'Userid()'~ | 'switch' | cons'
+                End
+'PIPE (NAME STDPROF.EXEC:120 END ?)',
+    'var cmds',                                  /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| strip',                                   /* Remove spaces    */
+    '| 'switch                                   /* Run this         */
+Return
+ 
+ 
+ 
+CheckFile:
+/*---------------------------------------------------------------+
+| Check if the requested file exists                             |
++---------------------------------------------------------------*/
+Parse Upper Arg filein
+'PIPE (NAME PROF.EXEC:120 END ?)',               /* .                */
+  'cms LISTFILE 'filein' * (NOH ISO',            /* Locate a file    */
+  '| pick 1.6 \== ~DMSLST~',                     /* Ignoree this     */
+  '| count lines',                               /* How many         */
+  '| var state'                                  /* Store as boolean */
+If state>1 Then state=1
+Return state
+ 
+ 
+LoadFile:
+/*---------------------------------------------------------------+
+| Read the requested file and load the values                    |
++---------------------------------------------------------------*/
+Parse Upper Arg filein
+'PIPE (NAME STDPROF.EXEC:147 END ?)',
+    '< 'filein' *',                              /* Read this file   */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~~ and',                     /* Ignore these     */
+           '1.1 \== ~*~',                        /* ...lines         */
+    '| join * x40',                              /* Make 1 record    */
+    '| split anycase before string ~:access_items.~', /* Split at         */
+    '| split anycase before string ~:tooling.~',      /* .these           */
+    '| split anycase before string ~:cpcmds.~',       /* .                */
+    '| split anycase before string ~:cmscmds.~',      /* .                */
+    '| split anycase before string ~:alt_tooling.~',  /* .                */
+    '| split anycase before string ~:ifrc0.~',        /* .                */
+    '| split anycase before string ~:run.~',          /* .                */
+    '| split anycase before string ~:pre_exit.~',     /* .                */
+    '| split anycase before string ~:post_exit.~',    /* .                */
+    '| split anycase before string ~:servercode.~',   /* .                */
+    '| change ~:~/~ 1',                          /* Prep 4 varload   */
+    '| change ~.~/~ 1',                          /* .idem            */
+    '| xlate fs / f2 upper',                     /* ..idem           */
+    '| varload'                                  /* Hand 2 rexx      */
+Return
+ 
+ 
+Init:
+/*---------------------------------------------------------------+
+| Initialise all possible values                                 |
++---------------------------------------------------------------*/
+pre_exit=''     ; post_exit=''
+access_items='' ; ifrc0=''
+tooling=''      ; alt_tooling=''
+cpcmds=''       ; cmscmds=''
+servercode=''   ; serverenv='CMS'
+run=''
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

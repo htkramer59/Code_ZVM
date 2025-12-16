@@ -11,10 +11,10 @@
     But you can use PROFDRM XEDIT to tailor PF-keys, etc
     and DRM NAMES to parameters, defaults, etc
  Functions to assign to PF-keys:
-    $DRM$ $SAVE$ ›D | DD! save directory ›and DIRMAP ›and DIRECT!!
-    $DRM$ $FILE$ ›D | DD! file directory ›and DIRMAP ›and DIRECT!!
+    $DRM$ $SAVE$ D | DD! save directory and DIRMAP and DIRECT!!
+    $DRM$ $FILE$ D | DD! file directory and DIRMAP and DIRECT!!
     $DRM$ $QUIT$          quit directory
-    $DRM$ $FIND$ ›PREV!   find a user top down ›or bottom-up!
+    $DRM$ $FIND$ PREV!   find a user top down or bottom-up!
     $DRM$ $REFR$          save directory & refresh GAPFILE
     $DRM$ $ALL$           See complete user for lines selected with ALL
     $DRM$ $ALLU$          See USER cards for all lines selected with ALL
@@ -1397,7 +1397,7 @@ MdiskBuildFreeMap: /* Build the FREEMAP                            */
  
  if CharsLogon ='' then CharsLogon ='ZABCDEFGHIJKLMNOPQRSTUVXWY'
  if CharsLogoff='' then CharsLogoff='zabcdefghijklmnopqrstuvxwy'
- if CharsHard  ='' then CharsHard  ='%$:/$ë'
+ if CharsHard  ='' then CharsHard  ='%$:/$k'
  lngCLog = length(CharsLogon)
  lngCLof = length(CharsLogoff)
  lngCHrd = length(CharsHard)

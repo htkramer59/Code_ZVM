@@ -80,12 +80,12 @@ For other DRM information:
    place the cursor under the topic of your choice and press ENTER
  
  
-CMS DRM     (ALL        Overview ›&- An overview of DRM
-DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
-DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
-DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
-DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
-DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
-DRM FREEMAP (ALL        FREEMAP  ›&- How to use the FREEMAP, defragment disks
-DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips
+CMS DRM     (ALL        Overview &- An overview of DRM
+DRM DRM     (ALL        DRM      &- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   &- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering&- Dynamic GAP & MDISKMAP filtering details
+DRM MDISKMAP(ALL        MDISKMAP &- How to use the MDISKMAP
+DRM FREEMAP (ALL        FREEMAP  &- How to use the FREEMAP, defragment disks
+DRM GENERAL (ALL        GENERAL  &- Genaral usage notes, remarks, tips
 .cs 7 off

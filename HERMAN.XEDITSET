@@ -14,7 +14,7 @@
 :synonyms_4_prefix.BOX COM DCM HD MC TAG PN PIPE IF DO SAV FIL NUL TR Z
        PBOX T TS B N CEN LEF RIG UPP LOW HTML ANC UL OL TBL IMG PCM
        HH SEL SUB CONS FMTP PIPNM PN NODE START RXTS RXHLP RXEXT
-       VSPEC MARK PIF
+       VSPEC MARK PIF CKLDD ADDCP ADDCM
 **---------------------------------------------------------------+
 * commandline synonymns to use the MANY macro                    |
 *---------------------------------------------------------------*/
@@ -34,6 +34,6 @@
 **--------------------------------------------------------------------+
 * Set my PF keys, using 1 to 12, separated by ;                       |
 *--------------------------------------------------------------------*/
-:pfkeys.HELP; ;ONLY SET MSGMODE OFF#QUIT#SET MSGMODE ON#FILE;SPLTJOIN;RGTLEFT;SCREEN 2;BACKWARD;FORWARD; ;
+:pfkeys.HELP; ;ONLY QUIT;SPLTJOIN;RGTLEFT;SCREEN 2;BACKWARD;FORWARD; ;
        TOP#NEXT;BOT#BACKWARD#NEXT 2;ONLY QUIT
 :pfkeylabels.Help;_;File;Sp/Jn;<->;Scr2;Back;Forw;_;Top;Bot;Quit

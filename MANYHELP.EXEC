@@ -12,7 +12,7 @@
 |                                                                     |
 | Called   : MANHLP   .                                               |
 |                                                                     |
-| Comments : hi on=›|  hi off=›%                                      |
+| Comments : hi on=|  hi off=%                                      |
 |                                                                     |
 | Author   : H.T.Kramer, At_home,                                     |
 | Created  : 20251128 15:35:03                                        |
@@ -38,7 +38,7 @@ hi_on ='4A4F'x ; hi_off='4A6C'x
            'break a',                                 /* ..on             */
            'id a 5',                                  /* ...alfabet       */
    '| change ~*/~~',                                  /* Remove these     */
-   '| specs 1;* 1 ~*/~ 100',                          /* Add at end       */
+   '| specs 1;* 1 ~*/~ 120',                          /* Add at end       */
    '| if2: if pick 5.1 \== ~ ~',                      /* If this          */
    '|   specs ~; ;~ 1 x4A4F 6 5.1 n x4A6C n 6;* n',   /* Add newline&hilig*/
    '| if2:',                                          /* Conn 2 iff       */
@@ -70,7 +70,7 @@ End c
 /*--------------------------------------------------------------------+
 | Create the final help file                                          |
 +--------------------------------------------------------------------*/
-hdr='›|        Name         Prefix  Cmdline     Subroutine & Switch              Description›%'
+hdr='|        Name         Prefix  Cmdline     Subroutine & Switch              Description%'
 'PIPE (NAME MANYHELP.EXEC:74 END ?)',
    'stem work.',                                      /* Take these       */
    '| preface var hdr',                               /* Add header       */
@@ -93,16 +93,16 @@ Exit
 .cm MANY XEDIT macro
  
  
-›|MANY XEDIT macro›%
+|MANY XEDIT macro%
  
  
 .cs 1 off
 .cs 2 on
  
-›|Purpose:›%
+|Purpose:%
   Create some user and prefix commands to make your editing easier.
  
-›|How to implement MANY:›%
+|How to implement MANY:%
  
   To use the MANY XEDIT macro you need to set prefix synonyms in
   your XEDIT PROFILE.

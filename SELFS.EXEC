@@ -807,7 +807,7 @@ WriteFields: /* Write a line with fields, Start in passed col      */
     if np=0 then leave /* No more fields */
  
     parse var Fieldclrs clr ',' FieldClrs  /* Field Styles and colors */
-    parse var clr clr '›' stijl '!' '' stijlen
+    parse var clr clr '' stijl '!' '' stijlen
     if clr='' then clr=oClr ; else oClr=Clr
     /* Now write the field itself */
     parse var data t '15'x data; if t=='' then t=' '
@@ -824,7 +824,7 @@ WriteFields: /* Write a line with fields, Start in passed col      */
        stijlen=stijlen||t
     end
     fields=fields sta ln
-    if stijlen<>'' then fields=fields'›'stijlen'!'
+    if stijlen<>'' then fields=fields''stijlen'!'
     parse value sta+ln+1 ne+1 with sta p
  end
 return
@@ -1196,12 +1196,12 @@ GetScreenData: /* Get the modified fields                          */
                   '14'x||datafld1<||'14'x||datafld2> ...
       For an InitFld panel "selchar" doesn't exist
    Format of variable "field"   Example
-     ,1,2 15 9›U! 37 30›U!,3,4 19 25,5 19 25,6 19 25›U!,7...
+     ,1,2 15 9U! 37 30U!,3,4 19 25,5 19 25,6 19 25U!,7...
      Line 2 has two fields: one: col 15, lnk 9; two: col 37 lnk 30
                             both fields have style "uppercase"
 */
  if style='INITF' then selcol=-1; else selcol=Offset+1
-/*say 'StartGetData:' translate(selections,'Ù@','1415'x) */
+/*say 'StartGetData:' translate(selections,'Y@','1415'x) */
  do i=3 to waitread.0
     parse var waitread.i t l# c d
     LinTyp=word('RES',(t='DATA')+1)
@@ -1231,7 +1231,7 @@ GetScreenData: /* Get the modified fields                          */
        fld.='' ; newFldsData=''
        do while FldCols<>''
           parse var FldCols col ln FldCols
-          parse var ln ln '›' styles '!'
+          parse var ln ln '' styles '!'
           parse var FldsData 2 t '14'x +0 FldsData
           if col<>c then NewFldsData=NewFldsData||'14'x||t /* old data*/
           else do /* This is the field just changed by the user */
@@ -1246,7 +1246,7 @@ GetScreenData: /* Get the modified fields                          */
     end
  end i
  selections='15'x || strip(selections,'L','15'x)
-/*say 'EndGetData:' translate(selections,'Ù@','1415'x)*/
+/*say 'EndGetData:' translate(selections,'Y@','1415'x)*/
 return
 /*-----------------------------------------------------------------*/
 UpdatePanel: /* Update field on the panel as requested by our caller*/
@@ -1259,8 +1259,8 @@ UpdatePanel: /* Update field on the panel as requested by our caller*/
    say '"UPDSELFLD" requests are only valid for INITX/INITC/INITF panels'
    return
  end
-/*say 'StartUpdPanl:' translate(selections,'Ù@','1415'x)*/
-/*say '   Merge:    ' translate(rest      ,'Ù@','1415'x)*/
+/*say 'StartUpdPanl:' translate(selections,'Y@','1415'x)*/
+/*say '   Merge:    ' translate(rest      ,'Y@','1415'x)*/
  if fields='' then rest=translate(rest,'15'x,';') /*Xlate separ in "nl"*/
  Do while rest<> ''
     parse var rest i fld d '15'x rest
@@ -1280,7 +1280,7 @@ UpdatePanel: /* Update field on the panel as requested by our caller*/
        t=','i' '                 /* Get know field cols for the line */
        parse var fields (t) fldcols ','
        col=word(fldcols,(fld#-1)*2+1)
-       parse value word(fldcols,(fld#-1)*2+2) with lng '›'
+       parse value word(fldcols,(fld#-1)*2+2) with lng ''
     end
     /* Update vscreen and our "selection" (result) string */
     if col='' then  say 'Field nbr' fld 'on line' i 'not fnd'
@@ -1296,7 +1296,7 @@ UpdatePanel: /* Update field on the panel as requested by our caller*/
        'VSCREEN WRITE 'vscreen l# col lng '('LinTyp 'DATA' left(d,lng)
     end
  end
-/*say 'EndUpdPanl:' translate(selections,'Ù@','1415'x)*/
+/*say 'EndUpdPanl:' translate(selections,'Y@','1415'x)*/
 return
  
 /*******************************************************************/

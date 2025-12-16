@@ -629,49 +629,49 @@ return
 /*                                                                    */
 /* <                                >/>>                              */
 /*                                                                    */
-/*  tcplisten<ÄÄÄÄÄÄÄÄÄ¿            tcplisten<ÄÄÄÄÄÄÄÄÄ¿              */
-/*  ³                  ³             ³                 ³              */
-/*  äÄtcpdata(data)    ³            äÄtcpdata(data)<ÄÄÄÄÄ¿           */
-/*  ³  ³               ³            ³                 ³  ³           */
-/*  ³  ³  ÚÄÄÄÄÄÄÄÄÄ¿  ³            ³     ÚÄÄÄÄÄÄÄÄÄ¿ ³  ³           */
-/*  ³  ³  ³   FTP   ³  ³            ³    ³   FTP   ³ ³  ³           */
-/*  ³  ³  ³         ³  ³            ³     ³         ³ ³  ³           */
-/*  ³  ³  0 ÚÄpostÄÄ0ÄÄÄÄ>          ³  >ÄÄ0ÄÄpreÄÄ¿ 0 ³  ³           */
-/*  ³  ³  ³ ³       ³  ³            ³     ³       ³ ³ ³  ³           */
-/*  ³  ÀÄÄdata   data  ³            ³     data   dataÄÄÄÄÙ           */
-/*  ³     ³         ³  ³            ³    ³        ³ ³              */
-/*  ÀÄÄÄÄ>port   portÄÄÙ            ÀÄÄÄÄ>port   portÄÙ              */
-/*        ³         ³                     ³        ³                */
-/*  cmdsÄ>1ÄÄÄ¿echoÄ1ÄÄÄÄ>           cmdsÄ>1ÄÄÄ¿echoÄ1ÄÄÄÄ>           */
-/*        ³ ÚÄ³ÄÙ   ³                     ³ ÚÄ³ÄÙ  ³                */
-/*  ÚÄÄÄÄ>ctl ÀÄÄ>ctlÄÄÄÄÄ¿          ÚÄÄÄÄ>ctl ÀÄÄ>ctlÄÄÄÄÄ¿          */
-/*  ³     ³         ³     ³          ³     ³        ³    ³          */
-/*  ³     ÀÄÄÄÄÄÄÄÄÄÙ     ³          ³    ÀÄÄÄÄÄÄÄÄÄÙ    ³          */
-/*  ÀÄÄÄÄÄÄtcpclientÄÄÄÄÄÄÙ          ÀÄÄÄÄÄÄtcpclientÄÄÄÄÄÄÙ          */
+/*  tcplisten<DDDDDDDDD?            tcplisten<DDDDDDDDD?              */
+/*  3                  3             3                 3              */
+/*  dDtcpdata(data)    3            dDtcpdata(data)<DDDDD?           */
+/*  3  3               3            3                 3  3           */
+/*  3  3  ZDDDDDDDDD?  3            3     ZDDDDDDDDD? 3  3           */
+/*  3  3  3   FTP   3  3            3    3   FTP   3 3  3           */
+/*  3  3  3         3  3            3     3         3 3  3           */
+/*  3  3  0 ZDpostDD0DDDD>          3  >DD0DDpreDD? 0 3  3           */
+/*  3  3  3 3       3  3            3     3       3 3 3  3           */
+/*  3  @DDdata   data  3            3     data   dataDDDDY           */
+/*  3     3         3  3            3    3        3 3              */
+/*  @DDDD>port   portDDY            @DDDD>port   portDY              */
+/*        3         3                     3        3                */
+/*  cmdsD>1DDD?echoD1DDDD>           cmdsD>1DDD?echoD1DDDD>           */
+/*        3 ZD3DY   3                     3 ZD3DY  3                */
+/*  ZDDDD>ctl @DD>ctlDDDDD?          ZDDDD>ctl @DD>ctlDDDDD?          */
+/*  3     3         3     3          3     3        3    3          */
+/*  3     @DDDDDDDDDY     3          3    @DDDDDDDDDY    3          */
+/*  @DDDDDDtcpclientDDDDDDY          @DDDDDDtcpclientDDDDDDY          */
 /*         (control)                        (control)                 */
 /*                                                                    */
 /* Passive variant                                                    */
 /*                                                                    */
 /* <                                >/>>                              */
 /*                                                                    */
-/*  tcpclient(data)                 tcpclient(data)<ÄÄÄÄÄ¿           */
-/*     ³                                                 ³           */
-/*     ³  ÚÄÄÄÄÄÄÄÄÄ¿                     ÚÄÄÄÄÄÄÄÄÄ¿    ³           */
-/*     ³  ³   FTP   ³                    ³   FTP   ³    ³           */
-/*     ³  ³         ³                     ³         ³    ³           */
-/*     ³  0 ÚÄpostÄÄ0ÄÄÄÄ>             >ÄÄ0ÄÄpreÄÄ¿ 0    ³           */
-/*     ³  ³ ³       ³                     ³       ³ ³    ³           */
-/*     ÀÄÄdata   data                     data   dataÄÄÄÄÙ           */
-/*        ³         ³                     ³        ³                */
-/*  cmdsÄ>1ÄÄÄ¿echoÄ1ÄÄÄÄ>           cmdsÄ>1ÄÄÄ¿echoÄ1ÄÄÄÄ>           */
-/*        ³ ÚÄ³ÄÙ   ³                     ³ ÚÄ³ÄÙ  ³                */
-/*  ÚÄÄÄÄ>ctl ÀÄÄ>ctlÄÄÄÄÄ¿          ÚÄÄÄÄ>ctl ÀÄÄ>ctlÄÄÄÄÄ¿          */
-/*  ³     ³         ³     ³          ³     ³        ³    ³          */
-/*  ³  ÚÄ>sox     soxÄÄ¿  ³          ³ ÚÄ>sox     soxÄÄ¿ ³          */
-/*  ³  ³  ÀÄÄÄÄÄÄÄÄÄÙ  ³  ³          ³  ³ ÀÄÄÄÄÄÄÄÄÄÙ  ³ ³          */
-/*  ³  ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ  ³          ³ ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ ³          */
-/*  ³                     ³          ³                   ³          */
-/*  ÀÄÄÄÄÄÄtcpclientÄÄÄÄÄÄÙ          ÀÄÄÄÄÄÄtcpclientÄÄÄÄÄÄÙ          */
+/*  tcpclient(data)                 tcpclient(data)<DDDDD?           */
+/*     3                                                 3           */
+/*     3  ZDDDDDDDDD?                     ZDDDDDDDDD?    3           */
+/*     3  3   FTP   3                    3   FTP   3    3           */
+/*     3  3         3                     3         3    3           */
+/*     3  0 ZDpostDD0DDDD>             >DD0DDpreDD? 0    3           */
+/*     3  3 3       3                     3       3 3    3           */
+/*     @DDdata   data                     data   dataDDDDY           */
+/*        3         3                     3        3                */
+/*  cmdsD>1DDD?echoD1DDDD>           cmdsD>1DDD?echoD1DDDD>           */
+/*        3 ZD3DY   3                     3 ZD3DY  3                */
+/*  ZDDDD>ctl @DD>ctlDDDDD?          ZDDDD>ctl @DD>ctlDDDDD?          */
+/*  3     3         3     3          3     3        3    3          */
+/*  3  ZD>sox     soxDD?  3          3 ZD>sox     soxDD? 3          */
+/*  3  3  @DDDDDDDDDY  3  3          3  3 @DDDDDDDDDY  3 3          */
+/*  3  @DDDDDDDDDDDDDDDY  3          3 @DDDDDDDDDDDDDDDY 3          */
+/*  3                     3          3                   3          */
+/*  @DDDDDDtcpclientDDDDDDY          @DDDDDDtcpclientDDDDDDY          */
 /*         (control)                        (control)                 */
 /*                                                                    */
 /* The port output stream is use to pass the sockaddr_in structure to */
@@ -1501,15 +1501,15 @@ return translate(a, ',', '.')','c2d(h)','c2d(l)
  
 /*--------------------------------------------------------------------*/
 /* Greeting                                                           */
-/*                        1,3      ÚÄÄÄ¿                              */
-/*                   ÚÄÄÄÄÄÄÄÄÄÄÄÄ>³ E ³                              */
-/*                   ³             ÀÄÄÄÙ                              */
-/*  ÚÄÄÄ¿          ÚÄ…Ä¿   2       ÚÄÄÄ¿                              */
-/*  ³ B äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ S ³                              */
-/*  ÀÄÄÄÙ          ÀÄ ÄÙ           ÀÄÄÄÙ                              */
-/*                   ³    4,5      ÚÄÄÄ¿                              */
-/*                   ÀÄÄÄÄÄÄÄÄÄÄÄÄ>³ F ³                              */
-/*                                 ÀÄÄÄÙ                              */
+/*                        1,3      ZDDD?                              */
+/*                   ZDDDDDDDDDDDD>3 E 3                              */
+/*                   3             @DDDY                              */
+/*  ZDDD?          ZDD?   2       ZDDD?                              */
+/*  3 B dDDDDDDDDD>3 W dDDDDDDDDDD>3 S 3                              */
+/*  @DDDY          @D DY           @DDDY                              */
+/*                   3    4,5      ZDDD?                              */
+/*                   @DDDDDDDDDDDD>3 F 3                              */
+/*                                 @DDDY                              */
 /*                                                                    */
 /*--------------------------------------------------------------------*/
 Greeting: procedure expose ftp (variables) RC
@@ -1541,15 +1541,15 @@ signal value command
 /*--------------------------------------------------------------------*/
 /* Simple Commands                                                    */
 /*                                                                    */
-/*                        1,3      ÚÄÄÄ¿                              */
-/*                   ÚÄÄÄÄÄÄÄÄÄÄÄÄ>³ E ³                              */
-/*                   ³             ÀÄÄÄÙ                              */
-/*  ÚÄÄÄ¿   cmd    ÚÄ…Ä¿   2       ÚÄÄÄ¿                              */
-/*  ³ B äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ S ³                              */
-/*  ÀÄÄÄÙ          ÀÄ ÄÙ           ÀÄÄÄÙ                              */
-/*                   ³    4,5      ÚÄÄÄ¿                              */
-/*                   ÀÄÄÄÄÄÄÄÄÄÄÄÄ>³ F ³                              */
-/*                                 ÀÄÄÄÙ                              */
+/*                        1,3      ZDDD?                              */
+/*                   ZDDDDDDDDDDDD>3 E 3                              */
+/*                   3             @DDDY                              */
+/*  ZDDD?   cmd    ZDD?   2       ZDDD?                              */
+/*  3 B dDDDDDDDDD>3 W dDDDDDDDDDD>3 S 3                              */
+/*  @DDDY          @D DY           @DDDY                              */
+/*                   3    4,5      ZDDD?                              */
+/*                   @DDDDDDDDDDDD>3 F 3                              */
+/*                                 @DDDY                              */
 /*                                                                    */
 /* ABOR, ALLO, DELE, CWD, CDUP, SMNT, HELP, MODE, NOOP, PASV, QUIT,   */
 /* SITE, PORT, SYST, STAT, RMD, MKD, PWD, STRU, TYPE (and also the    */
@@ -1800,15 +1800,15 @@ if ^tolerate?
  
 /*--------------------------------------------------------------------*/
 /* commands expecting a 100 reply                                     */
-/*                         3       ÚÄÄÄ¿                              */
-/*                   ÚÄÄÄÄÄÄÄÄÄÄÄÄ>³ E ³                              */
-/*                   ³             ÀÄÄÄÙ                              */
-/*  ÚÄÄÄ¿   cmd    ÚÄ…Ä¿   2       ÚÄÄÄ¿                              */
-/*  ³ B äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ S ³                              */
-/*  ÀÄÄÄÙ      ÚÄÄ>À Ä Ù           ÀÄÄÄÙ                              */
-/*            1³    ³ ³   4,5      ÚÄÄÄ¿                              */
-/*             ÀÄÄÄÄÙ ÀÄÄÄÄÄÄÄÄÄÄÄ>³ F ³                              */
-/*                                 ÀÄÄÄÙ                              */
+/*                         3       ZDDD?                              */
+/*                   ZDDDDDDDDDDDD>3 E 3                              */
+/*                   3             @DDDY                              */
+/*  ZDDD?   cmd    ZDD?   2       ZDDD?                              */
+/*  3 B dDDDDDDDDD>3 W dDDDDDDDDDD>3 S 3                              */
+/*  @DDDY      ZDD>@ D Y           @DDDY                              */
+/*            13    3 3   4,5      ZDDD?                              */
+/*             @DDDDY @DDDDDDDDDDD>3 F 3                              */
+/*                                 @DDDY                              */
 /*                                                                    */
 /* APPE, LIST, NLST, REIN, RETR, STOR, STOU                           */
 /*--------------------------------------------------------------------*/
@@ -2046,19 +2046,19 @@ return RC=0
  
 /*--------------------------------------------------------------------*/
 /* Rename                                                             */
-/*  ÚÄÄÄ¿  RNFR    ÚÄÄÄ¿  1,2      ÚÄÄÄ¿                              */
-/*  ³ B äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ E ³                              */
-/*  ÀÄÄÄÙ          À Ä Ù        ÚÄ>ÀÄÄÄÙ                              */
-/*           3      ³ ³  4,5    ³                                     */
-/*    ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÙ ÀÄÄÄÄÄÄÄ¿ ³                                     */
-/*    ³             ÚÄÄÄÄÄÄÄÄÄ³ÄÙ  ÚÄÄÄ¿                              */
-/*    ³             ³ ÚÄÄÄÄÄÄÄ³ÄÄÄ>³ S ³                              */
-/*    ³             ³ ³       ³    ÀÄÄÄÙ                              */
-/*    ³          1,3³ ³2      ³                                       */
-/*    ³             ³ ³       ³                                       */
-/*  ÚÄ…Ä¿  RNTO    Ú…Ä…¿      ÀÄÄÄ>ÚÄÄÄ¿                              */
-/*  ³   äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ F ³                              */
-/*  ÀÄÄÄÙ          ÀÄÄÄÙ   4,5     ÀÄÄÄÙ                              */
+/*  ZDDD?  RNFR    ZDDD?  1,2      ZDDD?                              */
+/*  3 B dDDDDDDDDD>3 W dDDDDDDDDDD>3 E 3                              */
+/*  @DDDY          @ D Y        ZD>@DDDY                              */
+/*           3      3 3  4,5    3                                     */
+/*    ZDDDDDDDDDDDDDY @DDDDDDD? 3                                     */
+/*    3             ZDDDDDDDDD3DY  ZDDD?                              */
+/*    3             3 ZDDDDDDD3DDD>3 S 3                              */
+/*    3             3 3       3    @DDDY                              */
+/*    3          1,33 32      3                                       */
+/*    3             3 3       3                                       */
+/*  ZDD?  RNTO    ZD?      @DDD>ZDDD?                              */
+/*  3   dDDDDDDDDD>3 W dDDDDDDDDDD>3 F 3                              */
+/*  @DDDY          @DDDY   4,5     @DDDY                              */
 /* RNFR needs a subroutine because it uses 300 as normal, RNTO does   */
 /* not                                                                */
 /*--------------------------------------------------------------------*/
@@ -2081,21 +2081,21 @@ return ok?
  
 /*--------------------------------------------------------------------*/
 /* Restart                                                            */
-/*  ÚÄÄÄ¿  RSTR    ÚÄÄÄ¿  1,2      ÚÄÄÄ¿                              */
-/*  ³ B äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ E ³                              */
-/*  ÀÄÄÄÙ          À Ä Ù        ÚÄ>ÀÄÄÄÙ                              */
-/*           3      ³ ³  4,5    ³                                     */
-/*    ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÙ ÀÄÄÄÄÄÄÄ¿ ³                                     */
-/*    ³             ÚÄÄÄÄÄÄÄÄÄ³ÄÙ  ÚÄÄÄ¿                              */
-/*    ³             ³ ÚÄÄÄÄÄÄÄ³ÄÄÄ>³ S ³                              */
-/*    ³             ³ ³       ³    ÀÄÄÄÙ                              */
-/*    ³            3³ ³2      ³                                       */
-/*    ³             ³ ³       ³                                       */
-/*  ÚÄ…Ä¿  cmd     Ú…Ä…¿      ÀÄÄÄ>ÚÄÄÄ¿                              */
-/*  ³   äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄ>³ F ³                              */
-/*  ÀÄÄÄÙ      ÚÄÄ>À ÄÄÙ   4,5     ÀÄÄÄÙ                              */
-/*            1³    ³                                                 */
-/*             ÀÄÄÄÄÙ                                                 */
+/*  ZDDD?  RSTR    ZDDD?  1,2      ZDDD?                              */
+/*  3 B dDDDDDDDDD>3 W dDDDDDDDDDD>3 E 3                              */
+/*  @DDDY          @ D Y        ZD>@DDDY                              */
+/*           3      3 3  4,5    3                                     */
+/*    ZDDDDDDDDDDDDDY @DDDDDDD? 3                                     */
+/*    3             ZDDDDDDDDD3DY  ZDDD?                              */
+/*    3             3 ZDDDDDDD3DDD>3 S 3                              */
+/*    3             3 3       3    @DDDY                              */
+/*    3            33 32      3                                       */
+/*    3             3 3       3                                       */
+/*  ZDD?  cmd     ZD?      @DDD>ZDDD?                              */
+/*  3   dDDDDDDDDD>3 W dDDDDDDDDDD>3 F 3                              */
+/*  @DDDY      ZDD>@ DDY   4,5     @DDDY                              */
+/*            13    3                                                 */
+/*             @DDDDY                                                 */
 /* cmd is RETR, STOR or APPE                                          */
 /*--------------------------------------------------------------------*/
 Restart: procedure expose ftp (variables)
@@ -2116,31 +2116,31 @@ return ok?
 /*--------------------------------------------------------------------*/
 /* Login                                                              */
 /*                                                                    */
-/*                   ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄ>ÚÄÄÄ¿                            */
-/*                  1³          ÚÄÄÄ>³ E ³                            */
-/*  ÚÄÄÄ¿  USER    ÚÄ…Ä¿  2     ³ÚÄÄ>ÀÄÄÄÙ                            */
-/*  ³ B äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄ¿ ³³                                    */
-/*  ÀÄÄÄÙ          À Ä Ù      ³ ³³                                    */
-/*           3      ³ ³ 4,5   ³ ³³                                    */
-/*    ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÙ ÀÄÄÄÄÄ¿ ³ ³³                                    */
-/*    ³              ÚÄÄÄÄÄÄ³Ä³ÄÙ³                                    */
-/*    ³              ³      ³ ³  ³                                    */
-/*    ³              ³      ³ ³  ³                                    */
-/*    ³             1³      ³ ³  ³                                    */
-/*    ³              ³      ³ ³  ³                                    */
-/*  ÚÄ…Ä¿  PASS    ÚÄ…Ä¿ 2  ³ ÀÄÄ³ÄÄ>ÚÄÄÄ¿                            */
-/*  ³   äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄ³ÄÄÄÄ³ÄÄ>³ S ³                            */
-/*  ÀÄÄÄÙ          À Ä Ù    ³    ³ÚÄ>ÀÄÄÄÙ                            */
-/*           3      ³ ³ 4,5 ³    ³³                                   */
-/*    ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÙ ÀÄÄÄ¿ ³    ³³                                   */
-/*    ³             ÚÄÄÄÄÄ³Ä³ÄÄÄÄÙ³                                   */
-/*    ³             ³ ÚÄÄÄ³Ä³ÄÄÄÄÄÙ                                   */
-/*    ³             ³ ³   ³ ³                                         */
-/*    ³          1,3³ ³2  ³ ³                                         */
-/*    ³             ³ ³   ³ ÀÄÄÄÄÄÄÄ>ÚÄÄÄ¿                            */
-/*  ÚÄ…Ä¿  ACCT    Ú…Ä…¿  ÀÄÄÄÄÄÄÄÄÄ>³ F ³                            */
-/*  ³   äÄÄÄÄÄÄÄÄÄ>³ W äÄÄÄÄÄÄÄÄÄÄÄÄ>ÀÄÄÄÙ                            */
-/*  ÀÄÄÄÙ          ÀÄÄÄÙ                                              */
+/*                   ZDDDDDDDDDDDDDD>ZDDD?                            */
+/*                  13          ZDDD>3 E 3                            */
+/*  ZDDD?  USER    ZDD?  2     3ZDD>@DDDY                            */
+/*  3 B dDDDDDDDDD>3 W dDDDDDD? 33                                    */
+/*  @DDDY          @ D Y      3 33                                    */
+/*           3      3 3 4,5   3 33                                    */
+/*    ZDDDDDDDDDDDDDY @DDDDD? 3 33                                    */
+/*    3              ZDDDDDD3D3DY3                                    */
+/*    3              3      3 3  3                                    */
+/*    3              3      3 3  3                                    */
+/*    3             13      3 3  3                                    */
+/*    3              3      3 3  3                                    */
+/*  ZDD?  PASS    ZDD? 2  3 @DD3DD>ZDDD?                            */
+/*  3   dDDDDDDDDD>3 W dDDDD3DDDD3DD>3 S 3                            */
+/*  @DDDY          @ D Y    3    3ZD>@DDDY                            */
+/*           3      3 3 4,5 3    33                                   */
+/*    ZDDDDDDDDDDDDDY @DDD? 3    33                                   */
+/*    3             ZDDDDD3D3DDDDY3                                   */
+/*    3             3 ZDDD3D3DDDDDY                                   */
+/*    3             3 3   3 3                                         */
+/*    3          1,33 32  3 3                                         */
+/*    3             3 3   3 @DDDDDDD>ZDDD?                            */
+/*  ZDD?  ACCT    ZD?  @DDDDDDDDD>3 F 3                            */
+/*  3   dDDDDDDDDD>3 W dDDDDDDDDDDDD>@DDDY                            */
+/*  @DDDY          @DDDY                                              */
 /*                                                                    */
 /*--------------------------------------------------------------------*/
 Login: procedure expose ftp (variables)

@@ -133,12 +133,12 @@ For other DRM information:
    place the cursor under the topic of your choice and press ENTER
  
  
-CMS DRM     (ALL        Overview ›&- An overview of DRM
-DRM DRM     (ALL        DRM      ›&- Command reference, Xedit a DIRECT file with DRM
-DRM GETGAP  (ALL        GETGAP   ›&- How to allocate a new minidisk with DRM
-DRM GAPFLTR (ALL        GapFilter›&- Gap file filtering
-DRM DYNFLTR (ALL        Filtering›&- Dynamic GAP & MDISKMAP filtering details
-DRM FINDUSER(ALL        FINDUSER ›&- How to see only users with certain "settings"
-DRM MDISKMAP(ALL        MDISKMAP ›&- How to use the MDISKMAP
-DRM GENERAL (ALL        GENERAL  ›&- Genaral usage notes, remarks, tips
+CMS DRM     (ALL        Overview &- An overview of DRM
+DRM DRM     (ALL        DRM      &- Command reference, Xedit a DIRECT file with DRM
+DRM GETGAP  (ALL        GETGAP   &- How to allocate a new minidisk with DRM
+DRM GAPFLTR (ALL        GapFilter&- Gap file filtering
+DRM DYNFLTR (ALL        Filtering&- Dynamic GAP & MDISKMAP filtering details
+DRM FINDUSER(ALL        FINDUSER &- How to see only users with certain "settings"
+DRM MDISKMAP(ALL        MDISKMAP &- How to use the MDISKMAP
+DRM GENERAL (ALL        GENERAL  &- Genaral usage notes, remarks, tips
 .cs 7 off

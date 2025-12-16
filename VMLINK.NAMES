@@ -20,6 +20,10 @@
 *
 :nick.tools    :product..dir vmusers:tools. <* Q :node.VM4HTK :title.Local tools :category.secondary
 :nick.tools_backup  :product.TOOLS 400 <* Q :node.VM4HTK :title.Local tools backup
+:nick.vmusers_backup :product.vmusers 800 :title.VMUSERS
+:nick.vmsysu_backup  :product.vmservu 800 :title.VMSERVU/VMSYSU
+:nick.vmsys_backup   :product.vmservs 800 :title.VMSERVS/VMSYS
+:nick.vmpsfs_backup  :product.vmservp 800 :title.VMSERVP/VMPSFS
 *
 * This part is for VMLINKIP/PUTFTP usage:
 * :nick.        The short name you want to use for this LPAR/NODE
@@ -34,8 +38,13 @@
 * Settings per filetype, the last :ft. card is mandatory
 * Used by PUTFTP and GETFTP exec
 :nick.putftp   :ft.*ARC*;MODULE;TEXT;*LIB :set.TYPE E;MODE B;SITE FIXRECFM 80
+               :ft.*                      :set.
 *
 * The lists that can be used by VMLINKIP. You need to specify the nicks in the list
+:nick.PROD     :list.P1 P2
+:nick.ACCP     :list.A1 A2
+:nick.ONTW     :list.O1
+:nick.BHR      :list.B1 B2
 :nick.LAPTOP   :list.LT
 * End of VMLINKIP usage
 *

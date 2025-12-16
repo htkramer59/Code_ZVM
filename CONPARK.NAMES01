@@ -20,8 +20,6 @@
 *
 :nick.CONPARK  :keep.180 :compress.7  :frequency.H :method.STORE
 :nick.OPERATOR :keep.180 :compress.7  :frequency.H :method.STORE
-:nick.OPERSYMP :keep.180 :compress.7  :frequency.H :method.STORE
-:nick.GCS      :keep.180 :compress.7  :frequency.H :method.STORE
 :nick.RSCS*    :keep.180 :compress.7  :frequency.H :method.STORE
 :nick.TCP*     :keep.180 :compress.7  :frequency.H :method.STORE
 :nick.SSL*     :keep.180 :compress.7  :frequency.H :method.STORE

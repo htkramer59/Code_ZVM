@@ -1,0 +1,122 @@
+/*--------------------------------------------------------------------+
+| Function : Check the filesystem of a MDISK or SFS directory         |
+|            so we can detect corrupted files                         |
+|                                                                     |
+| File     : CHECKFS  EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : <files>             files on the location (input)        |
+|            VMLINK   EXEC       Link & access a MDISK                |
+|                                                                     |
+| Called   : CHECKFS  <location>                                      |
+|                                                                     |
+|            <location> can be a SFS directory, Filemode or           |
+|                       <userid> <mdisk> combo                        |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20251202 16:23:56                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg location
+location=Strip(location)
+If location='' Then location='.'
+/*--------------------------------------------------------------------+
+| Determine where to go                                               |
++--------------------------------------------------------------------*/
+Select
+When Pos(':',location)<>0 |,
+   Pos(',',location)<>0 Then Call Go_SFS
+When Words(location)>=2 Then Call Go_Mdisk
+When Words(location)=1  Then Call Go_Filemode
+Otherwise Nop
+End
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Go_SFS:
+/*--------------------------------------------------------------------+
+| Check on a SFS location                                             |
++--------------------------------------------------------------------*/
+'PIPE (NAME CHECKFS.EXEC:52 END ?)',
+   'cms QUERY FILEATTR * * 'location,                 /* Ask cms          */
+   '| pick w4.1 == ~BASE~',                           /* Keep real files  */
+   '| specs w1.2 1 ~'location'~ nw',                  /* Add dir name     */
+   '| stem file.'                                     /* Hand 2 rexx      */
+Say 'Checking: 'location' , 'file.0' files'
+Call Check_Files '<sfs'
+Return
+ 
+ 
+Check_Files:
+/*--------------------------------------------------------------------+
+| Actual file check...rc<>0 is in error                               |
++--------------------------------------------------------------------*/
+Parse Upper Arg type .
+Do f=1 To file.0
+  Address CMS 'SET CMSTYPE HT'
+  'PIPE (NAME CHECKFS.EXEC:69 END ?)',
+      type file.f,                                    /* Read the file    */
+      '| hole'                                        /* Dump contents    */
+  filerc=rc                                           /* Keep return code */
+  Address CMS 'SET CMSTYPE RT'
+  If filerc<>0 Then Say 'File: 'file.f' probable error read rc: 'filerc
+End f
+Return
+ 
+ 
+Go_Mdisk:
+/*--------------------------------------------------------------------+
+| Check on a MDISK we do not have accessed                            |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK 'location' (NONAMES NOTYPE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc 'Invalid id/failed link'
+Call Get_Filenames
+Say 'Checking: 'location' , 'file.0' files'
+Call Check_Files '<'
+Address CMS 'VMLINK 'location' <DET (NONAMES NOTYPE'
+Return
+ 
+ 
+Go_Filemode:
+/*--------------------------------------------------------------------+
+| Check any filemode on this userid                                   |
++--------------------------------------------------------------------*/
+'PIPE (NAME CHECKFS.EXEC:97 END ?)',
+   'cms QUERY ACCESSED 'location,                     /* Ask cms          */
+   '| drop first 1',                                  /* Remove header    */
+   '| specs w-1;-1',                                  /* Keep this        */
+   '| deblock 1',                                     /* Split into recs  */
+   '| pick 1.1 == ~:~ or 1.1 == ~.~',                 /* Select these     */
+   '| count lines',                                   /* Count them       */
+   '| var sfs'                                        /* Hand 2 rexx      */
+If sfs>0 Then type='<sfs'
+         Else type='<'
+wfm=location
+Call Get_Filenames
+Say 'Checking: 'location' , 'file.0' files'
+Call Check_Files type
+Return
+ 
+ 
+Get_Filenames:
+/*--------------------------------------------------------------------+
+| Get all the filenames for this location                             |
++--------------------------------------------------------------------*/
+'PIPE (NAME CHECKFS.EXEC:118 END ?)',
+    'cms LISTFILE * * 'wfm' (NOH',                    /* Ask cms          */
+    '| specs w1.3 1',                                 /* Keep this        */
+    '| stem file.'                                    /* Hand 2 rexx      */
+Return

@@ -2,11 +2,11 @@
 .cm PIPEDDR - Dump/Restore a disk using PIPES.
 .cm From http://www.vm.ibm.com/download/packages/descript.cgi?pipeddr
  
-›|PIPEDDR›%
-›|Dump/Restore a disk using CMS Pipelines›%
+|PIPEDDR%
+|Dump/Restore a disk using CMS Pipelines%
  
 .CS 1 ON
-›|Description›%
+|Description%
  
  The PIPEDDR EXEC can save and restore disk images using either the raw disk
  I/O support available in CMS Pipelines or the Pipelines interface to the CMS
@@ -44,195 +44,195 @@
  
 .CS 1 OFF
 .CS 2 ON
-›|Syntax:›%
+|Syntax:%
  
                (1)
- >>ÄÄÄÄPIPEDDRÄÄÄÄÄÄÄ Ä ÄDumpÄÄÄÄ ÄÄuseridÄÄvaddrÄÄÑ›|Target›%äÄÄÄÄÄÄÄÄÄÄ ÄÄ>
-                     | ÀÄRestoreÄÙ                                     |
-                     äÄ ÄCopyÄÄÄÄÄÄ ÄÄuserid1ÄÄvaddr1ÄÄuserid2ÄÄvaddr2ÄÑ
-                     | ÀÄFLashcopyÄÙ                                   |
-                     |      ÚÄQueryÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿                    |
-                     ÀÄSetÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
-                            äÄQueryÄÄ ÄÄÄÄÄÄÄÄÄÄ ÄÑ
-                            |        ÀÄEXtendedÄÙ |
-                            ÀÄÑ›|Set Operands›%äÄÄÄÄÙ
+ >>DDDDPIPEDDRDDDDDDD D DDumpDDDD DDuseridDDvaddrDDQ|Target%dDDDDDDDDDD DD>
+                     | @DRestoreDY                                     |
+                     dD DCopyDDDDDD DDuserid1DDvaddr1DDuserid2DDvaddr2DQ
+                     | @DFLashcopyDY                                   |
+                     |      ZDQueryDDDDDDDDDDDDDDD?                    |
+                     @DSetDDEDDDDDDDDDDDDDDDDDDDDDEDDDDDDDDDDDDDDDDDDDDY
+                            dDQueryDD DDDDDDDDDD DQ
+                            |        @DEXtendedDY |
+                            @DQ|Set Operands%dDDDDY
  
- >ÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄ><
-    |                  <ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿ |
-    ÀÄ(ÄÄ ÄÄÄÄÄÄÄÄÄÄ ÄÄÄ ÄÑ›|General Options›%äÄÄÄÄ …ÄÙ
-         ÀÄDEFAULTsÄÙ   äÄÑ›|Remote Options›%äÄÄÄÄÄÑ
-                        äÄÑ›|FTP Options›%äÄÄÄÄÄÄÄÄÑ
-                        ÀÄÑ›|Deprecated Options›%äÄÙ
+ >DD DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD DD><
+    |                  <DDDDDDDDDDDDDDDDDDDDDDDDDD? |
+    @D(DD DDDDDDDDDD DDD DQ|General Options%dDDDD DY
+         @DDEFAULTsDY   dDQ|Remote Options%dDDDDDQ
+                        dDQ|FTP Options%dDDDDDDDDQ
+                        @DQ|Deprecated Options%dDY
  
-›|Note:›%
+|Note:%
  (1)  Uppercase letters denote the shortest acceptable abbreviation.  If a
       keyword appears entirely in uppercase letters, it cannot be abbreviated.
       Options, except for DEFAULTS, can be specified in any order.
  
-›|Target:›%
- äÄÄ Ä ÄFROMÄ ÄÄ ÄFILEÄÄÑ›|CMS File Specification›%äÄ Ä ÄÄÑ
-    | ÀÄTOÄÄÄÙ  äÄurlÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ |
-    |           äÄFILEDefÄÄfiledefÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ |
-    |           äÄBFSÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ |
-    |           äÄBFSFileÄÄbfsfilenameÄÄÄÄÄÄÄÄÄÄÄÄÄÑ |
-    |           äÄBFSPathÄÄpathÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ |
-    |           äÄPIPEÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ |
-    |           |       ÚÄ181ÄÄÄ¿                  | |
-    |           ÀÄTAPEÄÄÅÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ |
-    |                   ÀÄvaddrÄÙ                    |
-    äÄFROMÄÄREMoteÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    |     ÚÄREMoteÄ¿                                 |
-    äÄTOÄÄÅÄÄÄÄÄÄÄÄÅÄÄ Äipname:portÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    |     ÀÄUPDateÄÙ  ÀÄipnameÄÄportÄÙ               |
-    ÀÄÑ›|Deprecated Target›%äÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+|Target:%
+ dDD D DFROMD DD DFILEDDQ|CMS File Specification%dD D DDQ
+    | @DTODDDY  dDurlDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ |
+    |           dDFILEDefDDfiledefDDDDDDDDDDDDDDDDDQ |
+    |           dDBFSDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ |
+    |           dDBFSFileDDbfsfilenameDDDDDDDDDDDDDQ |
+    |           dDBFSPathDDpathDDDDDDDDDDDDDDDDDDDDQ |
+    |           dDPIPEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ |
+    |           |       ZD181DDD?                  | |
+    |           @DTAPEDDEDDDDDDDEDDDDDDDDDDDDDDDDDDY |
+    |                   @DvaddrDY                    |
+    dDFROMDDREMoteDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    |     ZDREMoteD?                                 |
+    dDTODDEDDDDDDDDEDD Dipname:portDD DDDDDDDDDDDDDDDQ
+    |     @DUPDateDY  @DipnameDDportDY               |
+    @DQ|Deprecated Target%dDDDDDDDDDDDDDDDDDDDDDDDDDDY
  
-›|Deprecated Target:›%
- äÄÄ ÄÑ›|CMS File Specification›%äÄ ÄÄÑ
-    äÄipname:portÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄipnameÄÄportÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄfiledefÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    ÀÄremotefilenameÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+|Deprecated Target:%
+ dDD DQ|CMS File Specification%dD DDQ
+    dDipname:portDDDDDDDDDDDDDDDDQ
+    dDipnameDDportDDDDDDDDDDDDDDDQ
+    dDfiledefDDDDDDDDDDDDDDDDDDDDQ
+    @DremotefilenameDDDDDDDDDDDDDY
  
-›|CMS File Specification:›%
-    ÚÄuseridÄÄDISKvaddrÄÄAÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
- äÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÑ
-    | ÚÄuseridÄÄÄ¿                                      |
-    ÀÄÅÄ=ÄÄÄÄÄÄÄÄÅÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÙ
-      ÀÄfilenameÄÙ  | ÚÄDISKvaddrÄ¿                   |
-                    ÀÄÅÄ=ÄÄÄÄÄÄÄÄÄÅÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÙ
-                      ÀÄfiletypeÄÄÙ  | ÚÄAÄÄÄÄÄÄÄÄ¿ |
-                                     ÀÄÅÄ=ÄÄÄÄÄÄÄÄÅÄÙ
-                                       ÀÄfilemodeÄÙ
+|CMS File Specification:%
+    ZDuseridDDDISKvaddrDDADDDDDDDDDDDDDDDDDDDDDDDDDDDDDD?
+ dDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDEDDQ
+    | ZDuseridDDD?                                      |
+    @DED=DDDDDDDDEDD DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD DY
+      @DfilenameDY  | ZDDISKvaddrD?                   |
+                    @DED=DDDDDDDDDEDD DDDDDDDDDDDDDD DY
+                      @DfiletypeDDY  | ZDADDDDDDDD? |
+                                     @DED=DDDDDDDDEDY
+                                       @DfilemodeDY
  
-›|General Options:›%
+|General Options:%
              (1)
-      ÚÄPACKÄÄÄÄÄÄÄÄ¿
- äÄÄ ÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÑ
-    | äÄNOPAckÄÄÄÄÄÄÑ                                            |
-    | äÄTERseÄÄÄÄÄÄÄÑ                                            |
-    | äÄCOmpactÄÄÄÄÄÑ                                            |
-    | äÄLZcompactÄÄÄÑ                                            |
-    | ÀÄZLIBÄÄ ÄÄÄ ÄÙ                                            |
-    |         ÀÄnÄÙ                                              |
+      ZDPACKDDDDDDDD?
+ dDD DEDDDDDDDDDDDDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD DDQ
+    | dDNOPAckDDDDDDQ                                            |
+    | dDTERseDDDDDDDQ                                            |
+    | dDCOmpactDDDDDQ                                            |
+    | dDLZcompactDDDQ                                            |
+    | @DZLIBDD DDD DY                                            |
+    |         @DnDY                                              |
     |             (1)                                            |
-    | ÚÄPIPEtrackÄÄÄÄ¿                                           |
-    äÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | ÀÄCMSddrÄÄÄÄÄÄÄÙ                                           |
+    | ZDPIPEtrackDDDD?                                           |
+    dDEDDDDDDDDDDDDDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    | @DCMSddrDDDDDDDY                                           |
     |        (1)                                                 |
-    | ÚÄTYPEÄÄÄÄ¿                                                |
-    äÄÅÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | ÀÄNOTypeÄÄÙ                                                |
+    | ZDTYPEDDDD?                                                |
+    dDEDDDDDDDDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    | @DNOTypeDDY                                                |
     |         (1)                                                |
-    | ÚÄNOCRCÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿                                |
-    äÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    | äÄCRCÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ                                |
-    | äÄCKSUMÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ                                |
-    | |              ÚÄSHA256Ä¿ |                                |
-    | ÀÄ ÄDIGestÄÄ ÄÄÅÄÄÄÄÄÄÄÄÅÄÙ                                |
-    |   ÀÄSDIGestÄÙ  äÄMD5ÄÄÄÄÑ                                  |
-    |                äÄSHA1ÄÄÄÑ                                  |
-    |                äÄSHA384ÄÑ                                  |
-    |                ÀÄSHA512ÄÙ                                  |
+    | ZDNOCRCDDDDDDDDDDDDDDDDDDD?                                |
+    dDEDDDDDDDDDDDDDDDDDDDDDDDDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    | dDCRCDDDDDDDDDDDDDDDDDDDDDQ                                |
+    | dDCKSUMDDDDDDDDDDDDDDDDDDDQ                                |
+    | |              ZDSHA256D? |                                |
+    | @D DDIGestDD DDEDDDDDDDDEDY                                |
+    |   @DSDIGestDY  dDMD5DDDDQ                                  |
+    |                dDSHA1DDDQ                                  |
+    |                dDSHA384DQ                                  |
+    |                @DSHA512DY                                  |
     |            (1)                                             |
-    | ÚÄNOCIpherÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿ |
-    äÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÑ
+    | ZDNOCIpherDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD? |
+    dDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDEDQ
     | |                                                   (1)  | |
-    | |                                    (2)      ÚÄCBCÄÄÄÄ¿ | |
-    | ÀÄCIpherÄÄ ÄDESÄÄ ÄÄ ÄKEYÄÄkeyvalueÄÄÄÄÄÄÄÄ ÄÄÅÄÄÄÄÄÄÄÄÅÄÙ |
-    |           äÄTDESÄÑ  ÀÄKEYVARiableÄÄvarnameÄÙ  ÀÄNOCBCÄÄÙ   |
-    |           ÀÄAESÄÄÙ                                         |
-    äÄNOPRomptÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄMATCHDiskÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄNOSIZECheckÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄTRUNCateÄÄnÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄSTAbleÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄONEreadÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄRAWÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    ÀÄDEBUGÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+    | |                                    (2)      ZDCBCDDDD? | |
+    | @DCIpherDD DDESDD DD DKEYDDkeyvalueDDDDDDDD DDEDDDDDDDDEDY |
+    |           dDTDESDQ  @DKEYVARiableDDvarnameDY  @DNOCBCDDY   |
+    |           @DAESDDY                                         |
+    dDNOPRomptDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDMATCHDiskDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDNOSIZECheckDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDTRUNCateDDnDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDSTAbleDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDONEreadDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dDRAWDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    @DDEBUGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDY
  
-›|Notes:›%
+|Notes:%
  (1)  The default for this option may change if the SET command is used to
       specify a different default.
  
  (2)  The key can be omitted if the key was stored with the SET command.
  
-›|Remote Options:›%
-      ÚÄNOSECureÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
- äÄÄ ÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄ ÄÄÑ
+|Remote Options:%
+      ZDNOSECureDDDDDDDDDDDDDDDDDDDDDDDD?
+ dDD DEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDED DDQ
     | |          (1)                    | |
-    | ÀÄ ÄSECureÄÄÄÄÄÄÄÄÄÄ ÄÄ ÄÄÄÄÄÄÄÄ ÄÙ |
-    |   ÀÄTLSLabelÄÄlabelÄÙ  ÀÄUNSAFEÄÙ   |
-    äÄTIMEOutÄÄsecondsÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄPOrtÄÄportnumÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    ÀÄSLEEPÄÄsecondsÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+    | @D DSECureDDDDDDDDDD DD DDDDDDDD DY |
+    |   @DTLSLabelDDlabelDY  @DUNSAFEDY   |
+    dDTIMEOutDDsecondsDDDDDDDDDDDDDDDDDDDDQ
+    dDPOrtDDportnumDDDDDDDDDDDDDDDDDDDDDDDQ
+    @DSLEEPDDsecondsDDDDDDDDDDDDDDDDDDDDDDY
  
-›|Note:›%
+|Note:%
  (1)  The default for this option may change if the SET command is used to
       specify a different default.
  
-›|FTP Options:›%
-      ÚÄEPASSIveÄÄ¿
- äÄÄ ÄÅÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÑ
-    | äÄPASSIveÄÄÄÑ                  |
-    | ÀÄNOPASSIveÄÙ                  |
-    äÄPASSWORDVARiableÄÄvariablenameÄÑ
-    äÄUNSAFEÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    äÄ ÄVMFTPÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÑ
-    | ÀÄFTPSITEÄÄsiteargsÄÙ          |
-    ÀÄOLDÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+|FTP Options:%
+      ZDEPASSIveDD?
+ dDD DEDDDDDDDDDDDEDDDDDDDDDDDDDDDDDD DDQ
+    | dDPASSIveDDDQ                  |
+    | @DNOPASSIveDY                  |
+    dDPASSWORDVARiableDDvariablenameDQ
+    dDUNSAFEDDDDDDDDDDDDDDDDDDDDDDDDDQ
+    dD DVMFTPDDDDDDDDDDDDD DDDDDDDDDDQ
+    | @DFTPSITEDDsiteargsDY          |
+    @DOLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDY
  
-›|Deprecated Options:›%
- äÄÄ ÄLIstenÄÄÄÄÄÄÄÄÄÄ ÄÄÑ
-    äÄFILEdefÄÄÄÄÄÄÄÄÄÑ
-    äÄFTPÄÄurlÄÄÄÄÄÄÄÄÑ
-    äÄHTTPÄÄurlÄÄÄÄÄÄÄÑ
-    |       ÚÄ181ÄÄÄ¿ |
-    äÄTAPEÄÄÅÄÄÄÄÄÄÄÅÄÑ
-    |       ÀÄvaddrÄÙ |
-    äÄBFSÄÄÄÄÄÄÄÄÄÄÄÄÄÑ
-    ÀÄBFSPathÄÄpathÄÄÄÙ
+|Deprecated Options:%
+ dDD DLIstenDDDDDDDDDD DDQ
+    dDFILEdefDDDDDDDDDQ
+    dDFTPDDurlDDDDDDDDQ
+    dDHTTPDDurlDDDDDDDQ
+    |       ZD181DDD? |
+    dDTAPEDDEDDDDDDDEDQ
+    |       @DvaddrDY |
+    dDBFSDDDDDDDDDDDDDQ
+    @DBFSPathDDpathDDDY
  
-›|Set Operands:›%
- äÄÄ ÄCBCÄÄ ÄYesÄ ÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÑ
-    |      ÀÄNoÄÄÙ            |
-    äÄCIPHerÄÄ ÄNONEÄ ÄÄÄÄÄÄÄÄÑ
-    |         äÄTDESÄÑ        |
-    |         äÄDESÄÄÑ        |
-    |         ÀÄAESÄÄÙ        |
-    äÄCOMpactÄÄ ÄPACKÄÄÄÄÄÄ ÄÄÑ
-    |          äÄNOPACKÄÄÄÄÑ  |
-    |          äÄTERseÄÄÄÄÄÑ  |
-    |          äÄCOmpactÄÄÄÑ  |
-    |          äÄLZcompactÄÑ  |
-    |          äÄZLIBÄÄÄÄÄÄÑ  |
-    |          ÀÄZLIBnÄÄÄÄÄÙ  |
-    äÄCRCÄÄ ÄNoÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÑ
-    |      äÄYesÄÄÄÄÄÑ        |
-    |      äÄCKSUMÄÄÄÑ        |
-    |      äÄDIGestÄÄÑ        |
-    |      ÀÄSDIGestÄÙ        |
-    äÄ ÄDIGestÄÄ ÄÄ ÄNONEÄÄÄ ÄÑ
-    | ÀÄSDIGestÄÙ  äÄMD5ÄÄÄÄÑ |
-    |              äÄSHA1ÄÄÄÑ |
-    |              äÄSHA256ÄÑ |
-    |              äÄSHA384ÄÑ |
-    |              ÀÄSHA512ÄÙ |
-    äÄDUMpformatÄÄ ÄPIPEÄ ÄÄÄÄÑ
-    |             ÀÄDDRÄÄÙ    |
-    äÄKEYÄÄ ÄNONEÄ ÄÄÄÄÄÄÄÄÄÄÄÑ
-    |      ÀÄkeyÄÄÙ           |
-    äÄPROgressÄÄ ÄYesÄ ÄÄÄÄÄÄÄÑ
-    |           ÀÄNoÄÄÙ       |
-    äÄSECureÄÄ ÄYesÄ ÄÄÄÄÄÄÄÄÄÑ
-    |         ÀÄNoÄÄÙ         |
-    ÀÄTLSLabelÄÄlabelÄÄÄÄÄÄÄÄÄÙ
+|Set Operands:%
+ dDD DCBCDD DYesD DDDDDDDDDDDD DDQ
+    |      @DNoDDY            |
+    dDCIPHerDD DNONED DDDDDDDDQ
+    |         dDTDESDQ        |
+    |         dDDESDDQ        |
+    |         @DAESDDY        |
+    dDCOMpactDD DPACKDDDDDD DDQ
+    |          dDNOPACKDDDDQ  |
+    |          dDTERseDDDDDQ  |
+    |          dDCOmpactDDDQ  |
+    |          dDLZcompactDQ  |
+    |          dDZLIBDDDDDDQ  |
+    |          @DZLIBnDDDDDY  |
+    dDCRCDD DNoDDDDDD DDDDDDDDQ
+    |      dDYesDDDDDQ        |
+    |      dDCKSUMDDDQ        |
+    |      dDDIGestDDQ        |
+    |      @DSDIGestDY        |
+    dD DDIGestDD DD DNONEDDD DQ
+    | @DSDIGestDY  dDMD5DDDDQ |
+    |              dDSHA1DDDQ |
+    |              dDSHA256DQ |
+    |              dDSHA384DQ |
+    |              @DSHA512DY |
+    dDDUMpformatDD DPIPED DDDDQ
+    |             @DDDRDDY    |
+    dDKEYDD DNONED DDDDDDDDDDDQ
+    |      @DkeyDDY           |
+    dDPROgressDD DYesD DDDDDDDQ
+    |           @DNoDDY       |
+    dDSECureDD DYesD DDDDDDDDDQ
+    |         @DNoDDY         |
+    @DTLSLabelDDlabelDDDDDDDDDY
  
 .CS 2 OFF
 .CS 3 ON
-›|Operands:›%
+|Operands:%
  
-›|Dump›%
-›|Restore›%
+|Dump%
+|Restore%
      Dump or Restore a disk.  The Dump function only reads the disk.  The
      Restore function overwrites all of the data on the disk.
  
@@ -243,10 +243,10 @@
      permission to link the disk or know the appropriate password.  Disks are
      linked read only for dumps and read/write for restore.
  
-›|Copy›%
+|Copy%
      Make a local copy of a disk, using either the DDR module or Pipelines.
  
-›|FLashcopy›%
+|FLashcopy%
      Make a local copy of a disk, using the CP FLASHCOPY command.  If this
      command is not available or it fails, the DDR module is used to copy the
      disk.
@@ -257,28 +257,28 @@
  userid2 vaddr2
      specifies the output disk of the copy.
  
-›|Set›%
+|Set%
      Set a program default which is stored as a global variable.
  
-›|Query›%
-›|Query EXtended›%
+|Query%
+|Query EXtended%
      Display the current settings.  This is the default if no operand is
      specified on a Set command.  QUERY shows all settings except a stored
      cipher key.  QUERY EXTENDED shows all settings, including the key.
  
-›|Target›%
+|Target%
  
  This section describes the target that the disk data is read from or written
  to.
  
-›|FROM›%
-›|TO›%
+|FROM%
+|TO%
      Keywords that describe where the disk data is coming FROM (for a Restore
      command) or going TO (for a Dump command.)  The FROM or TO keywords can
      be omitted for some targets so that the exec remains compatible with its
      older syntax.  However, using these keywords is recommended.
  
-›|FILE›%
+|FILE%
      Keyword that indicates that a CMS file specification follows.
  
  filename
@@ -293,7 +293,7 @@
      (without the quotes) to use the default file naming but with the
      specified CMS filemode for input or output.
  
-›|FROM REMote›%
+|FROM REMote%
      The contents of an entire disk are received from a remote system that is
      also running the PIPEDDR EXEC.  The exec waits for an incoming TCP/IP
      connection from a remote system running a PIPEDDR Dump command.  If a
@@ -303,7 +303,7 @@
      established or the pipeline is stopped.  If you want PIPEDDR to only wait
      a limited amount of time, specify the TIMEOUT option.
  
-›|TO REMote›%
+|TO REMote%
      The contents of the disk are sent to a remote system that is also running
      the PIPEDDR EXEC.  The remote system is specified by the ipname and port
      arguments.  PIPEDDR must already be running and waiting for a connection
@@ -311,7 +311,7 @@
      compression or encryption selections to specify how the data is processed
      before it is sent over the network.
  
-›|TO UPDate›%
+|TO UPDate%
      The contents of the remote disk are compared to the local disk using hash
      values and only changed tracks or blocks are sent ("updated") on the
      remote system.  The remote system must be running PIPEDDR with the FROM
@@ -330,7 +330,7 @@
      then the keywords TO REMOTE are required, otherwise the value is assumed
      to be a file name.
  
-›|FILEDef›%filedef
+|FILEDef%filedef
  filedef
      Dump or restore a disk to a CMS Filedef.  The filedef must be defined
      with the CMS FILEDEF command before PIPEDDR is invoked.  Any type of
@@ -352,9 +352,9 @@
      is valid for input and output.  See "Usage Note 3.  More about the URL
      argument" for more information.
  
-›|BFS›%
-›|BFSFile›%bfsfilename
-›|BFSPath›%path
+|BFS%
+|BFSFile%bfsfilename
+|BFSPath%path
      The input or output file resides in BFS (the CMS Byte File System) or in
      an NFS share that is mounted into the BFS filesystem.
  
@@ -382,13 +382,13 @@
      more information.  Synonyms for these arguments are HFS instead of BFS,
      HFSFile instead of BFSFile, and HFSPath instead of BFSPath.
  
-›|PIPE›%
+|PIPE%
      The PIPEDDR EXEC is invoked as an argument to the rexx CMS Pipelines
      stage.  When the argument is DUMP, the disk data is output to the
      pipeline.  When the argument is RESTORE, the disk data is received as
      input from the pipeline.  Only the DUMP and RESTORE arguments are valid.
  
-›|TAPE›%
+|TAPE%
      Dump a disk to tape or restore a disk from tape.  A tape drive virtual
      address can be specified after the TAPE keyword.  If no address is
      specified, it is assumed the tape drive is attached at virtual address
@@ -398,25 +398,25 @@
      set to compress mode before writing the data using the command "TAPE
      MODESET (COMP".
  
-›|SET Command Operands›%
+|SET Command Operands%
  
  This section describes the valid values for each Set option.
  
-›|CIPHer›%
+|CIPHer%
      Sets the default to the specified cipher method.  Specifying NONE sets
      the default to NOCIPHER.  If a default cipher key has not been specified,
      then the cipher key must be included as a command option.
  
-›|CBC›%
+|CBC%
      Sets the default cipher mode.  If CBC is Yes or not specified, the
      default cipher mode is CBC.  If CBC is No, the default mode is ECB.  See
      "Usage Note 10.  More about the encryption options" for more about the
      cipher mode.
  
-›|COMpact›%
+|COMpact%
      Sets the default compaction option.
  
-›|CRC›%
+|CRC%
      Sets the default for the type of verification used to ensure that the
      disk data has not been altered.  A value of Yes sets the default to use
      the CRC option.  A value of No sets the default to no verification (the
@@ -425,25 +425,25 @@
      digest type can be set using the DIGEST or SDIGEST set options.  If no
      digest type is set, the default digest of SHA256 is used.
  
-›|DIGest›%
-›|SDIGest›%
+|DIGest%
+|SDIGest%
      Set the type of verification (the CRC setting) to be the specified
      keyword and sets the default digest type.  If no default digest type is
      set, the default type is SHA256.  If the CRC setting is changed to one of
      the non-digest settings of YES, NO, or CKSUM, the digest type is changed
      to NONE.
  
-›|DUMpformat›%
+|DUMpformat%
      Sets the default dump format.  A value of PIPE sets the default to use
      the Pipeline track read/write stages for ECKD disks or the fba stages for
      FBA disks.  A value of DDR sets the default to use the CMS DDR program.
  
-›|PROgress›%
+|PROgress%
      Sets the default for the display of progress messages, which are the TYPE
      and NOTYPE options on the command.  A progress value of Yes sets the
      default option to TYPE.  A value of No sets the default to NOTYPE.
  
-›|KEY›%
+|KEY%
      Sets the default cipher key.  The keyword NONE removes the stored key.
      The key can be specified as a hexadecimal string, a single word, or a
      phrase enclosed in parentheses or quotes (single or double.)  The key is
@@ -451,11 +451,11 @@
      the LASTING GLOBALV file can read this key.  Also see "Usage Note 10.
      More about the encryption options" for information about storing a key.
  
-›|SECURE›%
+|SECURE%
      Sets the default for secure remote connections.  YES sets the default to
      SECURE and NO sets it to NOSECURE.
  
-›|TLSLabel›%
+|TLSLabel%
      Sets the TLSLABEL used for receiving disk images over secure remote
      connections.  If this value is set, the SECURE setting is also set to
      YES.  Specifying a blank label will clear the stored label value.  A
@@ -463,34 +463,34 @@
  
 .CS 3 OFF
 .CS 4 ON
-›|Options:›%
+|Options:%
  
-›|General Options›%
+|General Options%
  
  These options apply to all input and output selections.
  
-›|DEFAULTs›%
+|DEFAULTs%
      Ignore any program defaults stored using the Set operand for this
      execution of the exec.  All built-in program defaults are used unless
      another option is specified that overrides the default.  This option is
      useful when PIPEDDR is invoked in an exec or in automation so that the
      output settings are known and not changed by saved options.  If this
-     option is specified, it›|must›%be the first word of the options string.
+     option is specified, it|must%be the first word of the options string.
  
-›|PACK›%
+|PACK%
      Compress the dumped disk contents using the PACK Pipeline stage.  The
      format of the file is compatible with the PACK option of COPYFILE.  This
      is the default compression method unless a different default has been
      specified using the PIPEDDR SET command.
  
-›|NOPAck›%
+|NOPAck%
      Do not pack the output file when the disk is dumped.  The record
      structure of the data is preserved by adding a record descriptor word
      (rdw) to the beginning of each record.  If the output is written to a CMS
      file, the file may be fixed 1024 byte records or variable, depending on
      what other options are specified.
  
-›|TERse›%
+|TERse%
      Compress the dumped disk contents using the TERSE Pipeline stage.  This
      stage is part of the PIPSYSF filter package that must be downloaded from
      the Pipelines Runtime Distribution page.  The format of the file is
@@ -498,17 +498,17 @@
      Note 6.  Notes about compression" for more information about compressing
      data and alternatives if the TERSE option is not available to you.
  
-›|COMPact›%
+|COMPact%
      Compress the dumped disk contents using the COMPACT output option of the
      CMS DDR command.  This option is only valid if the CMSDDR option is also
      specified or DDR format dumps are the default.
  
-›|LZcompact›%
+|LZcompact%
      Compress the dumped disk contents using the LZCOMPACT output option of
      the CMS DDR command.  This option is only valid if the CMSDDR option is
      also specified or DDR format dumps are the default.
  
-›|ZLIB›%n
+|ZLIB%n
      Compress the dumped disk contents with the "compress" algorithm using the
      ZLIB pipelines stage.  This stage is available in the ZLIBSTG MODULE.
      See item 3 under "Usage Note 6.  Notes about compression" for more
@@ -519,7 +519,7 @@
      default compression value on a Set command, leave out the space between
      ZLIB and the number.  For example PIPEDDR SET COMP ZLIB5
  
-›|PIPEtrack›%
+|PIPEtrack%
      Use Pipelines format for input and output.  For ECKD disks, the trackread
      and trackwrite stages are used.  For FBA disks, fbaread and fbawrite are
      used.  These stages require the updated CMS Pipelines runtime module if
@@ -529,7 +529,7 @@
      default unless a new default is specified using the PIPEDDR SET
      DUMPFORMAT command.
  
-›|CMSddr›%
+|CMSddr%
      Use CMS DDR format for input and output.  This support requires the DRPC
      and DDR modules that support the Pipelines interface to DDR.  The updated
      modules are a standard part of CMS in z/VM release 6.2 and later.  See
@@ -537,24 +537,24 @@
      CMSDDR option is also assumed if the exec is renamed to CMSDDR EXEC or
      VMDDR EXEC, or the exec is invoked via a synonym named CMSDDR or VMDDR.
  
-›|TYPe›%
+|TYPe%
      Show the progress messages as the disk is dumped, restored, or copied.
  
-›|NOType›%
+|NOType%
      Do not show the progress messages as the disk is dumped, restored, or
      copied.  The option QUIET is accepted as a synonym for this option.
  
-›|NOCRC›%
+|NOCRC%
      Do not add any verification code (CRC, CKSUM, or DIGEST) to the end of
      the output.
  
-›|CRC›%
+|CRC%
      Add a 32 bit Cyclic Redundancy Code (CRC) to the end of the data dumped.
      The CRC value is the last record of the file.  See "Usage Note 8.
      Ensuring data integrity with CRC, CKSUM, SDIGEST, or DIGEST" for more
      information about data verification.
  
-›|CKSUM›%
+|CKSUM%
      Compute a checksum (binary value) of the dumped disk image and append it
      to the end of the data.  This checksum value is compatible with the value
      computed by the Posix cksum command.  The cksum command is also available
@@ -566,8 +566,8 @@
      that the cksum of the disk image can be calculated and verified on a
      Posix or Linux system.
  
-›|DIGest›%
-›|SDIGest›%
+|DIGest%
+|SDIGest%
      Compute a message digest (binary value) of the dumped or transferred disk
      image and append it to the end of the data.  This allows the integrity of
      the disk image to be verified when the disk is restored and may allow you
@@ -582,30 +582,30 @@
  
      These digest types are supported:
  
-    ›|SHA256›%
+    |SHA256%
          Compute a 32-byte message digest according to FIPS 180-2.  If no
          digest format is specified, this is the default.  The message
          security assist feature is used if it is available on the hardware.
  
-    ›|MD5›%
+    |MD5%
          Compute a 16-byte message digest according to RFC 1321.
  
-    ›|SHA1›%
+    |SHA1%
          Compute a 20-byte message digest according to RFC 3174.  The message
          security assist feature is used if it is available on the hardware.
  
-    ›|SHA384›%
+    |SHA384%
          Compute a 48-byte message digest according to FIPS 180-2.
  
-    ›|SHA512›%
+    |SHA512%
          Compute a 64-byte message digest according to FIPS 180-2.  The
          message security assist feature is used if it is available on the
          hardware.
  
-›|NOCIpher›%
+|NOCIpher%
      Do not encrypt the output.
  
-›|CIpher›%
+|CIpher%
      Encrypt the output using the CPACF hardware feature.  The argument
      specifies the cipher method to use.  See "Usage Note 10.  More about the
      encryption options" for more information and information about any
@@ -613,20 +613,20 @@
  
      These cipher formats are supported:
  
-    ›|AES›%
+    |AES%
          Use the Advanced Encryption Standard algorithm with a key length of
          128, 192, or 256 bits.  The key must be 16, 24, or 32 bytes
          respectively.
  
-    ›|TDES›%
+    |TDES%
          Use the triple Data Encryption Standard algorithm.  The key must be
          16 or 24 bytes.
  
-    ›|DES›%
+    |DES%
          Use the Data Encryption Standard algorithm when an 8 byte key is
          supplied.  If a longer key is needed, use triple DES.
  
-›|KEY›%keyvalue
+|KEY%keyvalue
      Specify the cipher key to use.  The KEY option is ignored if the Cipher
      option is not specified.  The keyvalue must be 16, 24, or 32 bytes for
      the AES method, 8, 16, or 24 bytes for the DES method, and 16 or 24 bytes
@@ -647,7 +647,7 @@
      or stored in GLOBALV using the SET command.  See "Usage Note 10.  More
      about the encryption options" for information about storing a key.
  
-›|KEYVARiable›%variablename
+|KEYVARiable%variablename
      If PIPEDDR is being invoked from another Rexx EXEC, specify the name of a
      variable in that program that contains the cipher key.  If PIPEDDR is
      invoked from the command line, or the specified variable is unset or is
@@ -656,30 +656,30 @@
      output or console logs.  If a key is obtained from the variable, it has
      priority over any other method of specifying the key.
  
-›|NOCBC›%
+|NOCBC%
      Do not use default Cipher Block Chaining mode.  If the data is encrypted,
      Electronic Code Book (EBC) mode is used.  Note that NOCBC mode was the
      default in older versions of PIPEDDR, so the NOCBC option may be required
      to decrypt a file created with an older version.
  
-›|CBC›%
+|CBC%
      Specify that Cipher Block Chaining (CBC) mode is used for encryption or
      decryption.  This is the default encryption mode.  Also see "Usage Note
      10.  More about the encryption options."
  
-›|NOPRompt›%
+|NOPRompt%
      On a Restore command, do not prompt for a Yes or No response to confirm
      output disk user ID and address.  This option is ignored on a Dump
      command.
  
-›|MATCHDisk›%
+|MATCHDisk%
      On a Restore command, check that the output disk is restored to the same
      user ID and virtual address that it was dumped from.  Note that the disk
      does not need to be restored on the same system.  If the user ID and
      virtual address do not match, an error is displayed and the disk is not
      restored.  This option is ignored on a Dump command.
  
-›|ONEread›%
+|ONEread%
      Normally for a restore from disk, tape, ftp, or http, the exec reads the
      input file to obtain the disk metadata information (the first line of the
      file), processes that data, then reads the input file again from the
@@ -690,8 +690,8 @@
      format is done.  It is recommended that this option only be used if
      errors are encountered.  This option is ignored on a Dump command.
  
-›|NOSIZECheck›%
-›|NOSIZEChk›%
+|NOSIZECheck%
+|NOSIZEChk%
      Do not check that the original input disk and the specified restore disk
      are the same size.  This option is ignored on a Dump command.  Normally,
      the input and output disk sizes are checked to verify that they match,
@@ -703,7 +703,7 @@
      different size than the original disk" for additional information about
      using this option.
  
-›|TRUNCate›%n
+|TRUNCate%n
      Only dump a partial number of cylinders or blocks.  This option is
      ignored on a Restore command.  The value n specifies the last cylinder or
      block of the disk that is dumped to the file or sent to a remote system.
@@ -717,7 +717,7 @@
      partial data you are dumping, otherwise the restored disk may not be
      usable.
  
-›|STAble›%
+|STAble%
      On a Dump command, attempt to use the "SR" (stable read) link option to
      access the source disk.  If the user is not allowed to use this link
      mode, then use link mode "R", which will fail if any other user has a R/W
@@ -732,7 +732,7 @@
      command, if a disk is already linked by the user, this option does not
      attempt to re-link the disk.  The existing link is used.
  
-›|RAW›%
+|RAW%
      On a Dump command, create an output file with no header or footer data
      added to the disk image.  Normally, PIPEDDR adds a header line to the
      output file to document the size, disk type, and which options were
@@ -745,7 +745,7 @@
      be specified.  See "Usage Note 7.  Restoring a disk a different size than
      the original disk" for additional information about using this option.
  
-›|DEBUG›%
+|DEBUG%
      Show the version of the PIPEDDR EXEC.  If no function is specified, just
      show the version and exit.  For example, entering "PIPEDDR (DEBUG" shows
      the version and exits with return code 1.  If a function is entered and
@@ -754,16 +754,16 @@
      the ftp stage.  For http, the sent and received header information is
      displayed.
  
-›|Remote Options›%
+|Remote Options%
  
  These options apply to remote connections.
  
-›|SECure›%
+|SECure%
      Use a secure (SSL/TLS) socket for the connection used to perform a remote
      dump or restore.  If the VM SSL server is not configured on both the
      sending and receiving system, the connection will fail.
  
-›|TLSLabel›%label
+|TLSLabel%label
      Specify the label of the certificate defined in the VM system SSL
      certificate database that is used to secure the connection.  The TLSLABEL
      option implies the SECURE option.  A TLS label can only be specified the
@@ -772,7 +772,7 @@
      deprecated LISTEN option.  A label must be 1 to 8 alphanumeric
      characters.
  
-›|UNSAFE›%
+|UNSAFE%
      Add the keyword UNSAFE to the secure tcpclient connection to the
      receiving system.  This option is only valid if one of the SECURE or
      TLSLABEL options are also specified on a DUMP command to a remote system.
@@ -781,14 +781,14 @@
      This only done when the destination is specified as host name or host
      name with domain.  To skip this verification, specify UNSAFE.
  
-›|TIMEOut›%seconds
+|TIMEOut%seconds
      This option is only valid with the FROM REMOTE keywords on a Restore
      command or with the deprecated LISTEN option.  It specifies the number of
      seconds PIPEDDR will wait for an incoming connection.  After the
      specified number of seconds, if no incoming connection is established,
      the exec ends with an error and a non-zero return code.
  
-›|POrt›%portnum
+|POrt%portnum
      Specify the TCP/IP port used to listen for a connection from a remote
      system or the listening port number on the remote system where PIPEDDR is
      waiting.  The PORT option is optional on a Restore command but required
@@ -796,17 +796,17 @@
      argument to PIPEDDR, but that value is ignored if the PORT option is also
      specified.
  
-›|SLEEP›%n
+|SLEEP%n
      Changes the amount of time the exec waits to reestablish the TCP/IP
      connection after reading the disk information.  The default is 2 seconds.
      This option is only valid when dumping a disk to a remote system and is
      specified with the DUMP command.
  
-›|FTP Options›%
+|FTP Options%
  
  These options apply to FTP selections.
  
-›|PASSWORDVARiable›%variablename
+|PASSWORDVARiable%variablename
      If PIPEDDR is being invoked from another Rexx exec, specify the name of a
      variable in that program that contains the ftp password.  If PIPEDDR is
      invoked from the command line, or the specified variable is unset or is
@@ -815,8 +815,8 @@
      output or console logs.  If a password is specified in the url or in the
      ftp command options, it is used instead of the password in this variable.
  
-›|EPASSIve›%
-›|EPSV›%
+|EPASSIve%
+|EPSV%
      If the input or output file is on an FTP server, and the FTP REXX stage
      is available and used, add the EPASSIVE option to the arguments to that
      stage.  The FTP stage will attempt to establish the connection using
@@ -825,8 +825,8 @@
      REXX stage.  See "Usage Note 2.  FTP support in Pipelines" for more
      information.
  
-›|PASSIve›%
-›|PASV›%
+|PASSIve%
+|PASV%
      If the input or output file is on an FTP server, and the FTP REXX stage
      is available and used, add the PASSIVE option to the arguments to that
      stage.  The FTP stage will attempt to establish the connection using
@@ -835,9 +835,9 @@
      stage.  See "Usage Note 2.  FTP support in Pipelines" for more
      information.
  
-›|NOPASSIve›%
-›|NOPASV›%
-›|NPASV›%
+|NOPASSIve%
+|NOPASV%
+|NPASV%
      If the input or output file is on an FTP server, and the FTP REXX stage
      is available and used, allow that stage to use its default connection
      mode, which uses the FTP PORT command.  NOPASV and NPASV are synonyms for
@@ -845,12 +845,12 @@
      destination is used and only for the FTP REXX stage.  See "Usage Note 2.
      FTP support in Pipelines" for more information.
  
-›|VMFTP›%
+|VMFTP%
      Specify this option if the receiving FTP server is hosted by z/VM.  This
      option adds the correct "site" option to the ftp stage so that the disk
      image file is created with the correct record format.
  
-›|FTPSITE›%siteargs
+|FTPSITE%siteargs
      Specifies an optional SITE command that is issued by the FTP client.  The
      command is issued before data transfer, after navigating to the correct
      directory.  It is not translated to upper case.  If the SITE command is
@@ -859,7 +859,7 @@
      used at the beginning and end of the string.  A closing parenthesis is
      used to end an opening parenthesis.  For example:  "FTPSITE (umask 022)"
  
-›|UNSAFE›%
+|UNSAFE%
      Add the keyword UNSAFE to the secure ftp connection to the server.  This
      option is only valid for an "ftps" connection.  When the connection is
      made, the ftp pipelines stage verifies that the destination name matches
@@ -867,7 +867,7 @@
      done when the destination is specified as host name or host name with
      domain.  To skip this verification, specify UNSAFE.
  
-›|OLD›%
+|OLD%
      Force the exec to use an old option or method.  See "Usage Note 2.  FTP
      support in Pipelines" for a description of the 3 different ftp stages
      that PIPEDDR may use.  If Pipelines supports the built in FTP stage, it
@@ -876,11 +876,11 @@
      option forces the exec to use the alternate ftpget and ftpput FTP
      pipeline stages instead of FTP REXX.
  
-›|Deprecated Options›%
+|Deprecated Options%
  
  These options remain functional but the Target arguments are recommended.
  
-›|FILEdef›%
+|FILEdef%
      Dump or restore a disk to a CMS Filedef.  The filedef must be defined
      with the CMS FILEDEF command before PIPEDDR is invoked.  Any type of
      filedef can be defined that is usable on the Pipelines "qsam" stage.  Any
@@ -888,7 +888,7 @@
      default output record format is Fixed 1024 byte records.  The ONEREAD
      option is implied when using this option with a Restore command.
  
-›|LIsten›%
+|LIsten%
      On a Restore command, wait for an incoming TCP/IP connection from a
      remote system running a PIPEDDR Dump TO REMOTE command.  If a TCP/IP port
      is not specified using the PORT option or with the positional arguments
@@ -896,12 +896,12 @@
      number is displayed on the console.  PIPEDDR will keep waiting for a
      connection until one is established or the pipeline is stopped.
  
-›|FTP›%
+|FTP%
      Dump to or restore from a file on an ftp server.  If an FTP URL is
      specified (ftp://) as the option, then the FTP option is implied.  See
      "Usage Note 4.  FTP and HTTP options" for more about this option.
  
-›|HTTP›%
+|HTTP%
      Restore from a file located on an http server.  This option is invalid on
      a Dump command.  If an HTTP URL is specified, the HTTP option is implied.
      The file may be placed on the server via ftp, a CMS file of the dumped
@@ -915,19 +915,19 @@
      URL is not used or other options follow.  See "Usage Note 4.  FTP and
      HTTP options" for more information about specifying a URL.
  
-›|TAPE›%
+|TAPE%
      Dump a disk to tape or restore a disk from tape.  A tape drive virtual
      address can be specified after the TAPE keyword.  If no address is
      specified, it is assumed the tape drive is attached at virtual address
      181.
  
-›|BFSPath›%path
+|BFSPath%path
      Specify the path in the BFS filesystem where the input or output file
      resides.  The path must already be mounted before running PIPEDDR.  The
      synonym HFSPath can be specified instead of BFSPath.  The BFS option is
      implied when the BFSPATH option is specified.
  
-›|BFS›%
+|BFS%
      Specify that the input or output file resides in BFS, but no path is
      specified.  The file will be read from or written to the current working
      directory set via the OPENVM SET DIRECTORY command.  See the description
@@ -936,9 +936,9 @@
  
 .CS 4 OFF
 .CS 5 ON
-›|Usage Notes:›%
+|Usage Notes:%
  
-›|Usage Note 1.  Disk input/output formats›%
+|Usage Note 1.  Disk input/output formats%
  
      The PIPEDDR EXEC supports 2 different methods for directly reading from
      and writing to disks.  The first method uses PIPE's TRACKREAD and
@@ -957,7 +957,7 @@
      current time of day clock.  Dumping the same disk image multiple times
      will result in files with slightly different contents.
  
-›|Usage Note 2.  FTP support in Pipelines›%
+|Usage Note 2.  FTP support in Pipelines%
  
      PIPEDDR can use 3 different ftp stages.  The newest ftp stage is built in
      to Pipelines and is available if secure TCP/IP connections are supported
@@ -990,7 +990,7 @@
      PIPEDDR, are not officially supported by IBM, and no source code is
      provided.
  
-›|Usage Note 3.  More about the URL argument›%
+|Usage Note 3.  More about the URL argument%
  
      A url is used to refer to a file on a remote system using a standard
      convention.  PIPEDDR supports reading from an HTTP server and reading and
@@ -1073,9 +1073,9 @@
            stages already built-in to the minimum required pipeline level are
            used.
  
-›|Usage Note 4.  FTP and HTTP options›%
+|Usage Note 4.  FTP and HTTP options%
  
-    ›|Note: ›%These options are deprecated, the preferred specification is a url
+    |Note: %These options are deprecated, the preferred specification is a url
      as a target argument that follows the keyword FROM or TO.  Secure
      connections cannot be specified using the deprecated options.
  
@@ -1096,47 +1096,47 @@
      more common to use an HTTP URL for HTTP transfers.  The ftp parameters
      usable for PIPEDDR are:
  
-    ›|-h,-host,-hostname›%hostname
+    |-h,-host,-hostname%hostname
          hostname or IP address to connect to
  
-    ›|-u,-user,-userid›%userid
+    |-u,-user,-userid%userid
          user ID to connect to - defaults to 'anonymous'
  
-    ›|-p,-pw,-pwd,-password›%password
+    |-p,-pw,-pwd,-password%password
          will prompt if not supplied
  
-    ›|-port›%nnnn
+    |-port%nnnn
          FTP port - defaults to 21
  
-    ›|-d,-dir,-directory›%directory
+    |-d,-dir,-directory%directory
          directory to change to before file transfer
  
-    ›|-f,-file,-filename›%filename
+    |-f,-file,-filename%filename
          name of the file to be written onto the FTP server
  
-    ›|-debug›%
+    |-debug%
          turns on debugging output
  
      Some notes about these options:
  
-       ù PIPEDDR always writes files sent to FTP in Fixed 1024 format, so the
+       y PIPEDDR always writes files sent to FTP in Fixed 1024 format, so the
          FTP option -fixed 1024 is automatically added to the ftp argument
          string for the restore command if the ftpget pipeline stage is used.
  
-       ù When using FTP for the restore command, the ftp file name will be
+       y When using FTP for the restore command, the ftp file name will be
          displayed by the ftpget stage 2 times on the console unless the
          ONEREAD option is also specified.  If the ONEREAD option is
          specified, the input file is only read 1 time.
  
-       ù If the -debug argument is specified as an ftp argument or with the
+       y If the -debug argument is specified as an ftp argument or with the
          DEBUG command option, the ftp user ID and password may be displayed
          as part of the debug output.
  
-       ù If an HTTP URL is not used and ftp parameters are used instead, the
+       y If an HTTP URL is not used and ftp parameters are used instead, the
          only ftp arguments valid for http are -hostname, -port, -directory,
          and -filename.  Any of the other ftp options are ignored.
  
-›|Usage Note 5.  Using BFS and NFS files for input and output›%
+|Usage Note 5.  Using BFS and NFS files for input and output%
  
      PIPEDDR can read and write OpenExtensions files, which are found in the
      Byte File System (BFS), using the CMS Pipelines HFS stage.  The most
@@ -1151,7 +1151,7 @@
      For more information, see the z/VM documentation OpenExtensions Commands
      Reference and the OpenExtensions User's Guide.
  
-›|Usage Note 6.  Notes about compression›%
+|Usage Note 6.  Notes about compression%
  
        1.  The TERSE option can only be used if the TERSE Pipelines stage is
            available.  This allows the exec to create output files that are
@@ -1177,7 +1177,7 @@
            when a ZLIB compressed disk is restored.  More information about
            zlib compression can be found at http://zlib.net/
  
-›|Usage Note 7.  Restoring a disk a different size than the original disk›%
+|Usage Note 7.  Restoring a disk a different size than the original disk%
  
      If the NOSIZECHECK or RAW options are used, PIPEDDR does not check that
      the size of the output disk is the same size as the original input disk.
@@ -1193,7 +1193,7 @@
      of the data.  Restoring to a larger disk will write all of the data, but
      the disk may appear to only be the size of the original input disk.
  
-›|Usage Note 8.  Ensuring data integrity with CRC, CKSUM, SDIGEST, or DIGEST›%
+|Usage Note 8.  Ensuring data integrity with CRC, CKSUM, SDIGEST, or DIGEST%
  
      The intent of these options is to compute a value based on the disk image
      and append that value to the output file.  When the file is read to
@@ -1243,7 +1243,7 @@
      11.  More about incrementally updating a remote disk" describes how a
      digest value is used to update a remote disk.
  
-›|Usage Note 9.  Output file structure with CKSUM or DIGEST verification›%
+|Usage Note 9.  Output file structure with CKSUM or DIGEST verification%
  
      The intent of the CKSUM or DIGEST options is to allow the verification of
      the checksum or message digest of the disk image when the file is stored
@@ -1284,7 +1284,7 @@
      information to verify the contents of a file is included in the PDF
      document that is part of the download package.
  
-›|Usage Note 10.  More about the encryption options›%
+|Usage Note 10.  More about the encryption options%
  
      To encrypt or decrypt data, your system must have the "CPACF" feature
      enabled.  The KM package contains CSL routines that interface to the
@@ -1333,7 +1333,7 @@
        secretkey=GetKey()
        'EXEC PIPEDDR DUMP MAINT 190 (CIPHER AES KEYVARIABLE SECRETKEY'
  
-›|Usage Note 11.  More about incrementally updating a remote disk›%
+|Usage Note 11.  More about incrementally updating a remote disk%
  
      The TO REMOTE function of PIPEDDR sends the complete contents of a disk
      to a remote system over the TCP/IP network.  The disk is sent track by
@@ -1362,7 +1362,7 @@
  
 .CS 5 OFF
 .CS 6 ON
-›|Errors:›%
+|Errors:%
  
  PIPEDDR issues messages with message numbers and a suffix character
  indicating the type of message.  The format of the message number is
@@ -1370,7 +1370,7 @@
  similar to z/VM message types of E for error, W for warning, I for
  informational, R for response, and S for severe.
  
-›|Some examples of how to use PIPEDDR›%
+|Some examples of how to use PIPEDDR%
  
  To dump a minidisk to a file with the default name:
  
@@ -1454,7 +1454,7 @@
  
 .CS 6 OFF
 .CS 7 ON
-›|See also:›%
+|See also:%
  
  Stages from CMS Pipelines are used extensively in PIPEDDR.  Here is a link
  to the help menu that show all of the available stages.
