@@ -68,7 +68,7 @@ End
 | Show HELP if required                                          |
 +---------------------------------------------------------------*/
 If srch='?' Then Do
-     pipecmd' (NAME QN.EXEC:71 END ?)',
+ pipecmd' (NAME QN.EXEC:00071 END ?)',
         '< 'myfn myft' *',                      /* Read myself      */
         '| tolabel Parse',                      /* Up to here       */
         '| cons'                                /* Display          */
@@ -76,14 +76,14 @@ If srch='?' Then Do
      End
 If ssipartner='' Then Do
                       ssipref=''
-                      pipecmd' (NAME QN.EXEC:79 END ?)',
+ pipecmd' (NAME QN.EXEC:00079 END ?)',
                           'cp QUERY USERID',     /* Ask cp           */
                           '| specs w3.1 1',      /* Keep this        */
                           '| var ssipartner'     /* Hand 2 rexx      */
                       End
                  Else ssipref='AT 'ssipartner' CMD '
 lines='';cols=''
-pipecmd' (NAME QN.EXEC:86 END ?)',
+pipecmd' (NAME QN.EXEC:00086 END ?)',
     'cp QUERY SSI',                              /* Ask this         */
     '| drop first 5',                            /* Remove hdr       */
     '| pick substr 1.1 of w2.1 \== ~-~',         /* Remove these     */
@@ -100,10 +100,14 @@ pipecmd' (NAME QN.EXEC:86 END ?)',
             '~;/COLS/~ n w3.1 n',                /* .                */
     '| split at ;',                              /* Split here       */
     '| verify fs / f3 ~012345679~',              /* Verify numbers   */
-    '| varload'                                  /* Hand 2 rexx      */
+    '| varload',                                 /* Hand 2 rexx      */
+    '?',                                         /* 4th pipe         */
+    'cp QUERY CPLEVEL',                          /* Issue cmd        */
+    '| pick anycase w1.1 == ~IPL~',              /* Select this      */
+    '| var ipltime'                              /* Hand 2 rexx      */
 If lines='' Then lines=48
 If cols=''  Then cols=160
-pipecmd' (NAME QN.EXEC:106 END ?)',
+pipecmd' (NAME QN.EXEC:00110 END ?)',
     'var srch',                                  /* Take this        */
     '| strip',                                   /* Remove blanks    */
     '| split',                                   /* Split            */
@@ -155,7 +159,7 @@ pipecmd' (NAME QN.EXEC:106 END ?)',
     '| change ~:~.~',                            /* Add a comma      */
     '| fi:'                                      /* Conn 2 faninany  */
 If myft='EXEC' Then Do
-Say Date('S') Time() myfn' at 'ssipartner
+Say Date('S') Time() myfn' at 'ssipartner' , 'ipltime
 Say
 End
 /*---------------------------------------------------------------+
@@ -177,7 +181,7 @@ Do s=1 To srch.0
 | Select the stuff and display                                   |
 +---------------------------------------------------------------*/
      snake=cols%colsize
-     pipecmd' (NAME QN.EXEC:180 END ?)',
+ pipecmd' (NAME QN.EXEC:00184 END ?)',
         'stem qn.',                              /* Take these       */
         search,                                  /* Search if present*/
         '| specs 1;* 1.'colsize,                 /* Adjust layout    */
