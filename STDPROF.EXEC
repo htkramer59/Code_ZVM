@@ -15,7 +15,6 @@
 |            example in pre_exit and post_exit:                  |
 |                PIPE var <varname> 1 | ....                     |
 |                PIPE rexxvars 1 toload | varload                |
-|            See: STDPROF USERID for sample input                |
 |                                                                |
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20180128 16:00:04                                   |
@@ -66,9 +65,9 @@ If post_exit<>''    Then Do
                          Say TimeStamp() 'Running post-exit: 'post_exit
                          Address CMS post_exit
                          End
-/* If disc &, */
-/*    servercode<>''   Then Address serverenv servercode */
-/*                     Else Say TimeStamp()' To start servercode 'servercode' type: 'servercode */
+If disc &,
+   servercode<>''   Then Address serverenv servercode
+                    Else If servercode<>'' Then Say TimeStamp()' To start servercode 'servercode' type: 'servercode
  
 Exit:
 /*---------------------------------------------------------------+
@@ -100,7 +99,7 @@ Do a=1 To access.0
       ifrc.a<>'' Then Do
                       Address CMS ifrc.a
                       End
-                 Else Say TimeStamp() 'Non-zero rc on: ACCESS 'access.a
+                 Else If rc<>0 Then Say TimeStamp() 'Non-zero rc on: 'access.a
 End a
 Return
  
@@ -175,6 +174,7 @@ Parse Upper Arg filein
     '| split anycase before string ~:pre_exit.~',     /* .                */
     '| split anycase before string ~:post_exit.~',    /* .                */
     '| split anycase before string ~:servercode.~',   /* .                */
+    '| split anycase before string ~:serverenv.~',    /* .                */
     '| change ~:~/~ 1',                          /* Prep 4 varload   */
     '| change ~.~/~ 1',                          /* .idem            */
     '| xlate fs / f2 upper',                     /* ..idem           */
