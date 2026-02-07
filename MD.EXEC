@@ -20,6 +20,7 @@
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20200513 07:42:03                                   |
 | Changes  : .                                                   |
+|            20260207 H.T.Kramer : Added percentage 4 sfs dirs   |
 |            20250526 H.T.Kramer : Fixed problem with accessing  |
 |                                  filepool directory            |
 |            20250526 H.T.Kramer : Added no of blocks for        |
@@ -34,10 +35,10 @@ Parse Upper Arg what .
 Parse Source . . myfn myft .
 If what='?' Then Do
                  'VMFCLEAR'
-                 'PIPE (NAME MD.EXEC:37 END ?)',
-                    '< 'myfn' EXEC *',
-                    '| tolabel Parse',
-                    '| cons'
+                 'PIPE (NAME MD.EXEC:00038 END ?)',
+                                    '< 'myfn' EXEC *',
+                                    '| tolabel Parse',
+                                    '| cons'
                  Call Exit
                  End
 If what<>'' Then Call Exit
@@ -75,7 +76,7 @@ Do x=1
   If cuu='FILC' | cuu='DIRC' Then dirhandle=1    /* Is it a DIR?     */
                              Else dirhandle=0    /* .                */
   refresh=0                                     /* Initialise this  */
-  Address CMS 'PIPE (NAME MD.EXEC:78 END ?)',
+ Address CMS 'PIPE (NAME MD.EXEC:00079 END ?)',
      'stack',                                   /* Read from stack  */
      '| xlate upper',                           /* Uppercase        */
      '| strip',                                 /* Remove spaces    */
@@ -101,7 +102,7 @@ Do x=1
      Pos(Substr(cmd,3,1),usablemodes)<>0) Then Do
                                                wfm=cmd
                                                cmd='ACCESSWM'
-                                               Address CMS 'PIPE (NAME MD.EXEC:104 END ?)',
+ Address CMS 'PIPE (NAME MD.EXEC:00105 END ?)',
                                                   'cms RELEASE 'cuu,
                                                   '| hole'
                                                End
@@ -123,7 +124,7 @@ Do x=1
                                       End
                            End
   When cmd='DETACH'   Then Do
-                           If \dirhandle Then Address CMS 'PIPE (NAME MD.EXEC:126 END ?)',
+ If \dirhandle Then Address CMS 'PIPE (NAME MD.EXEC:00127 END ?)',
                                                              'cp DETACH 'cuu,
                                                              '| HOLE'
                                          Else 'EMSG Can not DETACH directory: 'Strip(dir)
@@ -136,13 +137,13 @@ Do x=1
                            End
   When cmd='ACCESS'   Then Do
                            'GETFMADR'
-                           Address CMS 'PIPE (NAME MD.EXEC:139 END ?)',
+                           Address CMS 'PIPE (NAME MD.EXEC:00140 END ?)',
                                           'stack',
                                           '| specs w2.1',
                                           '| var wfm'
                            If dirhandle Then what=dir
                                         Else what=cuu
-                           Address CMS 'PIPE (NAME MD.EXEC:145 END ?)',
+                           Address CMS 'PIPE (NAME MD.EXEC:00146 END ?)',
                                           'CMS ACCESS 'what wfm,
                                           '| hole'
                            refresh=1
@@ -150,7 +151,7 @@ Do x=1
   When cmd='ACCESSWM' Then Do
                            If dirhandle Then what=dir
                                        Else what=cuu
-                           Address CMS 'PIPE (NAME MD.EXEC:153 END ?)',
+                           Address CMS 'PIPE (NAME MD.EXEC:00154 END ?)',
                                           'CMS ACCESS 'what wfm,
                                           '| hole'
                            refresh=1
@@ -202,7 +203,7 @@ Collect_Info:
 /*---------------------------------------------------------------+
 | Collect the info                                               |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MD.EXEC:205 END ?)',
+Address CMS 'PIPE (NAME MD.EXEC:00206 END ?)',
    'cms QUERY DISK',                            /* Ask cms          */
    '| drop first 1',                            /* Drop header      */
    '| p: pick substr 1.3 of w2.1 \== ~DIR~',    /* Select these     */
@@ -323,7 +324,8 @@ Do i=1 To input.0
    If Substr(Word(input.i,2),1,4) = 'FILC' |,
       Substr(Word(input.i,2),1,4) = 'DIRC' Then Do
            dir=Reverse(Word(Reverse(input.i),1))
-           Address CMS 'PIPE (NAME MD.EXEC:326 END ?)',
+           Parse Value dir With fpname ':' fspace '.' .
+ Address CMS 'PIPE (NAME MD.EXEC:00328 END ?)',
               'sfsdir 'dir' isodate',            /* Get block        */
               '| pick w3.1 \== ~D~',             /* Ignore these     */
               '| specs',                         /* Summ blocks      */
@@ -331,8 +333,16 @@ Do i=1 To input.0
                       'a: w7.1 .',               /* .                */
                       'set #0+=a',               /* .                */
                       'eof',                     /* .                */
-                      'print #0 1 ~-__~ n',      /* Print total      */
-              '| var used'                       /* Hand 2 rexx      */
+                      'print #0 1',              /* Print total      */
+              '| var used',                      /* Hand 2 rexx      */
+              '?',                                    /* 2nd pipe         */
+              'cms QUERY LIMITS FOR 'fspace fpname,   /* Ask cms          */
+              '| drop first 1',                       /* Remove hdr       */
+              '| specs w3.1',                         /* Keep max availabl*/
+              '| var maxblk'                          /* Hand 2 rexx      */
+           perc=Format((used/maxblk)*100,2,0)
+           perc=Right(Strip(perc),2,'0')
+           used=used'-'perc
            input.i=Subword(input.i,1,6)||Right(Strip(used),14),
                    Right(Word(input.i,7),10),
                    Right(Word(input.i,8),9),
@@ -350,7 +360,7 @@ RunExec:
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'PIPE (NAME MD.EXEC:353 END ?)',
+'PIPE (NAME MD.EXEC:00363 END ?)',
    'cms EXECMAP 'myfn' XEDIT',             /* Ask CMS          */
    '| drop first 1',                      /* Ignore header    */
    '| count lines',                       /* Count findings   */
@@ -412,8 +422,8 @@ SetHeader:
 | Set the header, separator and input line                       |
 +---------------------------------------------------------------*/
 hdr='Label  VDev Mod  Stat   Cyl Blk Files  Blk_Used-(%)   Blk_Left Blk_Total Type R_Blk/Cyl Owner    VDev Directory'
-inf='%GLink this: Owner%g________%GVDev%g____%G  or  Directory %g'Copies('_',30)'%G  and press PF9'
-Address CMS 'PIPE (NAME MD.EXEC:416 END ?)',
+inf='%GLink this: Owner%g________%GVDev%g____%G  or  Directory %g'Copies('_',30)'%G  and%Bpress PF9'
+Address CMS 'PIPE (NAME MD.EXEC:00426 END ?)',
     'var hdr',
     '| deblock 1',
     '| if: if pick 1.1 \== ~ ~',
@@ -428,7 +438,7 @@ SetPFKeys:
 /*---------------------------------------------------------------+
 | Disable all PF keys and set the ones we need                   |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME MD.EXEC:431 END ?)',
+Address CMS 'PIPE (NAME MD.EXEC:00441 END ?)',
     'var pfk',                                  /* Take this        */
     '| split at ,',                             /* Split here       */
     '| strip',                                  /* Remove spaces    */
