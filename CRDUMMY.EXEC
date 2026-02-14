@@ -1,11 +1,46 @@
-/**/
+/*--------------------------------------------------------------------+
+| Function : Create a dummy file on an empty disk                     |
+|                                                                     |
+| File     : CRDUMMY  EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : CRDUMMY  <userid> <minidisk>                             |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20260214 17:46:25                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
 Parse Upper Arg uid mdisk .
+Parse Source . . myfn myft .
+If uid='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME CRDUMMY.EXEC:00023 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
 If uid='RDEV' Then Address COMMAND 'CP ATT 'mdisk' * F00F'
               Else Address COMMAND 'CP LINK 'uid mdisk' F00F M'
 Address CMS 'ACCES F00F F'
-'PIPE (End ?)',
+'PIPE (NAME CRDUMMY.EXEC:00032 END ?)',
     'literal Created: 'Date('S') Time() Userid(),
     '| append literal To have at least 1 file on the disk so it can be accessed',
     '| > DUMMY FILE F'
 Address CMS 'REL F (DET'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
  
