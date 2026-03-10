@@ -552,6 +552,7 @@ Address CMS 'PIPE (NAME MANY.XEDIT:531 END ?)',
            'substr w2;* of f3 nw',                    /* .                */
    '| fi: faninany',                                  /* Take in others   */
    '| buffer',                                        /* Prevent stall    */
+   '| pad right 120 _',
    '| change x40 x6D',                                /* Replace these    */
    '| change xFF x6F',                                /* .items           */
    '| change ~__)~)~',                                /* .                */
