@@ -107,6 +107,7 @@ When semi<>0  Then Do
 | We found a semicolon so we need these steps                         |
 +--------------------------------------------------------------------*/
               Parse Value range With upto ';' from .
+              If from='*' Then from=9999999
               If from+1=0 Then part3='| hole'
                           Else part3='| specs ~3~ 1 'wrd||from+1';* nw'
               Select
@@ -122,6 +123,7 @@ When dash<>0  Then Do
 | We found a dash (-) prepare for that                                |
 +--------------------------------------------------------------------*/
               Parse Value range With upto '-' from .
+              If from='*' Then from=9999999
               If upto>1 Then part1='| specs ~1~ 1 'wrd'1-'upto-1' nw'
                         Else part1='| hole'
               part2='| specs 'zone' 1'
