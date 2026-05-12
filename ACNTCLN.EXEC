@@ -1,41 +1,36 @@
 /*---------------------------------------------------------------+
-| Function : Clean up accounting files                           |
+| Function : Keep 30 days worth of Accounting records            |
 |                                                                |
-| File     : ACNTCLN  EXEC                                       |
+| File     : CLNACNT  EXEC                                       |
 +----------------------------------------------------------------+
 | Version  : 1.1.0                                               |
 |                                                                |
 | Files    : .                                                   |
 |                                                                |
-| Called   : ACNTCLN  <run>                                      |
-|                     YES                                        |
+| Called   : CLNACNT  <days> ( <cleanup>                         |
+|                                                                |
+|            <days> is the no of day you want to keep            |
+|            <cleanup> is to run the actual cleanup              |
 | Comments : .                                                   |
 |                                                                |
-| Author   : H.T.Kramer, ,                                       |
-| Created  : 20190403 06:00:03                                   |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250726 12:40:32                                   |
 | Changes  : .                                                   |
 |                                                                |
 +---------------------------------------------------------------*/
-Parse Upper Arg run .
-Parse Source . how myfn myft .
-/*---------------------------------------------------------------+
-| How many to keep                                               |
-+---------------------------------------------------------------*/
-keep=15
-If run='YES' Then run='| cms | cons'
-             Else run=''
-timestamp=Date('S') Time()
-Say timestamp myfn 'Keeping last 'keep' files'
-/*---------------------------------------------------------------+
-| Remove some files....                                          |
-+---------------------------------------------------------------*/
-'PIPE (end ?)',
-   ' cms LISTFILE ACCOUNT * * (NOH ISODATE',
-   '| all /$A/',
-   '| drop last 'keep,
+Parse Upper Arg days . '(' doit .
+Parse Source . . myfn myft .
+If days='' Then days=30
+Say Date('S') Time() 'Starting 'myfn myft
+Say Date('S') Time() 'Input: 'days doit
+If doit<>'' Then doit='| cms | cons'
+            Else doit=''
+'PIPE (NAME CLNACNT.EXEC:30 END ?)',
+   'cms LISTFILE ACCOUNT $* A (NOH ISODATE',
+   '| sort w-2;-1 A',
+   '| drop last 'days,
    '| specs ~ERASE~ 1 w1.3 nw',
    '| cons',
-   run,
-   '| count lines',
-   '| specs ~'timestamp myfn' Files removed:~ 1 w1;* nw',
-   '| cons'
+   doit
+Say Date('S') Time() 'Ending 'myfn myft
+Exit

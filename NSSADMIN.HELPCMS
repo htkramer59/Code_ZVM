@@ -1,0 +1,96 @@
+  NSSADMIN to help you administer NSS's and DCSS's                              
+                                                                                
+------------------------------------------------------------------------------- 
+                                                                                
+  Main panel                                                                    
+                                                                                
+  A display of all NSS's/DCSS's and their                                       
+                                                                                
+  Function keys:                                                                
+                                                                                
+   1. Help             - Displays this panel                                    
+   2. Backup           - Creates a DCCSBKUP of the NSS/DCSS on that line        
+   3. Quit             - Exits the code                                         
+   4. Users            - Shows the users of the selected item                   
+   5. Date             - Shows the date of the selected item                    
+   6. Alldate          - Shows the dates of all items                           
+   7. Restore          - Goes to the panel where a restore can be selected      
+   8.                  -                                                        
+   9. Purge            - Purge the selected item from spool                     
+  10. Newdef           - Create a new item from scratch                         
+  11. Copydef          - Copy the definitions of an item for a new one          
+  12. Quit             - Exits the code                                         
+                                                                                
+------------------------------------------------------------------------------- 
+                                                                                
+  Restore panel                                                                 
+                                                                                
+  Displays the items for which a backup was made                                
+                                                                                
+                                                                                
+------------------------------------------------------------------------------- 
+                                                                                
+  Restore panel                                                                 
+                                                                                
+   1. Help             - Displays this panel                                    
+   2. Restore          - Restore a DCCSBKUP of the NSS/DCSS on that line        
+  ...                                                                           
+   3. Return           - Return to the main panel                               
+  ...                                                                           
+  12. Quit             - Exits the code                                         
+                                                                                
+                                                                                
+------------------------------------------------------------------------------- 
+                                                                                
+  Newdef panel                                                                  
+                                                                                
+  Select "Saved System" or "Saved Segment" and press ENTER                      
+                                                                                
+  Function keys:                                                                
+                                                                                
+   1. Help             - Displays this panel                                    
+  ...                                                                           
+   3. Return           - Return to the main panel                               
+  ...                                                                           
+  12. Quit             - Exits the code                                         
+                                                                                
+                                                                                
+------------------------------------------------------------------------------- 
+                                                                                
+  DCSS/NSS panel                                                                
+                                                                                
+                                                                                
+  Fill in the desired values in the fields and press                            
+                                                                                
+  Function keys:                                                                
+                                                                                
+   1. Help             - Displays this panel                                    
+  ...                                                                           
+   3. Return           - Return to the main panel                               
+  ...                                                                           
+   3. Define&Load      - Define the SEGMENT and Load it                         
+  ...                                                                           
+   9. Check            - Checks the entries                                     
+  10. Define           - Issue the DEFSEG                                       
+  ...                                                                           
+  12. Quit             - Exits the code                                         
+                                                                                
+                                                                                
+------------------------------------------------------------------------------- 
+                                                                                
+  CopyDef panel                                                                 
+                                                                                
+                                                                                
+  Fill in the desired values in the fields and press                            
+                                                                                
+  Function keys:                                                                
+                                                                                
+   1. Help             - Displays this panel                                    
+  ...                                                                           
+   3. Return           - Return to the main panel                               
+  ...                                                                           
+   9. Create           - Issue the DEFSEG command                               
+  ...                                                                           
+  12. Quit             - Exits the code                                         
+                                                                                
+                                                                                

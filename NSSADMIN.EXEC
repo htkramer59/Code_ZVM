@@ -1,23 +1,31 @@
 /*---------------------------------------------------------------+
-| Function : Help managing NSS and Saved Systems                 |
+| Function : Help managing NSS and DCSS items                    |
 |                                                                |
 | File     : NSSADMIN EXEC                                       |
 +----------------------------------------------------------------+
 | Version  : 1.1.0                                               |
 |                                                                |
-| Files    : .                                                   |
+| Files    : NSSADMIN OVERVIEW     output for display            |
+|            DCSSBKUP MODULE       backup of nss/dcss            |
+|            DCSSRSAV MODULE       restore of nss/dcss           |
 |                                                                |
 | Called   : NSSADMIN .                                          |
 |                                                                |
-| Comments : .                                                   |
+| Comments : Can not backup/restore NSS's                        |
 |                                                                |
 | Author   : H.T.Kramer, ,                                       |
 | Created  : 20200701 11:47:53                                   |
 | Changes  : .                                                   |
+|            20260505 H.T.Kramer : Added backup/restore          |
+|                                                                |
 |                                                                |
 +---------------------------------------------------------------*/
 Parse Upper Arg . '(' admin .
 Parse Source . . myfn myft .
+backup=0
+restore=0
+defseg=0
+defsys=0
 Select
 When myft='EXEC'  Then Call RunExec
 When myft='XEDIT' Then Call RunXedit
@@ -35,16 +43,20 @@ RunExec:
 /*---------------------------------------------------------------+
 | Start the code for the EXEC                                    |
 +---------------------------------------------------------------*/
-'PIPE (NAME NSSADMIN.EXEC:38 END ?)',
-     'cms EXECMAP 'myfn,
-     '| nfind DMS',
-     '| count lines',
-     '| var exld'
+Address CMS 'VMLINK WORK (WRITE QUIET .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else wfm='A'
+'PIPE (NAME NSSADMIN.EXEC:45 END ?)',
+     'cms EXECMAP 'myfn,                              /* Find myself stord*/
+     '| nfind DMS',                                   /* Ignore this      */
+     '| count lines',                                 /* Count them       */
+     '| var exld'                                     /* Hand 2 rexx      */
 If \exld Then Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
 Queue myfn
-Address CMS 'XEDIT 'myfn' OVERVIEW A (WIDTH 500'
-'PIPE (NAME NSSADMIN.EXEC:46 END ?) CMS ERASE 'myfn' OVERVIEW A | hole'
+Address CMS 'XEDIT 'myfn' OVERVIEW 'wfm' (WIDTH 500'
+'PIPE (NAME NSSADMIN.EXEC:53 END ?) CMS ERASE 'myfn' OVERVIEW 'wfm' | hole'
 Address CMS 'EXECDROP 'myfn' XEDIT'
+If wfm<>'A' Then Address CMS 'VMLINK WORK <DET (WRITE QUIET'
 Return
  
  
@@ -59,17 +71,19 @@ Call Display
 ':1'
 Do x=1
     Call Display
-    'READ ALL NUMBER'
-    'PIPE (NAME NSSADMIN.EXEC:63 END ?)',
+    'READ ALL NUMBER TAG'
+    'PIPE (NAME NSSADMIN.EXEC:71 END ?)',
         'stack',                                /* Read from stack  */
         '| xlate upper',                        /* Uppercase        */
+        '| l: locate ~PFK~',
+        '| specs w3.1 1',
         '| var cmd'                             /* Store as         */
 /*---------------------------------------------------------------+
 | What to do....                                                 |
 +---------------------------------------------------------------*/
     Select
     When cmd=''         Then Nop
-    When cmd='HELP'     Then Address CMS 'HELP * NSSADMIN'
+    When cmd='HELP'     Then Address CMS 'HELP NSSADMIN'
     When cmd='RETURN'   Then Do
                         Call InitDisp
                         Call SetPFkeys
@@ -81,14 +95,20 @@ Do x=1
                         End
     When cmd='USERS'    Then Call Show_Users
     When cmd='DATE'     Then Call Show_Date
-    When cmd='ALLDATE'  Then Call Show_All_Date
+    When cmd='ALLDATE'  Then Call Show_All_Dates
     When cmd='BACKUP'   Then Call Backup_NSS
+    When cmd='RESTORE'  Then Call Restore_NSS restore
     When cmd='COPYDEF'  Then Call Copy_NSS_Definitions
     When cmd='CREATE'   Then Call Create_NSS
     When cmd='NEWDEF'   Then Call New_NSS
     When cmd='PURGE'    Then Call Purge_NSS
-    When cmd='CHECK'    Then Call Check_Defs
+    When cmd='CHECK' & defseg Then Call Check_Defs_NSS
+    When cmd='CHECK' & defsys Then Call Check_Defs_SYS
     When cmd='DEFINE'   Then Call Issue_Defs
+    When cmd='DEFINE&'  Then Do
+                             Call Check_Defs_NSS
+                             Call Issue_Defs
+                             End
     Otherwise Say '>>>>' cmd '<<<<<'
     End
 End x
@@ -138,7 +158,7 @@ l=Length(time)
 'SET RESERVE 5 WHITE NO 'separator
 If data.0<=maxlines Then Do
           rep=maxlines-data.0-1
-          Address CMS 'PIPE (NAME NSSADMIN.EXEC:139 END ?)',
+          Address CMS 'PIPE (NAME NSSADMIN.EXEC:150 END ?)',
               'literal ',                       /* Make empty rec   */
               '| dup 'rep,                      /* Copy x times     */
               '| stem data. append'             /* Add to this      */
@@ -153,30 +173,30 @@ Return
  
 InitDisp:
 /*---------------------------------------------------------------+
-| .                                                              |
+| Initialise stuff and find all NSS/DCSS occurences              |
 +---------------------------------------------------------------*/
 title='Main Menu'
-Address CMS 'PIPE (NAME NSSADMIN.EXEC:157 END ?)',
-     'cp QUERY NSS ALL MAP',
-     '| t: take first 1',
-     '| specs 1;* 4 ~BEGPAGES(DEC) ENDPAGES(DEC) NO_Pages~ nw',
-     '| change ~#~~',
-     '| var header',
-     '? t:',
-     '| specs 1;* 1 33.5 80.6 40.5 88.6',
-     '| specs 1;* 1 pad 0 w-2;-2 nw.6 right w-1;-1 nw.6 right',
-     '| specs 1;78 1 95;* nw',
-     '| specs 1;* 1 80.6 x2d nw 87.6 x2d nw',
-     '| specs 1;117 1',
-     '        a: w-2;-2 .',
-     '        b: w-1;-1 .',
-     '        set #0:=b-a',
-     '        print #0 120',
-     '| specs 1;79 1 95;* nw',
-     '| specs ~%y_%Y~ 1 1;* n',
-     '| stem data.'
+Address CMS 'PIPE (NAME NSSADMIN.EXEC:168 END ?)',
+     'cp QUERY NSS ALL MAP',                          /* .                */
+     '| t: take first 1',                             /* .                */
+     '| specs 1;* 4 ~BEGPAGES(DEC) ENDPAGES(DEC) NO_Pages~ nw',   /* .                */
+     '| change ~#~~',                                 /* .                */
+     '| var header',                                  /* .                */
+     '? t:',                                          /* .                */
+     '| specs 1;* 1 33.5 80.6 40.5 88.6',             /* .                */
+     '| specs 1;* 1 pad 0 w-2;-2 nw.6 right w-1;-1 nw.6 right',   /* .                */
+     '| specs 1;78 1 95;* nw',                        /* .                */
+     '| specs 1;* 1 80.6 x2d nw 87.6 x2d nw',         /* .                */
+     '| specs 1;117 1',                               /* .                */
+     '        a: w-2;-2 .',                           /* .                */
+     '        b: w-1;-1 .',                           /* .                */
+     '        set #0:=b-a',                           /* .                */
+     '        print #0 120',                          /* .                */
+     '| specs 1;79 1 95;* nw',                        /* .                */
+     '| specs ~%y_%Y~ 1 1;* n',                       /* .                */
+     '| stem data.'                                   /* .                */
 Call MakeSeparator
-pfkeys='1 Help;2 Backup ;3 Quit;4 Users;5 Date;6 AllDate;7;8;9 Purge;10 NewDef;11 CopyDef;12 Quit'
+pfkeys='1 Help;2 Backup ;3 Quit;4 Users;5 Date;6 AllDate;7 Restore;8;9 Purge;10 NewDef;11 CopyDef;12 Quit'
 Return
  
  
@@ -184,7 +204,7 @@ SetPFKeys:
 /*---------------------------------------------------------------+
 | Set the pf keys                                                |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME NSSADMIN.EXEC:185 END ?)',
+Address CMS 'PIPE (NAME NSSADMIN.EXEC:196 END ?)',
    'var pfkeys',                                /* Take this        */
    '| split at ~;~',                            /* Split here       */
    '| f: fanout',                               /* Duplicate recs   */
@@ -214,7 +234,7 @@ MakeSeparator:
 /*---------------------------------------------------------------+
 | Create a separator to measure...                               |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME NSSADMIN.EXEC:215 END ?)',
+Address CMS 'PIPE (NAME NSSADMIN.EXEC:226 END ?)',
    'var header ',                               /* Take this        */
    '| deblock 1',                               /* Split into recs  */
    '| if: if pick 1.1 \== ~ ~',                 /* If not empty     */
@@ -231,11 +251,13 @@ Get_NSS_Name:
 +---------------------------------------------------------------*/
 'EXTRACT /CURSOR'
 line=cursor.1-6
-Address CMS 'PIPE (NAME NSSADMIN.EXEC:232 END ?)',
-    'literal 'data.line,
-    '| specs 11.8',
-    '| strip',
-    '| var nssname'
+If restore Then specs='6.8'
+           Else specs='11.8'
+Address CMS 'PIPE (NAME NSSADMIN.EXEC:245 END ?)',
+    'literal 'data.line,                              /* .                */
+    '| specs 'specs,                                  /* .                */
+    '| strip',                                        /* .                */
+    '| var nssname'                                   /* .                */
 Return
  
  
@@ -245,14 +267,14 @@ Show_Users:
 +---------------------------------------------------------------*/
 Call Get_NSS_Name
 If nssname<>'' Then Do
-     Address CMS 'PIPE (NAME NSSADMIN.EXEC:246 END ?)',
-         'cp QUERY NSS USERS 'nssname,
-         '| t: take 1',
-         '| specs 1;* 2',
-         '| var header',
-         '? t:',
-         '| specs ~%Y~ 1 1;* n',
-         '| stem data.'
+     Address CMS 'PIPE (NAME NSSADMIN.EXEC:259 END ?)',
+         'cp QUERY NSS USERS 'nssname,                /* .                */
+         '| t: take 1',                               /* .                */
+         '| specs 1;* 2',                             /* .                */
+         '| var header',                              /* .                */
+         '? t:',                                      /* .                */
+         '| specs ~%Y~ 1 1;* n',                      /* .                */
+         '| stem data.'                               /* .                */
 End
 Else Do
    'EMSG Cursor on invalid/empty field'
@@ -279,17 +301,17 @@ Copy_NSS_Definitions:
 +---------------------------------------------------------------*/
 Call Get_NSS_Name
 If nssname<>'' Then Do
-     Address CMS 'PIPE (NAME NSSADMIN.EXEC:281 END ?)',
-         'cp QUERY NSS NAME 'nssname' MAP',
-         '| t: take first 1',
-         '| change ~#~~',
-         '| specs 1;* 2',
-         '| var header',
-         '? t:',
-         '| specs ~%Y~ 1 1;* n',
-         '| stem data.',
-         '| join * x40',
-         '| var nssmap'
+     Address CMS 'PIPE (NAME NSSADMIN.EXEC:293 END ?)',
+         'cp QUERY NSS NAME 'nssname' MAP',           /* .                */
+         '| t: take first 1',                         /* .                */
+         '| change ~#~~',                             /* .                */
+         '| specs 1;* 2',                             /* .                */
+         '| var header',                              /* .                */
+         '? t:',                                      /* .                */
+         '| specs ~%Y~ 1 1;* n',                      /* .                */
+         '| stem data.',                              /* .                */
+         '| join * x40',                              /* .                */
+         '| var nssmap'                               /* .                */
          Call Compose_Defseg
 End
 Else Do
@@ -297,17 +319,20 @@ Else Do
    header='  '
    data.0=0
    End
-title='Definitions for NSS 'nssname
-pfkeys='1 Help;2;3 Return;4;5;6;7;8;9 Create ;10;11;12 Quit'
-If Word(header,2)='NOT' Then Do
-   'EMSG 'header
-   header='  '
-   data.0=0
-   End
-Call MakeSeparator
-Call SetPFkeys
-Call Display
-pfkeys='1 Help;2;3 Quit;4;5;6;7;8;9;10;11;12 Quit'
+If backup Then Nop
+          Else Do
+               title='Definitions for NSS 'nssname
+               pfkeys='1 Help;2;3 Return;4;5;6;7;8;9 Create ;10;11;12 Quit'
+               If Word(header,2)='NOT' Then Do
+                  'EMSG 'header
+                  header='  '
+                  data.0=0
+                  End
+               Call MakeSeparator
+               Call SetPFkeys
+               Call Display
+               pfkeys='1 Help;2;3 Quit;4;5;6;7;8;9;10;11;12 Quit'
+               End
 Return
  
  
@@ -316,12 +341,12 @@ Compose_Defseg:
 | Compose the DEFSEG command for the display                     |
 +---------------------------------------------------------------*/
 Parse Value nssmap With . nssname type minsize begpag endpag stortype . . parmregs vmgroup extra
-If extra<>'' Then 'PIPE (NAME NSSADMIN.EXEC:319 END ?)',
-                        'var extra',
-                        '| split at string ~%Y~',
-                        '| specs w1.1 1 ~-~ n w2.1 n w3.1 nw',
-                        '| join * x40',
-                        '| var extra'
+If extra<>'' Then 'PIPE (NAME NSSADMIN.EXEC:333 END ?)',
+                        'var extra',                  /* .                */
+                        '| split at string ~%Y~',     /* .                */
+                        '| specs w1.1 1 ~-~ n w2.1 n w3.1 nw',   /* .                */
+                        '| join * x40',               /* .                */
+                        '| var extra'                 /* .                */
 If minsize='N/A' Then minsize=''
                  Else minsize='MINSIZE='minsize
 If vmgroup='N/A' | vmgroup='NO' Then vmgroup=''
@@ -331,17 +356,25 @@ If parmregs='N/A' | parmregs='OMITTED' Then parmregs=''
 If type='DCSS' Then cmd='DEFSEG'
                Else cmd='DEFSYS'
 nline='%Y'cmd'%g'nssname'%Y'begpag'-'endpag stortype extra minsize parmregs '(' vmgroup
-'PIPE (NAME NSSADMIN.EXEC:334 END ?)',
-    'stem data.',
-    '| buffer',
-    '| append literal ',
-    '| append literal %YDefinitions for a copy of 'nssname,
-    '| append literal ',
-    '| append var nline',
-    '| append literal ',
-    '| append literal %YNote: Enter a new name if needed',
-    '| stem data.'
-'CURSOR SCREEN 11 9'
+If backup Then Do
+     'PIPE (END ? NAME NSSADMIN.EXEC:349) var nline',
+        '|change ~%Y~ ~',                             /* .                */
+        '|change ~%g~ ~',                             /* .                */
+        '| > 'nssname' DEFSEG 'bfm                    /* .                */
+     End
+     Else Do
+     'PIPE (NAME NSSADMIN.EXEC:355 END ?)',
+         'stem data.',                                /* .                */
+         '| buffer',                                  /* .                */
+         '| append literal ',                         /* .                */
+         '| append literal %YDefinitions for a copy of 'nssname,   /* .                */
+         '| append literal ',                         /* .                */
+         '| append var nline',                        /* .                */
+         '| append literal ',                         /* .                */
+         '| append literal %YNote: Enter a new name!',   /* .                */
+         '| stem data.'                               /* .                */
+     'CURSOR SCREEN 11 9'
+     End
 Return
  
  
@@ -349,10 +382,10 @@ Create_NSS:
 /*---------------------------------------------------------------+
 | Execute the command to create the NSS definition               |
 +---------------------------------------------------------------*/
-'PIPE (NAME NSSADMIN.EXEC:352 END ?)',
-    'stack',
-    '| xlate upper',
-    '| var nssname'
+'PIPE (NAME NSSADMIN.EXEC:374 END ?)',
+    'stack',                                          /* .                */
+    '| xlate upper',                                  /* .                */
+    '| var nssname'                                   /* .                */
 Parse Value nline With '%Y' cmd '%g' . '%Y' cmdinput '(' options
 If options<>'' Then options='(' options
 Address COMMAND 'CP' cmd nssname cmdinput options
@@ -387,7 +420,7 @@ Get_Selection:
 | .                                                              |
 +---------------------------------------------------------------*/
 'READ ALL NUMBER'
-'PIPE stack | hole'
+'PIPE (END ? NAME NSSADMIN.EXEC:412) stack | hole'
 'EXTRACT /CURSOR'
 line=cursor.1
 If line=7 Then Call System_Panel
@@ -404,12 +437,12 @@ title='Defining a new Saved Segment'
 data.1=''
 data.2= '%Y    Name:%g________%Y'
 data.3= '%Y    Page ranges: Hexpage  Hexpage Type'
-data.4= '%Y         1      %g______%Y-%g______%Y%g__%Y EW, EN, ER, SW, SN, SR or SC'
-data.5= '%Y         2      %g______%Y-%g______%Y%g__%Y'
-data.6= '%Y         3      %g______%Y-%g______%Y%g__%Y'
-data.7= '%Y         4      %g______%Y-%g______%Y%g__%Y'
-data.8= '%Y         5      %g______%Y-%g______%Y%g__%Y'
-data.9= '%Y         6      %g______%Y-%g______%Y%g__%Y'
+data.4= '%Y         1      %g_______%Y-%g_______%Y%g__%Y EW, EN, ER, SW, SN, SR or SC'
+data.5= '%Y         2      %g_______%Y-%g_______%Y%g__%Y'
+data.6= '%Y         3      %g_______%Y-%g_______%Y%g__%Y'
+data.7= '%Y         4      %g_______%Y-%g_______%Y%g__%Y'
+data.8= '%Y         5      %g_______%Y-%g_______%Y%g__%Y'
+data.9= '%Y         6      %g_______%Y-%g_______%Y%g__%Y'
 data.10='%Y'
 data.11='%Y    Options:'
 data.12='%Y   %g_%YRSTD       Y or N'
@@ -417,10 +450,12 @@ data.13='%Y   %g_%YLOADNSHR   Y or N'
 data.14='%Y   %g_%YSECURE     Y or N'
 data.15='%Y    SPACE%g________%Y'
 data.16=''
-data.17='%Y    See: HELP CP DEFSEG for more details'
-data.0=17
+data.17='%Y    File to be in the SEGMENT: %g________%Y%g________%Y'
+data.18=''
+data.19='%Y    See: HELP CP DEFSEG and SAVESYS for more details'
+data.0=19
 'SET ENTER IGNORE'
-pfkeys='1 Help;2;3 Return;4;5;6;7;8;9 Check ;10;11 Define ;12 Quit'
+pfkeys='1 Help;2;3 Return;4;5;6 Define&Load;7;8;9 Check ;10;11 Define ;12 Quit'
 Call MakeSeparator
 Call SetPFkeys
 Return
@@ -435,12 +470,12 @@ title='Defining a new Saved System'
 data.1=''
 data.2= '%Y    Name:%g________%Y'
 data.3= '%Y    Page ranges: Hexpage  Hexpage Type'
-data.4= '%Y         1      %g______%Y-%g______%Y%g__%Y EW, EN, ER, SW, SN, SR or SC'
-data.5= '%Y         2      %g______%Y-%g______%Y%g__%Y'
-data.6= '%Y         3      %g______%Y-%g______%Y%g__%Y'
-data.7= '%Y         4      %g______%Y-%g______%Y%g__%Y'
-data.8= '%Y         5      %g______%Y-%g______%Y%g__%Y'
-data.9= '%Y         6      %g______%Y-%g______%Y%g__%Y'
+data.4= '%Y         1      %g_______%Y-%g_______%Y%g__%Y EW, EN, ER, SW, SN, SR or SC'
+data.5= '%Y         2      %g_______%Y-%g_______%Y%g__%Y'
+data.6= '%Y         3      %g_______%Y-%g_______%Y%g__%Y'
+data.7= '%Y         4      %g_______%Y-%g_______%Y%g__%Y'
+data.8= '%Y         5      %g_______%Y-%g_______%Y%g__%Y'
+data.9= '%Y         6      %g_______%Y-%g_______%Y%g__%Y'
 data.10='%Y'
 data.11='%Y    Options:'
 data.12='%Y   %g_%YRSTD                     Y or N'
@@ -448,22 +483,71 @@ data.13='%Y   %g_%YVMGROUP                  Y or N'
 data.14='%Y    MINSIZE=%g_______%YK'
 data.15='%Y    PARMREGS=%g____%Y %g_%Y        m, m-n or NONE'
 data.16='%Y    MACHMODE%g__%Y               XA, XC or Z'
-data.17=''
-data.18='%Y    See: HELP CP DEFSYS for more details'
-data.0=18
+data.16=''
+data.17='%Y    File to be in the SYSTEM: %g________%Y%g________%Y'
+data.18=''
+data.19='%Y    See: HELP CP DEFSYS and SAVESYS for more details'
+data.0=19
 'SET ENTER IGNORE'
-pfkeys='1 Help;2;3 Return;4;5;6;7;8;9 Check ;10;11 Define ;12 Quit'
+pfkeys='1 Help;2;3 Return;4;5;6 Define&Load;7;8;9 Check ;10;11 Define ;12 Quit'
 Call MakeSeparator
 Call SetPFkeys
 Return
  
  
-Check_Defs:
+Check_Defs_SYS:
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Return
+ 
+ 
+Check_Defs_NSS:
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'READ ALL TAG'
-'PIPE stack | cons'
+'PIPE (END ? NAME NSSADMIN.EXEC:488)',
+      'stack',
+      '| strip ~_~',
+      '| xlate upper',
+      '| specs pad 0 w2.1 1.2 right w4;* nw',
+      '| join keylen 2',
+      '| stem new.'
+defseg=''
+Do n=1 To new.0
+   Parse Value new.n With lineno content
+   Select
+   When lineno=8  Then defseg='DEFSEG' content
+   When lineno=10 Then Call Check_Loc
+   When lineno=11 Then Call Check_Loc
+   When lineno=12 Then Call Check_Loc
+   When lineno=13 Then Call Check_Loc
+   When lineno=14 Then Call Check_Loc
+   When lineno=15 Then Call Check_Loc
+   When lineno=18 & content='Y' Then defseg=defseg' RSTD'
+   When lineno=19 & content='Y' Then defseg=defseg' LOADNSHR'
+   When lineno=20 & content='Y' Then defseg=defseg' SECURE'
+   When lineno=21 Then defseg=defseg' SPACE 'content
+   When lineno=23 Then loadfnft=content
+   Otherwise Nop
+   End
+End n
+Say defseg
+Say loadfnft
+Return
+ 
+ 
+Check_Loc:
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Parse Value content With strp endp type .
+ 
+If x2d(strp)<0 | x2d(strp)>x2d(7FFFFFF) Then Call Exit '110 Invalid start page 'strp
+If x2d(endp)<0 | x2d(endp)>x2d(7FFFFFF) Then Call Exit '111 Invalid end page 'endp
+If x2d(strp)>x2d(endp) Then Call Exit '112 Startpage is higher than Endpage: 'strp endp
+If Wordpos(type,'EW EN ER SW SN SR SC')=0 Then Call Exit '113 Invalid space type: 'type
+defseg=defseg Right(strp,7,'0') Right(endp,7,'0') type
 Return
  
  
@@ -483,12 +567,20 @@ Purge_NSS:
 +---------------------------------------------------------------*/
 'EXTRACT /CURSOR'
 line=cursor.1-6
-Address CMS 'PIPE (NAME NSSADMIN.EXEC:380 END ?)',
+Address CMS 'PIPE (NAME NSSADMIN.EXEC:508 END ?)',
     'literal 'data.line,
     '| specs 6.4',
     '| var spid'
-Address COMMAND 'CP PURGE NSS 'spid
-If rc<>0 Then 'EMSG Problem purging NSS 'spid nssname', rc: 'rc
+Say 'Are you sure you want to delete: 'Word(data.line,2)' type Y or N'
+Parse Upper Pull confirm .
+Select
+When confirm='Y' Then Do
+                      Address COMMAND 'CP PURGE NSS 'spid
+                      If rc<>0 Then 'EMSG Problem purging NSS 'spid nssname', rc: 'rc
+                      End
+When confirm='N' Then Return
+Otherwise Return
+End
 Call InitDisp
 Return
  
@@ -499,14 +591,14 @@ Show_Date:
 +---------------------------------------------------------------*/
 Call Get_NSS_Name
 If nssname<>'' Then Do
-     Address CMS 'PIPE (NAME NSSADMIN.EXEC:396 END ?)',
-         'cp QUERY NSS NAME 'nssname' ISODATE',
-         '| t: take 1',
-         '| specs 1;* 2',
-         '| var header',
-         '? t:',
-         '| specs ~%Y~ 1 1;* n',
-         '| stem data.'
+     Address CMS 'PIPE (NAME NSSADMIN.EXEC:524 END ?)',
+         'cp QUERY NSS NAME 'nssname' ISODATE',       /* .                */
+         '| t: take 1',                               /* .                */
+         '| specs 1;* 2',                             /* .                */
+         '| var header',                              /* .                */
+         '? t:',                                      /* .                */
+         '| specs ~%Y~ 1 1;* n',                      /* .                */
+         '| stem data.'                               /* .                */
 End
 Else Do
    'EMSG Cursor on invalid/empty field'
@@ -531,16 +623,22 @@ Backup_NSS:
 /*---------------------------------------------------------------+
 | Create a backup of the NSS using DCSSBKUP                      |
 +---------------------------------------------------------------*/
+backup=1
+Address CMS 'VMLINK NSS_BACKUP (ONLY('myfn') QUIET .fm'
+If rc=0 Then Parse Pull . . bfm .
+        Else bfm='A'
 Call Get_NSS_Name
 If nssname<>'' Then Do
-     Address CMS 'PIPE (NAME NSSADMIN.EXEC:430 END ?)',
-         'cms DCSSBKUP 'nssname nssname' A',
-         '| t: take 1',
-         '| specs 1;* 2',
-         '| var header',
-         '? t:',
-         '| specs ~%Y~ 1 1;* n',
-         '| stem data.'
+     Address CMS 'PIPE (NAME NSSADMIN.EXEC:562 END ?)',
+         'cms DCSSBKUP 'nssname nssname bfm,          /* .                */
+         '| t: take 1',                               /* .                */
+         '| specs 1;* 2',                             /* .                */
+         '| var header',                              /* .                */
+         '? t:',                                      /* .                */
+         '| specs ~%Y~ 1 1;* n',                      /* .                */
+         '| stem data.'                               /* .                */
+     Call Copy_NSS_Definitions
+     Call Compose_Defseg
 End
 Else Do
    'EMSG Cursor on invalid/empty field'
@@ -554,6 +652,7 @@ If Word(header,2)='NOT' Then Do
    header='  '
    data.0=0
    End
+If bfm<>'A' Then Address CMS 'VMLINK NSS_BACKUP <DET (ONLY('myfn') QUIET'
 Call MakeSeparator
 Call SetPFkeys
 Call Display
@@ -561,18 +660,68 @@ pfkeys='1 Help;2;3 Quit;4;5;6;7;8;9;10;11;12 Quit'
 Return
  
  
-Show_All_Date:
+Restore_NSS:
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Parse Arg switch .
+If \switch Then Do
+/*--------------------------------------------------------------------+
+| Set up the display                                                  |
++--------------------------------------------------------------------*/
+                  Address CMS 'VMLINK NSS_BACKUP (ONLY('myfn') QUIET .fm'
+                  If rc=0 Then Parse Pull . . rfm .
+                          Else rfm='A'
+                  'PIPE (NAME NSSADMIN.EXEC:605 end ?)',
+                      'cms LISTFILE * * 'rfm' (NOH ISO',   /* .                */
+                      '| specs ~%Y_%y~ 1 w1.2 n.18 w-2;-1 nw',   /* .                */
+                      '| stem data.'                  /* .                */
+                  header='   NSS      Filetype  Date       Time'
+                  pfkeys='1 Help;2 Restore;3 Return;4;5;6;7;8;9;10;11;12 Quit'
+                  Call MakeSeparator
+                  Call SetPFkeys
+                  Call Display
+                  restore=1
+                End
+           Else Do
+/*--------------------------------------------------------------------+
+| Do the actual restore                                               |
++--------------------------------------------------------------------*/
+                  Call Get_NSS_Name
+                  'PIPE (NAME NSSADMIN.EXEC:621 end ?)',
+                       '< 'nssname' DEFSEG 'rfm,      /* .                */
+                       '| strip',                     /* .                */
+                       '| strip trailing ~(~',        /* .                */
+                       '| cons',                      /* .                */
+                       '| cms',                       /* .                */
+                       '| cons'                       /* .                */
+                   If rc<>0 Then Call Exit rc' Problem with DEFSEG for 'nssname
+                   If Wordpos(nssname,'GCS CMS ZCMS')=0 Then Do
+                   'PIPE (NAME NSSADMIN.EXEC:630 end ?)',
+                        'literal DCSSRSAV 'nssname nssname rfm' (NEWNAME',   /* .                */
+                        '| cons',                     /* .                */
+                        '| cms',                      /* .                */
+                        '| cons'                      /* .                */
+                   If rc<>0 Then Call Exit rc' Problem with DCSSRSAV for 'nssname
+                   End
+                   Else 'EMSG Use a different method for restoring/rebuilding 'nssname', DEFINITION completed'
+               If rfm<>'A' Then Address CMS 'VMLINK NSS_BACKUP <DET (ONLY('myfn') QUIET'
+               End
+Return
+ 
+ 
+Show_All_Dates:
 /*---------------------------------------------------------------+
 | Show all dates for all NSS's                                   |
 +---------------------------------------------------------------*/
-Address CMS 'PIPE (NAME NSSADMIN.EXEC:463 END ?)',
-    'cp QUERY NSS ALL ISODATE',
-    '| t: take 1',
-    '| specs 1;* 2',
-    '| var header',
-    '? t:',
-    '| specs ~%Y~ 1 1;* n',
-    '| stem data.'
+Address CMS 'PIPE (NAME NSSADMIN.EXEC:647 END ?)',
+    'cp QUERY NSS ALL ISODATE',                       /* .                */
+    '| t: take 1',                                    /* .                */
+    '| specs 1;* 2',                                  /* .                */
+    '| var header',                                   /* .                */
+    '? t:',                                           /* .                */
+    '| specs ~%Y~ 1 1;* n',                           /* .                */
+    '| stem data.'                                    /* .                */
 title='Dates for ALL NSS '
 pfkeys='1 Help;2;3 Return;4;5;6;7;8;9;10;11;12 Quit'
 Call MakeSeparator
@@ -580,3 +729,7 @@ Call SetPFkeys
 Call Display
 pfkeys='1 Help;2;3 Quit;4;5;6;7;8;9;10;11;12 Quit'
 Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn
