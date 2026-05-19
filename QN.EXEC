@@ -46,7 +46,7 @@
 |                                                                |
 |                                                                |
 +---------------------------------------------------------------*/
-Parse Upper Arg srch '(' ssipartner .
+Parse Upper Arg srch '(' ssipartner
 Parse Source . . myfn myft .
 colsize=32
 Select
@@ -55,7 +55,11 @@ When myft='REXX' Then Do
               output='*:'
               End
 When myft='EXEC'  Then Do
-              'VMFCLEAR'
+              If Wordpos('NOCLEAR',ssipartner)=0 Then 'VMFCLEAR'
+                                                 Else Do
+                                                 Parse Value ssipartner With ssipartner 'NOCLEAR' ssipart2
+                                                 ssipartner=ssipartner' 'ssipart2
+                                                 End
               pipecmd='PIPE'
               output='CONS'
               End

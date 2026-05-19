@@ -16,7 +16,8 @@
 | Changes  : .                                                   |
 |                                                                |
 +---------------------------------------------------------------*/
-'VMFCLEAR'
+Parse Upper Arg . '(' switch .
+If switch='' Then 'VMFCLEAR'
 'PIPE (NAME UPT.EXEC:20 END ?)',
    'cp QUERY CPLEVEL ISODATE',                   /* Ask cp           */
    '| take last 1',                              /* Keep this        */

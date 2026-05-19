@@ -1,0 +1,103 @@
+/*---------------------------------------------------------------+
+| Function : Copy working dir to default disk                    |
+|                                                                |
+| File     : DIR2DISK EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : DIR2DISK <indir> <uid> <mdisk>                      |
+|            defaults      .   *     191                         |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20241119 15:57:56                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg indir uid mdisk .
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| Determine what the input wanst us to do                        |
++---------------------------------------------------------------*/
+If indir='?' Then Do
+            'VMFCLEAR'
+            'PIPE ( NAME DIR2DISK.EXEC:28 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+If indir=''  Then indir='.'
+If uid=''    Then uid=Userid()
+If mdisk=''  Then mdisk='191'
+If indir='.' Then Call Get_FM
+If Pos(':',indir)<>0 Then Call Use_Vml
+/*---------------------------------------------------------------+
+| Link the target disk                                           |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid mdisk' (NON NOTYPE  WRITE .fm'
+If rc=0 Then Parse Pull . .  tfm .
+/*---------------------------------------------------------------+
+| Here we do the actual copying of the files                     |
++---------------------------------------------------------------*/
+'PIPE ( NAME DIR2DISK.EXEC:47 End ?)',
+   'cms LISTFILE * * 'wfm' (NOH',
+   '| specs ~COPYFILE~ 1 w1.3 nw ~= = 'tfm' (REPLACE OLDDATE~ nw',
+   '| cons',
+   '| cms',
+   '| cons'
+/*---------------------------------------------------------------+
+| Release the MDISKs we acccessed                                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK 'uid mdisk' <DET (NON NOTYPE WRITE'
+If Pos(':',indir)<>0 Then Call VML 'DET'
+Exit:
+Exit
+ 
+ 
+Use_Vml:
+/*--------------------------------------------------------------------+
+| VMLINK to the source directory and eventually detach it             |
++--------------------------------------------------------------------*/
+Parse Upper Arg rel .
+If rel<>'' Then Do
+                rel='<DET'
+                fm=''
+                End
+                Else fm='.fm'
+Address CMS 'VMLINK .dir 'indir rel' (NON NOTYPE 'fm
+If rel='' Then Parse Pull . . wfm .
+          Else Do
+          Say rc 'on VMLINK 'indir
+          Call Exit
+          End
+Return
+ 
+ 
+Get_FM:
+/*---------------------------------------------------------------+
+| Get a filemode for an already accessed directory               |
++---------------------------------------------------------------*/
+'PIPE ( NAME DIR2DISK.EXEC:85 end ?)',
+   'cms QUERY FILEPOOL PRIMARY',
+   '| specs w2.1 1',
+   '| fi: fanin',
+   '| join *',
+   '| specs 1;* 1 ~.~ n',
+   '| var filespace',
+   '?',
+   'cms QUERY FILESPACE',
+   '| specs w2.1 ',
+   '| fi:'
+/*---------------------------------------------------------------+
+| Check if it is really accessed                                 |
++---------------------------------------------------------------*/
+'PIPE ( NAME DIR2DISK.EXEC:99 End ?)',
+  'cms QUERY ACCESSED',
+  '| pick w-1;-1 == ~'filespace'~',
+  '| specs w1.1',
+  '| var wfm'
+Return
