@@ -1,0 +1,9 @@
+/**/
+Parse Upper Arg uid .
+If uid='' Then uid='TESTER'
+Address CMS 'VMLINK DMSERVER 291 (QUIET WRITE  .fm'
+If rc=0 Then Parse Upper Pull . . wfm .
+        Else Exit
+Queue '/'uid
+Address CMS 'XEDIT USER DIRECT 'wfm
+Address CMS 'VMLINK DMSERVER 291 <DET (QUIET WRITE'

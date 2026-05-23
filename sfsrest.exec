@@ -1,0 +1,78 @@
+/*--------------------------------------------------------------------+
+| Function : Restore a filespace for user in a filepool               |
+|                                                                     |
+| File     : SFSREST  EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : SFSREST  <id> <filepoolid> ( <run>                       |
+|                                                                     |
+|            <id>         user id                                     |
+|            <filepoolid> filepool name                               |
+|            <run>        switch display or run                       |
+|                                                                     |
+| Comments : Need admin authority for the filepool                    |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20251211 14:07:42                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg id fpid . '(' run .
+Parse Source . . myfn myft .
+If id='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME MANY.XEDIT:214 END ?)',
+             '< 'myfn myft' *',            /* Read myself */
+             '| tolabel Parse',            /* Up to here  */
+             '| cons'                      /* Show        */
+           Call Exit
+           End
+/*--------------------------------------------------------------------+
+| Check input and some defaults                                       |
++--------------------------------------------------------------------*/
+If id=''   Then Call Exit '28 No userid given'
+If fpid='' Then fpid='VMUSERS'
+If run<>'' Then run=1
+           Else run=0
+/*--------------------------------------------------------------------+
+| Access the disk containing the backups                              |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK 'fpid'_BACKUP (NOTYPE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc 'Problem for VMLINK to 'fpid'_backup'
+/*--------------------------------------------------------------------+
+| Check if the requested input exists                                 |
++--------------------------------------------------------------------*/
+'PIPE (NAME SFSREST.EXEC:36 END ?)',
+   'literal 'id fpid wfm,
+   '| state',
+   '| hole'
+If rc<>0 Then Call Exit rc' Input file not found 'id fpid wfm
+/*--------------------------------------------------------------------+
+| Prepare for the restore and do the actual restore                   |
++--------------------------------------------------------------------*/
+Address CMS 'FILEDEF RELOAD DISK 'id fpid wfm
+If \run Then Say 'FILEPOOL RELOAD FILESPACE 'id fpid':'
+        Else Do
+        Address CMS 'FILEPOOL RELOAD FILESPACE 'id fpid':'
+        If rc<>0 Then Call Exit rc ' Problem reloading 'id fpid wfm
+        End
+Address CMS 'FILEDEF RELOAD CLEAR'
+Address CMS 'VMLINK 'fpid'_BACKUP <DET (NOTYPE'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn
+ 

@@ -1,0 +1,70 @@
+# =======================================================================
+# COPYRIGHT -
+#   Licensed Materials - Property of IBM
+#   This product contains "Restricted Materials of IBM"
+#   5741-A05 (C) Copyright IBM Corp. 2004
+#   All rights reserved.
+#   US Government Users Restricted Rights -
+#   Use, duplication or disclosure restricted by GSA ADP Schedule
+#   Contract with IBM Corp.
+#   See IBM Copyright Instructions.
+#
+#   STATUS = TCP/IP level 510 for z/VM Version 5, Release 1.0
+#
+# -----------------------------------------------------------------------
+#   %%File Origin Indicator - DO NOT REMOVE OR ALTER the next line%%
+#   %%TCPIP%%ETCHOSTS%%SAMPLE%%
+#
+# =======================================================================
+# File Name:   ETC      HOSTS            (Supplied as: ETCHOSTS SAMPLE)
+#
+# Description: TCP/IP ETC HOSTS File
+#
+# -----------------------------------------------------------------------
+# Purpose:
+#
+#  The ETC HOSTS file describes a number of hostname-to-address mappings
+#  for the TCP/IP subsystem.  It is mostly used at boot time, when no
+#  name servers are running.  On small systems, this file can be used
+#  instead of a "NameD" (or, DNS Name) server.
+#
+# -----------------------------------------------------------------------
+# Syntax Information:
+#
+#  IP-Address  HostName1 HostName2 HostName3 ...  HostName-n
+#
+# -----------------------------------------------------------------------
+# Notes:
+#
+#  - For detailed information about supported statements, syntax, and
+#    the use of this file for configuration purposes, see the chapter
+#    titled "Configuring the Local Hosts Files" in
+#    "z/VM: TCP/IP Planning and Customization".
+#
+# =======================================================================
+ 
+# -----------------------------------------------------------------------
+# Local Host Loopback Address (IPv4 format)
+# -----------------------------------------------------------------------
+ 
+127.0.0.1     localhost loopback
+192.168.0.178 laptop1 lt1 i1
+192.168.0.200 laptop2 lt2 i2
+192.168.0.135 laptop3 lt3 i3
+ 
+192.168.0.167 t5701 t1
+192.168.0.243 t5702 t2
+ 
+ 
+# -----------------------------------------------------------------------
+# Special IPv6 Addresses
+# -----------------------------------------------------------------------
+ 
+::1           localhost ipv6-localhost ipv6-loopback
+ 
+fe00::        ipv6-localnet
+ 
+ff00::        ipv6-mcastprefix
+ff02::1       ipv6-allnodes
+ff02::2       ipv6-allrouters
+ff02::3       ipv6-allhosts

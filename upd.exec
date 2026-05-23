@@ -1,0 +1,9 @@
+/**/
+'PIPE (end ?)',
+   'cms LISTFILE * EXEC K (NOH',
+   '| stem file.'
+Do f=1 To file.0
+  Say file.f
+  Queue 'PIPNM#FILE'
+  Address CMS 'XEDIT 'file.f
+End f

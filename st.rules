@@ -1,0 +1,34 @@
+:HIGHLIGHT.
+* highlighting: *
+default='00'x
+blink='F1'x
+reverse='F2'x
+underscore='F4'x
+ 
+:COLORS.
+* colors: *
+default='00'x
+blue='F1'x
+red='F2'x
+pink='F3'x
+green='F4'x
+turquoise='F5'x
+yellow='F6'x
+white='F7'x
+ 
+ 
+:REXX.
+* Highligt Color     Rexx stmts to get the color, separated by a semicolon (;)
+reverse    white     ';"
+reverse    green     /*;*/
+underscore green     If_;Then_;Else_
+reverse    red       Select;When_;Then_;Otherwise_;End_
+default    red       Do_;_While_;_Until_;_To_;_By_;End_;Leave_
+default    blue      Parse_Source_;Parse_Value_;Parse_Arg_;Parse_Upper_Arg_;Parse_Pull_;Parse_Upper_Pull_
+default    pink      Call_;Return_;Signal_
+underscore red       Wordpos(;Wordlen(;Right(;Left(;Center(;Pos;Lastos(;Substr(;Subword(;Word(;Translate(;Abs(;Value(
+default    pink      x2d(;d2x(;c2x(;x2c(;d2c(;c2d(;b2x(;x2b(
+blink      white     Queue_;Push_
+underscore blue      Address_;Upper_;Arg_;Pull_
+underscore pink      (;)
+underscore yellow    Exit

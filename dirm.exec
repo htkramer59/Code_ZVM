@@ -1,0 +1,7 @@
+/**/
+Parse Upper Arg cmd rest
+Address CMS 'VMLINK DIRECT (WRITE'
+Address COMMAND 'CP LINK MAINT 123 123 M'
+Address CMS 'DRM'
+Address COMMAND 'CP DET 123'
+Address CMS 'VMLINK DIRECT <DET (WRITE'

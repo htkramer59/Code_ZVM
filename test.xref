@@ -1,0 +1,441 @@
+RX EXEC : 20260420 16:33:47 
+Cross_Ref for: TEST EXEC * 
+ 
+ 
+LinNo/Source statements: 
+00001 /*---------------------------------------------------------------+                                                 
+00002 | Function : Standard profile exec which uses 3 levels of input  |                                                 
+00003 |                                                                |                                                 
+00004 | File     : STDPROF  EXEC                                       |                                                 
+00005 +----------------------------------------------------------------+                                                 
+00006 | Version  : 1.1.0                                               |                                                 
+00007 |                                                                |                                                 
+00008 | Files    : STDPROF  SYSTEM   input, generic profile            |                                                 
+00009 |          : STDPROF  <node>   input, node specific profile      |                                                 
+00010 |          : STDPROF  <userid> input, user specific profile      |                                                 
+00011 |                                                                |                                                 
+00012 | Called   : STDPROF  <startparm>                                |                                                 
+00013 |                                                                |                                                 
+00014 | Comments : Obtaining variables in the underlying execs, for    |                                                 
+00015 |            example in pre_exit and post_exit:                  |                                                 
+00016 |                PIPE var <varname> 1 | ....                     |                                                 
+00017 |                PIPE rexxvars 1 toload | varload                |                                                 
+00018 |                                                                |                                                 
+00019 | Author   : H.T.Kramer, ,                                       |                                                 
+00020 | Created  : 20180128 16:00:04                                   |                                                 
+00021 | Changes  : .                                                   |                                                 
+00022 |                                                                |                                                 
+00023 +---------------------------------------------------------------*/                                                 
+00024 Parse Upper Arg startparm                                                                                          
+00025 Parse Source . . myfn myft .                                                                                       
+00026 /*---------------------------------------------------------------+                                                 
+00027 | .                                                              |                                                 
+00028 +---------------------------------------------------------------*/                                                 
+00029 Parse Value myfn With . fb .                                                                                       
+00030 Call Init                                                                                      [SUB7]
+00031 'PIPE (NAME STDPROF.EXEC:26 END ?)',                                                                               
+00032    'cp QUERY USERID',                                                                                              
+00033    '| specs w3.1 1',                                                                                               
+00034    '| var node',                                                                                                   
+00035    '?',                                                                                                            
+00036    'cp QUERY USER 'Userid(),                                                                                       
+00037    '| specs fs - f2.1 1',                                                                                          
+00038    '| pick w1.1 == ~DSC~',                                                                                         
+00039    '| count lines',                                                                                                
+00040    '| var disc'                                                                                                    
+00041 /*---------------------------------------------------------------+                                                 
+00042 | Check if the files needed exist                                |                                                 
+00043 +---------------------------------------------------------------*/                                                 
+00044 systinp=Checkfile(myfn' SYSTEM')                                                                                   
+00045 nodeinp=CheckFile(myfn node)                                                                   [SUB5]
+00046 userinp=CheckFile(myfn Userid())                                                               [SUB5]
+00047 /*---------------------------------------------------------------+                                                 
+00048 | If the files exist load them                                   |                                                 
+00049 +---------------------------------------------------------------*/                                                 
+00050 If systinp Then Call LoadFile(myfn' SYSTEM')                                                   [SUB6]
+00051 If nodeinp Then Call LoadFile(myfn node)                                                       [SUB6]
+00052 If userinp Then Call LoadFile(myfn Userid())                                                   [SUB6]
+00053 /*---------------------------------------------------------------+                                                 
+00054 | Here we start running the various items found                  |                                                 
+00055 +---------------------------------------------------------------*/                                                 
+00056 If pre_exit<>''     Then Do                                                                          (DO1-Start)
+00057                          Say TimeStamp() 'Running pre-exit: 'pre_exit                          [SUB8]
+00058                          Address CMS pre_exit                                                                      
+00059                          End                                                                         (DO1-End)
+00060 If access_items<>'' Then Call Do_Access                                                        [SUB2]
+00061 If tooling<>''      Then Call Do_Tooling                                                       [SUB3]
+00062 If cpcmds<>''       Then Call Do_Cmds 'CP'                                                     [SUB4]
+00063 If cmscmds<>''      Then Call Do_Cmds 'CMS'                                                    [SUB4]
+00064 If run<>''          Then Address CMS run                                                                           
+00065 If post_exit<>''    Then Do                                                                          (DO2-Start)
+00066                          Say TimeStamp() 'Running post-exit: 'post_exit                        [SUB8]
+00067                          Address CMS post_exit                                                                     
+00068                          End                                                                         (DO2-End)
+00069 If disc &,                                                                                                         
+00070    servercode<>''   Then Address serverenv servercode                                                              
+00071                     Else If servercode<>'' Then Say TimeStamp()' To start servercode 'serverco [SUB8]
+00072                                                                                                                    
+00073 Exit:                                                                                          [SUB1-Start]
+00074 /*---------------------------------------------------------------+                                                 
+00075 | General Exit routine                                           |                                                 
+00076 +---------------------------------------------------------------*/                                                 
+00077 Parse Arg exrc errmsg                                                                                              
+00078 If Datatype(exrc,'NUM') Then Say errmsg exrc                                                                       
+00079                         Else exrc=0                                                                                
+00080 Exit exrc                                                                                      [SUB1]
+00081                                                                                                                    
+00082                                                                                                                    
+00083 Do_Access:                                                                                     [SUB2-Start]
+00084 /*---------------------------------------------------------------+                                                 
+00085 | Access filepools or minidisks                                  |                                                 
+00086 +---------------------------------------------------------------*/                                                 
+00087 'PIPE (NAME STDPROF.EXEC:73 END ?)',                                                                               
+00088   'var access_items',                            /* Take this        */                                            
+00089   '| split at ;',                                /* Split here       */                                            
+00090   '| strip',                                     /* Remove spaces    */                                            
+00091   '| stem access.',                              /* Hand 2 rexx      */                                            
+00092   '?',                                           /* 2nd pipe         */                                            
+00093   'var ifrc0',                                   /* Take this        */                                            
+00094   '| split at ;',                                /* Split here       */                                            
+00095   '| strip',                                     /* Remove spaces    */                                            
+00096   '| stem ifrc.'                                 /* Hand 2 rexx      */                                            
+00097 Do a=1 To access.0                                                                                   (DO3-Start)
+00098    Address CMS access.a                                                                                            
+00099    If rc=0 &,                                                                                                      
+00100       ifrc.a<>'' Then Do                                                                             (DO4-Start)
+00101                       Address CMS ifrc.a                                                                           
+00102                       End                                                                            (DO4-End)
+00103                  Else If rc<>0 Then Say TimeStamp() 'Non-zero rc on: 'access.a                 [SUB8]
+00104 End a                                                                                                (DO3-End)
+00105                                                                                                                    
+00106 Select                                                                                           {SEL1-Start}
+00107 When a Then Do                                                                                       (DO5-Start)
+00108             b                                                                                                      
+00109             End                                                                                      (DO5-End)
+00110 When c Then Do                                                                                       (DO6-Start)
+00111             d                                                                                                      
+00112             e                                                                                                      
+00113             End                                                                                      (DO6-End)
+00114 Otherwise Do                                                                                         (DO7-Start)
+00115            f                                                                                                       
+00116            g                                                                                                       
+00117           End                                                                                        (DO7-End)
+00118 End                                                                                              {SEL1-End}
+00119 Return                                                                                         [SUB2-End]
+00120                                                                                                                    
+00121                                                                                                                    
+00122 Do_Tooling:                                                                                    [SUB3-Start]
+00123 Select                                                                                           {SEL2-Start}
+00124 When a Then Do                                                                                       (DO8-Start)
+00125             b                                                                                                      
+00126             End                                                                                      (DO8-End)
+00127 When c Then Do                                                                                       (DO9-Start)
+00128             d                                                                                                      
+00129             e                                                                                                      
+00130             End                                                                                      (DO9-End)
+00131 End                                                                                              {SEL2-End}
+00132 /*---------------------------------------------------------------+                                                 
+00133 | Access the tooling you need                                    |                                                 
+00134 +---------------------------------------------------------------*/                                                 
+00135 Address CMS tooling                                                                                                
+00136 If rc<>0 &,                                                                                                        
+00137    alt_tooling<>'' Then Do                                                                           (DO10-Start)
+00138                         Say TimeStamp()' Accessing alternate tooling'                          [SUB8]
+00139                         Address CMS alt_tooling                                                                    
+00140                         End                                                                          (DO10-End)
+00141 Return                                                                                         [SUB3-End]
+00142                                                                                                                    
+00143                                                                                                                    
+00144 Do_Cmds:                                                                                       [SUB4-Start]
+00145 /*---------------------------------------------------------------+                                                 
+00146 | Issue the CP and CMS commands when offered                     |                                                 
+00147 +---------------------------------------------------------------*/                                                 
+00148 Parse Upper Arg switch .                                                                                           
+00149 If switch='CP'  Then Do                                                                              (DO11-Start)
+00150                 cmds=cpcmds                                                                                        
+00151                 switch='change anycase ~userid()~'Userid()'~ | 'switch' | hole'                                    
+00152                 End                                                                                  (DO11-End)
+00153 If switch='CMS' Then Do                                                                              (DO12-Start)
+00154                 cmds=cmscmds                                                                                       
+00155                 switch='change anycase ~userid()~'Userid()'~ | 'switch' | cons'                                    
+00156                 End                                                                                  (DO12-End)
+00157 'PIPE (NAME STDPROF.EXEC:120 END ?)',                                                                              
+00158     'var cmds',                                  /* Take this        */                                            
+00159     '| split at ;',                              /* Split here       */                                            
+00160     '| strip',                                   /* Remove spaces    */                                            
+00161     '| 'switch                                   /* Run this         */                                            
+00162                                                                                                                    
+00163 Select                                                                                           {SEL3-Start}
+00164 When a Then Do                                                                                       (DO13-Start)
+00165             b                                                                                                      
+00166             End                                                                                      (DO13-End)
+00167 When c Then Do                                                                                       (DO14-Start)
+00168             d                                                                                                      
+00169             e                                                                                                      
+00170             End                                                                                      (DO14-End)
+00171 Otherwise f=1                                                                                                      
+00172 End                                                                                              {SEL3-End}
+00173 Return                                                                                         [SUB4-End]
+00174                                                                                                                    
+00175                                                                                                                    
+00176 CheckFile:                                                                                     [SUB5-Start]
+00177 /*---------------------------------------------------------------+                                                 
+00178 | Check if the requested file exists                             |                                                 
+00179 +---------------------------------------------------------------*/                                                 
+00180 Parse Upper Arg filein                                                                                             
+00181 'PIPE (NAME PROF.EXEC:120 END ?)',               /* .                */                                            
+00182   'cms LISTFILE 'filein' * (NOH ISO',            /* Locate a file    */                                            
+00183   '| pick 1.6 \== ~DMSLST~',                     /* Ignoree this     */                                            
+00184   '| count lines',                               /* How many         */                                            
+00185   '| var state'                                  /* Store as boolean */                                            
+00186 If state>1 Then state=1                                                                                            
+00187 Return state                                                                                   [SUB5-End]
+00188                                                                                                                    
+00189                                                                                                                    
+00190 LoadFile:                                                                                      [SUB6-Start]
+00191 /*---------------------------------------------------------------+                                                 
+00192 | Read the requested file and load the values                    |                                                 
+00193 +---------------------------------------------------------------*/                                                 
+00194 Parse Upper Arg filein                                                                                             
+00195 'PIPE (NAME STDPROF.EXEC:147 END ?)',                                                                              
+00196     '< 'filein' *',                              /* Read this file   */                                            
+00197     '| strip',                                   /* Remove spaces    */                                            
+00198     '| pick 1.1 \== ~~ and',                     /* Ignore these     */                                            
+00199            '1.1 \== ~*~',                        /* ...lines         */                                            
+00200     '| join * x40',                              /* Make 1 record    */                                            
+00201     '| split anycase before string ~:access_items.~', /* Split at         */                                       
+00202     '| split anycase before string ~:tooling.~',      /* .these           */                                       
+00203     '| split anycase before string ~:cpcmds.~',       /* .                */                                       
+00204     '| split anycase before string ~:cmscmds.~',      /* .                */                                       
+00205     '| split anycase before string ~:alt_tooling.~',  /* .                */                                       
+00206     '| split anycase before string ~:ifrc0.~',        /* .                */                                       
+00207     '| split anycase before string ~:run.~',          /* .                */                                       
+00208     '| split anycase before string ~:pre_exit.~',     /* .                */                                       
+00209     '| split anycase before string ~:post_exit.~',    /* .                */                                       
+00210     '| split anycase before string ~:servercode.~',   /* .                */                                       
+00211     '| split anycase before string ~:serverenv.~',    /* .                */                                       
+00212     '| change ~:~/~ 1',                          /* Prep 4 varload   */                                            
+00213     '| change ~.~/~ 1',                          /* .idem            */                                            
+00214     '| xlate fs / f2 upper',                     /* ..idem           */                                            
+00215     '| varload'                                  /* Hand 2 rexx      */                                            
+00216 Return                                                                                         [SUB6-End]
+00217                                                                                                                    
+00218                                                                                                                    
+00219 Init:                                                                                          [SUB7-Start]
+00220 /*---------------------------------------------------------------+                                                 
+00221 | Initialise all possible values                                 |                                                 
+00222 +---------------------------------------------------------------*/                                                 
+00223 pre_exit=''     ; post_exit=''                                                                                     
+00224 access_items='' ; ifrc0=''                                                                                         
+00225 tooling=''      ; alt_tooling=''                                                                                   
+00226 cpcmds=''       ; cmscmds=''                                                                                       
+00227 servercode=''   ; serverenv='CMS'                                                                                  
+00228 run=''                                                                                                             
+00229 Return                                                                                         [SUB7-End]
+00230                                                                                                                    
+00231                                                                                                                    
+00232 TimeStamp:                                                                                     [SUB8-Start]
+00233 Return Date('S') Time() myfn                                                                   [SUB8-End]
+ 
+ 
+ Empty lines found on the following line-nos:
+    72 81 82 105 120 121 142 143 162 174 175
+    188 189 217 218 230 231
+ 
+ 
+Single line comments on lines:
+       88 /* Take this        */
+       89 /* Split here       */
+       90 /* Remove spaces    */
+       91 /* Hand 2 rexx      */
+       92 /* 2nd pipe         */
+       93 /* Take this        */
+       94 /* Split here       */
+       95 /* Remove spaces    */
+       96 /* Hand 2 rexx      */
+      158 /* Take this        */
+      159 /* Split here       */
+      160 /* Remove spaces    */
+      161 /* Run this         */
+      181 /* .                */
+      182 /* Locate a file    */
+      183 /* Ignoree this     */
+      184 /* How many         */
+      185 /* Store as boolean */
+      196 /* Read this file   */
+      197 /* Remove spaces    */
+      198 /* Ignore these     */
+      199 /* ...lines         */
+      200 /* Make 1 record    */
+      201 /* Split at         */
+      202 /* .these           */
+      203 /* .                */
+      204 /* .                */
+      205 /* .                */
+      206 /* .                */
+      207 /* .                */
+      208 /* .                */
+      209 /* .                */
+      210 /* .                */
+      211 /* .                */
+      212 /* Prep 4 varload   */
+      213 /* .idem            */
+      214 /* ..idem           */
+      215 /* Hand 2 rexx      */
+ 
+ 
+Comments over multiple lines:
+    1-23 41-43 53-55 84-86 145-147 191-193 
+    26-28 47-49 74-76 132-134 177-179 220-222 
+ 
+ 
+NO HEX-strings found
+ 
+ 
+Literals found on the following lines:
+    ' | cons'                                                                                  155 
+    ' | hole'                                                                                  151 
+    ' * (NOH ISO'                                                                              182 
+    ' *'                                                                                       196 
+    ' type: '                                                                                  71 
+    ' Accessing alternate tooling'                                                             138 
+    ' SYSTEM'                                                                                  44  50 
+    ' To start servercode '                                                                    71 
+    '< '                                                                                       196 
+    '| '                                                                                       161 
+    '| change ~.~/~ 1'                                                                         213 
+    '| change ~:~/~ 1'                                                                         212 
+    '| count lines'                                                                            39  184 
+    '| join * x40'                                                                             200 
+    '| pick w1.1 == ~DSC~'                                                                     38 
+    '| pick 1.1 \== ~~ and'                                                                    198 
+    '| pick 1.6 \== ~DMSLST~'                                                                  183 
+    '| specs fs - f2.1 1'                                                                      37 
+    '| specs w3.1 1'                                                                           33 
+    '| split anycase before string ~:access_items.~'                                           201 
+    '| split anycase before string ~:alt_tooling.~'                                            205 
+    '| split anycase before string ~:cmscmds.~'                                                204 
+    '| split anycase before string ~:cpcmds.~'                                                 203 
+    '| split anycase before string ~:ifrc0.~'                                                  206 
+    '| split anycase before string ~:post_exit.~'                                              209 
+    '| split anycase before string ~:pre_exit.~'                                               208 
+    '| split anycase before string ~:run.~'                                                    207 
+    '| split anycase before string ~:servercode.~'                                             210 
+    '| split anycase before string ~:serverenv.~'                                              211 
+    '| split anycase before string ~:tooling.~'                                                202 
+    '| split at ;'                                                                             89  94  159 
+    '| stem access.'                                                                           91 
+    '| stem ifrc.'                                                                             96 
+    '| strip'                                                                                  90  95  160  197 
+    '| var disc'                                                                               40 
+    '| var node'                                                                               34 
+    '| var state'                                                                              185 
+    '| varload'                                                                                215 
+    '| xlate fs / f2 upper'                                                                    214 
+    '?'                                                                                        35  92 
+    ''                                                                                         56  60  61  62  63  64
+                                                                                                    65  70  71  100  137
+                                                                                                    223  223  224  224
+                                                                                                    225  225  226  226
+                                                                                                    227  228 
+    'change anycase ~userid()~'                                                                151  155 
+    'cms LISTFILE '                                                                            182 
+    'cp QUERY USER '                                                                           36 
+    'cp QUERY USERID'                                                                          32 
+    '~ | '                                                                                     151  155 
+    'var access_items'                                                                         88 
+    'var cmds'                                                                                 158 
+    'var ifrc0'                                                                                93 
+    'CMS'                                                                                      63  153  227 
+    'CP'                                                                                       62  149 
+    'Non-zero rc on: '                                                                         103 
+    'NUM'                                                                                      78 
+    'PIPE (NAME PROF.EXEC:120 END ?)'                                                          181 
+    'PIPE (NAME STDPROF.EXEC:120 END ?)'                                                       157 
+    'PIPE (NAME STDPROF.EXEC:147 END ?)'                                                       195 
+    'PIPE (NAME STDPROF.EXEC:26 END ?)'                                                        31 
+    'PIPE (NAME STDPROF.EXEC:73 END ?)'                                                        87 
+    'Running post-exit: '                                                                      66 
+    'Running pre-exit: '                                                                       57 
+    'S'                                                                                        233 
+    '1.1 \== ~*~'                                                                              199 
+ 
+ 
+SUB-routines called/signaled from lineno:
+    CheckFile            45 46 176
+    Do_Access            60 83
+    Do_Cmds              62 63 144
+    Do_Tooling           61 122
+    Exit                 73 80
+    Init                 30 219
+    LoadFile             50 51 52 190
+    TimeStamp            57 66 71 103 138 232
+ 
+ 
+SUB-routines (I=Intern/E=Extern) found on lines:
+    I Exit:                73-80
+    I Do_Access:           83-119
+    I Do_Tooling:          122-141
+    I Do_Cmds:             144-173
+    I CheckFile:           176-187
+    I LoadFile:            190-216
+    I Init:                219-229
+    I TimeStamp:           232-233
+ 
+ 
+REXX-statements on line:column:
+    Arg                  24:13 77:7 148:13 180:13 194:13 
+    Call                 30:1 50:17 51:17 52:17 60:24 61:24 62:24 63:24 
+    Do                   56:24 65:24 97:1 100:21 107:13 110:13 114:11 124:13 127:13 137:23 149:18 153:17 164:13 167:13 
+    Else                 71:21 79:25 103:18 
+    End                  59:26 102:23 109:13 117:11 126:13 131:1 152:17 166:13 172:1 
+                         68:26 104:1 113:13 118:1 130:13 140:25 156:17 170:13 
+    Exit                 80:1 
+    If                   50:1 52:1 60:1 62:1 64:1 69:1 78:1 103:23 149:1 186:1 
+                         51:1 56:1 61:1 63:1 65:1 71:26 99:4 136:1 153:1 
+    Otherwise            114:1 171:1 
+    Parse                24:1 25:1 29:1 77:1 148:1 180:1 194:1 
+    Return               119:1 141:1 173:1 187:1 216:1 229:1 233:1 
+    Say                  57:26 66:26 71:47 78:25 103:37 138:25 
+    Select               106:1 123:1 163:1 
+    Source               25:7 
+    Then                 50:12 52:12 60:19 62:19 64:19 70:19 78:20 103:32 110:8 127:8 149:13 164:8 186:12 
+                         51:12 56:19 61:19 63:19 65:19 71:42 100:16 107:8 124:8 137:18 153:12 167:8 
+    Upper                24:7 148:7 180:7 194:7 
+    Value                29:7 
+    When                 107:1 110:1 124:1 127:1 164:1 167:1 
+    With                 29:18 
+ 
+ 
+Variables found on lines:
+    .                    25 25 25 29 29 148
+    a                    97
+    access.a             98 103
+    access.0             97
+    access_items         60 224
+    alt_tooling          137 225
+    cmds                 150 154
+    cmscmds              63 226
+    cpcmds               62 226
+    errmsg               77
+    exrc                 77 79
+    f                    171
+    fb                   29
+    filein               180 194
+    ifrc.a               100 101
+    ifrc0                224
+    myfn                 25 29
+    myft                 25
+    nodeinp              45
+    post_exit            65 223
+    pre_exit             56 223
+    rc                   99 103 136
+    run                  64 228
+    servercode           70 71 227
+    serverenv            227
+    startparm            24
+    state                186 186
+    switch               148 149 151 153 155
+    systinp              44
+    tooling              61 225
+    userinp              46

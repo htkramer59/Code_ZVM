@@ -33,7 +33,7 @@ Parse Source . . myfn myft .
 +---------------------------------------------------------------*/
 If input='.' Then Do
                   input=Userid()
-                  view='x'
+                  view='1'
                   End
 wildcard=Pos('*',input)
 If wildcard<>0 Then wildcard=1
@@ -61,7 +61,7 @@ Otherwise Do
 End
 If view Then Do
              'CP SLEEP 2 SEC'
-             Address CMS 'CONPARK 'target_id
+             Address CMS 'CONPARK 'target_id view
              End
 Exit:
 If exrc='' | exrc='EXRC' Then exrc=0

@@ -1,0 +1,45 @@
+/* Calculate the bytes/kb used and sort them */
+Parse Upper Arg order dir .
+Select
+When dir=''  Then dir='A'
+When dir='A' Then dir='A'
+When dir='D' Then dir='D'
+Otherwise dir='A'
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Select
+When order=''      Then order='w1.2' dir
+When order='LRECL' Then order='w3.1' dir
+When order='RECS'  Then order='w4.1' dir
+When order='SIZE'  Then order='w5.1' dir
+Otherwise Nop
+End
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+  'cms LISTFILE * * K (NOH ISO',
+  '| specs w1.2 1.20 pad 0 w5.1 nw.4 right w6.1 nw.4 right',
+  '| specs 1;* 1.50',
+          'a: w3.1 .',
+          'b: w4.1 .',
+          'set #0:=a*b',
+          'set #1:=(a*b)/1024',
+          'print #0 picture 9999999 nw',
+          'print #1 picture 99999.99 nw',
+  '| specs w1.1 1.8 w2.1 nw.8 w3.1 nw.6 right w4.1 nw.6 right w5.1 nw.8 right w6.1 nw.8 right',
+  '| sort 'order,
+  '| specs 1;* 1',
+          'c: w5.1 .',
+          'set #1+=c',
+          'eof',
+          'set #2:=#1/1024',
+          '~Bytes & KB Totals:~ 1',
+          'print  #1 picture 9999999 34',
+          'print  #2 picture ----9.99 nw',
+  '| specs 1;* 1.50 x4F40 nw',
+  '| snake 3',
+  '| specs 1.156',
+  '| cons'

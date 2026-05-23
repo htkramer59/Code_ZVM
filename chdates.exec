@@ -1,0 +1,62 @@
+/*---------------------------------------------------------------+
+| Function : Change dates on files to what is in the heading     |
+|                                                                |
+| File     : CHDATES  EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : .                                                   |
+|                                                                |
+| Called   : CHDATES  <ft> <fm> ( <test>                         |
+|                                                                |
+| Comments : .                                                   |
+|                                                                |
+| Author   : H.T.Kramer, At_home,                                |
+| Created  : 20250713 16:28:38                                   |
+| Changes  : .                                                   |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Upper Arg ft fm '(' test .
+If test<>'' Then test=0
+            Else test=1
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK TOOLS <* Q (QUIET WRITE'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (NAME CHDATES.EXEC:20 END ?)',
+   'cms LISTFILE * 'ft fm'(NOH ISO',
+   '| f: fanout',
+   '| specs w1.3 1',
+   '| stem file.',
+   '? f:',
+   '| specs w-2;-1',
+   '| stem date.'
+Do f=1 To file.0
+  newdate=''
+  newtime=''
+  'PIPE (NAME CHDATES.EXEC:34 END ?)',
+     '< 'file.f,
+     '| pick anycase from w2.1 == ~Created~ to -5;-1 == ~---*/~',
+     '| pick 17.1 \== ~ ~ and 17.1 \== ~.~',
+     '| change ~Created  :~~',
+     '| f: fanout',
+     '| take first 1',
+     '| specs w3.1 1',
+     '| var newtime tracking',
+     '? f:',
+     '| specs w2.1',
+     '| sort w1.1 a',
+     '| take last 1',
+     '| specs 1.4 1 ~-~ n 5.2 n ~-~ n 7.2 n',
+     '| var newdate tracking'
+  If newdate<>'' Then Do
+                      Say 'TOUCH' file.f newdate newtime ' 'date.f
+                      If \test Then Address CMS 'TOUCH 'file.f newdate newtime
+                      End
+                 Else Say file.f date.f '******** No new date/time'
+ 
+End f
+Address CMS 'VMLINK TOOLS (QUIET'

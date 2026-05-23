@@ -1,0 +1,48 @@
+:PFKEYS.1 Help; ;3 Qquit; ; ; ;7 Back;8 Forw; ; ; ; ;12 Qquit
+ 
+:COLORS.
+% ESCAPE
+ 
+* C XX Type Color Ext-Highlighting Intensity
+ 
+* C                 Short color code for ease of use in :REXX. section
+* XX                Hex character that actually will be used
+* Type              Protected or nonprotected field
+* Color             The color that the field will get
+* Ext-Highlighting  Underline, Blink, Default, etc.
+* Intensity         High or normal intensity
+ 
+* See: HELP SET CTLCHAR
+ 
+* C XX Type Color Ext-Highlighting Intensity
+Y 8E PROTECT YELLOW DEFAULT   HIGH    ;y ED NOPROTECT YELLOW DEFAULT   HIGH
+W DC PROTECT WHITE  UNDERLINE NOHIGH  ;w EC NOPROTECT WHITE  UNDERLINE NOHIGH
+X DB PROTECT WHITE  BLINK     NOHIGH  ;x EB NOPROTECT WHITE  BLINK     NOHIGH
+Z DA PROTECT WHITE  REVVIDEO  NOHIGH  ;z EA NOPROTECT WHITE  REVVIDEO  NOHIGH
+B CE PROTECT BLUE   DEFAULT   NOHIGH  ;b BE NOPROTECT BLUE   DEFAULT   NOHIGH
+C CD PROTECT BLUE   UNDERLINE NOHIGH  ;c BD NOPROTECT BLUE   UNDERLINE NOHIGH
+G CC PROTECT GREEN  DEFAULT   HIGH    ;g BC NOPROTECT GREEN  DEFAULT   HIGH
+H CB PROTECT GREEN  REVVIDEO  NOHIGH  ;h BB NOPROTECT GREEN  REVVIDEO  NOHIGH
+I CA PROTECT GREEN  UNDERLINE NOHIGH  ;i BA NOPROTECT GREEN  UNDERLINE NOHIGH
+R DE PROTECT RED    DEFAULT   HIGH    ;r EE NOPROTECT RED    DEFAULT   HIGH
+S DF PROTECT RED    UNDERLINE NOHIGH  ;s EF NOPROTECT RED    UNDERLINE NOHIGH
+T AA PROTECT RED    REVVIDEO  NOHIGH  ;t AD NOPROTECT RED    REVVIDEO  NOHIGH
+P AB PROTECT PINK   DEFAULT   HIGH    ;p 8F NOPROTECT PINK   DEFAULT   HIGH
+Q AC PROTECT PINK   UNDERLINE NOHIGH  ;q AF NOPROTECT PINK   UNDERLINE NOHIGH
+ 
+ 
+:REXX.
+* Color   Items to get the color, separated by a semicolon (;)
+z ';"
+h /*;*/
+i If_;Then_;Else_
+t Select;When_;Then_;Otherwise_;End_
+r Do_;_While_;_Until_;_To_;_By_;End_;Leave_
+b Parse_Source_;Parse_Value_;Parse_Arg_;Parse_Upper_Arg_;Parse_Pull_;Parse_Upper_Pull_
+p Call_;Return_;Signal_
+s Wordpos(;Wordlen(;Right(;Left(;Center(;Pos;Lastos(;Substr(;Subword(;Word(;Translate(;Abs(;Value(
+p x2d(;d2x(;c2x(;x2c(;d2c(;c2d(;b2x(;x2b(
+x Queue_;Push_
+c Address_;Upper_;Arg_;Pull_
+q (;)
+s Exit

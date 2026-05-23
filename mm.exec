@@ -1,0 +1,46 @@
+/**/
+myfn='SYNTAX'
+'PIPE (end ?)',
+   '< 'myfn' RULES *',                           /* Read file        */
+   '| pick 1.1 \== ~ ~ and 1.1 \== ~*~',         /* Ignore empty/cmts*/
+   '| join * ~@~',                               /* Make 1 record    */
+   '| split anycase before string ~:rexx.~',     /* Split here       */
+   '| split anycase before string ~:colors.~',   /* ..and here       */
+   '| l: locate anycase ~:colors.~',             /* Take this        */
+   '| split at anyof ~@;~',                      /* Split again      */
+   '| drop first 1',                             /* Ignore tag       */
+   '| p: pick anycase w2.1 \== ~escape~',        /* Move this away   */
+   '| specs w1.1 1 w2.1 x2c nw w3;* nw',         /* Change layout    */
+   '| change anycase ~default~~',                /* Remove this      */
+   '| space 1',                                  /* Suppress spaces  */
+   '| stem mycolor.',                            /* Send 2 stem      */
+   '| specs x4F 1 ~CHANGE 1.1 /~ nw w1.1 n ~/~ n w2.1 n ~/~ n',   /* Compose cmd      */
+   '| join * x40',                               /* Make 1 record    */
+   '| var changecmd',                            /* Hand 2 rexx      */
+   '? l:',                                       /* Conn 2 locate    */
+   '| split at ~@~',                             /* Split here       */
+   '| drop first 1',                             /* Ignore tag       */
+   '| stem rule.',                               /* Hand 2 rexx      */
+   '? p:',                                       /* Conn 2 pick      */
+   '| specs w1.1',                               /* Keep this        */
+   '| var escape',                               /* Hand 2 rexx      */
+   '| specs ~SET CTLCHAR~ 1 w1.1 nw ~ESCAPE~ nw',   /* Compose set cmd  */
+   '| subcom xedit'                              /* Issue 2 xedit    */
+'PIPE (end ?)',
+   'stem rule.',                                 /* Take these       */
+   '| buffer',                                   /* Prevent stall    */
+   changecmd,                                    /* Do this          */
+   '| specs ~'escape'~ 1 1;* n',                 /* Add escape char. */
+   '| n1: nlocate x7D',                          /* Move these away  */
+   '| n2: nlocate x615C',                        /* .                */
+   '| stem rule.',                               /* Hand 2 rexx      */
+   '? n1:',                                      /* Conn 2 nlocate   */
+   '| specs w1.1',                               /* Keep this        */
+   '| var quotcolor',                            /* Hand 2 rexx      */
+   '? n2:',                                      /* Conn 2 nlocate   */
+   '| specs w1.1',                               /* Keep this        */
+   '| var commcolor',                            /* Hand 2 rexx      */
+   '?',                                          /* 2nd pipe         */
+   'stem mycolor.',                              /* Take these       */
+   '| specs ~SET CTLCHAR~ 1 w2;* nw',            /* Compose xedit cmd*/
+   '| subcom xedit'                              /* Hand 2 xedit     */

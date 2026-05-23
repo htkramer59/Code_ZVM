@@ -1,0 +1,79 @@
+/*--------------------------------------------------------------------+
+| Function : FTP a directory/mdisk to laptop                          |
+|                                                                     |
+| File     : MOVE2PC  EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : NETRC    DATA                                            |
+|                                                                     |
+| Called   : MOVE2PC  <tgt_id> <who> <lcl_dir> <tgt_dir>              |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20260522 14:15:59                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Arg tgt_id who lcl_dir tgt_dir
+Parse Source . . myfn myft .
+/*--------------------------------------------------------------------+
+| Some basic checks/defaults                                          |
++--------------------------------------------------------------------*/
+If tgt_id=''  Then Call Exit '28 No target for FTP entered'
+If id=''      Then id=Userid()
+If lcl_dir='' Then lcl_dir='A'
+If tgt_dir='' Then tgt_dir='/home/'Userid()'/a_disk'
+/*--------------------------------------------------------------------+
+| To make sure stacked items do not leak                              |
++--------------------------------------------------------------------*/
+'MAKEBUF'
+bufno=rc
+ 
+Address CMS 'VMLINK TCPIP (NOTYPE'
+If rc<>0 Then Call Exit rc' VMLINK Problem'
+/*--------------------------------------------------------------------+
+| Store id and pw, stack some commands                                |
++--------------------------------------------------------------------*/
+Call CreateNetRc
+Queue 'LCD 'lcl_dir
+Queue 'CD 'tgt_dir
+Queue 'MPUT *.*'
+Queue 'QUIT'
+Address CMS 'FTP' tgt_id '21 ( WIDTH 500'
+ 
+Address CMS 'VMLINK TCPIP <DET (NOTYPE'
+/*--------------------------------------------------------------------+
+| Clear the stack and erase the data file                             |
++--------------------------------------------------------------------*/
+'DROPBUF 'bufno
+Address CMS 'ERASE NETRC DATA A'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+CreateNetRc:
+/*---------------------------------------------------------------+
+| Create NETRC DATA                                              |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Password:'                      /* Ask ....         */
+'PIPE ( NAME MOVE2PC.EXEC:25 END ?)',
+   'cons dark',                                  /* Ask....        */
+   '| var pw'                                    /* Hand 2 rexx    */
+'PIPE ( NAME MOVE2PC.EXEC:28 END ?)',
+   'literal ',                                   /* Take these       */
+   '| specs ~machine 'tgt_id'~ 1  ~login 'who' password 'pw'~ nw',
+   '| > netrc data a'                            /* Store as         */
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

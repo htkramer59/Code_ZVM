@@ -1,0 +1,122 @@
+/**/
+Parse Upper Arg .
+Parse Source . . myfn myft .
+ 
+Call Init
+Call Read_Rules
+ 
+/* 'PIPE (end ?)', */
+/*    'rexxvars toload', */
+/*    '| cons' */
+ 
+data='c0c2'x ||,                      /* Clear and restore           */
+   '11'x || d2c(lines*cols-1,2) ||,   /* Go to last position         */
+   '13'x ||,                          /* Insert cursor               */
+   '1d 60'x ||,                       /* Make a protected field.     */
+   clear ||,                          /* Possibly some blank lines   */
+   '2841'x || default ||,             /* Set hilite                  */
+   '2843'x || c2x(ps)                 /* And program symbols         */
+ 
+br=70
+in='3C28'x
+chars=d2x((lines*cols)-1)
+Say 10481 d2x(10481)
+ 
+Address CMS 'PIPE (NAME TT.XEDIT:00010 END ?)',
+    'XEDIT',
+    '| take first 'no_lines,
+    '| specs pad space recno from 'start' 1.5 right 1;* nw',
+    '| specs ~'in||blue'~ 1 1.5 n ~'in||default'~ n 7;* nw',
+    '| stem line.'
+Address CMS 'PIPE (end ?)',
+    'var data',
+    '| append stem line.',
+    '|spec x11 1',
+          'number from' start 'by' cols 'd2c n.2 right',
+          'x2828F1 n 1-* n.'br,
+    '|strliteral x00c3',
+    '| > temp file a',
+    '| Join *',
+    '| fullscr',
+    '| hole'
+':'flscreen.1
+Exit
+ 
+ 
+Init:
+/*--------------------------------------------------------------------+
+| Initialise the code, extract items and do some settings             |
++--------------------------------------------------------------------*/
+'EXTRACT /FLSCREEN/LSCREEN/COLOR *'
+start=flscreen.1
+If start=0 Then start=1
+no_lines=flscreen.2-flscreen.1+1
+lines=lscreen.1
+cols=lscreen.2
+ps=Word(color.4,5)
+Parse Value ps With 'PS' ps .
+clear=''
+Return
+ 
+ 
+Read_Rules:
+/*--------------------------------------------------------------------+
+| Reading the settings and rules we want to be colored                |
++--------------------------------------------------------------------*/
+Address CMS 'PIPE (end ?)',
+              '< 'myfn' RULES *',
+              '| pick 1.1 \== ~~ and 1.1 \== ~ ~ and 1.1 \== ~*~',
+              '| join * xFF',
+              '| split before string ~:~',
+              '| p1: pick anycase fs . f1 == ~:HIGHLIGHT~',
+              '| specs fs . f2;* 1',
+              '| split at xFF',
+              '| specs ~/~ 1 1;* n',
+              '| change ~=~/~',
+              '| xlate upper',
+              '| fi: fanin',
+              '| varload',
+              '? p1:',
+              '| p2: pick anycase fs . f1 ==  ~:COLORS~',
+              '| specs fs . f2;* 1',
+              '| split at xFF',
+              '| specs ~/~ 1 1;* n',
+              '| change ~=~/~',
+              '| xlate upper',
+              '| buffer',
+              '| fi:',
+              '? p2:',
+              '| specs fs . f2;*',
+              '| split at xFF',
+              '| stem rexx.'
+ 
+Interpret 'default='default
+Interpret 'reverse='reverse
+Interpret 'blink='blink
+Interpret 'underscore='underscore
+ 
+Interpret 'red='red
+Interpret 'blue='blue
+Interpret 'pink='pink
+Interpret 'yellow='yellow
+Interpret 'green='green
+Interpret 'white='white
+Interpret 'blue='blue
+Interpret 'turquoise='turquoise
+ 
+Address CMS 'PIPE (end ?)',
+   'stem rexx.',
+   '| buffer',
+   '| change anycase w1.2 ~DEFAULT~ ~'default'~',
+   '| change anycase w1.1 ~REVERSE~ ~'reverse'~',
+   '| change anycase w1.1 ~BLINK~ ~'blink'~',
+   '| change anycase w1.1 ~UNDERSCORE~ ~'underscore'~',
+   '| change anycase w2.1 ~RED~ ~'red'~',
+   '| change anycase w2.1 ~BLUE~ ~'blue'~',
+   '| change anycase w2.1 ~PINK~ ~'pink'~',
+   '| change anycase w2.1 ~GREEN~ ~'green'~',
+   '| change anycase w2.1 ~YELLOW~ ~'yellow'~',
+   '| change anycase w2.1 ~WHITE~ ~'white'~',
+   '| change anycase w2.1 ~TURQUOISE~ ~'turquoise'~',
+   '| stem rexx.'
+Return

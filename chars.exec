@@ -1,0 +1,9 @@
+/* Create an overview of EBCDIC characters */
+Do n=0 To 15
+   Do m=0 To 15
+     hex=d2x(n)||d2x(m)
+     char=x2c(hex)
+     tofile=hex char
+     'PIPE var tofile | >> chars file a'
+   End m
+End n

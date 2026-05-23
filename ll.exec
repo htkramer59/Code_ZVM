@@ -1,0 +1,57 @@
+/**/
+Parse Upper Arg input
+Parse Source . . myfn myft .
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Select
+When myft='EXEC'  Then Call RunAsExec
+When myft='XEDIT' Then Call RunAsXedit
+Otherwise Call Exit 'Do not understand 'myft
+End
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+RunAsExec:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'EXECLOAD 'myfn myft' * = XEDIT'
+Address CMS 'VMLINK WORK (QUIET WRITE .fm'
+If rc=0 Then Parse Upper Pull . . ws .
+        Else ws='A'
+'PIPE (end ?)',
+  'cp QUERY RETRIEVE BUFFERS',
+  '| drop first 1',
+  '| specs pad 0 w1.1 1.3 right w2;* nw',
+  '| sort w1.1 a',
+  '| specs w2;* 1',
+  '| > retrieve content 'ws
+Queue 'SET PF9 BEFORE 'myfn
+Address CMS 'XEDIT RETRIEVE CONTENT 'ws
+'PIPE var newcmd | cms'
+ 
+Address CMS 'ERASE RETRIEVE CONTENT 'ws
+If ws<>'A' Then Address CMS 'VMLINK WORK <DET (QUIET WRITE'
+Address CMS 'EXECDROP 'myfn' XEDIT'
+Return
+ 
+ 
+RunAsXedit:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'EXTRACT /CURLINE/CURSOR/LINE'
+prevcursor=cursor.3
+':'cursor.3
+'EXTRACT /CURLINE'
+Address CMS 'PIPE var curline.3 | var newcmd 1'
+'QQUIT'
+Return

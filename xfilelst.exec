@@ -1,0 +1,538 @@
+/*---------------------------------------------------------------+
+| Function : Emulate FILELIST...also for remote objects          |
+|                                                                |
+| File     : XFILELST EXEC                                       |
++----------------------------------------------------------------+
+| Version  : 1.1.0                                               |
+|                                                                |
+| Files    : RMCMD    EXEC     talk over RSCS to other nodes     |
+|            VMLINKIP EXEC     determine IP addresses            |
+|            VMLINK   EXEC     link & access dir/mdisk           |
+|            VMLINK   NAMES    control file                      |
+|            FILELIST EXEC     defautt FILELIST                  |
+|            PROFFLST XEDIT    FILELIST PROFILE                  |
+|            FLBFS    EXEC     for BFS display                   |
+|            NETRC    DATA     work file                         |
+|            REMOTE   FILELIST work file                         |
+|                                                                |
+| Called   : XFILELST <fn> <ft> <fm> <node> ( <options>          |
+|               <fn>      Filename or wildcard                   |
+|               <ft>      Filetype or wildcard                   |
+|               <fm>      Filemode or <user.mdisk>, <sfs_dir>,   |
+|                         <bfs_dir> of <linux_dir>               |
+|               <node>    The node you want the info from        |
+|               <options> Can be VERBOSE to make it noisy        |
+|                                                                |
+|                                                                |
+|  Examples for <fm>:                                            |
+|    Q                       for the Q-disk on your id           |
+|    maint.193               for the content of maint 193 mdisk  |
+|    vmpsfs:maint720.        for the content of the filespace    |
+|    /../vmbfs:vmsysu:etc/   for this bfs part                   |
+|    /bin                    for the bin dir of a Linux id       |
+|                                                                |
+| Comments : To arrange the selection of FTP or RSCS before hand |
+|            you can set a GLOBALV variable:                     |
+|            For FTP:  GLOBALV SELECT XFILELST SETLP FTP 1       |
+|                      GLOBALV SELECT XFILELST SETLP RSCS 0      |
+|            For RSCS: GLOBALV SELECT XFILELST SETLP RSCS 1      |
+|                    : GLOBALV SELECT XFILELST SETLP FTP 0       |
+|                                                                |
+|            To use F as SYNONYM add this: XFILELST F   1        |
+|            to your SYNONYM file                                |
+|                                                                |
+| Note     : The outcome is restricted to what your userid is    |
+|            authorised for on the systems you are querying.     |
+|                                                                |
+| Author   : H.T.Kramer, ,                                       |
+| Created  : 20230119 15:50:24                                   |
+| Changes  : .                                                   |
+|            20230201 H.T.Kramer : Adapted so we can show        |
+|                     Linux & bfs directories                    |
+|            20230126 H.T.Kramer : Update to use my workspace    |
+|                     see VMLINK STATUS in the code              |
+|            20230123 H.T.Kramer : Update to make SDATE, SNAME,  |
+|                     etc. working                               |
+|                                                                |
++---------------------------------------------------------------*/
+Parse Arg fn ft fm node '(' options
+Parse Source . . myfn myft .
+If fn='?' Then Do
+          'VMFCLEAR'
+          'PIPE (NAME XFILELST.EXEC:62 END ?)',
+             '< 'myfn myft' *',            /* Read myself */
+             '| tolabel Parse',            /* Up to here  */
+             '| cons'                      /* Show        */
+           Call Exit
+           End
+Call Exec_Code
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+Exec_Code:
+/*---------------------------------------------------------------+
+| Check some of the input                                        |
++---------------------------------------------------------------*/
+If fn='' Then fn='*'
+If ft='' Then ft='*'
+If fm='' Then fm='A'
+node=Strip(node)
+/*---------------------------------------------------------------+
+| Are we going noisy or quiet                                    |
++---------------------------------------------------------------*/
+Upper options
+If Pos('VERB',options) Then quiet=0
+                       Else quiet=1
+ftp=0
+/*---------------------------------------------------------------+
+| Access workspace & compose workfile name                       |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK STATUS (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . stfm .
+        Else stfm='A'
+workfile='REMOTE FILELIST 'stfm'0'
+/*---------------------------------------------------------------+
+| Determine what to do                                           |
++---------------------------------------------------------------*/
+If node<>'' Then Call CheckComms
+Select
+When Length(fm)>1     &,
+     Pos('/../',fm)=1 &,
+     node<>''         Then Call RemoteBfs
+When Length(fm)>1     &,
+     Pos('/../',fm)=1 &,
+     node=''          Then Call LocalBfs
+When Length(fm)=1     &,
+     node=''          Then Call CurDisk
+When Length(fm)=1     &,
+     Pos('/',fm)=0    &,
+     node<>''         Then Call RemoteOwnDisk
+When Length(fm)>1     &,
+     Pos(':',fm)<>0   &,
+     node=''          Then Call LocalFilepool
+When Length(fm)>1     &,
+     Pos('.',fm)<>0   &,
+     node=''          Then Call LocalIdMdisk
+When Length(fm)>1     &,
+     Pos(':',fm)<>0   &,
+     node<>''         Then Call RemoteFilepool
+When Length(fm)>1     &,
+     Pos('.',fm)<>0   &,
+     node<>''         Then Call RemoteIdMdisk
+When Length(fm)>=1    &,
+     Pos('/',fm)<>0   &,
+     node<>''         Then Call LinuxContent
+Otherwise Call Exit '99  Can not handle input: 'fn ft fm node
+End
+If node<>'' Then Do
+                 Address CMS 'XEDIT 'workfile profilestmt
+                 Address CMS 'ERASE 'workfile
+                 End
+If wfm<>'A' Then Address CMS 'VMLINK STATUS <DET (QUIET WRITE'
+If ftp & \linux Then Address CMS 'ERASE NETRC DATA A'     /* Clean up         */
+Return
+ 
+ 
+LocalBfs:
+/*---------------------------------------------------------------+
+| Show content of a local bfs                                    |
++---------------------------------------------------------------*/
+linux=0
+Parse Value fm With '/../' . ':' bfsdir .
+Address CMS 'FLBFS 'bfsdir
+Return
+ 
+ 
+RemoteBfs:
+/*---------------------------------------------------------------+
+| Show the content of a remote bfs                               |
++---------------------------------------------------------------*/
+linux=0
+If rscs Then Do
+             Parse Value fm With '/../' . ':' bfsdir .
+             cmdline='FLBFS 'bfsdir' (NOXEDIT'
+             Call GetRscsList
+             reduce= '| drop first 3| specs w2;* 6'
+             End
+If ftp  Then Do
+             cdcmd='CD 'fm
+             If fn='*' & ft='*' Then fnft='.'
+                                Else fnft=fn'.'ft
+             cmdline='DIR 'fnft' (DISK'
+             Call GetFtpList
+             reduce='| specs 1;* 7'
+             End
+/*---------------------------------------------------------------+
+| Remove/adjust some items in the workfile                       |
++---------------------------------------------------------------*/
+'PIPE (NAME XFILELST.EXEC:177 END ?)',
+   '< 'workfile,                                 /* Take this        */
+   reduce,                                       /* Do this          */
+   '| > 'workfile                                /* Write 2 file     */
+Call BFS_Display
+Return
+ 
+ 
+CurDIsk:
+/*---------------------------------------------------------------+
+| Show the content of disks we have accessed                     |
++---------------------------------------------------------------*/
+linux=0
+Address CMS 'FILELIST 'fn ft fm '(' options
+Return
+ 
+ 
+RemoteOwnDisk:
+/*---------------------------------------------------------------+
+| Show the content of the remote accessed disks for my id        |
++---------------------------------------------------------------*/
+linux=0
+Call GetFmDetails
+Select
+When mdisk  & rscs Then Do
+                        cmdline='LISTFILE 'fn ft fm' (NOH ISO'
+                        Call GetRscsList
+                        End
+When \mdisk & rscs Then Do
+                        cmdline='LISTFILE 'fn ft fm' (NOH ISO'
+                        Call GetRscsList
+                        End
+When mdisk  & ftp  Then Do
+                        cdcmd='CD 'wfm
+                        If fn='*' & ft='*' Then fnft='.'
+                                           Else fnft=fn'.'ft
+                        cmdline='DIR 'fnft' (DISK'
+                        Call GetFtpList
+                        End
+When \mdisk & ftp  Then Do
+                        cdcmd='CD 'wfm
+                        If fn='*' & ft='*' Then fnft='.'
+                                           Else fnft=fn'.'ft
+                        cmdline='DIR 'fnft' (DISK'
+                        Call GetFtpList
+                        End
+Otherwise Call Exit '288 Problem on "RemoteOwnDisk"'
+End
+Call Prepare4Filelist
+Call CMS_Display
+Return
+ 
+ 
+LocalFilepool:
+/*---------------------------------------------------------------+
+| Show the content of a local filepool/directory                 |
++---------------------------------------------------------------*/
+linux=0
+If options<>'' Then options='(' options
+Address CMS 'VMLINK .DIR 'fm' (NON NOT FILEL 'fn ft' .fm 'options
+Return
+ 
+ 
+LocalIdMdisk:
+/*---------------------------------------------------------------+
+| Show the content of a local userid/minidisk                    |
++---------------------------------------------------------------*/
+linux=0
+fm=Translate(fm,' ','.')
+If options<>'' Then options='(' options
+Address CMS 'VMLINK 'fm' (NON NOT FILEL 'fn ft' .fm 'options
+Return
+ 
+ 
+RemoteFilepool:
+/*---------------------------------------------------------------+
+| Show the content for a remote filepool/directory               |
++---------------------------------------------------------------*/
+linux=0
+If rscs Then Do
+             cmdline='VMLINK .DIR 'fm' (NON NOT I LISTFILE 'fn ft' .fm (NOH ISO'
+             Call GetRscsList
+             End
+If ftp  Then Do
+             cdcmd='CD 'fm
+             If fn='*' & ft='*' Then fnft='.'
+                                Else fnft=fn'.'ft
+             cmdline='DIR 'fnft' (DISK'
+             Call GetFtpList
+             End
+Call Prepare4Filelist
+Call CMS_Display
+Return
+ 
+ 
+RemoteIdMdisk:
+/*---------------------------------------------------------------+
+| Show the content for a remote userid/minidisk                  |
++---------------------------------------------------------------*/
+linux=0
+fm=Translate(fm,' ','.')
+If rscs Then Do
+             cmdline='VMLINK 'fm' (NON NOT I LISTFILE 'fn ft' .fm (NOH ISO'
+             Call GetRscsList
+             End
+If ftp  Then Do
+             cdcmd='CD 'fm
+             If fn='*' & ft='*' Then fnft='.'
+                                Else fnft=fn'.'ft
+             cmdline='DIR 'fnft' (DISK'
+             Call GetFtpList
+             End
+Call Prepare4Filelist
+Call CMS_Display
+Return
+ 
+ 
+LinuxContent:
+/*---------------------------------------------------------------+
+| Show the content of a directory on a linux server              |
++---------------------------------------------------------------*/
+linux=1
+/* If rscs Then Call Exit '388 Can not obtain info using RSCS' */
+/* ftp=1 */
+cdcmd='CD 'fm
+If fn='*' & ft='*' Then fnft='.'
+                   Else fnft=fn'.'ft
+cmdline='DIR 'fnft' (DISK'
+Call GetFtpList
+Call Linux_Display
+Return
+ 
+ 
+GetFMDetails:
+/*---------------------------------------------------------------+
+| Get details on the current filemode                            |
++---------------------------------------------------------------*/
+'PIPE (NAME XFILELST.EXEC:314 END ?)',
+    'cms QUERY ACCESSED 'fm,                     /* Check this       */
+    '| drop first 1',                            /* Remove hdr       */
+    '| if: if pick substr 1.3 of w4.1 == ~DIR~', /* If this          */
+    '|     specs ~/WFM/~ 1',                     /* Take this        */
+                 'w5.1 n',                       /* .                */
+                 '~;/MDISK/1~ n',                /* Set boolean      */
+    '| if:',                                     /* Conn 2 if/else   */
+    '|     specs ~QUERY MDISK~ 1',               /* Compose cmd      */
+                'w4.1 nw',                       /* .                */
+    '|     cp',                                  /* Hand 2 cp        */
+    '|     drop first 1',                        /* Remove hdr       */
+    '|     specs ~/WFM/~ 1',                     /* Take this        */
+                'w3.1 n',                        /* .                */
+                '~.~ n',                         /* .                */
+                'w4.1 n',                        /* .                */
+                '~;/MDISK/0~ n',                 /* Set boolean      */
+    '| if:',                                     /* Conn 2 if        */
+    '| split at ;',                              /* Split here       */
+    '| varload'                                  /* Hand 2 rexx      */
+Return
+ 
+ 
+BFS_Display:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+If rscs Then loc=node
+        Else loc=ip'/'node
+Queue 'SET CMDLINE BOT#SET PREFIX OFF#SET SCALE OFF#SET TOFEOF OFF'
+Queue 'SET CTLCHAR % ESCAPE#SET CTLCHAR W PROTECT WHITE HIGH#SET CTLCHAR B PROTECT BLUE HIGH#SET CTLCHAR G PROTECT GREEN HIGH'
+If rscs Then Queue 'SET RESERVED 3 NON NOH ..... File/Directory  Owner      Group       Permissions Fn Ft BFS         Date',
+                                    '    Time     Type Links      Size'
+If ftp  Then Queue 'SET RESERVED 3 NON NOH ..... Date       Time       Dir/File                  File/Directory'
+Queue 'SET RESERVED 2 NON NOH Content of%W'fm'%Bon%W'loc'%Bfiles selected:%W'Substr(fn,1,8) Substr(ft,1,8)
+Queue 'SET RESERVED -2 NON NOH %W1=%GHelp%W2=%G%W3=%GQuit%W4=%G%GW=%G%W6=%G%W7=%GBack%W8=%GForward%W9=%G%W10=%GTop%W11=%GBot%W12=%GQuit'
+Queue ':1'
+profilestmt=''
+Return
+ 
+ 
+CMS_Display:
+/*---------------------------------------------------------------+
+| Display for CMS related items                                  |
++---------------------------------------------------------------*/
+If rscs Then loc=node
+        Else loc=ip'/'node
+Queue 'SET CTLCHAR % ESCAPE#SET CTLCHAR W PROTECT WHITE HIGH#SET CTLCHAR B PROTECT BLUE  HIGH'
+Queue 'SET RESERVED 3 NON NOH Cmd  Filename Filetype  .. Format Lrecl    Records     Blocks   Date       Time'
+Queue 'SET RESERVED 2 NON NOH Content of%W'fm'%Bon%W'loc'%Bfiles selected:%W'Substr(fn,1,8) Substr(ft,1,8)
+Queue ':1#TRUNC *#VERIFY 1 82'
+profilestmt='( PROFILE PROFFLST'
+Return
+ 
+ 
+Linux_Display:
+/*---------------------------------------------------------------+
+| Display for linux directories                                  |
++---------------------------------------------------------------*/
+If rscs Then loc=node
+        Else loc=ip'/'node
+Queue 'SET CMDLINE BOT#SET PREFIX OFF#SET SCALE OFF#SET TOFEOF OFF'
+Queue 'SET CTLCHAR % ESCAPE#SET CTLCHAR W PROTECT WHITE HIGH#SET CTLCHAR B PROTECT BLUE HIGH#SET CTLCHAR G PROTECT GREEN HIGH'
+Queue 'SET RESERVED 3 NON NOH ..... Permisions .... Owner  Group Size          Date   Time  Fn.Ft'
+Queue 'SET RESERVED 2 NON NOH Content of%W'fm'%Bon%W'loc'%Bfiles selected:%W'Substr(fn,1,8) Substr(ft,1,8)
+Queue 'SET RESERVED -2 NON NOH %W1=%GHelp%W2=%G%W3=%GQuit%W4=%G%GW=%G%W6=%G%W7=%GBack%W8=%GForward%W9=%G%W10=%GTop%W11=%GBot%W12=%GQuit'
+Queue ':1'
+profilestmt=''
+Return
+ 
+ 
+GetRscsList:
+/*---------------------------------------------------------------+
+| Talk 2 RSCS to obtain details from the other end               |
++---------------------------------------------------------------*/
+Address CMS 'RMCMD CMS 'cmdline','node',,FILE,'workfile
+Return
+ 
+ 
+GetFtpList:
+/*---------------------------------------------------------------+
+| Talk 2 FTP to obtain details from the other end                |
++---------------------------------------------------------------*/
+Address CMS 'VMLINKIP 'node
+If ip.0=0 |,
+   ip.0='IP.0' Then Do
+               Address CMS 'NAMEFIND :nick 'node' :ip :status linux (file(VMLINK NAMES *) stem ip.'
+               If rc<>0 Then Call Exit '928 No output from VMLINKIP/NAMEFIND'
+               linux=1
+               ftpoptions.1=''
+               End
+ftpoptions=ftpoptions.1
+ip=ip.1
+If \linux Then Call CreateNetRc
+/*---------------------------------------------------------------+
+| Run the ftp command                                            |
++---------------------------------------------------------------*/
+Address CMS 'VMLINK TCPIP (QUIET'                /* Link FTP         */
+If linux Then Do
+              Call GetCPLevel
+              'PIPE (NAME XFILELST.EXEC:414 END ?)',
+                 ftpstage,                       /* Run ftp stage    */
+                 '| specs 1;* 7',                /* Adjust output    */
+                 '| > 'workfile                  /* Write 2 file     */
+              End
+         Else Do
+/*---------------------------------------------------------------+
+| Stack some commands for ftp                                    |
++---------------------------------------------------------------*/
+              If quiet  Then Address CMS 'SET CMSTYPE HT'      /* Supress FTP noise*/
+              If \quiet Then Do
+                             Say   cdcmd
+                             Say   cmdline
+                             Say   ip'/'node
+                             End
+              If portno='PORTNO' Then portno=''
+              If wfm<>'A' Then Queue 'LCD 'stfm
+              Queue cdcmd
+              Queue cmdline
+              Queue 'QUIT'
+              Address CMS 'FTP 'ip portno' ( 'ftpoptions
+              Address CMS 'COPYFILE FTP DIROUTP 'stfm workfile'(REPL OLDD'    /* Need 1 file 4 all*/
+              Address CMS 'ERASE FTP DIROUTP 'stwfm                           /* .                */
+              If quiet Then Address CMS 'SET CMSTYPE RT'       /* Resume FTP noise */
+              End
+Address CMS 'VMLINK TCPIP <DET (QUIET'           /* Remove FTP       */
+Return
+ 
+ 
+Prepare4Filelist:
+/*---------------------------------------------------------------+
+| Prepare for "FILELIST"                                         |
++---------------------------------------------------------------*/
+If rscs Then reduce='| drop first 3',
+                    '| specs w2;* 1',
+                    '| specs 1.17 6.18 ~__~ nw 22;* nw'
+If ftp  Then reduce='| specs 1.17 6.18 ~__~ nw 19;* nw'
+/*---------------------------------------------------------------+
+| Remove/rework some items in the work file                      |
++---------------------------------------------------------------*/
+'PIPE (NAME XFILELST.EXEC:454 END ?)',
+   '< 'workfile,                                 /* Take this        */
+   reduce,                                       /* Reduce file      */
+   '| specs 1;* 1 1;* 82',                       /* To make PROFFLST */
+   '| specs 1;* 1.170',                          /* ..working        */
+   '| > 'workfile                                /* Overwrite file   */
+Return
+ 
+ 
+GetCPLevel:
+/*---------------------------------------------------------------+
+| Get the CP Level so we can use the proper FTP stage            |
++---------------------------------------------------------------*/
+'PIPE (NAME XFILELST.EXEC:467 END ?)',
+    'cp QUERY CPLEVEL',                          /* Ask cp           */
+    '| take first 1',                            /* Keep 1           */
+    '| specs w3.1 1 w5.1 n',                     /* Keep these       */
+    '| space 0 ~.,~',                            /* Remove these     */
+    '| var cplevel',                             /* Hand 2 rexx      */
+    '?',                                         /* 2nd pipe         */
+    'literal 'Userid(),                          /* Get my name      */
+    '| strip',                                   /* Remove space     */
+    '| xlate lower',                             /* Make lowercase   */
+    '| var uid'                                  /* Hand 2 rexx      */
+Call AskPass
+If portno='' | portno='PORTNO' Then portno=21
+/*---------------------------------------------------------------+
+| Select ftp stage from VM Downloads or default one              |
++---------------------------------------------------------------*/
+Select
+When cplevel=640 Then ftpstage='ftp list ftp://'uid':'pw'@'ip':'portno||fm
+When cplevel>640 Then ftpstage='ftp ftp://'uid':'pw'@'ip':'portno||fm||';type=d details'
+Otherwise Call Exit '888 Can not handle cplevel: 'cplevel
+End
+Return
+ 
+ 
+AskPAss:
+/*---------------------------------------------------------------+
+| Ask for the password                                           |
++---------------------------------------------------------------*/
+Say TimeStamp() 'Password for 'Userid()' at 'ip'/'node':' /* Ask ....         */
+'PIPE (NAME XFILELST.EXEC:496 END ?)',
+   'cons dark',                                  /* Ask....        */
+   '| var pw'                                    /* Hand 2 rexx    */
+Return
+ 
+ 
+CreateNetRc:
+/*---------------------------------------------------------------+
+| Create NETRC DATA                                              |
++---------------------------------------------------------------*/
+Call AskPass
+'PIPE (NAME XFILELST.EXEC:507 END ?)',
+   'stem ip.',                                   /* Take these       */
+   '| specs ~machine~ 1 w1.1 nw ~login 'Userid()' password 'pw'~ nw',
+   '| > netrc data a'                            /* Store as         */
+Return
+ 
+ 
+CheckComms:
+/*---------------------------------------------------------------+
+| How will we communicate with the other side                    |
+| Check LASTING GLOBALV first then check FTP/RSCS                |
++---------------------------------------------------------------*/
+ftp=Strip(Value('FTP',,'LASTING 'myfn))
+rscs=Strip(Value('RSCS',,'LASTING 'myfn))
+If ftp=''  |,
+   rscs='' Then Do
+     'PIPE (NAME XFILELST.EXEC:523 END ?)',
+        'cp QUERY RSCS',                              /* Ask if running   */
+        '| pick w3.1 ==  ~DSC~',                      /* Look for this    */
+        '| count lines',                              /* How many?        */
+        '| var rscs',                                 /* Store as         */
+        '?',                                          /* 2nd pipe         */
+        'cp QUERY FTPSERVE',                          /* Ask if running   */
+        '| pick w3.1 ==  ~DSC~',                      /* Look for this    */
+        '| count lines',                              /* How many?        */
+        '| var ftp'                                   /* Store as         */
+    End
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

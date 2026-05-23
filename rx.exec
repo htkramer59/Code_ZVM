@@ -1,0 +1,781 @@
+/*--------------------------------------------------------------------+
+| Function : Create a cross reference for REXX programs               |
+|                                                                     |
+| File     : RX       EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : RX       CODE  file with input (Rexx stmts)              |
+|            <ifn>    <ift> filename of file u want xref for          |
+|                     <ift> defaults to EXEC                          |
+|          : <ifn>    XREF  output containing the cross ref.          |
+|          : ZSTRIP   REXX  homegrown stage                           |
+|                                                                     |
+| Called   : RX       <ifn> <ift> <ifm>                               |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20260216 16:43:48                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg ifn ift ifm .
+Parse Source . . myfn myft .
+/*--------------------------------------------------------------------+
+| Check the input given                                               |
++--------------------------------------------------------------------*/
+'VMFCLEAR'
+If ifn='?' Then Do
+           'PIPE (NAME RX.EXEC:30 END ? SEP |)',
+              '< 'myfn myft' *',            /* Read myself */
+              '| tolabel Parse',            /* Up to here  */
+              '| cons'                      /* Show        */
+            Call Exit
+            End
+If ifn='' Then Call Exit '28 No input specified'
+If ift='' Then ift='EXEC'
+If ifm='' Then ifm='*'
+/*--------------------------------------------------------------------+
+| M A I N L I N E                                                     |
++--------------------------------------------------------------------*/
+Call Init
+Call Read_File
+Call Find_Empty_Lines
+Call Find_Single_Line_Comments
+Call Find_Multi_Line_Comments
+Call Find_Hex_Strings
+Call Find_Literals
+/*--------------------------------------------------------------------+
+| Save this status to find the variables later on                     |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:52 end 'ec' sep 'ss')',
+      'stem input.',                                  /* Take these       */
+      ss' stem work.'                                 /* Save 2 use later */
+/*--------------------------------------------------------------------+
+| Find some more items and identify them                              |
++--------------------------------------------------------------------*/
+Call Find_Subroutines
+Call Find_Rexx
+Call Find_Vars
+/*--------------------------------------------------------------------+
+| Start labeling some things                                          |
++--------------------------------------------------------------------*/
+Call Label_Subroutines
+Call Label_Select
+Call Label_Do
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Call Write_File
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+elapsed=Time('E')
+Say 'Elapsed time: 'elapsed
+Exit exrc
+ 
+ 
+Label_Do:
+/*--------------------------------------------------------------------+
+| Label all DO constructs                                             |
++--------------------------------------------------------------------*/
+Say 'Labeling DO-Constructs'
+'PIPE (NAME RX.EXEC:90 end 'ec' sep 'ss')',
+    'stem source.',                                   /* .                */
+    ss' casei all 'dl'do 'dl ! dl'end 'dl,            /* .                */
+    ss' nlocate anycase 'dl'pipe'dl,                  /* .                */
+    ss' nlocate anycase 'dl'{sel'dl,                  /* .                */
+    ss' pad right 100',                               /* .                */
+    ss' if: if locate anycase /do/',                  /* .                */
+    ss'     specs /DO/ 1.3 1;* nw',                   /* .                */
+    ss' if:',                                         /* .                */
+    ss'     specs /END/ 1.3 1;* nw',                  /* .                */
+    ss' if:',                                         /* .                */
+    ss' stem do_end.'                                 /* .                */
+dolvl=0
+endlvl=0
+oldrec=''
+Do d=1 To do_end.0
+   If Word(do_end.d,1)='DO' Then Do
+                               dolvl=dolvl+1
+                               lbl='(DO'dolvl'-Start)'
+                               subloc=Word(do_end.d,2)
+                               Call Add_Label lbl '106'
+                               End
+   If Word(do_end.d,1)='END' Then Do
+                               If oldrec='END' Then endlvl=endlvl-1
+                                               Else endlvl=dolvl
+                               lbl='(DO'endlvl'-End)'
+                               subloc=Word(do_end.d,2)
+                               Call Add_Label lbl '106'
+                               End
+   oldrec=Word(do_end.d,1)
+End d
+Return
+ 
+ 
+Label_Select:
+/*--------------------------------------------------------------------+
+| Label all Select constructs                                         |
++--------------------------------------------------------------------*/
+Say 'Labeling SELECT-Constructs'
+'PIPE (NAME RX.EXEC:129 end 'ec' sep 'ss')',
+    'stem rx.',                                       /* .                */
+    ss' pick anycase w1.1 == 'dl'select'dl,           /* .                */
+    ss' specs w2;* 1',                                /* .                */
+    ss' split',                                       /* .                */
+    ss' specs fs : f1 1 'dl'{SEL'dl' nw recno n.1 'dl'-Start}'dl' n',   /* .                */
+    ss' stem selstrt.'                                /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:139 end 'ec' sep 'ss')',
+    'stem source.',                                   /* .                */
+    ss' pick anycase w2.1 == 'dl'select'dl' or',      /* .                */
+                    'w2.1 == 'dl'when'dl' or',        /* .                */
+                    'w2.1 == 'dl'otherwise'dl' or',   /* .                */
+                    'w2.1 == 'dl'end'dl,              /* .                */
+    ss' frtarget locate anycase 'dl'select'dl,        /* .                */
+    ss' stem work.'                                   /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+oldline=0
+selno=0
+Do w=1 To work.0
+   Parse Value work.w With lineno stmt .
+   Upper stmt
+   If oldline+1=lineno & stmt='END' Then endflag=1
+                                    Else endflag=0
+   If endflag Then Do
+   selno=selno+1
+   subloc=lineno
+   Call Add_Label '{SEL'selno'-End} 102'
+   End
+   oldline=lineno
+End w
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Do s=1 To selstrt.0
+   Parse Value selstrt.s With subloc lbl
+   Call Add_Label lbl '102'
+End s
+Return
+ 
+ 
+Label_Subroutines:
+/*--------------------------------------------------------------------+
+| Label all subroutines, calls and start-return constructs            |
++--------------------------------------------------------------------*/
+Say 'Labeling SUB-routines'
+'PIPE (NAME RX.EXEC:179 end 'ec' sep 'ss')',
+    'stem subr.',                                     /* .                */
+    ss' specs 'dl'[SUB'dl' 1 recno n.1 'dl']'dl' n w2;* nw',   /* .                */
+    ss' specs  w2;* 1 w1.1 nw',                       /* .                */
+    ss' append stem subrcald.',                       /* .                */
+    ss' strip',                                       /* .                */
+    ss' sort 1.20 d',                                 /* .                */
+    ss' join 1 x40',                                  /* .                */
+    ss' sort 1.20',                                   /* .                */
+    ss' stem labelloc.'                               /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Do l=1 To labelloc.0
+   Parse Value labelloc.l With . subloc'-'sublocend lbl . calloc
+   strtloc=subloc
+   Parse Value lbl With '[' wrklbl ']' .
+   strtlbl='['wrklbl'-Start]'
+   endlbl='['wrklbl'-End]'
+   Call Add_Label strtlbl '100'
+   subloc=sublocend
+   Call Add_Label endlbl '100'
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+   'PIPE (NAME RX.EXEC:204 end 'ec' sep 'ss')',
+      'var calloc',                                   /* .                */
+      ss' split',                                     /* .                */
+      ss' strip',                                     /* .                */
+      ss' nlocate 'dl||Strip(strtloc)||dl,            /* .                */
+      ss' stem calloc.'                               /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+    Do c=1 To calloc.0
+       subloc=calloc.c
+       Call Add_Label lbl '100'
+    End c
+End l
+Return
+ 
+ 
+Add_Label:
+/*--------------------------------------------------------------------+
+| Add a label to a line                                               |
++--------------------------------------------------------------------*/
+Parse Arg new_lbl offset .
+   'PIPE (NAME RX.EXEC:226 end 'ec' sep 'ss')',
+       'stem source.',                                /* .                */
+       ss' buffer',                                   /* .                */
+       ss' t1: take first 'subloc,                    /* .                */
+       ss' f: faninany',                              /* .                */
+       ss' stem source.',                             /* .                */
+       ec' t1:',                                      /* .                */
+       ss' t2: take 1',                               /* .                */
+       ss' specs pad space 1.'offset' 1 left 'dl||new_lbl||dl' nw',   /* .                */
+       ss' f:',                                       /* .                */
+       ec' t2:',                                      /* .                */
+       ss' f:'
+Return
+ 
+ 
+Find_Vars:
+/*--------------------------------------------------------------------+
+| Find any variables                                                  |
++--------------------------------------------------------------------*/
+Say 'Processing Variables'
+f1='5F'x
+f2='61'x
+f3='E0'x
+'PIPE (NAME RX.EXEC:249 end 'ec' sep 'ss')',
+   'stem work.',                                      /* .                */
+   ss' n1: nlocate anycase ~ARG~',                    /* .                */
+   ss' n2: nlocate anycase ~SOURCE~',                 /* .                */
+   ss' n3: nlocate anycase ~PARSE~',                  /* .                */
+   ss' f1: fanout',                                   /* .                */
+   ss' specs w1.1 1 x40 n',                           /* .                */
+   ss' j1: juxtapose',                                /* .                */
+   ss' casei all ~<~ ! ~>~ ! ~=~ ! ~.~ ! ~\~ !',      /* .                */
+           '~+~ ! ~-~ ! ~*~ ! ~%~ ! x5F ! x61 ! xE0', /* .                */
+   ss' fi: faninany',                                 /* .                */
+   ss' space 1',                                      /* .                */
+   ss' f2: fanout',                                   /* .                */
+   ss' specs w1.1 1 x40 n',                           /* .                */
+   ss' j2: juxtapose',                                /* .                */
+   ss' specs fs = f1',                                /* .                */
+   ss' specs fs > f1',                                /* .                */
+   ss' specs fs < f1',                                /* .                */
+   ss' specs fs \ f1',                                /* .                */
+   ss' specs fs 'f1' f1',                             /* .                */
+   ss' specs fs 'f2' f1',                             /* .                */
+   ss' specs fs 'f3' f1',                             /* .                */
+   ss' specs w2.1 1.20 w1.1 nw',                      /* .                */
+   ss' sort 1.20',                                    /* .                */
+   ss' join keylen 20',                               /* .                */
+   ss' zstrip w2;* l ~0~',                            /* .                */
+   ss' specs w1.1 5.20 w2;* nw',                      /* .                */
+   ss' stem vars.',                                   /* .                */
+   ec' f1:',                                          /* .                */
+   ss' specs w2;* 1',                                 /* .                */
+   ss' split',                                        /* .                */
+   ss' j1:',                                          /* .                */
+   ec' f2:',                                          /* .                */
+   ss' specs w2;* 1',                                 /* .                */
+   ss' split',                                        /* .                */
+   ss' j2:',                                          /* .                */
+   ec' n1:',                                          /* .                */
+   ss' change anycase ~PARSE~~',                      /* .                */
+   ss' change anycase ~UPPER~~',                      /* .                */
+   ss' change anycase ~ARG~~',                        /* .                */
+   ss' fi:',                                          /* .                */
+   ec' n2:',                                          /* .                */
+   ss' change anycase ~PARSE~~',                      /* .                */
+   ss' change anycase ~UPPER~~',                      /* .                */
+   ss' change anycase ~SOURCE~~',                     /* .                */
+   ss' fi:',                                          /* .                */
+   ec' n3:',                                          /* .                */
+   ss' change anycase ~PARSE~~',                      /* .                */
+   ss' change anycase ~VAR~~',                        /* .                */
+   ss' change anycase ~VALUE~~',                      /* .                */
+   ss' change anycase ~WITH~~',                       /* .                */
+   ss' change anycase ~SOURCE~~',                     /* .                */
+   ss' fi:'                                           /* .                */
+If vars.0<>0 Then Call Add_2_Output 'vars. Variables found on lines:'
+             Else Call Add_2_Output '. NO Variables found'
+Return
+ 
+ 
+Find_Rexx:
+/*--------------------------------------------------------------------+
+| Find the valid rexx statements                                      |
++--------------------------------------------------------------------*/
+Say 'Processing REXX-statements'
+'PIPE (NAME RX.EXEC:312 end 'ec' stagesep 'ss')',
+    'stem input.',                                    /* .                */
+    ss' not all 'dl'PIPE'dl' & 'dl'END'dl,            /* .                */
+    ss' f: fanout',                                   /* .                */
+    ss' specs w1.1 1 x40 n',                          /* .                */
+    ss' j: juxtapose',                                /* .                */
+    ss' buffer',                                      /* .                */
+    ss' l: lookup anycase w2.1 w1.1 detail',          /* .                */
+    ss' specs w2.1 1.30 w1.1 nw',                     /* .                */
+    ss' sort 1.30',                                   /* .                */
+    ss' join keylen 30',                              /* .                */
+    ss' stem rx.',                                    /* .                */
+    ec,                                               /* .                */
+    'stem rxstmt.',                                   /* .                */
+    ss' l:',                                          /* .                */
+    ec' f:',                                          /* .                */
+    ss' specs w2;* 1',                                /* .                */
+    ss' split',                                       /* .                */
+    ss' j:'                                           /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+temp.0=0
+Do r=1 To rx.0
+   item=Word(rx.r,1)
+   locs=Subword(rx.r,2)
+   'PIPE (NAME RX.EXEC:338 end 'ec' SEP 'ss')',
+       'var locs',                                    /* .                */
+       ss' split',                                    /* .                */
+       ss' stem loc.'                                 /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+   stpos=1
+   oldloc=''
+   Do l=1 To loc.0
+      'PIPE (NAME RX.EXEC:348 end 'ec' SEP 'ss')',
+          'stem input.',                              /* .                */
+          ss' pick w1.1 == 'dl||loc.l||dl,            /* .                */
+          ss' specs 7;* 1',                           /* .                */
+          ss' var line'                               /* .                */
+       If loc.l=oldloc Then stpos=temp1+Length(item)
+       temp1=Pos(item,line,stpos)
+       oldloc=loc.l
+       loc.l=Strip(loc.l,'L','0')':'temp1
+    End l
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+    'PIPE (NAME RX.EXEC:361 end 'ec' SEP 'ss')',
+       'stem loc.',                                   /* .                */
+       ss' specs 1;* 1 x40 n',                        /* .                */
+       ss' snake 15',                                 /* .                */
+       ss' specs 'dl||item||dl' 1.20 1;* nw',         /* .                */
+       ss' stem temp. append'                         /* .                */
+End r
+If temp.0<>0 Then Do
+                  'PIPE (NAME RX.EXEC:369 end 'ec' stagesep 'ss')',
+                      'stem temp.',                   /* .                */
+                      ss' specs a: 1.20 .',           /* .                */
+                              '21;* 25',              /* .                */
+                              'break a',              /* .                */
+                              'id a 5',               /* .                */
+                      ss' stem rx.',                  /* .                */
+                      ss' pick 5.1 \== 'dl'.'dl' and',   /* .                */
+                              '5.1 \== x40 and',      /* .                */
+                              '5.1 \== '||dl||dl,     /* .                */
+                      ss' strip',                     /* .                */
+                      ss' specs xFE 1',               /* .                */
+                                dl'CHANGE ANYCASE /'dl' nw',   /* .                */
+                                'w1.1 n',             /* .                */
+                                dl'//'dl 'n',         /* .                */
+                      ss' join * x40',                /* .                */
+                      ss' var remove'                 /* .                */
+                  End
+remove=Translate(remove,ss,'FE'x)
+If remove<>'' Then Call Clean_Input
+If rx.0<>0 Then Call Add_2_Output 'rx. REXX-statements on line:column:'
+           Else Call Add_2_Output '. NO Rexx statements found'
+Return
+ 
+ 
+Find_Subroutines:
+/*--------------------------------------------------------------------+
+| Locate all the subroutines and where they were called               |
++--------------------------------------------------------------------*/
+Say 'Processing SUB-routines'
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:402 end 'ec' sep 'ss')',
+   'stem input.',
+   ss' pick anycase substr -1;-1 of w2.1 == 'dl':'dl' or',   /* .                */
+                   'w2.1 == 'dl'Return'dl' or',       /* .                */
+                   'w2.1 == 'dl'Exit'dl,              /* .                */
+   ss' specs w1.2 1',                                 /* .                */
+   ss' join 1 x40',                                   /* .                */
+   ss' specs ~I~ 1 w2.1 nw w1.1 nw 'dl'-'dl' n w3.1 nw',   /* .                */
+   ss' zstrip w2;* L 'dl'0'dl,                        /* .                */
+   ss' change 'dl'- 'dl'-'dl,                         /* .                */
+   ss' specs w1.1 5 w2.1 nw.20 w3;* nw',              /* .                */
+   ss' stem subr.',                                   /* .                */
+   ss' specs w2.1',
+   ss' change 'dl':'dl||dl,
+   ss' stem subsrc.'
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+subrcald.0=0
+Do s=1 To subsrc.0
+   'PIPE (NAME RX.EXEC:422 end 'ec' sep 'ss')',
+       'stem input.',                                 /* .                */
+       ss' locate 'dl||subsrc.s||dl,                  /* .                */
+       ss' specs 'dl||subsrc.s||dl' 1.20 w1.1 nw',    /* .                */
+       ss' stem subrcald. append'                     /* .                */
+End s
+If subrcald.0<>0 Then Do
+ 'PIPE (NAME RX.EXEC:429 end 'ec' sep 'ss')',
+    'stem subrcald.',                                 /* .                */
+    ss' buffer',                                      /* .                */
+    ss' zstrip w2;* l 'dl'0'dl,                       /* .                */
+    ss' specs w1.1 1.20 w2;* nw',                     /* .                */
+    ss' sort w1.1',                                   /* .                */
+    ss' join keylen 20',                              /* .                */
+    ss' specs 1;* 5',                                 /* .                */
+    ss' stem subrcald.'                               /* .                */
+End
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:442 end 'ec' sep 'ss')',
+   'stem subr.',
+   ss' buffer',                                       /* .                */
+   ss' specs w2.1 1 w1.1 nw',                         /* .                */
+   ss' change 'dl':'dl||dl,                           /* .                */
+   ss' l: lookup w1.1 w1.1',                          /* .                */
+   ec,                                                /* .                */
+   'stem subrcald.',                                  /* .                */
+   ss' buffer',                                       /* .                */
+   ss' specs w1.1',                                   /* .                */
+   ss' l:',                                           /* .                */
+   ec' l:',                                           /* .                */
+   ss' specs 'dl'E'dl' 5 1;* nw',                     /* .                */
+   ss' stem subrcald. append'                         /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+If remove<>'' Then Call Clean_Input
+If subrcald.0<>0 Then Call Add_2_Output 'subrcald. SUB-routines called/signaled from lineno:'
+                 Else Call Add_2_Output '. NO SUB-routine calls/signals found'
+If subr.0<>0 Then Call Add_2_Output 'subr. SUB-routines (I=Intern/E=Extern) found on lines:'
+             Else Call Add_2_Output '. NO SUB-routine locations found'
+Return
+ 
+ 
+Find_Hex_Strings:
+/*--------------------------------------------------------------------+
+| Locate the places where we use hexadecimal strings                  |
++--------------------------------------------------------------------*/
+Say 'Processing HEX-strings'
+hexstr.0=0
+'PIPE (NAME RX.EXEC:473 END 'ec'  SEP 'ss')',
+   'stem input.',                                      /* .                */
+   ss' strip leading 'dl'0'dl,                         /* .                */
+   ss' all x7DA7 ! x7FA7 ! x7DE7 ! x7FE7',             /* .                */
+   ss' f: fanout',                                     /* .                */
+   ss' specs w1.1 1.5 right x40 n',                    /* .                */
+   ss' j: juxtapose',                                  /* .                */
+   ss' pick ( 7.1 == x7D or 7.1 == x7F ) and ',        /* .                */
+          '( -2;-1 == x7DA7 or -2;-1 == x7FA7 or',     /* .                */
+          '  -2;-1 == x7DE7 or -2;-1 == x7FE7 )',      /* .                */
+   ss' stem hexstr.',                                  /* .                */
+   ss' strip',                                         /* .                */
+   ss' specs ~CHANGE /~ 1 w2.1 n ~//~ n',              /* .                */
+   ss' join * x4F',                                    /* .                */
+   ss' var remove tracking',                           /* .                */
+   ec' f:',                                            /* .                */
+   ss' split at anyof 'dl',;() 'dl,                    /* .                */
+   ss' j:'                                             /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:494 END 'ec'  SEP 'ss')',
+   'stem hexstr.',                                     /* .                */
+   ss' buffer',                                        /* .                */
+   ss' specs w2.1 1.30 w1.1 nw',                       /* .                */
+   ss' sort 1.30',                                     /* .                */
+   ss' join keylen 30',                                /* .                */
+   ss' specs 1;* 5',                                   /* .                */
+   ss' stem hexstr.'                                   /* .                */
+remove=Translate(remove,ss,'4F'x)
+If remove<>'' Then Call Clean_Input
+If hexstr.0<>0 Then Call Add_2_Output 'hexstr. HEX-strings found on line:'
+               Else Call Add_2_Output '. NO HEX-strings found'
+Return
+ 
+ 
+Find_Literals:
+/*--------------------------------------------------------------------+
+| Find literals in the code                                           |
++--------------------------------------------------------------------*/
+Say 'Processing Literals'
+liter.0=0
+'PIPE (NAME RX.EXEC:515 END 'ec' SEP 'ss')',
+    'stem input.',                                     /* .                */
+    ss' locate anyof x7D7F',                           /* .                */
+    ss' f: fanout',                                    /* .                */
+    ss' specs 7;*',                                    /* .                */
+    ss' stem content.',                                /* .                */
+    ec' f:',                                           /* .                */
+    ss' specs 1.5',                                    /* .                */
+    ss' strip leading 'dl'0'dl,                        /* .                */
+    ss' stem recno.'                                   /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Do c=1 To content.0
+ posits=''
+ work1=content.c
+ 'PIPE (NAME RX.EXEC:531 END 'ec'  SEP 'ss')',
+      'var work1',                                    /* .                */
+      ss' deblock 1',                                 /* .                */
+      ss' specs recno 1 1;* nw',                      /* .                */
+      ss' locate anyof x7D7F',                        /* .                */
+      ss' specs w1.1 1',                              /* .                */
+      ss' join 1 'dl'-'dl,                            /* .                */
+      ss' join * x40',                                /* .                */
+      ss' var posits tracking'                        /* .                */
+    Do p=1 To Words(posits)
+       If p=1 Then app=''
+              Else app='append'
+       range=Word(posits,p)
+       work2=content.c
+       'PIPE (NAME RX.EXEC:545 END 'ec' SEP 'ss')',
+          'var work2',                                  /* .                */
+          ss' specs 'range' 1.90 'dl||recno.c||dl' nw', /* .                */
+          ss' stem liter. append'                       /* .                */
+    End p
+End c
+drop work1 work2
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+remove=''
+'PIPE (NAME RX.EXEC:556 END 'ec' SEP 'ss')',
+    'stem liter.',                                    /* .                */
+    ss' buffer',                                      /* .                */
+    ss' f: fanout',                                   /* .                */
+    ss' sort 1.90',                                   /* .                */
+    ss' specs 1;* 1 x40 n',                           /* .                */
+    ss' join keylen 90',                              /* .                */
+    ss' specs 1;* 5',                                 /* .                */
+    ss' spill 120 offset 100',                        /* .                */
+    ss' stem liter.',                                 /* .                */
+    ec' f:',                                          /* .                */
+    ss' specs 1.90',
+    ss' strip both',                                  /* .                */
+    ss' specs xEE 1 'dl'CHANGE ' 'EF'x||dl' nw 1;* n 'dl||'EFEF'x||dl' n',   /* .                */
+    ss' join * x40',                                  /* .                */
+    ss' var remove tracking'                          /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+If remove<>'' Then Do
+                   remove=Translate(remove,ss,'EE'x)
+                   Call Clean_Input
+                   End
+If liter.0<>0 Then Call Add_2_Output 'liter. Literals found on the following lines:'
+              Else Call Add_2_Output '. NO Literals'
+Return
+ 
+ 
+Clean_Input:
+/*--------------------------------------------------------------------+
+| Remove certain items from the input stem                            |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:588 END 'ec' SEP 'ss')',
+     'stem input.',                                   /* .                */
+     ss' buffer',                                     /* .                */
+     remove,                                          /* .                */
+     ss' stem input.'                                 /* .                */
+remove=''
+Return
+ 
+ 
+Find_Single_Line_Comments:
+/*--------------------------------------------------------------------+
+| Find and the single line comments                                   |
++--------------------------------------------------------------------*/
+Say 'Processing Singe-Line comments'
+singlecom.0=0
+'PIPE (NAME RX.EXEC:603 END 'ec' SEP 'ss')',
+    'stem input.',                                    /* .                */
+    ss' all 'dl'/*'dl' & 'dl'*/'dl,                    /* .                */
+    ss' f: fanout',                                    /* .                */
+    ss' strip leading 'dl'0'dl,                        /* .                */
+    ss' specs pad space w1.1 1.5 right x40 n',         /* .                */
+    ss' j: juxtapose',                                 /* .                */
+    ss' specs 1;* 5',                                  /* .                */
+    ss' stem singlecom.',                              /* .                */
+    ss' specs w2;* 1',                                 /* .                */
+    ss' specs xFD 1 'dl'CHANGE'dl' nw xFC nw 1;* n xFC40FC n 'dl'*'dl' nw', /* .                */
+    ss' sort unique',                                  /* .                */
+    ss' join * x40',                                   /* .                */
+    ss' var remove',                                   /* .                */
+    ec' f:',                                           /* .                */
+    ss' split before string 'dl'/*'dl,                 /* .                */
+    ss' pick 1.2 == 'dl'/*'dl,                         /* .                */
+    ss' j:'                                            /* .                */
+remove=Translate(remove,ss,'FD'x)
+remove=Translate(remove,'A1'x,'FC'x)
+If remove<>'' Then Call Clean_Input
+If singlecom.0<>0 Then Call Add_2_Output 'singlecom. Single line comments on lines:'
+                  Else Call Add_2_Output '. NO Single line comments found'
+Return
+ 
+ 
+Find_Multi_Line_Comments:
+/*--------------------------------------------------------------------+
+| Find comments which run multiple lines                              |
++--------------------------------------------------------------------*/
+Say 'Processing Multi-Line comments'
+multicom.0=0
+'PIPE (NAME RX.EXEC:635 END 'ec'  SEP 'ss')',
+    'stem input.',                                     /* .                */
+    ss' buffer',                                       /* .                */
+    ss' pick 7.2 == 'dl'/*'dl' or -2;-1 == 'dl'*/'dl,  /* .                */
+    ss' spec w1.1 1',                                  /* .                */
+    ss' join 1 x40',                                   /* .                */
+    ss' stem clean.',                                  /* .                */
+    ss' zstrip w1;* l 'dl'0'dl,                        /* .                */
+    ss' specs w1.1 1 'dl'-'dl' n w2.1 n x40 n',        /* .                */
+    ss' snake 10',                                     /* .                */
+    ss' specs 1;* 5',                                  /* .                */
+    ss' stem multicom.'                                /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:650 END 'ec'  SEP 'ss')',
+    'stem clean.',                                     /* .                */
+    ss' buffer',                                       /* .                */
+    ss' change 'dl'-'dl' 'dl,                          /* .                */
+    ss' specs pad 0 w1.1 1.5 right w2.1 nw.5 right',   /* .                */
+    ss' sort w1.1 d',                                  /* .                */
+    ss' stem clean.'                                   /* .                */
+/*--------------------------------------------------------------------+
+| .                                                                   |
++--------------------------------------------------------------------*/
+Do c=1 To clean.0
+   Parse Value clean.c With start max .
+   Do s=start To max
+      s=Right(s,5,'0')
+ 'PIPE (NAME RX.EXEC:664 END 'ec' SEP 'ss')',
+          'stem input.',                               /* .                */
+          ss' buffer',                                 /* .                */
+          ss' nlocate w1.1 'dl||s||dl,                 /* .                */
+          ss' stem input.'                             /* .                */
+   End s
+End c
+If multicom.0<>0 Then Call Add_2_Output 'multicom. Comments over multiple lines:'
+                 Else Call Add_2_Output '. NO MULTI line comments found'
+Return
+ 
+ 
+Find_Empty_Lines:
+/*--------------------------------------------------------------------+
+| Find the empty lines                                                |
++--------------------------------------------------------------------*/
+Say 'Processing Empty lines'
+empties.0=0
+'PIPE (NAME RX.EXEC:682 END 'ec' SEP 'ss')',
+    'stem input.',                                     /* .                */
+    ss' buffer',                                       /* .                */
+    ss' p: pick 7.'reclen' == 'dl||Copies(' ',reclen)||dl, /* .                */
+    ss' specs 1.5',                                    /* .                */
+    ss' strip leading 'dl'0'dl,                        /* .                */
+    ss' join 10 x40',                                  /* .                */
+    ss' specs 1;* 5',                                  /* .                */
+    ss' stem empties.',                                /* .                */
+    ec' p:',                                           /* .                */
+    ss' strip',                                        /* .                */
+    ss' stem input.'                                   /* .                */
+If empties.0<>0 Then Call Add_2_Output 'empties.  Empty lines found on the following line-nos:'
+                Else Call Add_2_Output '. NO Empty lines found'
+Return
+ 
+ 
+Read_File:
+/*--------------------------------------------------------------------+
+| Read the file and add line numbers                                  |
++--------------------------------------------------------------------*/
+Say 'Reading file: 'ifn ift ifm
+'PIPE (NAME RX.EXEC:704 END 'ec' SEP 'ss')',
+   '< 'ifn ift ifm,                                    /* .                */
+   ss' specs pad 0 recno 1.5 right pad space 1;* nw.'reclen,   /* .                */
+   ss' stem input.',                                   /* .                */
+   ss' pad right 120',                                 /* .                */
+   ss' preface literal LinNo/Source statements:',      /* .                */
+   ss' stem source.'                                   /* .                */
+Return
+ 
+ 
+Add_2_Output:
+/*--------------------------------------------------------------------+
+| Add findings to the output stem                                     |
++--------------------------------------------------------------------*/
+Parse Arg stemname  header
+If stemname='.' Then stemname=''
+                Else stemname=ss' append stem 'stemname
+'PIPE (NAME RX.EXEC:721 END 'ec' SEP 'ss')',
+     'stem output.',                                   /* .                */
+     ss' buffer',                                      /* .                */
+     ss' append literal ',                             /* .                */
+     ss' append literal ',                             /* .                */
+     ss' append var header',                           /* .                */
+     stemname,                                         /* .                */
+     ss' stem output.'                                 /* .                */
+Return
+ 
+ 
+Write_File:
+/*--------------------------------------------------------------------+
+| Write the file to the A disk                                        |
++--------------------------------------------------------------------*/
+Say 'Writing cross reference'
+'PIPE (NAME RX.EXEC:737 END 'ec' SEP 'ss')',
+   'stem output.',                                     /* Take these       */
+   ss' preface stem source.',                          /* Add source       */
+   ss' preface literal ',                              /* Add empty        */
+   ss' preface literal ',                              /* .    lines       */
+   ss' preface literal Cross_Ref for: 'ifn ift ifm,    /* Add hdr          */
+   ss' preface literal 'myfn myft' : 'Date('S') Time(),   /* More heading     */
+   ss' > 'ifn' XREF A'                                 /* Write 2 file     */
+Return
+ 
+ 
+Init:
+/*--------------------------------------------------------------------+
+| Initialise some items                                               |
++--------------------------------------------------------------------*/
+Say 'Initialising'
+/*--------------------------------------------------------------------+
+| Setting some default values                                         |
++--------------------------------------------------------------------*/
+fs='00'x
+ec='FF'x
+ss='FE'x
+dl='01'x
+output.0=0
+remove=''
+/*--------------------------------------------------------------------+
+| Check if the input file exists                                      |
++--------------------------------------------------------------------*/
+'PIPE (NAME RX.EXEC:765 END 'ec' SEP 'ss')',
+    'literal 'ifn ift ifm,                        /* Take this        */
+    ss' state iso',                               /* Check file       */
+    ss' var stats',                               /* Hand 2 rexx      */
+    ss' specs w5.1',                              /* Keep this        */
+    ss' var reclen'                               /* Hand 2 rexx      */
+If rc<>0 Then Call Exit rc' Input not found'
+'PIPE (NAME RX.EXEC:773 END 'ec' SEP 'ss')',
+    '< 'myfn' CODE *',                            /* Read file        */
+    ss' strip',                                   /* Remove spaces    */
+    ss' pick 1.1 \== 'dl'*'dl' and 1.1 \== 'dl||dl, /* Ignore these     */
+    ss' stem rxstmt.'                             /* Hand 2 rexx      */
+Return
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn

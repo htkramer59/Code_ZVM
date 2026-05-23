@@ -18,8 +18,8 @@
 *
 :nick.fcx      :product.PERFSVM 201   :title.FCONX
 *
-:nick.tools    :product..dir vmusers:tools. <* Q :node.VM4HTK :title.Local tools :category.secondary
-:nick.tools_backup  :product.TOOLS 400 <* P :node.VM4HTK :title.Local tools backup
+:nick.tools          :product..dir vmusers:tools. <* Q :node.VM4HTK :title.Local tools :category.secondary
+:nick.tools_backup   :product.TOOLS 400 <* P :node.VM4HTK :title.Local tools backup
 :nick.vmusers_backup :product.vmusers 800 :title.VMUSERS
 :nick.vmsysu_backup  :product.vmservu 800 :title.VMSERVU/VMSYSU
 :nick.vmsys_backup   :product.vmservs 800 :title.VMSERVS/VMSYS
@@ -35,6 +35,7 @@
 * Except the :nick. tag the tags can appear in any order
 *
 :nick.LT       :ip.192.168.0.177 :lpar.TK :status.active :ostype.linux
+:nick.I3       :ip.192.168.0.135 :lpar.TK :status.active :ostype.linux
 * Settings per filetype, the last :ft. card is mandatory
 * Used by PUTFTP and GETFTP exec
 :nick.putftp   :ft.*ARC*;MODULE;TEXT;*LIB :set.TYPE E;MODE B;SITE FIXRECFM 80

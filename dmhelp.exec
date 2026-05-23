@@ -1,0 +1,54 @@
+/* Create all HELP files for DM */
+'PIPE (End ?)',
+  'cms LISTFILE * EXEC K (NOH',
+  '| specs w1.2 1',
+  '| nfind DMTOP',
+  '| fi: fanin',
+  '| sort w1.1',
+  '| join keylen 8',
+  '| stem file.',
+  '?',
+  '< DM COMMANDS K',
+  '| pick w2.1 == ~1~',
+  '| specs w4.1 1.8 w1.1 nw',
+  '| nfind .',
+  '| fi:'
+Do f=1 To file.0
+  Parse Value file.f With fn ft alt .
+  Say fn ft
+  'PIPE (end ?)',
+     '< 'fn ft' K',
+     '| tolabel Parse Upper',
+     '| preface literal (c) Copyright Remarkable 2024;.mt DM',
+     '| split at ;',
+     '| > 'fn' HELPDM K'
+ If alt<>'' Then Address CMS 'COPYFILE 'fn' HELPDM K 'alt' = = (REPL OLDD'
+  Drop fn ft alt
+  alt=''
+End f
+hdr=".MT DM;(c) Copyright Remarkable 2024;.cm Menu file for DM (Poor Man's Dirmaint); ;Menu file for DM (Poor Man's Dirmaint); ; ;"
+'PIPE (end ?)',
+   'cms LISTFILE * HELPDM K (NOH',
+   '| specs w1.1 ',
+   '| sort',
+   '| preface var hdr',
+   '| split at ;',
+   '| specs pad space 1.80 1 left',
+   '| > dm helpmenu k'
+Task:
+'PIPE (end ?)',
+   'cms LISTFILE * HELPDM K (NOH',
+   '| f: fanout',
+   '| specs 1;* 1 ~-~ nw',
+   '| j: juxtapose',
+   '| locate anycase ~Function :~',
+   '| specs ~DM~ 1.8 w1.1 nw.16 w1.1 nw.8 x4A6C nw w7;* n',
+   '| change x4F ~~',
+   '| sort w2.1',
+   "| preface literal                                     DM (Poor Man's DirMaint) task menu; ;",
+   '| preface literal (c) Copyright Remarkable 2024;  ; ;',
+   '| split at ;',
+   '| > dm helptask k',
+   '? f:',
+   '| getfiles',
+   '| j:'

@@ -1,0 +1,13 @@
+/**/
+Parse Upper Arg id1 cuu1 id2 cuu2 .
+Address COMMAND 'CP LINK 'id1 cuu1' 1111 RR'
+Address COMMAND 'CP LINK 'id2 cuu1' 2222 M '
+Queue 'SYSPRINT CONS'
+Queue 'IN 1111 DASD'
+Queue 'OUT 2222 DASD'
+Queue 'COPY ALL'
+Queue 'YES'
+Queue 'YES'
+Queue
+Address CMS 'DDR'
+Address COMMAND 'CP DET 1111 2222'

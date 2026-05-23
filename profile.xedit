@@ -1,0 +1,123 @@
+/*--------------------------------------------------------------------+
+| Function : Do some settings I like in my XEDIT sessions             |
+|                                                                     |
+| File     : PROFILE  XEDIT                                           |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : DEFAULTS XEDITSET                                        |
+|            <userid> XEDITSET                                        |
+|                                                                     |
+| Called   : N/A                                                      |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer                                               |
+| Created  : 20120316 11:16:41                                        |
+| Changes  : .                                                        |
+|            20250623 H.T.Kramer : Rework to have setting in an       |
+|                                  input file                         |
+|            20210428 H.T.Kramer : Rework of the PROFILE XEDIT        |
+|            20191108 H.T.Kramer : Update to activate FMTP from MANY  |
+|                                                                     |
++--------------------------------------------------------------------*/
+'SET LINEND OFF'
+'EXTRACT /RECFM/TRUNC/LRECL/FNAME/FTYPE/FMODE'
+/*---------------------------------------------------------------+
+| Check if my personal input file exists                         |
++---------------------------------------------------------------*/
+myname=Userid()
+Address CMS 'PIPE (NAME PROFILE.XEDIT:30 END ?)',
+  'literal 'myname' XEDITSET *',                 /* Compose name     */
+  '| state',                                     /* Does it exist    */
+  '| count lines',                               /* How many         */
+  '| var inpfound'                               /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Do we use defaults or a personal input file                    |
++---------------------------------------------------------------*/
+If \inpfound Then Do
+                  myname='DEFAULTS'
+                  Say 'Using DEFAULTS XEDITSET'
+                  End
+/*              Else Say 'Using 'myname' XEDITSET' */
+/*---------------------------------------------------------------+
+| Read the input file...                                         |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME PROFILE.XEDIT:46 END ?)',
+    '< 'myname' XEDITSET *',                     /* Read the file    */
+    '| strip',                                   /* Remove spaces    */
+    '| pick 1.1 \== ~*~ and',                    /* Ignore these     */
+           '1.1 \== ~~',                         /* .                */
+    '| join * ~;~',                              /* Make 1 record    */
+    '| change ~;;~;~',                           /* Replace these    */
+    '| split before string ~:~',                 /* Split here       */
+    '| xlate fs . f1',                           /* Uppercase 1st prt*/
+    '| change ~:~/~ 1',                          /* Replace these    */
+    '| change ~.~/~ 1',                          /* and these        */
+    '| varload'                                  /* Hand 2 rexx      */
+/*---------------------------------------------------------------+
+| Do the PF key settings                                         |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME PROFILE.XEDIT:61 END ?)',
+    'var pfkeys',                                /* Take these       */
+    '| dup 1',                                   /* Duplicate        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET PF~ 1',                        /* Compose          */
+            'pad 0 recno n.2 right',             /* ....setting      */
+            'w1;* nw',                           /* .                */
+    '| fi: faninany',                            /* Take in others   */
+    '| subcom xedit',                            /* Hand 2 xedit     */
+    '?',                                         /* 2nd pipe         */
+    'var ctlchars',                              /* Take this        */
+    '| split at ;',                              /* Split here       */
+    '| specs ~SET CTLCHAR~ 1 1;* nw',            /* Compose cmds     */
+    '| fi:'                                      /* Conn 2 faninany  */
+Address CMS 'PIPE (NAME PROFILE.XEDIT:75 END ?)',
+     'var pfkeylabels',                          /* Take this        */
+     '| split at ;',                             /* Split here       */
+     '| specs recno 1.2',                        /* Compose          */
+             '~=%G~ n',                          /* ...setting       */
+             'w1.1 n',                           /* .                */
+             '~%W~ n',                           /* .                */
+     '| join *',                                 /* Make 1 record    */
+     '| space 0',                                /* Suppress spaces  */
+     '| specs ~%W~ 6 1;* n',                     /* Shift 6          */
+     '| var pfkresrvd'                           /* Store as         */
+/*---------------------------------------------------------------+
+| Do the settings...synonyms and others                          |
++---------------------------------------------------------------*/
+Address CMS 'PIPE (NAME PROFILE.XEDIT:89 END ?)',
+     'var synonyms_4_prefix',                    /* Take this        */
+     '| split at ;',                             /* Split in records */
+     '| split',                                  /* .                */
+     '| specs',                                  /* .                */
+             '~SET PREFIX',                      /* Compose cmds     */
+             'SYNONYM~',                         /* .                */
+             '1 w1.1 NW',                        /* .                */
+             '~MANY~ NW',                        /* .                */
+     '| fi: faninany',                           /* Take in others   */
+     '| subcom xedit',                           /* Hand it to XEDIT */
+     '?',                                        /* Start 2nd PIPE   */
+     'var synonyms_4_commandline',               /* Take this        */
+     '| split at ;',                             /* Split in records */
+     '| split',                                   /* .                */
+     '| specs',                                  /* Compose setting  */
+             '~SET SYNONYM~ 1',                  /* .                */
+             'w1.1 NW',                          /* .                */
+             '~MANY~ NW',                        /* .                */
+     '| fi:',                                    /* Conn. 2 faninany */
+     '?',                                        /* 3rd PIPE         */
+     'var settings',                             /* Take this        */
+     '| split at ;',                             /* Split here       */
+     '| specs ~SET~ 1 1;* nw',                   /* Compose setcmds  */
+     '| fi:',                                    /* Conn 2 faninany  */
+     '?',                                        /* 4th PIPE         */
+     'var synonyms_other',                       /* TAKE THIS        */
+     '| split at ;',                             /* Split here       */
+     '| specs ~SET SYNONYM~ 1 1;* nw',           /* Compose cmds     */
+     '| fi:'                                     /* Conn 2 faninany  */
+/*---------------------------------------------------------------+
+| Show the line with PF keys                                     |
++---------------------------------------------------------------*/
+'SET RESERVED  -1 HIGH 'pfkresrvd
+Exit

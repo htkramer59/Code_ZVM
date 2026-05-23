@@ -1,0 +1,140 @@
+/**/
+Parse Source .  . myfn myft .
+Address CMS 'VMLINK WORK (QUIET WRITE .fm'
+If rc=0 Then Parse Pull . . ws .
+        Else ws='A'
+ 
+list='H'
+list='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+numeric digits 64
+userinfo.0=0
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'var list',
+   '| deblock 1',
+   '| specs ~LOCATE VMDBK~ 1 1.1 nw ~*~ n',
+   '| cp',
+   '| pick 1.6 \== ~HCPLUS~ and',
+          'w1.1 \== ~Userid~ and',
+          'w1.1 \== ~SYSTEMMP~ and',
+          'w1.1 \== ~SYSTEM~',
+   '| sort w1.2',
+   '| stem vmblk.'
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Do v=1 To vmblk.0
+   Call GetIplStmt
+   Call GetVDevInfo
+   Call GetVDevDetails
+   'PIPE (end ?)',
+      'literal ',
+      '| stem userinfo. append'
+End v
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'stem userinfo.',
+   '| > 'myfn' OVERVIEW 'ws
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+Address CMS 'XEDIT 'myfn' OVERVIEW 'ws
+Address CMS 'ERASE 'myfn' OVERVIEW 'ws
+Address CMS 'VMLINK WORK <DET (QUIET WRITE'
+Exit
+ 
+ 
+GetIplStmt:
+/*---------------------------------------------------------------+
+| Get the IPL statement for the user                            |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'literal 'vmblk.v,
+   '| specs ~D H~ 1 substr 1;-4 of w2.1 nw ~580.8~ n',
+   '| cp',
+   '| specs ~'Word(vmblk.v,1)'~ 1.8 ~IPLed:~ nw w2.1 x2c nw w3.1 x2c n',
+   '| drop first 1',
+   '| stem userinfo. append'
+Return
+ 
+ 
+GetVDevInfo:
+/*---------------------------------------------------------------+
+| Get all devices that are in use by the user                    |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'literal LOCATE VDEV 'Word(vmblk.v,1)' 0-FFFF',
+   '| cp',
+   '| nlocate anycase ~USERID~',
+   '| specs w1.2 1 w-2;-1 nw',
+   '| stem vdev.'
+Return
+ 
+ 
+GetVdevDetails:
+/*---------------------------------------------------------------+
+| Obtain all the device details                                  |
++---------------------------------------------------------------*/
+Do x=1 To vdev.0
+   text=''
+   Parse Value vdev.x With uid vdev blk rdev .
+   Select
+   When vdev='0009' |,
+        vdev='001F' Then Call GetConsInfo
+   When vdev='000C' Then text='Virtual Reader'
+   When vdev='000D' Then text='Virtual Punch'
+   When vdev='000E' Then text='Virtual Printer'
+   When vdev=rdev   Then Call GetDevType
+   When vdev<>rdev  Then Call GetDevType
+   Otherwise Call GetMDiskInfo
+   End
+   'PIPE (end ?)',
+       'literal 'Substr(uid,1,8) vdev text,
+       '| stem userinfo. append'
+/*    Say Substr(uid,1,8) vdev text */
+End x
+Return
+ 
+ 
+GetConsInfo:
+/*---------------------------------------------------------------+
+| Check whether the console is spooled                           |
++---------------------------------------------------------------*/
+loc=d2x(x2d(blk)+x2d(28))
+'PIPE (end ?)',
+    'cp d h'loc'.8',
+    '| specs w2.1 1 w3.1 n',
+    '| specs w1.1 x2c 1.8',
+    '| var consdetail'
+If rdev='*' Then rdev=''
+text='CONSOLE spooled to: 'consdetail rdev
+Return
+ 
+ 
+GetDevType:
+/*---------------------------------------------------------------+
+| Get the device type                                            |
++---------------------------------------------------------------*/
+'PIPE (end ?)',
+   'cp QUERY 'rdev,
+   '| specs w1.1',
+   '| var text tracking'
+If text='DASD' Then Call GetMDiskinfo
+Return
+ 
+ 
+GetMDiskInfo:
+/*---------------------------------------------------------------+
+| .                                                              |
++---------------------------------------------------------------*/
+text=''
+'PIPE (end ?)',
+  'cp QUERY MDISK USER 'uid vdev' DIR LOC',
+  '| drop first 1',
+  '| var text tracking'
+If text='' Then text='Linked MDISK'
+Return

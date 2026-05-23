@@ -1,0 +1,1278 @@
+Dec Offs Hex Offs Length   Label/Code
+       0        0      256 VMDSDSC  DS    XL256          Guest machine state descriptor
+     256      100      256 VMDSDEXT DS    XL256          Guest machine state descriptor
+     512      200       32 VMDUSRBK DS    XL32          Area for embedded USRBK
+     544      220        8 VMDUSER  DS    CL8           User logon identification
+     552      228        8 VMDDIST  DS    CL8            USER DISTRIBUTION CODE
+     560      230        8 VMDGRPN  DS    CL8            RACF ACI GROUP NAME
+     568      238        4 VMDTODON DS    F              SESSION LOGON TOD, BITS 0-31
+     572      23C        4 VMDATODN DS    F              VALUE OF VMDTODON AT LAST 'ACNT'
+     576      240       32 VMDATTMP DS    FL8S12         Value of VMDTTMP at last 'ACNT'
+     608      260       32 VMDAVTMP DS    FL8S12         Value of VMDVTMP at last 'ACNT'
+     640      280        8 VMDADIST DS    CL8            Accounting DISTRIBUTION field
+     648      288        4 VMDSIGCT DS    F              Count of SIGA instructions
+     652      28C        4 VMDCCSIO DS    F              Count of completed virtual I/O
+     656      290        4 VMDACPGW DS    F              TOTAL NUMBER OF PAGE/SPOOL WRITES
+     660      294        4 VMDACPGR DS    F              TOTAL NUMBER OF PAGE/SPOOL READS
+     664      298       32 VMDATTMS DS    FL8S12         Value of VMDTTMS at last 'ACNT'
+     696      2B8       32 VMDAVTMS DS    FL8S12         Value of VMDVTMS at last 'ACNT'
+     728      2D8       32 VMDLACTM DS    FL8S12         Last time active, for IND ACT
+     760      2F8        1 VMDDIAST DS    X              DIAGNOSE STATUS BYTE
+       _        _        _ VMDDIA4C EQU   X'80'          DIAG4C WAS LAST ACCOUNT RECORD
+       _        _        _ VMDUDST  EQU   X'40'          Indicate user spool distribution
+     761      2F9        1 VMDACFL  DS    X              Accounting Flag byte.
+       _        _        _ VMDNETA  EQU   X'80'          This indicates Network
+       _        _        _ VMDNETR  EQU   X'40'          User is a Network Router.
+     762      2FA        1 VMDADJFL DS    XL1            ADJUNCT FLAGS
+       _        _        _ VMDCMSAJ EQU   X'80'          This is an adjunct VMDBK
+       _        _        _ VMDRDPDG EQU   X'40'          A read was pending for the VMDBK
+       _        _        _ VMDSTOPA EQU   X'20'          An ADJUNCT STOP command was
+       _        _        _ VMDVISAD EQU   X'10'          VMDBK is a "visible" adjunct.
+     763      2FB        1 VMDDSPTC DS    XL1            Previous dispatch type for call
+     764      2FC        4 VMDACRDR DS    F      Count at last ACNT command of cards read
+     768      300        4 VMDACPCH DS    F      Count at last ACNT command of lines
+     772      304        4 VMDACPRT DS    F      Count at last ACNT command of lines
+     776      308        4 VMDARSIO DS    F      Count at last ACNT command of virtual
+     780      30C        4 VMDACSIO DS    F      Count at last ACNT command of virtual
+     784      310        1 VMDLOGFG DS    XL1            Flag bits set at logon and
+       _        _        _ VMDIDENT EQU   X'80'          This VMDBK is for an Identity
+     785      311        1 ........ DS    X              Reserved for IBM use
+     786      312        2 VMDALGSL DS    H              SSI slot number of userid that
+     788      314        4 VMDVOPEX DS    A              Operand FETCH/STORE exit address
+     792      318        4 VMDPACPE DS    A              Promote/Annex CPEBK pointer
+     796      31C        4 VMDBOMBT DS    A              Time bomb TRQBK address
+     800      320        8 VMDCOMND DS    CL8            LAST CP COMMAND EXECUTED
+     808      328        8 ........ DS    0D
+     816      330        1 VMDCFCTL DS    X              CONSOLE FUNCTION CONTROL
+       _        _        _ VMDEXCF  EQU   X'80'          INDICATES THAT CONSOLE FUNCTION
+       _        _        _ VMDDGCF  EQU   X'40'          CONSOLE FUNCTION MODE ENTERED
+       _        _        _ VMDSTOPD EQU   X'04'          INDICATES WHEN SET THAT A
+       _        _        _ VMDCFIDL EQU   X'02'          INDICATES THAT THE GUEST
+     817      331        1 VMDCFLAG DS    X              CONSOLE FUNCTION STATUS FLAGS
+       _        _        _ VMDLOGON EQU   X'80'          USER NOT YET LOGGED ON
+       _        _        _ VMDLOGOF EQU   X'40'          USER IS LOGGING OFF.  THIS BIT
+       _        _        _ VMDREST  EQU   X'20'          GUEST SYSTEM RESET IN PROGRESS.
+       _        _        _ VMDUTERM EQU   X'10'          CONSOLE FUNCTION OUTPUT IS NOT
+       _        _        _ VMDBUFWT EQU   X'04'          VALID ONLY IN THE PRIMARY VMDBK:
+       _        _        _ VMDBUFIF EQU   X'02'          VMDBUFIF IS SET TO INDICATE THAT
+       _        _        _ VMDHXBLE EQU   X'01'          The command now running may
+     818      332        1 VMDOSTAT DS    X              VIRTUAL MACHINE OPERATING STATUS
+       _        _        _ VMDSYSOP EQU   X'80'          USER IS PRIMARY SYSTEM OPERATOR
+       _        _        _ VMDUSRCT EQU   X'40'          USER INCLUDED IN SYSTEM USER CT
+       _        _        _ VMDAPROC EQU   X'20'          AUTOLOG/XAUTOLOG in process
+       _        _        _ VMDFORCE EQU   X'10'          USER IS TO BE LOGGED OFF.
+       _        _        _ VMDUFORC EQU   X'08'          USER IS FORCED TO LOGOFF THE
+       _        _        _ VMDDISC  EQU   X'04'          USER IS RUNNING DISCONNECTED
+       _        _        _ VMDAUTOL EQU   X'02'          AUTOLOG/XAUTOLOG command issued
+       _        _        _ VMDXAUTO EQU   X'01'          The original command was
+     819      333        1 VMDSTAT2 DS    X              Virtual Machine Operating status
+       _        _        _ VMDRDISC EQU   X'80'          A remote disconnect was initiated
+       _        _        _ VMDHASHD EQU   X'40'          Indicates that this VMDBK has
+       _        _        _ VMDDISCP EQU   X'20'          A disconnect is in progress for
+       _        _        _ VMDSYSLG EQU   X'10'          Indicates that this VMDBK was
+       _        _        _ VMDESMON EQU   X'08'          Indicates that the ESM has been
+     820      334        1 VMDCFPND DS    X              CONSOLE FUNCTION IS PENDING.
+     821      335        1 VMDCFPDR DS    X              CONSOLE FUNCTION READ PENDING.
+     822      336        1 VMDCFHXF DS    X              CONSOLE FUNCTION HALT FLAG.
+     823      337        1 VMDCWAIT DS    X              CF WAIT CONTROL
+       _        _        _ VMDSTOP  EQU   X'80'          VIRTUAL MACHINE IN STOP STATE
+       _        _        _ VMDSLEEP EQU   X'40'          VIRTUAL MACHINE IS SLEEPING
+       _        _        _ VMDCKST  EQU   X'20'          VIRT CPU IN CHECK STOP STATE
+       _        _        _ VMDDSCWT EQU   X'10'          USER IS IN 'DISCONNECTED WAIT'
+       _        _        _ VMDSKSLP EQU   X'01'          SLEEP skipped for user with RUN
+     824      338        4 VMDCFBUF DS    F              THIS IS THE ANCHOR TO A STACK OF
+     828      33C        4 VMDCOMPR DS    F              Pointer to command in a GSDBK
+     832      340        4 VMDCFCAL DS    F              QUEUE OF CPEBKS TO BE
+     836      344        1 VMDCFREQ DS    X              CONSOLE FUNCTION ENTRY FLAG.
+     837      345        1 VMDCFDSP DS    X              CONSOLE FUNCTION ENDOP FLAG.
+     838      346        1 VMDCFACT DS    X              Console Read active.
+     839      347        1 VMDCFCT1 DS    X              Console Function Controls, 2nd
+       _        _        _ VMDPRVRD EQU   X'10'          Indicates that the virtual
+       _        _        _ VMDRDNUL EQU   X'08'          If set, indicates the previous
+     840      348        4 VMDCFCNT DS    F              CONSOLE FUNCTION ENDOP COUNT.
+     844      34C        4 VMDFORGS DS    A              The address of the command GSDBK
+     848      350        4 VMDCFCPU DS    F              ASYNCHRONOUS COMMAND AND
+     852      354        4 VMDBUFVM DS    F              CONTAINS THE VMDBK ADDRESS OF
+     856      358        8 VMDBUFIA DS    D        i-ASIT that identifies the address
+     864      360        4 VMDFORBK DS    A              Address of FORBK control block
+     868      364        4 VMDBUFLN DS    F              CONTAINS THE LENGTH REMAINING IN
+     872      368        4 VMDOSTAK DS    F              CONSOLE FUNCTION OUTPUT STACK.
+     876      36C        1 VMDCFOPT DS    X              CONSOLE FUNCTION OPTIONS.
+       _        _        _ VMDBOMBA EQU   X'80'          Time bomb is active (i.e., is
+       _        _        _ VMDBOMBE EQU   X'40'          Time bomb is enabled (i.e., has
+       _        _        _ VMDBOMBS EQU   X'20'          Time bomb is suspended by SET
+       _        _        _ VMDCFRUN EQU   X'10'          GUEST MACHINE CAN RUN FOLLOWING
+       _        _        _ VMDCFMCP EQU   X'08'          Multiple virtual CPUs have been
+       _        _        _ VMDCFMCE EQU   X'04'          Error msg has been issued for
+       _        _        _ VMDCFPCL EQU   X'02'          Guest machine can not issue the
+     877      36D        1 VMDCMDMC DS    X              ACI 'MAC' authorized priviledge
+     878      36E        1 VMDJURNL DS    X              Journaling Flag, valid only for
+       _        _        _ VMDNOAUT EQU   X'80'          Indicates user may not AUTOLOG
+     879      36F        1 VMDCTYPE DS    X              COMMAND TYPE(S) THIS USER IS
+     880      370        1 VMDPCL   DS    0XL4           AUTHORIZED PRIVILEGE CLASSES
+     881      371        1 VMDPCLB0 DS    X              AUTHORIZED PRIV CLASSES - BYTE 0
+     882      372        1 VMDPCLB1 DS    X              AUTHORIZED PRIV CLASSES - BYTE 1
+     883      373        1 VMDPCLB2 DS    X              AUTHORIZED PRIV CLASSES - BYTE 2
+     884      374        1 VMDPCLB3 DS    X              AUTHORIZED PRIV CLASSES - BYTE 3
+     885      375        4 VMDTRQDL DS    F              DELAYED SLEEP OR LOGOFF TRQBK
+     889      379        1 VMDCTPWD DS    X              DIAGNOSE LINK PASSWORD COUNT
+     890      37A        1 VMDMLVL  DS    X              MESSAGE RECEIVING LEVEL
+       _        _        _ VMDMSGON EQU   X'80'          CONTROLS WHETHER MESSAGES SENT
+       _        _        _ VMDWNGON EQU   X'40'          CONTROLS WHETHER MESSAGES SENT
+       _        _        _ VMDMCODE EQU   X'20'          CONTROLS ERROR MESSAGE DISPLAY
+       _        _        _ VMDMTEXT EQU   X'10'          CONTROLS ERROR MESSAGE DISPLAY
+       _        _        _ VMDSPMSG EQU   X'08'           CONTROLS WHETHER SPECIAL
+       _        _        _ VMDMIMSG EQU   X'04'          CONTROLS THE DISPLAY OF SELECTED
+       _        _        _ VMDMCNFG EQU   X'01'          Message level set from system
+     891      37B        1 VMDMIUCV DS    X              'SET' command IUCV flags
+       _        _        _ VMDMSGIU EQU   X'80'          Indicates that MSG is set to
+       _        _        _ VMDWNGIU EQU   X'40'          Indicates that WNG is set to
+       _        _        _ VMDEMSGI EQU   X'20'          Indicates that EMSG is set to
+       _        _        _ VMDSMSGI EQU   X'08'          Indicates that SMSG is set to
+       _        _        _ VMDIMSGI EQU   X'04'          Indicates that IMSG is set to
+       _        _        _ VMDCPCOI EQU   X'02'          Indicates that CPCONIO is set
+       _        _        _ VMDVMCOI EQU   X'01'          Indicates that VMCONIO is set
+     892      37C        1 VMDMSSFL DS    X              Message System Service flags
+       _        _        _ VMDMSSVP EQU   X'80'          Indicates there is a valid path
+       _        _        _ VMDMSSCS EQU   X'40'          Indicates that an IUCV "connect"
+       _        _        _ VMDMSAVP EQU   X'20'          Indicates there is a valid path
+       _        _        _ VMDMSACS EQU   X'10'          Indicates that connection
+     893      37D        2 VMDPTHID DS    H              The path id for the userid's
+     895      37F        2 VMDMAPTH DS    H              The path id for the *MSGALL
+     897      381        1 VMDMLVL2 DS    X              Additional message level flags
+       _        _        _ VMDSILNT EQU   X'80'          Command running silently
+       _        _        _ VMDSILEN EQU   X'40'          Command enabled for silencing
+       _        _        _ VMDFOR   EQU   X'20'          Command output for another user
+       _        _        _ VMDATCMD EQU   X'02'          Indicates that this VMDBK was
+       _        _        _ VMDATEX  EQU   X'01'          Indicates that this VMDBK is
+     898      382        1 VMDLOGCT DS    X              COUNT OF INVALID LOGON ATTEMPTS
+     899      383        2 VMDCTRAU DS    H              Count of AUTOLOG commands that
+     901      385        4 VMDTREXT DS    F              ADDRESS OF EXTENDED TRACE BLOCK
+       _        _        _ VMDTREX3 EQU   VMDTREXT+3,1   OVLY FOR TEST OF LOW-ORDER BYTE
+     905      389        8 VMDABEXE DS    0D             Abort exit address and parameter
+     913      391        4 VMDABEXA DS    A              Address of abort exit routine.
+     917      395        4 VMDABEXP DS    F              Parameter for abort exit routine.
+     921      399        8 VMDHXID  DS    CL8            UserID who told us to HX
+     929      3A1        8 VMDBUFAE DS    AD             Guest real address fields for
+     937      3A9        4 ........ DS    F              RESERVED FOR FUTURE IBM USE
+     941      3AD        4 ........ DS    F              RESERVED FOR FUTURE IBM USE
+     945      3B1        4 VMDEBUG1 DS    2H             RESERVED FOR PATCHING, DEBUGGING
+     949      3B5        4 VMDEBUG2 DS    2H             RESERVED FOR PATCHING, DEBUGGING
+     953      3B9        4 VMDEBUG3 DS    2H             RESERVED FOR PATCHING, DEBUGGING
+     957      3BD        4 VMDEBUG4 DS    2H             RESERVED FOR PATCHING, DEBUGGING
+     961      3C1        4 VMDEBUG5 DS    F              RESERVED FOR PATCHING, DEBUGGING
+     965      3C5        4 VMDEBUG6 DS    F              RESERVED FOR PATCHING, DEBUGGING
+     969      3C9        4 VMDEBUG7 DS    F              RESERVED FOR PATCHING, DEBUGGING
+     973      3CD        4 VMDEBUG8 DS    F              RESERVED FOR PATCHING, DEBUGGING
+     977      3D1        1 VMDARS   DS    0XL64          Guest value of access registers
+     978      3D2        4 VMDAR0   DS    F              Access register 0
+     982      3D6        4 VMDAR1   DS    F              Access register 1
+     986      3DA        4 VMDAR2   DS    F              Access register 2
+     990      3DE        4 VMDAR3   DS    F              Access register 3
+     994      3E2        4 VMDAR4   DS    F              Access register 4
+     998      3E6        4 VMDAR5   DS    F              Access register 5
+    1002      3EA        4 VMDAR6   DS    F              Access register 6
+    1006      3EE        4 VMDAR7   DS    F              Access register 7
+    1010      3F2        4 VMDAR8   DS    F              Access register 8
+    1014      3F6        4 VMDAR9   DS    F              Access register 9
+    1018      3FA        4 VMDAR10  DS    F              Access register 10
+    1022      3FE        4 VMDAR11  DS    F              Access register 11
+    1026      402        4 VMDAR12  DS    F              Access register 12
+    1030      406        4 VMDAR13  DS    F              Access register 13
+    1034      40A        4 VMDAR14  DS    F              Access register 14
+    1038      40E        4 VMDAR15  DS    F              Access register 15
+    1042      412        1 VMDGPRS  DS    0XL64          GUEST GENERAL PURPOSE REGISTERS
+       _        _        _ VMDGPRLO EQU   VMDGPRS+3,1    TO ACCESS LOW-ORDER BYTE OF A
+    1043      413        4 VMDGPR0  DS    F              GUEST GENERAL PURPOSE REGISTER 0
+    1047      417        4 VMDGPR1  DS    F              GUEST GENERAL PURPOSE REGISTER 1
+    1051      41B        4 VMDGPR2  DS    F              GUEST GENERAL PURPOSE REGISTER 2
+    1055      41F        4 VMDGPR3  DS    F              GUEST GENERAL PURPOSE REGISTER 3
+    1059      423        4 VMDGPR4  DS    F              GUEST GENERAL PURPOSE REGISTER 4
+    1063      427        4 VMDGPR5  DS    F              GUEST GENERAL PURPOSE REGISTER 5
+    1067      42B        4 VMDGPR6  DS    F              GUEST GENERAL PURPOSE REGISTER 6
+    1071      42F        4 VMDGPR7  DS    F              GUEST GENERAL PURPOSE REGISTER 7
+    1075      433        4 VMDGPR8  DS    F              GUEST GENERAL PURPOSE REGISTER 8
+    1079      437        4 VMDGPR9  DS    F              GUEST GENERAL PURPOSE REGISTER 9
+    1083      43B        4 VMDGPR10 DS    F              GUEST GENERAL PURPOSE REGISTER 10
+    1087      43F        4 VMDGPR11 DS    F              GUEST GENERAL PURPOSE REGISTER 11
+    1091      443        4 VMDGPR12 DS    F              GUEST GENERAL PURPOSE REGISTER 12
+    1095      447        4 VMDGPR13 DS    F              GUEST GENERAL PURPOSE REGISTER 13
+    1099      44B        8 VMDGPE45 DS    0D             GUEST GPR 14-15 FOR SIE TRANSFER
+    1107      453        4 VMDGPR14 DS    F              GUEST GENERAL PURPOSE REGISTER 14
+    1111      457        4 VMDGPR15 DS    F              GUEST GENERAL PURPOSE REGISTER 15
+    1115      45B       64 ........ DS    XL64           (Not free, used in next ORG).
+    1179      49B        1 VMDGGRS  DS    0XL128         General-Purpose Registers
+    1180      49C        8 VMDGGR0  DS    D              General-Purpose Register 0
+    1188      4A4        8 VMDGGR1  DS    D              General-Purpose Register 1
+    1196      4AC        8 VMDGGR2  DS    D              General-Purpose Register 2
+    1204      4B4        8 VMDGGR3  DS    D              General-Purpose Register 3
+    1212      4BC        8 VMDGGR4  DS    D              General-Purpose Register 4
+    1220      4C4        8 VMDGGR5  DS    D              General-Purpose Register 5
+    1228      4CC        8 VMDGGR6  DS    D              General-Purpose Register 6
+    1236      4D4        8 VMDGGR7  DS    D              General-Purpose Register 7
+    1244      4DC        8 VMDGGR8  DS    D              General-Purpose Register 8
+    1252      4E4        8 VMDGGR9  DS    D              General-Purpose Register 9
+    1260      4EC        8 VMDGGR10 DS    D              General-Purpose Register 10
+    1268      4F4        8 VMDGGR11 DS    D              General-Purpose Register 11
+    1276      4FC        8 VMDGGR12 DS    D              General-Purpose Register 12
+    1284      504        8 VMDGGR13 DS    D              General-Purpose Register 13
+    1292      50C        1 VMDGG145 DS    0XL16            Covers both GPR 14 and 15
+    1293      50D        8 VMDGGR14 DS    D              General-Purpose Register 14
+    1301      515        8 VMDGGR15 DS    D              General-Purpose Register 15
+    1309      51D        1 VMDVSIEO DS    0XL128         Non-vSIE VMDBK area
+    1310      51E      120 ........ DS    XL120          Reserved for future IBM use
+    1430      596        4 VMDFPVRB DS    A              Floating-Point(/Vector) Register
+    1434      59A        2 VMDVRLEN DS    H              Vector Register length in bytes
+    1436      59C        2 ........ DS    H              Reserved for future non-vSIE use
+       _        _        _ VMDVSIL1 EQU   *-VMDVSIEO     Length of area for vSIE overlay
+    1438      59E        1 VMDNTMOD DS    X              INTERCEPTION CODE 36 MODIFIER
+       _        _        _ VMDNTFIO EQU   04             I/O INTERRUPTION
+       _        _        _ VMDNTFRS EQU   08             RESTART INTERRUPTION
+       _        _        _ VMDNTFMC EQU   12             MACHINE CHECK INTERRUPTION
+       _        _        _ VMDNTFEX EQU   16             SIMULATED EXTERNAL INTERRUPTION
+       _        _        _ VMDNTFPG EQU   20             SIMULATED PROGRAM INTERRUPTION
+       _        _        _ VMDNTFPF EQU   28             HOST PAGE FAULT ON USER PAGE
+       _        _        _ VMDNTFGX EQU   32             UNSTACKED GOTO/CPEX FOR ENDOP
+       _        _        _ VMDNTFIS EQU   36             INTERRUPT SCAN, I/O, EXTERNAL
+       _        _        _ VMDNTXDS EQU   40             Exception driven simulation
+    1439      59F        1 VMDWPEND DS    X              WORK PENDING STATUS
+       _        _        _ VMDPDPPF EQU   X'80'          Reflect an initial PAGEX program
+       _        _        _ VMDCKPSW EQU   X'40'          CHECK THE FORMAT OF THE GUEST
+       _        _        _ VMDPDTMR EQU   X'20'          UPDATE THE GUEST INTERVAL TIMER
+       _        _        _ VMDPDIRP EQU   X'10'          SCAN GUEST INTERRUPTION LISTS
+       _        _        _ VMDPDCFM EQU   X'08'          PERFORM CONSOLE FUNCTION
+       _        _        _ VMDPDSIE EQU   X'04'          Force an entry to SIE
+       _        _        _ VMDPDTRD EQU   X'02'          TRACE DISPLAY IS PENDING
+       _        _        _ VMDPD9CW EQU   X'01'          One or more vCPUs may be in Diag
+    1440      5A0        1 VMDIPEND DS    X              Interrupt pending and ENDOP
+       _        _        _ VMDXTKEY EQU   X'80'          SIGNIFIES THAT AN EXTERNAL KEY
+       _        _        _ VMDUNRIO EQU   X'40'          Indicates an unreflectible I/O
+       _        _        _ VMDEXMCK EQU   X'20'          THIS BIT IS SET TO INDICATE
+       _        _        _ VMDVOPHI EQU   X'10'          HCPVOP is holding the IPTE lock
+    1441      5A1        1 VMDTYPE  DS    X              Identifies the VMDBK type. May
+       _        _        _ VMDTYPPR EQU   00             PROTOTYPE VMDBK
+       _        _        _ VMDTYPSY EQU   88             SYSTEM VMDBK
+       _        _        _ VMDTYPUS EQU   21             USER VMDBK
+       _        _        _ VMDTYPAD EQU   31             USER ADJUNCT VMDBK
+       _        _        _ VMDTYPMP EQU   23             USER DEFINED CPU (GUEST MP)
+       _        _        _ VMDTYPSI EQU   44             USER VIRTUAL SIE VMDBK
+    1442      5A2        1 VMDGTLB  DS    X              GUEST TLB STATUS
+       _        _        _ VMDGPTLB EQU   X'20'          GUEST PTLB WAS SIMULATED.
+       _        _        _ VMDINVPG EQU   X'10'          One or more frames backing
+    1443      5A3        1 VMDGSTAT DS    X              GUEST VIRTUAL RUNNING STATUS
+       _        _        _ VMDVSIE  EQU   X'80'          GUEST IS IN V/SIE MODE.
+       _        _        _ VMDRGPER EQU   X'40'          PRESERVE A PENDING PER INTERRUPT
+       _        _        _ VMDRGTRD EQU   X'20'          PRESERVE A PENDING TRACE DISPLAY
+       _        _        _ VMDIPTLH EQU   X'10'          IPTE LOCK HELD FOR THIS VIRTUAL
+       _        _        _ VMDSCALK EQU   X'08'          PAGE CONTAINING THE SYSTEM
+       _        _        _ VMDSDNLK EQU   X'04'          Page containing the guest SDNX
+    1444      5A4        1 VMDTIMER DS    X              GUEST TIMER CONTROLS
+       _        _        _ VMDPTRQ  EQU   X'80'          GUEST TIMERS ARE BEING TRACKED
+       _        _        _ VMDITMRL EQU   X'40'          THIS BIT DESIGNATES THAT THE
+       _        _        _ VMDVPTRK EQU   X'20'          GUEST CPU TIMER BEING TRACKED.
+       _        _        _ VMDTODAC EQU   X'10'          TOD CLOCK ACCOUNTING FLAG
+       _        _        _ VMDINTTR EQU   X'08'          This bit is set to indicate that
+       _        _        _ VMDITMRI EQU   X'04'          Interval timer interrupt pending
+       _        _        _ VMDITMOF EQU   X'02'          Guest interval timer disabled
+    1445      5A5        1 VMDTRCTL DS    X              GUEST MACHINE TRACING CONTROL
+       _        _        _ VMDTRACT EQU   X'80'          TRACE ACTIVE BIT.  THIS BIT IS
+       _        _        _ VMDTRALT EQU   X'40'          TRACE ALTERED BIT.  THIS BIT IS
+       _        _        _ VMDTRCTR EQU   X'20'          CCW TRACING ACTIVE, TERMINAL
+       _        _        _ VMDTRCPR EQU   X'10'          CCW TRACING ACTIVE, PRINTER
+       _        _        _ VMDTRCCW EQU   VMDTRCTR+VMDTRCPR   CCW TRACING ACTIVE
+       _        _        _ VMDTRTRS EQU   X'08'          TRSOURCE trace. This bit is set
+       _        _        _ VMDTRTRA EQU   X'04'          TRSOURCE trace alter bit. This
+       _        _        _ VMDTRTBL EQU   X'02'          TRSOURCE trace bit.  This bit
+    1446      5A6        2 VMDPRGIL DS    H              THE VGUEST INSTRUCTION LENGTH
+    1448      5A8        1 VMDWSTAT DS    X              PSEUDO-WAIT CONDITIONS
+       _        _        _ VMDWTPAG EQU   X'80'          GUEST IS IN PAGE WAIT.  THIS IS
+       _        _        _ VMDWTTIO EQU   X'40'          GUEST IS IN TIO-BUSY  WAIT
+       _        _        _ VMDWTTSC EQU   X'20'          GUEST IS IN TSCH-BUSY WAIT
+       _        _        _ VMDWIUCV EQU   X'10'          Indicate IUCV soft wait
+       _        _        _ VMDWT9C  EQU   X'08'          Indicate Diag 9C soft wait
+       _        _        _ VMDWCFCP EQU   X'01'          Indicate CF is in a soft wait
+    1449      5A9        1 VMDCFGEM DS    X              Virtual configuration indicators.
+       _        _        _ VMDNOISI EQU   X'80'          Configuration can not use iSIE.
+       _        _        _ VMDCPUAF EQU   X'40'          CPUAFFinity is requested for
+    1450      5AA        1 VMDSTFNX DS    X              Index into either the logical or
+    1451      5AB        1 VMDPUTYP DS    X              CPU type
+    1452      5AC        1 VMDPUST  DS    X              CPU Status flag
+       _        _        _ VMDAFSUP EQU   X'80'          Indicates that CPUAFFinity is
+       _        _        _ VMDIBMU1 EQU   X'40'          Already in use by IBM.
+       _        _        _ VMDSECPR EQU   X'20'          CPU is defined as a secondary
+    1453      5AD        1 VMDDSPTY DS    X              CPU type for dispatch
+    1454      5AE        4 2  VMDPTLBT DS    0FL8S12        TOD clock at last host TLB purge
+    1458      5B2        4 VMDPTLHI DS    F              FIRST WORD OF VMDPTLBT
+    1462      5B6        4 VMDPTLLO DS    F              SECOND WORD OF VMDPTLBT
+    1466      5BA        4 VMDMSO   DS    F              MAIN STORAGE ORIGIN FOR NON-
+    1470      5BE        4 VMDMSL   DS    F              MAIN STORAGE LIMIT FOR NON-
+    1474      5C2        8 VMDVMDRA DS    AD             Host real addr of VMDBK/SIEBK
+    1482      5CA        4 VMDSCALA DS    A              Host logical addr of SCABK
+    1486      5CE        2 VMDCPUAD DS    H              CPU ADDRESS OF VIRTUAL CPU
+    1488      5D0        1 VMDIAGF1 DS    X              Diagnose option flags I.
+       _        _        _ VMD8GSDM EQU   X'20'          GSDBK located by VMDCFBUF is a
+       _        _        _ VMD8GSDJ EQU   X'10'          GSDBK located by VMDCFBUF has
+       _        _        _ VMD8LOCK EQU   X'04'          User may not issue SET D8ONECMD
+       _        _        _ VMD8LOG  EQU   X'02'          Watch for (and log) diagnose
+       _        _        _ VMD8FAIL EQU   X'01'          Disallow diagnose 8 instructions
+    1489      5D1        1 VMDIAGF2 DS    X              Diagnose and guest option flags
+       _        _        _ VMDNOFSL EQU   X'80'          No fair share limit applies. Set
+       _        _        _ VMDCSRMI EQU   X'40'          The Virtual machine is authorized
+       _        _        _ VMDNOINS EQU   X'20'          User is prevented from inserting
+       _        _        _ VMDLXAP  EQU   X'10'          This virtual machine is author-
+       _        _        _ VMDLNKS  EQU   X'08'          This virtual machine is author-
+       _        _        _ VMDLNKE  EQU   X'04'          This virtual machine is author-
+       _        _        _ VMDEXCLD EQU   X'02'          User is to be excluded from
+       _        _        _ VMDSHARE EQU   X'01'          This virtual machine is author-
+    1490      5D2        1 VMDIAGFL DS    X              DIAGNOSE AND GUEST OPTION FLAGS
+       _        _        _ VMDIAG98 EQU   X'80'          This virtual machine authorized
+       _        _        _ VMDLNKNP EQU   X'40'          Allows guest to link any DASD
+       _        _        _ VMDD84NP EQU   X'20'          Allows DIAG X'84' to bypass
+       _        _        _ VMDSETOR EQU   X'10'          This virtual machine is author-
+       _        _        _ VMDDEVI  EQU   X'08'          User is authorized to receive
+       _        _        _ VMDDEVM  EQU   X'04'          User is authorized to receive
+       _        _        _ VMDMCCW  EQU   X'02'          User is authorized to execute
+       _        _        _ VMDIAG88 EQU   X'01'          User is authorized to issue
+    1491      5D3        1 VMDRFEAT DS    X              GUEST MACHINE SIMULATION OPTIONS
+       _        _        _ VMDSVMST EQU   X'40'          SVMSTAT specified in the OPTION
+       _        _        _ VMDVMCFA EQU   X'20'          VM COMMUNICATION FACILITY
+       _        _        _ VMDVERP  EQU   X'10'          VIRTUAL ERROR RECORDING ACTIVE
+       _        _        _ VMDCFLF  EQU   X'08'          Guest machine is authorized to
+       _        _        _ VMDCMSRV EQU   X'04'          Guest machine is authorized as a
+       _        _        _ VMDACTRC EQU   X'02'          GUEST MACHINE MAY CREATE ACCOUNT
+       _        _        _ VMDVTOD  EQU   X'01'          The TODENABLE option has been
+    1492      5D4        1 VMDSTORE DS    X              STORAGE OPTIONS
+       _        _        _ VMDPAGEX EQU   X'80'          PSEUDO PAGE FAULT OPTION ACTIVE
+       _        _        _ VMDPFTOK EQU   X'40'          PFAULT page-fault handshaking
+       _        _        _ VMDPFTK2 EQU   X'20'          Version 2 of PFAULT is in effect.
+       _        _        _ VMDMASST EQU   X'10'          Valid in all VMDBKs.
+       _        _        _ VMDMAACT EQU   X'08'          Valid in all VMDBKs.
+       _        _        _ VMDMAOFF EQU   X'04'          Valid in all VMDBKs.
+       _        _        _ VMDPINLO EQU   X'02'          Valid in all VMDBKs.
+    1493      5D5        1 VMDEMCTL DS    X              Emulation Controls.
+       _        _        _ VMDBYPEW EQU   X'80'          Bypass Enabled-Wait Processing.
+       _        _        _ VMDALEDE EQU   X'40'          Alerting deactivated.  Set when
+       _        _        _ VMDPTRQQ EQU   X'20'          The TRQBK (anchored at VMDTRQPT)
+       _        _        _ VMDPTRQL EQU   X'10'          We did not enqueue the TRQBK
+       _        _        _ VMDSIUSR EQU   X'08'          Indicates this guest issues the
+       _        _        _ VMDALERT EQU   X'04'          Alert Processing Required.
+    1494      5D6        1 VMDCPUCT DS    X              COUNT OF GUEST DEFINED CPUS.
+    1495      5D7        1 VMDCPULT DS    X              MAX MP GUEST CPU COUNT LESS ONE
+    1496      5D8        1 VMDSTYPE DS    X              STORAGE TYPE
+       _        _        _ VMDVF    EQU   X'40'          This bit signifies that the
+    1497      5D9        1 VMDTODFL DS    X              FLAG FOR TIME-OF-DAY CLOCK BUSY.
+    1498      5DA        1 VMDILFNC DS    X              INDICATOR OF WHAT CP FUNCTION(S)
+       _        _        _ VMDILIOP EQU   X'80'          I/O PASS THROUGH
+    1499      5DB        1 VMDMCFLG DS    X              Monitor call intercept flags
+       _        _        _ VMDMC10I EQU   X'80'          Intercept monitor call class 10
+       _        _        _ VMDMC10E EQU   X'10'          Status of guest CR8 Monitor call
+       _        _        _ VMDMCLC8 EQU   X'08'          Status of intercept LCTL CR8
+       _        _        _ VMDMCSTC EQU   X'04'          Status of intercept STCTL
+       _        _        _ VMDMCPRG EQU   X'02'          Status of intercept program
+       _        _        _ VMDMC10S EQU   X'01'          Status of guest CR8 Monitor call
+    1500      5DC        1 VMDRCAPG DS    X              Recording-Capable-Guest flag in
+       _        _        _ VMDRCGNO EQU   X'00'          Guest is not recording capable.
+       _        _        _ VMDRCG76 EQU   X'FF'          Recording-Capable-Guest, Guest
+    1501      5DD        1 VMDVMCF  DS    X              VMCF-specific flags
+       _        _        _ VMDVAUTH EQU   X'80'          Virtual processor is authorized
+    1502      5DE        4 VMDCHPPT DS    A              POINTER TO INOP CHPID ARRAY
+    1506      5E2        4 VMDCACHN DS    F              Number of Minidisk Cache inserts
+    1510      5E6        1 VMDMMODE DS    X              Virtual machine type and
+       _        _        _ VMDMRG32 EQU   X'80'          Guest is in ESA/390 mode,
+       _        _        _ VMDMRG64 EQU   X'40'          Guest is in z/Architecture mode,
+       _        _        _ VMDMZ    EQU   X'08'          Guest is z/Architecture-only.
+       _        _        _ VMDMXC   EQU   X'04'          Guest is ESA/XC or z/XC mode
+       _        _        _ VMDMESA  EQU   X'02'          Guest is ESA mode.
+       _        _        _ VMDM370  EQU   X'01'          Guest is S/370 mode. This is
+    1511      5E7        1 VMDMFEAT DS    X              Feature byte. Valid in all VMDBK.
+       _        _        _ VMDSETXA EQU   X'80'          Indicates that the SET MACHINE XA
+       _        _        _ VMD370AC EQU   X'40'          Indicates that the 370
+       _        _        _ VMDVEXFP EQU   X'20'          Indicates that the guest is
+       _        _        _ VMDVVECT EQU   X'10'          Indicates that the guest is
+       _        _        _ VMDVGSF  EQU   X'08'          Indicates that the guest is
+    1512      5E8        0 VMDSTDV  DS    0H             Storage Device Management options
+    1512      5E8        1 VMDSTDV1 DS    X              STDEVOPT flag 1
+       _        _        _ VMDLIBC  EQU   X'80'          Guest has library control. Valid
+       _        _        _ VMDTZA   EQU   X'40'          Guest has CONCOPY authorization
+    1513      5E9        1 VMDCPUSC DS    X              The number of scheduleable
+    1514      5EA        8 VMDGTEID DS    0D             The translation-exception
+    1522      5F2        7 ........ DS    XL7            (top bytes of fault id)
+    1529      5F9        1 VMDGTEI7 DS    X
+    1530      5FA        4 VMDIBMU2 DS    F              Already in use by IBM.
+    1534      5FE        1 VMDFEAID DS    X              The exception access
+    1535      5FF        1 VMDSHELD DS    X              Shield settings
+       _        _        _ VMDSHLOV EQU   X'80'          User shield request is an
+       _        _        _ VMDSHLON EQU   X'40'          SHIELD ON request
+    1536      600        1 VMDVLTBL DS    0XL6                 Lookaside table
+    1537      601        2 VMDVLADD DS    H                    Device address
+    1539      603        4 VMDVLLOC DS    A                    VDEV location
+    1543      607        4 ........ DS    F              Reserved for IBM use
+    1547      60B        1 VMDCVCP  DS    X              Count of pending connections to
+    1548      60C        1 VMDCFDIR DS    X              Virtual Crypto Facility flags.
+       _        _        _ VMDQCIR  EQU   X'20'          QCI R-bit exposed to APDED users
+       _        _        _ VMDADRST EQU   X'10'          This crypto user has been APDED
+       _        _        _ VMDAPCR  EQU   X'08'          APVIRT crypto user
+       _        _        _ VMDAPDED EQU   X'04'          APDED crypto user
+       _        _        _ VMDDYNCR EQU   X'03'          Dynamic Crypto ARD Flags
+       _        _        _ VMDVAPXA EQU   X'02'          APXA will be virtualized for
+       _        _        _ VMDVAPIN EQU   X'01'          AP instructions are installed
+       _        _        _ VMDDCSIM EQU   VMDVAPIN+VMDVAPXA+VMDADRST+VMDQCIR  Flags used
+    1549      60D        1 VMDSTHYI DS    X              STHYI Authorization
+       _        _        _ VMDSTHYU EQU   X'80'               UTIL functions authorized
+       _        _        _ VMDSTHYG EQU   X'40'               GUEST functions authorized
+       _        _        _ VMDSTHYR EQU   X'20'               RESPOOL functions authorized
+    1550      60E        1 ........ DS    X              Reserved for future IBM use
+    1551      60F        1 ........ DS    X              Reserved for future IBM use
+    1552      610        1 VMDMSTAT DS    XL1            Virtual Machine status flags
+       _        _        _ VMDSIGAC EQU   X'80'          A signal (e.g., shutdown) is acti
+    1553      611        1 VMDVOPF1 DS    XL1            Various HCPVOP flags
+       _        _        _ VMDVOPGI EQU   X'80'          Tell VOP to get the IPTE lock
+       _        _        _ VMDVOPXS EQU   X'40'          Exit specified
+    1554      612        1 VMDCRYMF DS    XL1            Miscellaneous crypto flags
+       _        _        _ VMDAPMS  EQU   X'80'          Authorized to obtain data from
+    1555      613        4 VMDPPRLG DS    F              Pending Page Release Log
+    1559      617        4 VMDPPRCR DS    F              Pending Page Release CuRsor
+    1563      61B        4 VMDVOBUF DS    F              THIS FIELD IS USED DURING
+       _        _        _ VMDVOCMP EQU   0              Offset of the compare parameter
+       _        _        _ VMDVOSWP EQU   8              Offset of the swap parameter
+       _        _        _ VMDVOSIZ EQU   33             Simulation buffer length in
+       _        _        _ VMDVOWSZ EQU   VMDVOSIZ-1     Simulation buffer length in
+    1567      61F        4 VMDVOSAV DS    F              Simulation savearea stack
+       _        _        _ VMDVODEP EQU   2              Depth of HCPVOP simulation
+    1571      623        8 VMDCPCA  DS    0D             CP communication area fields must
+    1579      62B        4 VMDCPCAA DS    F              Guest absolute address of CP
+    1583      62F        4 VMDCPCAS DS    F              Size of CP communication area in
+    1587      633        0 VMDFPCR  DS    0F             Floating-point control register
+    1587      633        1 VMDFPCB0 DS    X              FPCR byte 0, masks
+    1588      634        1 VMDFPCB1 DS    X              FPCR byte 1, flags
+    1589      635        1 VMDFPCB2 DS    X              FPCR byte 2, DXC / VXC
+    1590      636        1 VMDFPCB3 DS    X              FPCR byte 3, DRM / BRM
+    1591      637        4 VMDVOPBK DS    F              HCPVOP simulation fetch/store
+    1595      63B        8 ........ DS    0D
+    1603      643        1 VMDXT    DS    0XL20          EXTERNAL INTERRUPT PENDING DATA.
+    1604      644        8 VMDXTMFA DS    D              A BIT MASK FOR THE SOURCE
+    1612      64C        8 VMDXTEMS DS    D              A BIT MASK OF THE SOURCE
+    1620      654        4 VMDXTSFI DS    F              ANCHOR OF PENDING SFXBK'S.
+    1624      658        4 ........ DS    F              Reserved for future IBM use
+    1628      65C        4 VMDTRQPT DS    F              ADDRESS OF TRQBK FOR GUEST
+    1632      660        4 VMD9CWVM DS    A              Address of VMDBK this VMDBK is
+    1636      664        4 VMDSWTIM DS    F              Soft wait target time (TOD 0-31)
+    1640      668        4 ........ DS    F              Reserved for IBM use
+    1644      66C        0 VMDSFIPM DS    0F             SOFTWARE-GENERATED-INTERRUPT
+    1644      66C        1 VMDSFIP0 DS    X              SOFTWARE INTERRUPT MASK BYTE 0
+    1645      66D        1 VMDSFIP1 DS    X              SOFTWARE INTERRUPT MASK BYTE 1
+    1646      66E        1 VMDSFIP2 DS    X              SOFTWARE INTERRUPT MASK BYTE 2
+    1647      66F        1 VMDSFIP3 DS    X              SOFTWARE INTERRUPT MASK BYTE 3
+    1648      670        4 VMDFIN   DS    F              POINTER TO FLOATING INTERRUPTION
+    1652      674        4 VMDPPFPT DS    F              LIST OF PSEUDO PAGE FAULT
+    1656      678        2 VMDPPFCT DS    H              Count of pseudo page faults for
+    1658      67A        2 ........ DS    H              Reserved for future IBM use
+    1660      67C        4 VMDMCV   DS    F              POINTER TO MCVBK, FOR GUEST
+    1664      680        4 VMDCTFLT DS    F              Count of host segment and page
+    1668      684        4 VMDSVPBK DS    F              Pointer to SCLP Information
+    1672      688        4 VMDMSGCT DS    F              Count of queued message blocks.
+    1676      68C        1 VMDDMPFL DS    X              Dump Function byte.
+       _        _        _ VMDCONTM EQU   X'80'          Indicates guest is in continuous
+       _        _        _ VMDDG94  EQU   X'40'          Indicates guest is processing a
+    1677      68D        1 VMDDATFL DS    X              User default date format flag
+    1678      68E        1 ........ DS    X              RESERVED FOR FUTURE IBM USE, Be
+    1679      68F        1 ........ DS    X              RESERVED FOR FUTURE IBM USE, Be
+    1680      690        4 VMDVDUPT DS    F              Address of VDUBK.
+    1684      694        4 VMDRTERM DS    F              USER DISPLAY STATION RDEVBK
+    1688      698        4 VMDVCONS DS    F              GUEST CONSOLE VDEVBLOK ADDRESS
+    1692      69C        1 VMDTOPTN DS    X              USER DEFINED DISPLAY STATION
+       _        _        _ VMDCLEXT EQU   X'80'          AN EXTERNAL INTERRUPT IS TO BE
+       _        _        _ VMDEDIT  EQU   X'40'          SPECIFIES THAT EDITING, USING
+       _        _        _ VMDATTCP EQU   X'20'          ONE OR MORE ATTENTIONS ON THE
+       _        _        _ VMDTSTAM EQU   X'10'          REQUEST TIME STAMP ON CP OUTPUT
+       _        _        _ VMDNOBKY EQU   X'08'          TERMINAL BREAK-KEY IS DISABLED
+       _        _        _ VMDPFIKY EQU   X'04'          IMMEDIATE PF KEY REQUEST
+       _        _        _ VMDGSTCL EQU   X'02'          BREAKIN IN GUESTCTL
+       _        _        _ VMDHLITE EQU   X'01'          TERMINAL HILIGHT FLAG
+    1693      69D        1 VMDSCREN DS    X              MORE AND HOLDING STATUS FOR THE
+       _        _        _ VMDCRMOR EQU   X'80'          DISPLAY SCREEN AUTOMATICALLY
+       _        _        _ VMDCRHLD EQU   X'40'          SCREEN GOES TO 'HOLDING' STATUS
+       _        _        _ VMDNHOLD EQU   X'20'          Stop screen from going into ...
+       _        _        _ VMDNULLD EQU   X'10'          Remember null text entered, so
+    1694      69E        0 VMDMORTM DS    0H             Contains the time intervals from
+    1694      69E        1 VMDMORBP DS    X              Contains the time from the
+    1695      69F        1 VMDMORCL DS    X              Contains the time from the
+    1696      6A0        1 VMDTOPT2 DS    X              USER DEFINED DISPLAY STATION
+       _        _        _ VMDTLEOV EQU   X'80'          THE DEFAULT LINE-DELETE
+       _        _        _ VMDNOCTL EQU   X'40'          USER SUPPLIED LINE CONTROL
+       _        _        _ VMDSTAMP EQU   X'10'          Time stamp all console output
+       _        _        _ VMDBRMIN EQU   X'08'          BREAKIN MINIMAL IN EFFECT, WHEN S
+       _        _        _ VMDAUTCR EQU   X'04'          TERMINAL AUTOCR OFF OPTION
+       _        _        _ VMDCFINP EQU   X'02'          The currently active CP read was
+       _        _        _ VMDPRCSM EQU   X'01'          Messages are delivered to the
+    1697      6A1        1 VMDTRMDV DS    X              REAL DISPLAY DEVICE STATUS
+       _        _        _ VMDTRMIO EQU   X'80'          INDICATES TO I/O SUBSYSTEM THAT
+    1698      6A2        1 VMDBCSFL DS    X              DBCS support flag
+       _        _        _ VMDBCLDI EQU   X'80'          Linemode DBCS Input Support ON
+    1699      6A3        1 ........ DS    X              Reserved for future IBM use
+    1700      6A4        2 VMDCNFCT DS    H              Count of entries into HCPCNFTS.
+    1702      6A6        2 VMDHPIC  DS    H              Saved host PIC used during
+    1704      6A8        0 VMDTEDIT DS    0F             DISPLAY INPUT LINE EDITING
+    1704      6A8        1 VMDTLEND DS    C              CONTAINS THE CHARACTER DEFINED
+    1705      6A9        1 VMDTLDEL DS    C              CONTAINS THE CHARACTER DEFINED
+    1706      6AA        1 VMDTCDEL DS    C              CONTAINS THE CHARACTER DEFINED
+    1707      6AB        1 VMDTESCP DS    C              CONTAINS THE CHARACTER DEFINED
+    1708      6AC        1 VMDEXVMO DS    C              VM OUTPUT
+       _        _        _ VMDEXNON EQU   X'00'          NONE
+       _        _        _ VMDEXBLI EQU   X'10'          BLINKING
+       _        _        _ VMDEXREV EQU   X'20'          REVERSE VIDEO
+       _        _        _ VMDEXUND EQU   X'40'          UNDERSCORE
+       _        _        _ VMDEXHGH EQU   X'F0'          MASK TO ISOLATE EXTENDED
+       _        _        _ VMDEXDEF EQU   X'00'          DEFAULT
+       _        _        _ VMDEXBLU EQU   X'01'          BLUE
+       _        _        _ VMDEXRED EQU   X'02'          RED
+       _        _        _ VMDEXPIN EQU   X'03'          PINK
+       _        _        _ VMDEXGRE EQU   X'04'          GREEN
+       _        _        _ VMDEXTUR EQU   X'05'          TURQUIOSE
+       _        _        _ VMDEXYEL EQU   X'06'          YELLOW
+       _        _        _ VMDEXWHI EQU   X'07'          WHITE
+       _        _        _ VMDEXCOL EQU   X'0F'          MASK TO ISOLATE EXTENDED COLOR
+    1709      6AD        1 VMDEXINR DS    C  INPUT REDISPLAY
+    1710      6AE        1 VMDEXINA DS    C              INPUT AREA
+    1711      6AF        1 VMDEXSTA DS    C              STATUS AREA
+    1712      6B0        1 VMDEXCPO DS    C              CP OUTPUT
+    1713      6B1        1 VMDTTAB  DS    X              TERMINAL TAB CHARACTER
+    1714      6B2        1 VMDBRKKY DS    X              USER DEFINED BREAK-IN BY CP KEY
+    1715      6B3        1 ........ DS    X              RESERVED FOR FUTURE IBM USE
+    1716      6B4        4 VMDPFUNC DS    A              Address oF PFUNC block, which
+    1720      6B8        4 VMDPCBUF DS    A              putchar() buffer address
+    1724      6BC        8 VMDIPLNM DS    D              DEVICE NUMBER in EBCDIC or Named
+    1732      6C4        4 VMDBKIPL DS    F              Host Logical address of a page
+    1736      6C8        4 VMDIADDR DS    F              GUEST REAL ADDRESS OF IPL
+    1740      6CC        1 VMDIPLST DS    X              GUEST IPL FLAGS AND STATUS
+       _        _        _ VMDIPSSL EQU   X'80'          Store-status-on-load mode enabled
+       _        _        _ VMDIPLAC EQU   X'40'          List-directed IPL is active.
+       _        _        _ VMDIPLKP EQU   X'20'          Indicates reset should keep the
+       _        _        _ VMDFIPSV EQU   X'08'          INDICATES THAT THE IPL SIMULATOR
+       _        _        _ VMDIPDEV EQU   X'04'          Indicates that the last IPL was
+       _        _        _ VMDIPLOG EQU   X'02'          An asynchronous XAUTOLOG command
+       _        _        _ VMDIPVMI EQU   X'01'          HCPVMI is needed as the IPL
+    1741      6CD        1 VMDIPLKY DS    X              PRESERVES THE STORAGE KEY FROM
+    1742      6CE        2 ........ DS    H              RESERVED FOR FUTURE IBM USE
+    1744      6D0        4 VMDIVPAG DS    F              IPL simulator Host Virtual
+    1748      6D4        4 VMDHLIPL DS    F              Host Logical address of the
+    1752      6D8        4 ........ DS    F              RESERVED FOR FUTURE IBM USE
+    1756      6DC        8 VMDLDPRM DS    CL8            IPL LOAD PARAMETER.  (THIS FIELD
+    1764      6E4        4 VMDPROBK DS    A              POINTER TO USER'S PROTECT BLOCK
+    1768      6E8        4 VMDIPLCM DS    A              POINTER TO LAST IPL COMMAND
+    1772      6EC        4 VMDSYNCH DS    A              CPEBK pointer indicating a
+    1776      6F0        2 ........ DS    XL2            Reserved for future IBM use
+    1778      6F2        1 VMDCMDOP DS    X              Command options
+       _        _        _ VMDUNDSC EQU   X'80'          Display Underscore
+       _        _        _ VMDPSWTS EQU   X'01'          PSWTRANS = STORE
+       _        _        _ VMDPSWTD EQU   X'02'          PSWTRANS = DISPLAY
+    1779      6F3        1 VMDPROFL DS    X              PROTECTED APPLICATION FLAGS
+       _        _        _ VMDPROAP EQU   X'80'          PROT. APPL. ENVIRONMENT ACTIVE
+       _        _        _ VMDPROTB EQU   X'40'          Activated by time bomb support
+    1780      6F4        4 VMDCAPQ  DS    F              Pointer to CAPBK control block
+    1784      6F8        4 VMDLANG  DS    A              ADDRESS OF THE ACTIVE LANGBK
+    1788      6FC        4 VMDLGFBK DS    F              LOGOFF control block
+    1792      700        4 ........ DS    F              Reserved
+    1796      704        4 VMDFIDTE DS    A              FILEID TABLE ENTRY.
+    1800      708        4 VMDPGSPL DS    F              Total number of pages spooled
+    1804      70C        8 VMDSLAB  DS    D              Security label for user's VMDBK
+    1812      714        8 VMDALTSC DS    D              Security label of alternate
+    1820      71C        1 VMDALSYN DS    X              This byte serializes the
+       _        _        _ VMDALD4O EQU   X'80'          Diagnose X'D4' controls (owns)
+       _        _        _ VMDALAPO EQU   X'20'          APPC/VM owns the VMDALTID field
+       _        _        _ VMDALAPW EQU   X'10'          An APPC/VM connect is waiting
+    1821      71D        1 VMDSECF  DS    X              Secondary user's functionality
+       _        _        _ VMDUSECO EQU   X'80'          This user's secondary is observer
+       _        _        _ VMDUSECM EQU   X'40'          This user's secondary has been
+       _        _        _ VMDUSECP EQU   X'20'          This user's secondary passed
+       _        _        _ VMDUSECA EQU   X'10'          Audit check for SCIF done
+    1822      71E        2 ........ DS    2X             Reserved for IBM use
+    1824      720        4 VMDSECRQ DS    F              Pointer to SCIF secondary read
+    1828      724        8 VMDSECU  DS    CL8            Userid of the Secondary user.
+    1836      72C        8 VMDALTID DS    CL8            Userid of an end user. All spool
+    1844      734        0 VMDVSRCA DS    0F             Virtual Start Request Counter
+       _        _        _ VMDOFCON EQU   *-VMDVSRCA     Offset to console I/O count
+    1844      734        4 VMDVCSCT DS    1F             Count of start requests to the
+       _        _        _ VMDOFDAS EQU   *-VMDVSRCA     Offset to DASD I/O count
+    1848      738        4 VMDVDSCT DS    1F             Count of virtual I/O requests
+       _        _        _ VMDOFOTH EQU   *-VMDVSRCA     Offset to other I/O count
+    1852      73C        4 VMDVOSCT DS    1F             Count of start requests to
+       _        _        _ VMDOFCTC EQU   *-VMDVSRCA     Offset to CTCA I/O count
+    1856      740        4 VMDVTSCT DS    1F             Count of start requests to
+       _        _        _ VMDOFUR  EQU   *-VMDVSRCA     Offset to unit record I/O count
+    1860      744        4 VMDVUSCT DS    1F             Count of start requests to
+    1864      748        4 VMDX98CT DS    F              Number of times Diagnose x'98'
+    1868      74C        1 VMDCMDAU DS    XL1            ACI 'Audit' Authorized privilege
+    1869      74D        1 VMDCMDPR DS    XL1            ACI 'Protect' Authorized
+    1870      74E        1 VMDSECU1 DS    XL1            Security Flag, serialized by CFM
+       _        _        _ VMDDGNAU EQU   X'80'          Audit Diagnose, Origin VMDBK
+       _        _        _ VMDDGNPR EQU   X'40'          Protect Diagnose, Origin VMDBK
+       _        _        _ VMDANYAU EQU   X'20'          Audit setting of the 'ANY'
+       _        _        _ VMDANYPR EQU   X'10'          Protect setting of the 'ANY'
+       _        _        _ VMDANYMC EQU   X'08'          MAC setting of the 'ANY'
+       _        _        _ VMDDGNMC EQU   X'04'          MAC setting of a diagnose
+    1871      74F        1 VMDESMID DS    XL1            Reserved for ESM use
+    1872      750       12 VMDCSQOP DS    3F             CP command name, or SET operand,
+    1884      75C        4 VMDACIMP DS    F              address of the user security
+    1888      760        4 VMD9CTAR DS    F              VMDBK address of the guest CPU
+    1892      764        4 VMDLALTR DS    1F             Time stamp (TOD high order) used
+    1896      768        4 VMDUNSTK DS    F              Normal CPEBK PUSH-THRU dequeue
+    1900      76C        4 ........ DS    F              RESERVED FOR IBM USE
+    1904      770        2 ........ DS    H              Reserved for IBM use
+    1906      772        1 VMDQCINA DS    XL1            QCI Na value exposed to APDED
+    1907      773        1 VMDQCIND DS    XL1            QCI Nd value exposed to APDED
+    1908      774        4 VMDIBM3  DS    A              Already in use by IBM
+    1912      778        4 VMDAPVBK DS    A              Crypto APVIRT user's APVBK addr;
+    1916      77C        4 VMDSHRPT DS    F              POINTER TO THE USER'S SHRBK
+    1920      780        4 VMDSDNX  DS    F              HLA of the user's SDNX. This
+    1924      784        8 VMDBYVAL DS    D              The BYUSER ID that logged on this
+    1932      78C        4 VMDUSER1 DS    F              RESERVED FOR INSTALLATION USE
+    1936      790        4 VMDUSER2 DS    F              RESERVED FOR INSTALLATION USE
+    1940      794        4 VMDUSER3 DS    F              RESERVED FOR INSTALLATION USE
+    1944      798        4 VMDUSER4 DS    F              RESERVED FOR INSTALLATION USE
+    1948      79C        4 VMDUSER5 DS    F              RESERVED FOR INSTALLATION USE
+    1952      7A0        4 VMDUSER6 DS    F              RESERVED FOR INSTALLATION USE
+    1956      7A4        4 VMDUSER7 DS    F              RESERVED FOR INSTALLATION USE
+    1960      7A8        4 VMDUSER8 DS    F              RESERVED FOR INSTALLATION USE
+    1964      7AC        4 VMDQFPNT DS    F              DISPATCH LIST FORWARD POINTER
+    1968      7B0        4 VMDQBPNT DS    F              DISPATCH LIST BACKWARD POINTER
+    1972      7B4        1 VMDRSTAT DS    X              RUNNING BLOCKAGE STATUS.  THIS
+       _        _        _ VMDCFWT  EQU   X'40'          THE VMDBK IS IN CONSOLE FUNCTION
+       _        _        _ VMDSIMWT EQU   X'20'          PERFORMING GUEST SIMULATION.
+       _        _        _ VMDIOWT  EQU   X'10'          INSTRUCTION WAITING FOR I/O
+       _        _        _ VMDSIMAB EQU   X'08'          An abort exit has been
+       _        _        _ VMDLIMMV EQU   X'04'          Indicates this VMDBK should be
+    1973      7B5        1 VMDDLCTL DS    X              DISPATCH LIST CONTROLS
+       _        _        _ VMDDSEND EQU   X'40'          DISPATCH TIME SLICE EXCEEDED
+       _        _        _ VMDIDROP EQU   X'08'          USER SHOULD BE DROPPED FROM
+       _        _        _ VMDLOVMP EQU   X'04'          VIRTUAL MP VOLUNTARY DROP
+       _        _        _ VMDREORD EQU   X'02'          VMDBK IS TO BE REORDERED IN THE
+       _        _        _ VMDRSCEL EQU   X'01'          VMDBK EXCEEDED LIMITS OF A
+       _        _        _ VMDSTKDL EQU   X'FF'          ANY BIT REQUIRES HCPSTLDL CALL
+    1974      7B6        1 VMDSTATE DS    X             SCHEDULER/DISPATCHER STATE
+       _        _        _ VMDRVSPN EQU   099           REVIEW SUSPENDED.  VMDBK SHOULD
+       _        _        _ VMDRVIDL EQU   088           REVIEW IDLE.  VMDBK SHOULD BE
+       _        _        _ VMDISPCH EQU   077           VMDBK HAS BEEN SELECTED BY THE
+       _        _        _ VMDREADY EQU   066           VMDBK IS READY FOR SELECTION BY
+       _        _        _ VMDTIDLE EQU   055           TEST-IDLE.
+       _        _        _ VMDSUSPN EQU   044           VMDBK IS SUSPENDED, WAITING FOR
+       _        _        _ VMDIDLE  EQU   000           VMDBK IS IDLE, NO WORK AVAILABLE
+    1975      7B7        1 VMDSIMC  DS    X             Simulation wait codes
+       _        _        _ VMDAPPCW EQU   1             Virtual CPU is in an APPC WAIT
+    1976      7B8        1 ........ DS    X              RESERVED FOR FUTURE IBM USE
+    1977      7B9        1 VMDDWFLG DS    X             WORK DISPATCHING CONTROL FLAGS
+       _        _        _ VMDPPPR  EQU   X'40'         Process Pending Page Release
+       _        _        _ VMDDWACO EQU   X'08'         VMDBK IS TO BE DISPATCHED ON
+    1978      7BA        2 ........ DS    XL2            Reserved for future IBM use
+    1980      7BC        4 VMDQURCP DS    F              URGENT CPEBK PUSH-THRU STACK
+    1984      7C0        4 VMDQIORF DS    F              IORBK/TRQBK PUSH-THRU STACK
+    1988      7C4        4 VMDQCPEF DS    F              CPEBK PUSH-THRU STACK
+    1992      7C8        4 VMDDFRWK DS    F              DEFERRED WORK COUNTER
+    1996      7CC        0 VMDWRKCS DS    0F            COMPARE-AND-SWAP WORK BITS FIELD
+    1996      7CC        1 VMDWRKCD DS    X             DISPATCHING/SCHEDULING WORK
+       _        _        _ VMDWKETS EQU   X'80'         ELAPSED TIME-SLICE END PENDING
+       _        _        _ VMDWKHIP EQU   X'40'         HI-PRIORITY SCHEDULING REQUEST
+       _        _        _ VMDWKMCO EQU   X'20'         MASTER CPU ONLY DISPATCH REQUIRED
+       _        _        _ VMDWKGRL EQU   X'10'         VMDBK exceeded WSS Growth Limit
+       _        _        _ VMDWKPRM EQU   X'08'         VMDBK requires pre-emption from
+       _        _        _ VMDWKCPX EQU   X'04'         Virtual MP complex dropped. (Used
+       _        _        _ VMDWKLCK EQU   X'02'         A user in the d-list via the
+    1997      7CD        1 VMDWRKCK DS    X             EXECUTION-BLOCK STACK STATUS
+       _        _        _ VMDWKUCP EQU   X'80'         URGENT CPEBK STACKED
+       _        _        _ VMDWKIOR EQU   X'40'         IORBK/TRQBK STACKED
+       _        _        _ VMDWKCPE EQU   X'20'         CPEBK STACKED
+       _        _        _ VMDWKCPF EQU   X'08'         CPEBK STACKED FOR CONSOLE FUNCTION
+    1998      7CE        1 VMDWRKCL DS    X             RESERVED FOR FUTURE IBM USE
+    1999      7CF        1 VMDWRKCB DS    X             STACKED WORK CONTROL BITS (USED
+       _        _        _ VMDWKCFM EQU   X'80'         ENTER HCPCFM FOR CONSOLE FUNCTION
+       _        _        _ VMDWKTST EQU   X'40'         ENTER HCPTSMRG FOR TRACE TABLE
+       _        _        _ VMDWKSIE EQU   X'20'         Force an entry into interpretive
+       _        _        _ VMDWKALE EQU   X'10'         Handle an alert condition.  This
+       _        _        _ VMDWKMNI EQU   X'08'         MONITOR IUCV: initiate event IUCV
+       _        _        _ VMDWKMNX EQU   X'04'         MONITOR IUCV: initiate frame
+       _        _        _ VMDWKSCI EQU   X'02'         REQUEST XA SUBCHANNEL I/O
+       _        _        _ VMDRECRT EQU   X'01'         Request the latest certification
+    2000      7D0        0 VMDWRKLC DS    0F            LOCAL WORK BITS
+    2000      7D0        1 VMDWRKLD DS    X             DISPATCHING/SCHEDULING WORK
+    2001      7D1        1 VMDWRKLK DS    X             EXECUTION-BLOCK STACK STATUS
+    2002      7D2        1 VMDWRKLL DS    X             LOCAL-ONLY WORK BITS
+       _        _        _ VMDWKPIN EQU   X'80'         INDICATES A SIE INTERCEPTION WAS
+       _        _        _ VMDWKRUN EQU   X'10'         INDICATES THAT WHEN DISPATCHED,
+    2003      7D3        1 VMDWRKLB DS    X             STACKED WORK CONTROL BITS
+    2004      7D4        4 VMDRPFTR DS    F              REQUIRED PROCESSOR FEATURE MASK
+    2008      7D8        4 VMDHDSV  DS    F              Home Dispatch Vector
+       _        _        _ VMDHDVSH EQU   8              Number of bits a PFXINDEX value
+    2012      7DC        4 VMDSSHBK DS    A              Ptr to share settings block
+    2016      7E0        2 VMDDEDCA DS    H              CPU ADDRESS OF DEDICATED CPU
+    2018      7E2        1 VMDDEDFG DS    X              DEDICATION FLAGS
+       _        _        _ VMDISDED EQU   X'80'          This VMDBK has a real CPU
+    2019      7E3        1 VMDCMODE DS    X              Virtual Configuration Mode
+       _        _        _ VMDCMESA EQU   X'80'          ESA390 / GENERAL virtual
+       _        _        _ VMDCMLIN EQU   X'40'          Linux virtual configuration mode
+       _        _        _ VMDCMVM  EQU   X'20'          VM virtual configuration mode
+       _        _        _ VMDCMCF  EQU   X'10'          CF virtual configuration mode
+    2020      7E4        4 VMDADSV  DS    A              Actual Dispatch Vector.
+    2024      7E8        2 ........ DS    H              Reserved for IBM use
+    2026      7EA        4 VMDTIDCT DS    FL1            Current value of test-idle
+    2030      7EE        1 VMDALEFG DS    X              Alerting Flags.
+       _        _        _ VMDALEW  EQU   X'80'          Virtual CPU is in enabled wait
+       _        _        _ VMDALVSI EQU   X'40'          VMDBK is in V/SIE mode
+       _        _        _ VMDALUDI EQU   X'20'          Virtual CPU is either not I/O
+    2031      7EF        2 VMDCPUDS DS    H              HOST CPU ADDRESS ON WHICH USER
+    2033      7F1        2 VMDCPULS DS    H              CPU address of the last processor
+    2035      7F3        4 VMDALECT DS    F              Alerting counter.
+    2039      7F7       32 VMDTSLIC DS    FL8S12         DISPATCH (MINOR) TIME SLICE
+    2071      817       32 VMDTTIME DS    FL8S12         SESSION TOTAL CPU TIME USED
+    2103      837       32 VMDVTIME DS    FL8S12         SESSION VIRTUAL CPU TIME USED
+    2135      857       32 VMDSUSCK DS    FL8S12         TOD CLOCK WHEN USER WAS MARKED
+    2167      877       32 VMDLPRTY DS    FL8S12         Limit-list priority (deadline).
+    2199      897       32 VMDDPRTY DS    FL8S12         DISPATCH LIST SORTING PRIORITY
+    2231      8B7       32 VMDVTZPT DS    FL8S12         Delta from VMDVTIME used by CP
+    2263      8D7       16 VMDVDCLK DS    2D             Configuration lock word for
+    2279      8E7        4 VMDCHRSN DS    F              Pointer for radix tree to virtual
+    2283      8EB        4 VMDCHRDN DS    F              Pointer for radix tree to virtual
+    2287      8EF        4 VMDCHC   DS    F              POINTER TO HCPCHCBK
+    2291      8F3        4 VMDVSPRT DS    F              ADDRESS OF PRINTER VDEVBK FOR
+    2295      8F7        4 VMDSCNCS DS    F              Second operand of COMPARE AND
+    2299      8FB        4 VMDLDDPT DS    F              Pointer to chain of LDDBKs
+    2303      8FF        2 VMDLIMDV DS    H              MAX NUMBER OF VIRTUAL DEVICES
+    2305      901        2 VMDMAXVS DS    H              HIGHEST VIRTUAL SUBCHANNEL
+    2307      903        2 VMDMAXVD DS    H              HIGHEST VIRTUAL DEVICE NUMBER
+    2309      905        2 VMDDEVCT DS    H              COUNT OF DEFINED DEVICES
+    2311      907        1 VMDCCWOP DS    X              GUEST CCW TRANSLATION OPTIONS
+       _        _        _ VMDFAUTO EQU   X'40'          AUTOPOLL CCW HANDSHAKE ACTIVE
+       _        _        _ VMDNOP   EQU   X'20'          TRANSFER DATA FOR NOP CCW'S
+       _        _        _ VMDCHVSP EQU   X'10'          Single path chpid virtualization
+    2312      908        1 ........ DS    X              Reserved for IBM use
+    2313      909        1 VMDIOPF1 DS    X              REASONS FOR I/O PASS THROUGH
+       _        _        _ VMDIOPBC EQU   X'80'          I/O PASS THROUGH IS INACTIVE
+       _        _        _ VMDIOPCD EQU   X'40'          I/O PASS THROUGH IS INACTIVE
+       _        _        _ VMDIOPDG EQU   X'20'          I/O PASS THROUGH IS INACTIVE
+       _        _        _ VMDIOPIS EQU   X'10'          I/O PASS THROUGH IS INACTIVE
+       _        _        _ VMDIOPAL EQU   X'04'          I/O PASS THROUGH IS INACTIVE
+       _        _        _ VMDIOPMB EQU   X'02'          I/O PASS THROUGH IS INACTIVE
+       _        _        _ VMDIOPDS EQU   X'01'          I/O PASS THROUGH IS INACTIVE
+    2314      90A        1 VMDIOPF2 DS    X              I/O PASS THROUGH FLAGS.  VALID
+       _        _        _ VMDIOPOP EQU   X'80'          THE SYSTEM IS CURRENTLY BEING
+       _        _        _ VMDIOP1T EQU   X'40'          THE SYSTEM WAS IN I/O PASS
+       _        _        _ VMDIOPM6 EQU   X'20'          MONITOR THE GUEST'S USE OF CR 6
+       _        _        _ VMDIOPEW EQU   X'08'          I/O PASS THROUGH GUEST HAS
+       _        _        _ VMDIOPIP EQU   X'04'          INITIAL IPL PSW FOR A 370 GUEST
+       _        _        _ VMDIOPQO EQU   X'02'          QUEUE I/O PASS THROUGH INACTIVE
+       _        _        _ VMDIOPSD EQU   X'01'          SIGA Assist is Disable
+    2315      90B        2 VMDLVSID DS    H              Last virtual SID assigned
+    2317      90D        1 VMDIOPST DS    X              I/O PASS THROUGH STATE.  VALID
+       _        _        _ VMDIOPSN EQU   X'00'          I/O PASS THROUGH NOT ACTIVE
+       _        _        _ VMDIOPSI EQU   X'80'          I/O PASS THROUGH BEING
+       _        _        _ VMDIOPSA EQU   X'C0'          I/O PASS THROUGH ACTIVE
+       _        _        _ VMDIOPSR EQU   X'40'          I/O PASS THROUGH BEING REMOVED
+    2318      90E        1 VMDVIOF  DS    X              VIRTUAL I/O FLAGS
+       _        _        _ VMDRVRIO EQU   X'80'          V=F Guest in I/O System reset
+       _        _        _ VMDINCFM EQU   X'20'          User has system in configuration
+       _        _        _ VMDRDPS  EQU   X'10'          Resetting non-preferred DPS
+       _        _        _ VMDPCIUC EQU   X'08'          UID checking on ATT PCIF command
+       _        _        _ VMDROPNO EQU   X'04'          Do not drop DIALed devices on res
+    2319      90F        4 VMDIOPGT DS    F              Preferred guest being kept out
+    2323      913        1 VMDIOPRN DS    0XL4           Reason counter for keeping a
+    2324      914        1 VMDIOPDL DS    X              Command with Device Range counter
+    2325      915        3 ........ DS    XL3            Reserved for IOASSIST
+    2328      918        4 VMDWVDEV DS    F              ADDRESS OF VDEVBK FOR STATUS
+    2332      91C        4 VMDIOACT DS    F              NUMBER OF I/O'S OUTSTANDING
+    2336      920        1 VMDMIFLG DS    X              FLAG USED BY MISSING INT HANDLER
+       _        _        _ VMDMIHON EQU   X'80'          MISSING INTERRUPTS ARE TO BE
+       _        _        _ VMDDPS   EQU   X'01'          DYNAMIC PATH SELECTION CAPABLE
+    2337      921        1 VMDTIOLP DS    X              TIO LOOP DETECTION FIELD
+       _        _        _ VMDTIOBZ EQU   X'08'          TSCH/STSCH BUSY Indicator
+       _        _        _ VMDTSCBZ EQU   X'07'          TSCH/STSCH BUSY Loop Counter Bits
+       _        _        _ VMDTSCX1 EQU   X'01'          TSCH BUSY increment value
+       _        _        _ VMDTSCWD EQU   2              Time in seconds of the TSCH busy
+    2338      922        2 VMDTSCLP DS    H              TSCH LOOPING TEST DEVICE ADDRESS
+    2340      924        4 VMDBLKIO DS    A              BLOCK I/O CHAIN POINTER
+    2344      928        4 VMDCTSIO DS    F              Count of requested virtual I/O
+    2348      92C        4 VMDCTRDR DS    F              COUNT IS MAINTAINED BY SPOOLING
+    2352      930        4 VMDCTPCH DS    F              COUNT OF CARDS OUTPUTTED TO
+    2356      934        4 VMDCTPRT DS    F              COUNT OF LINES SPOOLED TO
+    2360      938        4 VMDVDISK DS    F              Count of virtual I/Os to a
+    2364      93C        4 VMDIPQPT DS    A              Address of IPQBK.  Used only in
+    2368      940        4 VMDIOPNO DS    F              COUNT OF DEVICES TO BE TAKEN OUT
+    2372      944        4 VMDIOPBK DS    A              Address of IOPBK.  Used only in
+    2376      948        8 VMDTASIT DS    D        Temporary save area of an i-ASIT.
+    2384      950        8 VMDPASCE DS    D        Primary Address-Space-Control Element
+    2392      958        4 VMDPASW0 DS    F        Primary ASCE Word 0
+    2396      95C        4 VMDPASW1 DS    F        Primary ASCE Word 1
+    2400      960        8 VMDPFXMK DS    D        Guest prefix mask
+    2408      968        4 VMDPFXHM DS    F          High half of prefix mask
+    2412      96C        4 VMDPFXLM DS    F          Low  half of prefix mask
+    2416      970        4 VMDLFCFG DS    A        CFLF configuration block address
+    2420      974        1 VMDLFUID DS    X        CFLF User Identification value
+    2421      975        1 VMDLFFLG DS    X        CFLF Flags
+    2422      976        2 VMDLFRSV DS    XL2            Reserved for IBM use
+       _        _        _ VMDLFLEN EQU   *-VMDLFCFG lenth of CFLF area
+    2424      978        8 VMDFASIT DS    D              Last page translation exception i
+    2432      980        4 VMDMSF   DS    A              PTR to Message Facility Block
+    2436      984        4 VMDCHPCN DS    1F             ADDR of Configured CHPID Bit Map
+    2440      988        1 VMDLCKFG DS    1X             CF locking flag
+       _        _        _ VMDSHLCK EQU   X'80'          Shared lock on CF MSFBK
+       _        _        _ VMDEXLCK EQU   X'40'          Exclusive lock on CF MSFBK
+       _        _        _ VMDEXDLY EQU   X'20'          Exclusive lock after delay
+    2441      989        1 VMDYZLFL DS    1X             CFVM flags
+       _        _        _ VMDCFUSR EQU   X'80'          CFUSER Virtual Machine
+    2442      98A        1 VMDVPEND DS    1X             Work pending status
+    2443      98B        1 ........ DS    1X             Reserved for future IBM use
+    2444      98C        4 VMDQDIO  DS    1F             Number of QDIO Shadow Queues
+    2448      990        4 VMDVEBLK DS    A              HL address of the HCPVEBLK.
+    2452      994        4 VMDMSVBK DS    A              HCPMSVBK chain anchor, holding
+    2456      998        4 VMDCYCLE DS    A              CYCLIC LIST OF LOGGED ON USERS
+    2460      99C        4 VMDLCYCL DS    A              USER-LOCAL CYCLIC LIST
+    2464      9A0        4 VMDORIG  DS    A              THE ORIGINATING VMDBK.  THIS IS
+    2468      9A4        4 VMDBASE  DS    A              THE ADDRESS OF THE VMDBK OWNING
+    2472      9A8        4 VMDCYCLH DS    F              VMDBK CYCLIC LIST HOLD STATE:
+    2476      9AC        4 VMDADJL  DS    A              Linked list of Adjunct VMDBKs
+    2480      9B0        4 VMDVSIVM DS    A              POINTER BETWEEN RGUEST AND V/SIE
+    2484      9B4        0 VMDMONDA DS    0F             Monitor status fields.
+    2484      9B4        1 VMDMONFA DS    X              Monitor facilities.
+       _        _        _ VMDAMDIR EQU   X'80'          User has the APPLMON directory
+       _        _        _ VMDAPBUF EQU   X'40'          User has defined an application
+    2485      9B5        1 VMDMONST DS    X              Monitoring status
+       _        _        _ VMDMONEU EQU   X'80'          User monitored for events
+       _        _        _ VMDMONSD EQU   X'40'          User NOT being monitored for
+       _        _        _ VMDMONEC EQU   X'20'          User monitored for scheduler
+       _        _        _ VMDMONTV EQU   X'10'          Last transaction by this user
+       _        _        _ VMDMONSV EQU   X'08'          Monitor sever processing bit
+    2486      9B6        1 ........ DS    X              Reserved for IBM use
+    2487      9B7        1 ........ DS    X              Reserved for IBM use
+    2488      9B8        4 VMDBLKCT DS    F              Count of SSCH's issued by
+    2492      9BC        4 VMDMDCIA DS    F              Count of SSCH's avoided due to
+    2496      9C0        4 VMDHFDAT DS    F              Pointer to high frequency data -
+    2500      9C4        4 VMDHFLCK DS    F              Lock for VMDHFDAT
+    2504      9C8        4 VMDQ1SUM DS    F              MONITOR transaction-end data:
+    2508      9CC        4 VMDQSUMS DS    F              MONITOR transaction-end data:
+    2512      9D0        4 VMDTTABK DS    A              Pointer to TTABK (Trace instr.
+    2516      9D4        4 VMDTDHBK DS    A              Pointer to TDHBK (Trace service
+    2520      9D8        4 VMDTODAG DS    A              Guest real address of TOD Clock
+    2524      9DC        0 VMDGSRST DS    0F             Guest status information
+    2524      9DC        1 ........ DS    X              Reserved for IBM use
+    2525      9DD        1 VMDGSRFG DS    X              Flag for guest IPL and RESET
+       _        _        _ VMDGSIPL EQU   X'80'          Guest IPL in progress
+       _        _        _ VMDGSRES EQU   X'40'          Guest virtual system RESET in
+       _        _        _ VMDGSNSS EQU   X'20'          Guest IPLing an NSS
+    2526      9DE        1 ........ DS    X              Reserved for IBM use
+    2527      9DF        1 ........ DS    X              Reserved for IBM use
+    2528      9E0        4 VMDTODAI DS    A              Logical addr of TOD accounting
+    2532      9E4        4 VMDTHRCT DS    F              Count of delays due to throttle
+    2536      9E8        8 VMDRVMBK DS    0D             Mapping of the STMGT area
+    2544      9F0       24 VMDRELLK DS    3D             Release-Function defer lock.
+    2568      A08       24 VMDPTIL  DS    3D             Page Table Invalidation Lock
+    2592      A20        4 VMDPTILB DS    F              Count of bump shares of VMDPTIL
+    2596      A24        4 VMDPTILX DS    F              Count of explicit shares of
+    2600      A28        8 ........ DS    0D
+    2608      A30        4 VMDPTSOC DS    F              Bits 1-31:  Count of outstanding
+       _        _        _ VMDPTSO0 EQU   X'80'          Flag in bit 0 of VMDPTSOC
+    2612      A34        4 VMDPTSOQ DS    F              Queue of CPEBKs of HCPLKPTL
+    2616      A38        8 ........ DS    0D
+    2624      A40        4 VMDPTXMC DS    F              Bits 1-31:  Count of exclusive
+       _        _        _ VMDPTXM0 EQU   X'80'          Flag in bit 0 of VMDPTXMC
+    2628      A44        4 VMDPTXMQ DS    F              Queue of CPEBKs of tasks waiting
+    2632      A48        4 VMDPTSOE DS    F              Historical count of CPEBK
+    2636      A4C        4 VMDPTXME DS    F              Historical count of CPEBK
+    2640      A50        4 VMDFSCBK DS    A             Address of free storage counter
+    2644      A54        4 VMDMPEBK DS    A              Address minidisk pool extent
+    2648      A58        4 VMDCTFAC DS    F             Cumulative count of frames
+    2652      A5C        4 VMDCTPFD DS    F             Cumulative count of page faults
+    2656      A60        4 VMDXSTOR DS    F              The number of pages in the
+    2660      A64        2 VMDSTLFC DS    H              "Steal Factor": used by Demand
+    2662      A66        2 VMDSTFHW DS    H              "Steal Factor" high water mark
+    2664      A68        4 VMDCTISO DS    F              The number of times an address
+    2668      A6C        4 VMDSHDLK DS    F              V/SIE SHADOW TABLE LOCK
+       _        _        _ VMDSHALD EQU   -1             INDICATE THE LOCK IS OWNED BY
+       _        _        _ VMDSHALF EQU   -2             INDICATE THE LOCK IS OWNED BY
+       _        _        _ VMDSHHTF EQU   -3             Indicate the lock is owned by
+       _        _        _ VMDSHREL EQU   -4             Indicate the lock is owned by
+       _        _        _ VMDSHPTE EQU   -5             Indicate the lock is owned by
+    2672      A70        4 VMDCTXBK DS    F              Count of XSTORE blocks used for
+    2676      A74        4 VMDCTSPR DS    F              COUNT OF SPOOLING PAGE READS
+    2680      A78        4 VMDCTSPW DS    F              COUNT OF SPOOLING PAGE WRITES
+    2684      A7C        8 ........ DS    2F             Reserved for IBM use
+    2692      A84        4 VMDPAGZP DS    F              Guest page zero host logical addr
+    2696      A88        4 VMDSVZCR DS    F              Pointer to a save area for the
+    2700      A8C        4 VMDMXRVP DS    F              MAXIMUM RESERVED PAGE COUNT
+    2704      A90        4 VMDCTPWT DS    F              PAGE WAIT COUNT
+    2708      A94        4 ........ DS    F              Reserved for IBM use.
+    2712      A98        8 ........ DS    D              Reserved for IBM use
+    2720      AA0        4 VMDMVB2G DS    F              Number of times page translation
+    2724      AA4        4 VMDCTPPR DS    F              Count of primary space private
+    2728      AA8        0 VMDCTPVR DS    0F             Count of private address space
+    2728      AA8        4 VMDCTSHR DS    F              Count of shared address space
+    2732      AAC        0 VMDCTPVL DS    0F             Count of locked pages < 2G for
+    2732      AAC        4 VMDCTSHL DS    F              Count of shared address space
+    2736      AB0        4 VMDVUDBK DS    F              Pointer to the Vestigial User
+    2740      AB4        4 VMDVUDLK DS    F              Spin lock to serialize access to
+    2744      AB8        1 VMDDFLGS DS    X              Destroy address space flags.
+       _        _        _ VMDESTRY EQU   X'80'          User ASCBKs are in the progress
+    2745      AB9        1 ........ DS    X              Reserved for IBM use
+    2746      ABA        1 VMDPGFLG DS    X              Paging control flags
+       _        _        _ VMDPWQD  EQU   X'10'          Tasks waiting for page wait exit
+       _        _        _ VMDPZUNV EQU   X'01'          Guest page zero or page one is
+    2747      ABB        1 VMDRSSFG DS    X              Read Storage Status Flag Byte
+       _        _        _ VMDRSSUE EQU   X'80'          An uncorrectable storage or key
+    2748      ABC        0 VMDSFORE DS    0F             The cumulative referenced frames
+    2748      ABC        4 ........ DS    F              Reserved for IBM use
+    2752      AC0        2 VMDASMMX DS    H         Maximum number of non-Base address
+    2754      AC2        2 VMDASMCT DS    H         Current number of non-Base address
+    2756      AC4        4 VMDASTMX DS    F         Maximum size in megabytes of all
+    2760      AC8        8 VMDGASTP DS    D         Current size in pages of all non-
+    2768      AD0        4 ........ DS    F         Reserved for IBM use
+    2772      AD4        4 VMDPASTE DS    A         PASTEO is Host Real Address.
+    2776      AD8        8 VMDPASIT DS    D         Internal-address-space-identification
+    2784      AE0        8 VMDGPVTP DS    D         Current number of pages in all
+    2792      AE8        8 VMDGPRMP DS    D         Primary address space size in pages -
+    2800      AF0       24 VMDASCLK DS    3D        Shared/exclusive defer lock to
+    2824      B08        4 VMDASCBK DS    A         Anchor for chain of ASCBK's for
+    2828      B0C        2 VMDACLMX DS    H         Largest permitted size of user's
+    2830      B0E        1 VMDSTMFS DS    X         Miscellaneous STMGT flags
+       _        _        _ VMDDSRED EQU   X'40'     Valid in base VMDBK only.
+       _        _        _ VMDvDPPL EQU   X'20'     Valid in base VMDBK only.
+    2831      B0F        4 VMDVMDWU DS    F              COUNT OF DOUBLEWORDS OF
+    2835      B13        4 ........ DS    F         Reserved for IBM use
+    2839      B17       24 VMDSHRLK DS    3D             VMDBK/SHRBK queue lock
+    2863      B2F        4 VMDWASTE DS    F         Cumulative count of times a page
+    2867      B33        4 VMDDSVIS DS    F         Count of times Demand Scan visited
+    2871      B37        2 VMDSKPPT DS    H         Count of times Demand Scan skipped
+    2873      B39        2 VMDSKPST DS    H         Count of times Demand Scan skipped
+    2875      B3B        2 VMDSKPUF DS    H         Count of times Demand Scan skipped
+    2877      B3D        2 ........ DS    H         Reserved for IBM use
+    2879      B3F        4 VMDDSPTS DS    F         Count of times Demand Scan scanned
+    2883      B43        4 VMDDSPTX DS    F         Count of times Demand Scan scanned
+    2887      B47        8 VMDPTXTM DS    D         Cumulative amount of time (TOD format)
+    2895      B4F        4 VMDRQLCK DS    F         Count of times a page was requeued to
+    2899      B53        4 VMDRQSER DS    F         Count of times a page was requeued to
+    2903      B57        4 VMDREDOC DS    F         Count of Demand Scan "Redo's" that
+    2907      B5B        4 VMDDSRSV DS    F         Count of times Demand Scan could not
+       _        _        _ VMDRVMSZ EQU   *-VMDRVMBK     Size of the STMGT section
+    2911      B5F        8 ........ DS    0D
+    2919      B67        0 VMDSHARS DS    0F             A symbol used as a base for
+    2919      B67        4 VMDRELSH DS    F              This user's relative share of
+    2923      B6B        8 VMDABSSH DS    FS(SHRSCALE)   This user's absolute share of
+    2931      B73        1 VMDSCDF1 DS    X              Scheduler Flags
+       _        _        _ VMDRTNLP EQU   X'80'          Retain limit list priority in
+       _        _        _ VMDLDGDL EQU   X'40'          User remained loading  during
+       _        _        _ VMDLRGST EQU   X'20'          User was pre-empted due to its
+       _        _        _ VMDTREND EQU   X'10'          'report TRansaction END'.  All
+       _        _        _ VMDQDSPU EQU   X'08'          QUICKDISP User designation
+       _        _        _ VMDLIMCS EQU   X'04'          Limited by consumption method
+       _        _        _ VMDLIMTH EQU   X'02'          The LIMITHARD option has been
+       _        _        _ VMDIOPND EQU   X'01'          Some VMDBK(s) in the virtual-MP
+    2932      B74        1 VMDSCDF2 DS    X              Scheduling flags byte 2
+       _        _        _ VMDCONTR EQU   X'80'          This is a continuing transaction
+       _        _        _ VMDFRDSP EQU   X'40'          User is coming from dispatch list
+       _        _        _ VMDFRELG EQU   X'20'          User is coming from eligible list
+       _        _        _ VMDFRDRM EQU   X'10'          User is coming from dormant list
+       _        _        _ VMDSHRSM EQU   X'08'          VMDBK's share is included in the
+       _        _        _ VMDELTOD EQU   X'04'          User entered eligible list prior
+       _        _        _ VMDCKVMP EQU   X'02'          User is a base VMDBK coming into
+       _        _        _ VMDOK2DD EQU   X'01'          Flag to indicate the VMDBK is
+    2933      B75        1 VMDSCDF3 DS    X              Scheduling flags byte 3.
+       _        _        _ VMDMXSHA EQU   X'80'          User's max-SHARE (see VMDMXSHR)
+       _        _        _ VMDNMSHA EQU   X'40'          User's normal SHARE (see VMDSHARS
+       _        _        _ VMDUSMXS EQU   X'20'          The scheduler is using maximum
+       _        _        _ VMDLIMGR EQU   X'10'          VMDBK limited due to Group limit
+       _        _        _ VMDLIMSU EQU   X'08'          VMDBK group limit suspended
+       _        _        _ VMDINTOT EQU   X'04'          VMDBK's share is included in
+    2934      B76        1 VMDDLCTX DS    X              Extension for VMDDLCTL -
+       _        _        _ VMDWSSGR EQU   X'80'          WSS Growth Limit Exceeded
+       _        _        _ VMDPRMPT EQU   X'40'          User is to be Pre-Empted
+       _        _        _ VMDCPLXD EQU   X'20'          Complex dropped (valid only
+       _        _        _ VMDESEND EQU   X'10'          Elapsed Timeslice End Exceeded
+       _        _        _ VMDVSEND EQU   X'08'          Voluntary Timeslice End
+       _        _        _ VMDCANLK EQU   X'04'          Cancel "lockshot" for this user
+    2935      B77        1 VMDSACTL DS    X              Saved copy of VMDDLCTL for later
+    2936      B78        1 VMDSACTX DS    X              Saved copy of VMDDLCTX.  Used
+    2937      B79        1 VMDQSTAT DS    X              User scheduling status
+       _        _        _ VMDHOTRQ EQU   X'80'          HOT SHOT scheduling requested
+       _        _        _ VMDHOTST EQU   X'40'          HOT SHOT user scheduling granted
+       _        _        _ VMDLOADU EQU   X'20'          Loading User designation
+       _        _        _ VMDIABIA EQU   X'10'          Interactive Bias is in effect
+       _        _        _ VMDLKSHT EQU   X'04'          "Lockshot" scheduling in effect
+       _        _        _ VMDNULL  EQU   X'01'          VMDBK should be destroyed by the
+    2938      B7A        1 VMDSLIST DS    X              Scheduling list definition
+       _        _        _ VMDDISPL EQU   55             User is in the Dispatch List
+       _        _        _ VMDELIG  EQU   33             User is in the Eligible List
+       _        _        _ VMDDORM  EQU   11             User is in the Dormant List
+       _        _        _ VMDDNULL EQU   00             User is not in a list
+    2939      B7B        1 VMDELIST DS    X              Eligible List Class for current
+    2940      B7C        1 VMDPRVEL DS    X              Prev E-List Class (before HOTSHOT
+    2941      B7D        2 ........ DS    XL2            Reserved for IBM use
+    2943      B7F        4 ........ DS    F              Reserved for IBM use
+    2947      B83       32 VMDEPRTY DS    FL8S12         Eligible List Priority value
+    2979      BA3       32 VMDPRVEP DS    FL8S12         Prev E-LIST Priority (B4 HOTSHOT
+    3011      BC3       32 ........ DS    FL8            Reserved for IBM use
+    3043      BE3       32 VMDOPRTY DS    FL8S12         A version of VMDDPRTY computed
+    3075      C03        2 VMDSLCNT DS    H              Count of minor timeslices
+    3077      C05        2 VMDSLCAD DS    H              VMDSLCNT saved at D-list add
+    3079      C07        4 VMDURRSP DS    F              User's resource requirement for
+    3083      C0B        8 VMDRTHRU DS    FS(SHRSCALE)   Required throughput while user
+    3091      C13       32 VMDVTIMD DS    FL8S12         VMDVTIME value from last time
+    3123      C33        4 VMDWSSPR DS    F              Working Set Size projection
+    3127      C37        4 VMDHOTWS DS    F              Alternate WSS for HOTSHOT
+    3131      C3B        4 VMDRPLIM DS    F              Working set growth limit.
+    3135      C3F        1 VMDELGST DS    X              A flag byte manipulated by
+    3136      C40        2 ........ DS    2X             Reserved for IBM use
+    3138      C42        1 VMDLMNDX DS    X              Index to element of the SRMRTHRU
+    3139      C43        4 VMDTLPRS DS    F              The last Resident Page Count
+    3143      C47        4 VMDCCPGR DS    F              Count of page reads from DASD
+    3147      C4B        4 VMDTLPGR DS    F              Count of page reads from DASD
+    3151      C4F        4 VMDPGRTE DS    F              Paging rate during last D-list
+    3155      C53        8 VMDEDFAC DS    FS8            Eligible list delay factor. This
+    3163      C5B       32 VMDESLIC DS    FL8S12         Elapsed Time Slice for D-List
+    3195      C7B       32 VMDEQTOD DS    FL8S12         TOD at last D-List entry
+    3227      C9B       32 VMDDQTOD DS    FL8S12         TOD at last drop from the D-List
+    3259      CBB       32 VMDDTIME DS    FL8S12         Actual time in D-List (last stay)
+    3291      CDB       32 VMDETIME DS    FL8S12         Actual time in E-List (last stay)
+    3323      CFB       32 VMDEETOD DS    FL8S12         TOD at last E-List entry
+    3355      D1B       32 VMDMTTOD DS    FL8S12         TOD at last started transaction
+    3387      D3B       32 VMDMPSUS DS    FL8S12         Most-recent VMDSUSCK time in
+    3419      D5B        0 VMDCIDLD DS    0H             Count of User Went Idle   drops
+    3419      D5B        2 VMDCIDL0 DS    H              ... for Q0 user drops
+    3421      D5D        2 VMDCIDL1 DS    H              ... for Q1 user drops
+    3423      D5F        2 VMDCIDL2 DS    H              ... for Q2 user drops
+    3425      D61        2 VMDCIDL3 DS    H              ... for Q3 user drops
+    3427      D63        0 VMDCETSD DS    0H             Count of E-Slice End      drops
+    3427      D63        2 VMDCETS0 DS    H              ... for Q0 user drops
+    3429      D65        2 VMDCETS1 DS    H              ... for Q1 user drops
+    3431      D67        2 VMDCETS2 DS    H              ... for Q2 user drops
+    3433      D69        2 VMDCETS3 DS    H              ... for Q3 user drops
+    3435      D6B        0 VMDCWSGD DS    0H             Count of WSS Growth Limit drops
+    3435      D6B        2 VMDCWSG0 DS    H              ... for Q0 user drops
+    3437      D6D        2 VMDCWSG1 DS    H              ... for Q1 user drops
+    3439      D6F        2 VMDCWSG2 DS    H              ... for Q2 user drops
+    3441      D71        2 VMDCWSG3 DS    H              ... for Q3 user drops
+    3443      D73        0 VMDCPRMD DS    0H             Count of Pre-Emption      drops
+    3443      D73        2 VMDCPRM0 DS    H              ... for Q0 user drops
+    3445      D75        2 VMDCPRM1 DS    H              ... for Q1 user drops
+    3447      D77        2 VMDCPRM2 DS    H              ... for Q2 user drops
+    3449      D79        2 VMDCPRM3 DS    H              ... for Q3 user drops
+    3451      D7B        2 VMDCTIDL DS    H              Count of test idle granted.
+    3453      D7D        2 VMDCNTID DS    H              Count of no test idl granted drop
+    3455      D7F        4 VMDLKSDL DS    F              Total time this user has been in
+    3459      D83        4 VMDCTCRT DS    F              Counter of critical-processes
+    3463      D87        4 ........ DS    F              Reserved for IBM use
+    3467      D8B        4 VMDTRQQS DS    F              Pointer to scheduling TRQBLOK
+    3471      D8F        4 VMDQ1WSS DS    F              Smoothed Resident Pgs at Q1 drop.
+    3475      D93       32 VMDESRES DS    FL8S12         Elapsed Time Slice residue.
+    3507      DB3        4 VMDLFPNT DS    F             Limit-list forward pointer.
+    3511      DB7        4 VMDLBPNT DS    F             Limit-list backward pointer.
+    3515      DBB        4 VMDLLANC DS    F             Points to anchor word of the
+    3519      DBF        4 VMDMXSHR DS    F             The VMDBK's max-SHARE.  It may be
+    3523      DC3        4 VMDCTSTA DS    F             Count of times this virtual CPU
+    3527      DC7        4 VMDCTSTO DS    F             Count of times this virtual CPU
+    3531      DCB        8 ........ DS    2F             Reserved for IBM use
+    3539      DD3       24 VMDVMCFL DS    3D             VMCF lockword semaphore
+    3563      DEB        4 VMDVMCB  DS    F              Pointer to chain of VMCBLOKs.
+    3567      DEF        4 VMDVSEVM DS    F              Number of times VMCF data was
+    3571      DF3        4 VMDVSTVM DS    F              Number of times VMCF data was
+    3575      DF7        4 VMDVSUVM DS    F              Number of times VMCF data was
+    3579      DFB       24 VMDIUCVL DS    3D             IUCV lockword semaphore
+    3603      E13        4 VMDIUCVB DS    F              Pointer to IUCV block
+    3607      E17        4 VMDISEVM DS    F              Number of times IUCV/APPC data
+    3611      E1B        4 VMDISTVM DS    F              Number of times IUCV/APPC data
+    3615      E1F        4 VMDISUVM DS    F              Number of times IUCV/APPC data
+    3619      E23        8 VMDSVMID DS    CL8            Userid or CP system service name
+    3627      E2B        4 VMDVMCT  DS    F              Pointer to tail of chain of
+    3631      E2F        4 VMDMAXVF DS    F              MAXIMUM SINK VALUE FOR VMCF
+    3635      E33        4 VMDSVMFX DS    F              Count of times SVM-wait flag was
+    3639      E37        1 VMDSVMWT DS    X              Service virtual machine wait
+       _        _        _ VMDSVMWF EQU   X'80'          VMDBK is waiting for a response
+    3640      E38        1 VMDSVMW2 DS    X              Back-up byte for VMDSVMWT.
+    3641      E39        1 VMDRDYCM DS    X              Readied-by/received-interrupt-
+    3642      E3A        1 VMDAPPCF DS    X              APPC/VM control flags, Compare
+       _        _        _ VMDCPIBF EQU   X'80'          CP has generated an IUCVB for
+       _        _        _ VMDIUANY EQU   X'40'          IUCV ANY directory statement
+       _        _        _ VMDIUALL EQU   X'20'          IUCV ALLOW directory statement
+       _        _        _ VMDUNDET EQU   X'08'          Unused virtual machine detection
+       _        _        _ VMDUNEXT EQU   X'04'          Unused virtual machine detection
+    3643      E3B        4 VMDVGRPT DS    F              VM Group Block pointer used by
+    3647      E3F        2 VMDSIGID DS    H              Siginal ID of this VM Group
+    3649      E41        2 VMDVMETY DS    H              Last *VMEVENT event type
+    3651      E43        8 ........ DS    D              Reserved for IBM use
+    3659      E4B        1 VMDISFFL DS    X              VM/CSE Flag byte, Changes to
+       _        _        _ VMDISFER EQU   X'80'          HCPQCT should bypass error msg,
+       _        _        _ VMDISFSM EQU   X'40'          HCPQCN will call HCPXCMCN to
+       _        _        _ VMDISFIX EQU   X'10'          User is in VM/CSE input spool
+       _        _        _ VMDISFOX EQU   X'08'          User is in VM/CSE output spool
+       _        _        _ VMDISFAS EQU   X'04'          Processing on an associated
+       _        _        _ VMDISF08 EQU   X'02'          Processing message response
+    3660      E4C        1 VMDSYSRS DS    X              System reset stacked for end
+    3661      E4D        1 ........ DS    1X             Reserved for IBM use
+    3662      E4E        4 VMDVMEFT DS    AL1            *VMEVENT failure type
+    3666      E52        4 ........ DS    F              Reserved for IBM use
+    3670      E56       24 VMDPXILK DS    3D             PXIBK-chain lockword. Valid only
+    3694      E6E        4 VMDPXIBK DS    A              Anchor of the PXIBK chain for
+    3698      E72        1 VMDPXFL1 DS    X              POSIX flags. Valid in base VMDBK.
+       _        _        _ VMDPQDBA EQU   X'80'          User is allowed to query others'
+       _        _        _ VMDPESIA EQU   X'40'          exec() is allowed to change this
+       _        _        _ VMDPSIDA EQU   X'20'          User is allowed to set others'
+       _        _        _ VMDPQDBB EQU   X'08'          User is allowed to query others'
+       _        _        _ VMDPESIB EQU   X'04'          exec() is allowed to change this
+       _        _        _ VMDPSIDB EQU   X'02'          User is allowed to set others'
+    3699      E73        1 ........ DS    XL1            Reserved for IBM use
+    3700      E74        2 VMDPIDCT DS    H              Count of PIDs currently
+    3702      E76        0 VMDPXCAI DS    0F             POSIX communication area
+    3702      E76        2 VMDPXCAL DS    H              Length of vConfig's POSIX
+    3704      E78        2 VMDPXCAD DS    H              Displacement of vConfig's POSIX
+    3706      E7A        4 VMDITDBA DS    1F             Host-logical address of the ITDB
+    3710      E7E        8 VMDLMSG  DS    CL8            Userid of adjunct to get control
+    3718      E86        4 ........ DS    1F             Reserved for IBM use
+    3722      E8A        0 VMDCTPVG DS    0F        Count of private address space
+    3722      E8A        4 VMDCTSHG DS    F         Count of shared address space resident
+    3726      E8E        4 ........ DS    F
+    3730      E92        4 VMDPFAUL DS    A              GReal @ of ESA guest's PFAULT
+    3734      E96        4 VMDPPFAR DS    A              List of page-fault handshaking
+    3738      E9A        4 VMDPG1FR DS    F              Host logical addr of V=V
+    3742      E9E        8 VMDSELMK DS    FD             PSW selection mask.  Bits 0-63
+    3750      EA6        8 VMDCMPMK DS    FD             PSW comparison mask.
+    3758      EAE        8 VMDVOPST DS    FD             Stuff for HCPVINOP/HCPVOP
+    3766      EB6        1 VMDVOPOC DS    XL1            Operand code to pass to HCPVOP
+    3767      EB7        7 ........ DS    XL7            Reserved
+    3774      EBE        4 VMDLLOAD DS    A              Address of FCLBK for
+    3778      EC2        4 VMDLDUMP DS    A              Address of FCLBK for
+    3782      EC6        4 ........ DS    A              Reserved for future IBM use
+    3786      ECA        4 VMDHSASZ DS    F              Size of HSA (number of pages)
+    3790      ECE        4 VMDPDIPL DS    A              Address of IPL Parameter List for
+    3794      ED2        1 VMDPDSTS DS    X              Pgm-Directed status flags
+       _        _        _ VMDPDIAC EQU   X'80'          Pgm-Directed IPL is active
+       _        _        _ VMDPDIRS EQU   X'40'          LD-IPL initiated by PD-IPL is
+    3795      ED3        1 VMDPDERR DS    X              Unique loc ID of last 402 error
+    3796      ED4        2 ........ DS    XL2            Reserved for future IBM use
+    3798      ED6        8 VMDHSA   DS    D              64b HA Segment-Address-Table
+       _        _        _ VMDUFOLK DS    (SYNBKDSZ)D    USER FRAME OWNED LIST SPIN LOCK
+    3806      EDE       32 VMDTTMP  DS    FL8S12         Total virtual and simulation time
+    3838      EFE       32 VMDVTMP  DS    FL8S12         Total virtual time consumed while
+    3870      F1E       32 VMDTTMS  DS    FL8S12         Total virtual and simulation time
+    3902      F3E       32 VMDVTMS  DS    FL8S12         Total virtual time consumed while
+    3934      F5E        8 VMDRLVTM DS    1D             VMDVTIME for HCPRLGFI to put into
+    3942      F66       16 ........ DS    2D             Reserved for IBM use
+    3958      F76        8 VMDLIMLS DS    0D             LIMVMDLS chain ptrs of origin
+    3966      F7E        4 VMDRUNCP DS    F              Count of SIE instructions issued
+    3970      F82        4 VMDLIMBK DS    A             Pointer to LIMBK for this VMDBK
+    3974      F86       32 VMDGTIMS DS    FL8S12        VMDTTIME at the last time this
+    4006      FA6       32 VMDTODIL DS    FL8S12        TOD Individual Limit expires.
+    4038      FC6        8 VMDITRES DS    D              Interval timer residue (formerly
+    4046      FCE        4 VMDLKTOT DS    F              Count of times user has issued
+    4050      FD2        4 VMDLKPLX DS    F              Count of times user has consulted
+    4054      FD6        8 VMDLKTOD DS    D              Total time spent consulting SSI
+    4062      FDE        4 VMDDTTOT DS    F              Count of times user has issued
+    4066      FE2        4 VMDDTPLX DS    F              Count of times user has consulted
+    4070      FE6        8 VMDDTTOD DS    D              Total time spent consulting SSI
+    4078      FEE        4 VMDWKTOT DS    F              Count of times user has issued
+    4082      FF2        4 VMDWKPLX DS    F              Count of times user has consulted
+    4086      FF6        8 VMDWKTOD DS    D              Total time spent consulting SSI
+    4094      FFE       32 ........ DS    4D             Reserved for IBM use
+    4126     101E        8 VMDRLOLG DS    CL8            Name of the system/member where
+    4134     1026        8 VMDRLLST DS    D              Time stamp of last relocation
+    4142     102E        8 VMDRLBYU DS    CL8            Contains the VMRELOC cmd issuer's
+    4150     1036        8 VMDRLUSR DS    CL8            Contains the userid of the guest
+    4158     103E        8 VMDRLSRC DS    CL8            Source system of last relocation
+    4166     1046        8 VMDRLDN  DS    CL8            Contains the destination node
+    4174     104E        8 VMDRLSC  DS    CL8            Contains the source node name
+    4182     1056        1 VMDSTRLO DS    XL1            SET VMRELOCATE flags.
+       _        _        _ VMDRLONA EQU   X'80'          SET VMRELOCATE OFF was specified
+       _        _        _ VMDVARCH EQU   X'40'          When ON this bit indicates CP is
+    4183     1057        1 VMDRLFLG DS    XL1            Relocation flags -- The bits in
+       _        _        _ VMDRLINP EQU   X'80'          Relocation of this user is
+       _        _        _ VMDRLOIB EQU   X'40'          If VMDRLINP is on then this flag
+       _        _        _ VMDRLQUI EQU   X'20'          Virtual machine has been quiesced
+       _        _        _ VMDRLSKL EQU   X'10'          Indicates this is a relocation
+       _        _        _ VMDRLLGF EQU   X'08'          Indicates logging off on source
+       _        _        _ VMDSCTXP EQU   X'04'          User security context hasn't been
+       _        _        _ VMDRLSUP EQU   X'02'          Value of VMDAFSUP from source.
+       _        _        _ VMDLIMDE EQU   X'01'          Virtual machine is running with
+    4184     1058        1 VMDRLHFL DS    X              Relocation history flag.
+       _        _        _ VMDRLRST EQU   X'80'          A relocation has occurred for
+       _        _        _ VMDNOQEB EQU   X'40'          This user was relocated from a
+    4185     1059        1 VMDRLFNC DS    X              Count of times a FORCE command
+    4186     105A        4 VMDRLOBK DS    A              Host logical address of the RLOBK
+    4190     105E        8 VMDEPOCH DS    D              TOD clock difference between orig
+    4198     1066       24 VMDRLOLK DS    3D             Relocation defer lock.
+    4222     107E        4 VMDARDBK DS    A              Pointer (host logical address)
+    4226     1082        4 VMDARDFP DS    A              Forward pointer (host logical)
+    4230     1086        1 VMDRLMON DS    XL1            Bits that indicate a flag should
+       _        _        _ VMDD4R3  EQU   X'80'          Tells monitor this is the first
+       _        _        _ VMDD4R4  EQU   X'40'          Tells monitor this is the first
+       _        _        _ VMDD10R2 EQU   X'20'          Tells monitor this is the first
+    4231     1087        1 VMDUSKCK DS    X      LGR elig check skip flags for VMDUSER1-8
+       _        _        _ VMDUSRS1 EQU   X'80'          Skip elig check of VMDUSER1
+       _        _        _ VMDUSRS2 EQU   X'40'          Skip elig check of VMDUSER2
+       _        _        _ VMDUSRS3 EQU   X'20'          Skip elig check of VMDUSER3
+       _        _        _ VMDUSRS4 EQU   X'10'          Skip elig check of VMDUSER4
+       _        _        _ VMDUSRS5 EQU   X'08'          Skip elig check of VMDUSER5
+       _        _        _ VMDUSRS6 EQU   X'04'          Skip elig check of VMDUSER6
+       _        _        _ VMDUSRS7 EQU   X'02'          Skip elig check of VMDUSER7
+       _        _        _ VMDUSRS8 EQU   X'01'          Skip elig check of VMDUSER8
+    4232     1088        1 VMDUSRMV DS    X      LGR move indication flags for VMDUSER1-8
+       _        _        _ VMDUSRM1 EQU   X'80'          Move VMDUSER1 during relocation
+       _        _        _ VMDUSRM2 EQU   X'40'          Move VMDUSER2 during relocation
+       _        _        _ VMDUSRM3 EQU   X'20'          Move VMDUSER3 during relocation
+       _        _        _ VMDUSRM4 EQU   X'10'          Move VMDUSER4 during relocation
+       _        _        _ VMDUSRM5 EQU   X'08'          Move VMDUSER5 during relocation
+       _        _        _ VMDUSRM6 EQU   X'04'          Move VMDUSER6 during relocation
+       _        _        _ VMDUSRM7 EQU   X'02'          Move VMDUSER7 during relocation
+       _        _        _ VMDUSRM8 EQU   X'01'          Move VMDUSER8 during relocation
+    4233     1089        5 ........ DS    XL5            Reserved for future IBM use
+    4238     108E        8 VMDATORG DS    CL8            Contains the system/member
+    4246     1096        4 VMDATCNT DS    F              Contains the count of lines of
+    4250     109A        1 VMDATSTA DS    X              At Command Status Byte.
+       _        _        _ VMDATPA1 EQU   X'80'          This user has pressed the PA1
+       _        _        _ VMDATLIM EQU   X'40'          User has reached the exceeded
+    4251     109B        1 ........ DS    X              Reserved for future IBM use
+    4252     109C        2 VMDATSLT DS    H              AT command source member slot id.
+    4254     109E        4 VMDATSID DS    F              Socket handle dedicated to AT
+    4258     10A2        8 VMDACTID DS    CL8            Accounting user identification
+    4266     10AA        8 VMDALGID DS    CL8            Userid causing this user's logon
+    4274     10B2        8 VMDACTNO DS    CL8            User accounting number
+    4282     10BA       32 VMDTODST DS    FL8S12         TOD at start of the current
+    4314     10DA       32 VMDTTIMS DS    FL8S12         VMDTTIME/VMATTIME PRO at start of
+    4346     10FA       32 VMDTODLM DS    FL8S12         Limit-list expiration TOD.
+    4378     111A        4 VMDVMUBK DS    A              Pointer to VM CPU Usage Block
+    4382     111E        4 VMDCPUCH DS    F              Count of SIE entries with
+    4386     1122       32 VMDLSTRN DS    FL8S12         TOD clock value when this VMDBK
+    4418     1142        8 VMDIOPTR DS    D              Reserved doubleword for I/O
+    4426     114A        4 VMDVMABK DS    A             Pointer to VMABK for this VMDBK.
+    4430     114E        4 VMDVSTCT DS    F             Number of virtual CPUs for this
+    4434     1152        8 VMDRDHSH DS    D             Redrive hash value used to detect
+    4442     115A        4 VMDRDRCC DS    F             Number of times a given instance
+    4446     115E        2 VMDRDSIX DS    H             Redrive stats index for current
+    4448     1160        2 ........ DS    XL2           Reserved for future IBM use
+    4450     1162       32 VMDTMRDY DS    FL8           Timestamp when VMDBK became ready
+    4482     1182       32 VMDTMDSP DS    FL8           Timestamp when the VMDBK was
+    4514     11A2        8 VMDAGLKS DS    AD            (Debug only) Time lock obtained.
+    4522     11AA        8 VMDAGLKE DS    AD            (Debug only) Time lock released.
+    4530     11B2        8 VMDAGLRL DS    AD            (Debug only) Address of last lock
+    4538     11BA        0 VMDDPPL  DS    0FD     VMDBK DPPL anchor (vDPPL).
+    4538     11BA        8 ........ DS    AD      Host Logical Address
+    4546     11C2        8 ........ DS    AD      Host Logical Address
+       _        _        _ VMDLSLEN EQU   (4096-(*-VMDBK))
+       _        _        _ VMDLSPSZ EQU   (VMDLSLEN)/8
+       _        _        _ VMDLSPAC DS    (VMDLSLEN)X        User-local free storage area
+       _        _        _ VMDBKLEN EQU   (*-VMDBK)      Length of VMDBK in bytes
+       _        _        _ VMDBKSIZ EQU   (*-VMDBK)/8    SIZE OF VMD BLOCK IN DOUBLEWORDS
+       _        _        _ VMDNOOWN EQU   X'40'          No own resources need to be
+       _        _        _ VMDRCGAL EQU   X'20'          The cleared global available
+       _        _        _ VMDSXSPM EQU   X'10'          Low priority SXSPM work exists.
+       _        _        _ VMDSYSML EQU   *-VMDGGRS      Size of the overlay
+       _        _        _ VMDWUSHD EQU   X'80'          USE SHADOW TRANSLATE TABLES
+       _        _        _ VMDWUNRQ EQU   X'40'          VGUEST UN-RUN IS REQUIRED
+       _        _        _ VMDWPALB EQU   X'20'          Purge of real ALB is needed: set
+       _        _        _ VMDWPTLB EQU   X'10'          Purge of real TLB is needed: set
+       _        _        _ VMDWPINT EQU   X'08'          Most recent interception from
+       _        _        _ VMDWFLCY EQU   X'04'          SIEFLD  contains the host abs
+       _        _        _ VMDWVRDL EQU   X'02'          SIEGVRD contains the host real
+       _        _        _ VMDWPG1F EQU   X'01'          There is a known translation
+       _        _        _ VMDKREFL EQU   X'00'          Reflect any keyop interceptions
+       _        _        _ VMDKBYP  EQU   X'01'          Simulate RCP Bypass (also set
+       _        _        _ VMDKGRCP EQU   X'02'          Lowest VMDWKEYH value for which
+       _        _        _ VMDKRCPA EQU   X'02'          Simulate RCP-area-based keyop
+       _        _        _ VMDKSKF  EQU   X'03'          Simulate SKF
+       _        _        _ VMDAROVL EQU   *-VMDARS       Length of the overlay
+       _        _        _ VMDVSIL2 EQU   *-VMDVSIEO    Length of vSIE overlay
+       _        _        _ UFOHDR   DSECT
+       _        _        _ UFOHDRDW EQU   (*-UFOHDR+7)/8     Size in doublewords

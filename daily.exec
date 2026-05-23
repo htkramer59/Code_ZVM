@@ -1,0 +1,14 @@
+/**/
+'UPTIME (NOCLEAR'
+Say
+'QN (NOCLEAR'
+Say 'DIR2DISK -----------'
+'DIR2DISK'
+Say 'TOOLS2DS -----------'
+'TOOLS2DS (GO'
+Say 'MOVE2PC  Herman-----'
+'MOVE2PC I3 herman VMUSERS:HERMAN. /home/herman/a_disk'
+Say 'MOVE2PC  VMUSERS:TOOLS.'
+'MOVE2PC I3 herman VMUSERS:TOOLS. /home/herman/Code_ZVM'
+Say 'SFSBACK  -----------'
+'SFSBACK * (GO'

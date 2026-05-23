@@ -1,0 +1,269 @@
+Dec Offs Hex Offs Length   Label/Code
+       0        0        4 VDEVFPNT DS    1F       Forward  interruption pointer.
+       4        4        4 VDEVBPNT DS    1F       Backward interruption pointer.
+       8        8        8 VDEVLOCK DS    0D       VIRTUAL DEVICE LOCKWORD
+      16       10        4 VDEVLOWN DS    A        ADDRESS OF LOCK OWNERS VMDBK
+      20       14        4 VDEVTSKQ DS    A        ANCHOR FOR QUEUE OF WAITING TASKS
+      24       18        2 VDEVSUB  DS    1H       VIRTUAL SUBCHANNEL NUMBER
+      26       1A        0 VDEVCODE DS    0H       VIRTUAL DEVICE IDENTITY CODE
+      26       1A        1 VDEVCLAS DS    1X       DEVICE CLASS
+      27       1B        1 VDEVTYPE DS    1X       DEVICE TYPE
+      28       1C        4 VDEVUSER DS    1F       Host logical address of VMDBK of owner
+      32       20        1 VDEVSTAT DS    1X       DEVICE STATUS - OWNED BY VIRTUAL I/O
+       _        _        _ VDEVBUSY EQU   X'80'    START FUNCTION
+       _        _        _ VDEVPRCE EQU   X'40'    CHANNEL END RECEIVED
+       _        _        _ VDEVCLRF EQU   X'20'    CLEAR FUNCTION
+       _        _        _ VDEVHLTF EQU   X'10'    HALT  FUNCTION
+       _        _        _ VDEVACTV EQU   VDEVBUSY+VDEVPRCE+VDEVCLRF+VDEVHLTF
+       _        _        _ VDEVSUSP EQU   X'08'    SUBCHANNEL SUSPENDED
+       _        _        _ VDEVRPND EQU   X'04'    RESUME PENDING
+       _        _        _ VDEVQUED EQU   X'02'    DEVICE-BUSY RECEIVED -  VDEVNIOR
+       _        _        _ VDEVCATT EQU   X'01'    ATTACHED VIA CONSOLE COMMAND
+      33       21        1 VDEVWAIT DS    1X       WAIT STATUS CONTROLS
+       _        _        _ VDEVIMRS EQU   X'80'    VM SUSPENDED PENDING I/O RESPONSE
+       _        _        _ VDEVWINT EQU   X'40'    CPU(S) AWAITING STATUS (TIO/TSCH BUSY)
+      34       22        1 VDEVAFLG DS    1X       DEVICE ALLOCATION FLAG
+       _        _        _ VDEVINTV EQU   X'80'    SIMULATED INTERVENTION REQUIRED
+       _        _        _ VDEVTDSK EQU   X'40'    DEVICE IS DASD TDISK
+       _        _        _ VDEVVSIM EQU   X'20'    DEVICE IS SIMULATED BY VDSBK
+       _        _        _ VDEVFULL EQU   X'10'    DEVICE IS A COMPLETE VOLUME
+       _        _        _ VDEVDED  EQU   X'08'    DEVICE IS ATTACHED TO VDEVRDEV
+       _        _        _ VDEVMPLX EQU   X'04'    MULTIPLE EXPOSURE DEVICE
+       _        _        _ VDEVFPO  EQU   X'02'    THE DEVICE IS A FULL-PACK-OVERLAY
+       _        _        _ VDEVDTCH EQU   X'01'    THE DEVICE IS BEING DETACHED
+      35       23        1 VDEVBFLG DS    1X       HALT flags plus some misc flags
+       _        _        _ VDEVBCC0 EQU   X'80'    BACKUP CONFIRMED CC 0 FLAG
+       _        _        _ VDEVBPCI EQU   X'40'    BACKUP PCI FLAG
+       _        _        _ VDEVBSUI EQU   X'20'    BACKUP SUSPENSION INTERRUPT FLAG
+       _        _        _ VDEVMBSF EQU   X'10'    QDIO multiple buffer streaming facility
+       _        _        _ VDEVQACT EQU   X'08'    BACKUP QDIO Active Status
+       _        _        _ VDEVCMS  EQU   X'04'    Device is attached to adjunct
+       _        _        _ VDEVVMIO EQU   X'02'    Update VMDIOACT for active I/O
+       _        _        _ VDEVNOFT EQU   X'01'    Device Ineligible for CCW FastTran
+      36       24        1 VDEVDFLG DS    1X       DEVICE CONTROL FLAGS
+       _        _        _ VDEVRO   EQU   X'80'    DEVICE- READ ONLY ACCESS
+       _        _        _ VDEVENAB EQU   X'40'    COMMUNICATION LINE - ENABLED
+       _        _        _ VDEVDIAL EQU   X'20'    COMMUNICATION LINE - DIALED
+       _        _        _ VDEVSDIA EQU   X'10'    COMMUNICATION LINE - SNA DIALED
+       _        _        _ VDEVNOTO EQU   X'08'    If on, means that this VDEV is no longe
+       _        _        _ VDEVRSRL EQU   X'04'    RESERVE/RELEASE VALID CCW'S
+       _        _        _ VDEVNSEG EQU   X'02'    NO CHAN PROG SEGMENTATION ALLOWED
+       _        _        _ VDEVGCWE EQU   X'01'    GLOBAL CCW EXPECTED FOR THIS DEVICE
+      37       25        1 VDEVCFLG DS    1X       CONSOLE PROCESSING CONTROLS
+       _        _        _ VDEVINT3 EQU   X'80'    Device used as integrated 3270
+       _        _        _ VDEVPPA1 EQU   X'40'    REFLECT PA1 KEY TO THE VIRTUAL MACHINE
+       _        _        _ VDEVGSUS EQU   X'20'    FULL SCREEN GUEST WAS SUSPENDED WITH
+       _        _        _ VDEVDING EQU   X'10'    dial in progress
+       _        _        _ VDEVATTN EQU   X'08'    ATTENTION INTERRUPT MUST BE GENERATED
+       _        _        _ VDEVBRGS EQU   X'04'    Set RDEVGSUS when reconnected to consol
+      38       26        1 VDEVFFLG DS    1X       MINIDISK FLAGS
+       _        _        _ VDEVLNKS EQU   X'80'    STABLE MINIDISK LINK
+       _        _        _ VDEVLNKE EQU   X'40'    EXCLUSIVE MINIDISK LINK
+       _        _        _ VDEVDVFP EQU   X'20'    THE DEVICE IS A DEVNO DEFINED
+       _        _        _ VDEVQDSK EQU   X'10'    The device is a VDISK
+       _        _        _ VDEVFBA  EQU   X'08'    FBA disk or minidisk
+       _        _        _ VDEVRMLF EQU   X'04'    Minidisk can use real MPLF facility
+       _        _        _ VDEVSULF EQU   X'02'    Suppress CFLF and MPLF
+       _        _        _ VDEV3DSK EQU   X'01'    VCM Vdisk
+      39       27        1 VDEVPFLG DS    1X       DEVICE PROCESSING FLAG
+       _        _        _ VDEVCPCL EQU   X'80'    DEVICE CLOSED BY CP COMMAND
+       _        _        _ VDEVPURG EQU   X'40'    DEVICE CLOSED AND PURGED BY CP COMMAND
+       _        _        _ VDEVNRSM EQU   X'20'    DEVICE CANNOT RESUME CHANNEL PROGRAM
+       _        _        _ VDEVDPRE EQU   X'10'    DYMAMIC PATHING HAS BEEN REQUESTED
+       _        _        _ VDEVTRCW EQU   X'08'    FORCE TRANSLATION OF CHANNEL PROGRAM
+       _        _        _ VDEVTENB EQU   X'04'    TAPE Device has not been enabled.
+       _        _        _ VDEVSHRD EQU   X'02'    Multiuser device bit
+       _        _        _ VDEVSHND EQU   X'01'    Multiuser/Detach ALL fails for vdev
+      40       28       28 VDEVPMCW DS    XL28     PATH MANAGEMENT CONTROL WORD
+      68       44        4 VDEVAIOR DS    1F       Host logical address of active IORBK
+      72       48        4 VDEVNIOR DS    1F       SSCH pending (not yet started) IORBK
+      76       4C        4 VDEVSIOR DS    1A       IORBK holding sense data for device.
+      80       50        4 VDEVIORQ DS    1F       RDEV-to-VDEV lock swapping pivot
+      84       54        4 VDEVPIOR DS    1F       HL @ of Pending interrupt IORBK
+      88       58        4 VDEVENDQ DS    1F       COMPLETION TASK QUEUE ANCHOR
+      92       5C        4 VDEVDEOT DS    1A       DELAYED ENDOP TRQBK ANCHOR
+      96       60        4 VDEVRDEV DS    1F       Host logical address of RDEV of
+     100       64        4 VDEVAEVT DS    1A       POINTER TO LIST OF ASYNCHRONOUS EVENTS
+     104       68        4 VDEVTMCT DS    1F       Count of virtual Transport Mode I/O
+     108       6C        4 VDEVCEOT DS    1A       POINTER TO 20 SECOND TIMER
+     112       70        4 VDEVLMSG DS    1A       CFLF In-line Message Block Pointer
+     116       74        4 VDEVIOCT DS    1F       Count of virtual I/O requests issued
+     120       78        8 VDEVTIME DS    0D       TOD CLOCK AT DEVICE CREATION
+     128       80        4 VDEVTIMH DS    F        HI ORDER TOD CLOCK ROUGHLY IN SECONDS
+     132       84        4 VDEVTIML DS    F        LO ORDER TOD CLOCK
+     136       88       64 VDEVSPEC DS   16F       DEVICE-DEPENDENT SPECIFICATIONS
+     200       C8        4 VDEVIOMI DS    1A       Address of Virtual I/O Management Info
+     204       CC        4 VDEVUIOR DS    1A       Pending unsolicited IORBK came in
+     208       D0        4 VDEVIOCA DS    1F       Count of actual I/O operations initiate
+     212       D4        4 VDEVATIM DS    1F       Time of device creation or last ACNT,
+     216       D8        1 VDEVIOP1 DS    1X       I/O PASS THROUGH FLAGS
+       _        _        _ VDEVIOPQ EQU   X'80'    User set QIOAssist off for the device
+       _        _        _ VDEVIOPA EQU   X'40'    DEV IS OPERATING UNDER PASS THROUGH
+       _        _        _ VDEVIOPI EQU   X'20'    DEV BEING PUT UNDER I/O PASS THROUGH
+       _        _        _ VDEVIOPO EQU   X'10'    TAKE DEVICE OUT OF PASS THROUGH AT
+       _        _        _ VDEVIOPR EQU   X'08'    DEV BEING REMOVED FROM PASS THROUGH
+       _        _        _ VDEVIOPS EQU   X'04'    User set I/O Assist off for the device
+       _        _        _ VDEVIOPX EQU   X'02'    DEVICE IS ELIGIBLE FOR XA I/O PASS
+       _        _        _ VDEVIOP3 EQU   X'01'    DEVICE IS ELIGIBLE FOR 370 I/O PASS
+     217       D9        1 VDEVMODL DS    1X       VIRTUAL DEVICE MODEL NUMBER
+     218       DA        1 VDEVCPIE DS    1X       CHANNEL PATH IN ERROR MASK
+     219       DB        1 VDEVCRDR DS    1X       Count of I/O redrives to simulation
+     220       DC        4 VDEVIUBK DS    1F       I/O Assist Utilization Block Address
+     224       E0        1 VDEVLCNT DS    X        CURRENT LINE COUNT
+     225       E1        3 VDEVLTOD DS    3X       BYTES 1-3 OF TOD CLOCK WHEN LCNT RESET
+     228       E4        4 VDEVBKIA DS    A        Address of the BKIBK
+     232       E8        4 VDEVIPTS DS    1A       Used by HCPIPT to contain a pointer
+     236       EC        1 VDEVLGRI DS    1X       LGR I/O status flags
+       _        _        _ VDEVPROC EQU   X'80'    VDEV processed
+       _        _        _ VDEVDFRD EQU   X'20'    Deferred transfer
+       _        _        _ VDEVNODT EQU   X'10'    Not detachable on destination
+       _        _        _ VDEVXNIC EQU   X'08'    This NIC was transferred via LGR
+       _        _        _ VDEVOSAB EQU   X'04'    This is a base OSA
+       _        _        _ VDEVOSAN EQU   X'02'    This is a non-base OSA
+       _        _        _ VDEVIFCC EQU   X'01'    Device owed an IFCC on next I/O
+     237       ED        1 VDEVPMSK DS    1X       Mask of path on which the Quiesce/Resum
+     238       EE        1 VDEVVNET DS    1X       Virtual Network Simulation Flags
+       _        _        _ VDEVNSIM EQU   X'80'    Fully Simulated Virtual NIC Device
+       _        _        _ VDEVVSW  EQU   X'40'    Virtual SWITCH (VSWITCH) UPLink Port
+       _        _        _ VDEVBRGP EQU   X'20'    Virtual SWITCH (VSWITCH) Bridge Port
+       _        _        _ VDEVOVLY EQU   VDEVNSIM+VDEVVSW+VDEVBRGP  Virt Network Overlay
+     239       EF        1 VDEVAISM DS    XL1      AIF VDEV AI Source Mask
+     240       F0        4 VDEVUSR1 DS    1F             RESERVED FOR INSTALLATION USE
+     244       F4        4 VDEVUSR2 DS    1F             RESERVED FOR INSTALLATION USE
+     248       F8        4 VDEVUSR3 DS    1F             RESERVED FOR INSTALLATION USE
+     252       FC        4 VDEVUSR4 DS    1F             RESERVED FOR INSTALLATION USE
+     256      100        4 VDEVFOID DS    A        L:ADR of Fabric Owner ID
+     260      104        4 VDEVRTMR DS    1F       Pointer to RESET TRQBK.  This field is
+     264      108        4 VDEVTRKF DS    F        First relative track for device
+     268      10C        4 VDEVTRKL DS    F        Last relative track for device
+     272      110        4 VDEVARSL DS    F        Pointer to next Diag 254 pseudo vdev
+     276      114        4 VDEVARSI DS    F        Pointer to Diag 254 information block
+     280      118        4 VDEVARPV DS    F        Pointer to Diag 254 parent vdev
+     284      11C        1 VDEVMDFG DS    1X       Message Device Flag
+       _        _        _ VDEVMDEL EQU   X'80'    Message Device Deleted
+     285      11D        1 VDEVAIF1 DS    X        AIF Pending Latch (HCPVAIEV stacked)
+     286      11E        1 VDEVEFLG DS    X        Flag byte
+       _        _        _ VDEVEAVM EQU   X'80'    This devices is a EAV minidisk
+     287      11F        1 ........ DS    X        Reserved for future IBM use
+     288      120        4 VDEVQDIO DS    A        HL address of the QDIO block.
+     292      124        4 VDEVAIF  DS    A        HL address of Adapter Interruption
+     296      128        4 VDEVSHTP DS    A        MULTIuser tape device forward pointer
+     300      12C        4 VDEVIODD DS    A        CCW TRACE IODATA buffer
+     304      130        8 VDEVMBLK DS    0D       64-bit measurement block address
+     312      138        4 VDEVMBAH DS    1F       High order MBA word
+     316      13C        4 VDEVMBAL DS    1F       Low order MBA word
+       _        _        _ VDEVMBAO EQU   VDEVMBAL 390 measurement block address
+     320      140        2 VDEVHPPL DS    H        HyperPAV Pool Number
+     322      142        1 VDEVPVFG DS    X        PAV Flags
+       _        _        _ VDEVPVBA EQU   X'80'    PAV Base Device
+       _        _        _ VDEVPVAL EQU   X'40'    PAV Alias Device
+       _        _        _ VDEVHPBA EQU   X'20'    HyperPAV Base Device
+       _        _        _ VDEVHPAL EQU   X'10'    HyperPAV Alias Device
+       _        _        _ VDEVUVAL EQU   X'08'    PAV Unit Address Valid
+       _        _        _ VDEVPVHP EQU   (VDEVPVBA+VDEVPVAL+VDEVHPBA+VDEVHPAL)  PAV/Hyper
+     323      143        1 VDEVUNIT DS    X        Dynamic PAV Unit Address
+     324      144        4 VDEVPAVB DS    1A       Addr of PAV VDEV Base
+     328      148        4 VDEVPAVP DS    1A       Addr of PAV VDEV Alias bak ptr
+     332      14C        4 VDEVPAVA DS    1A       Addr of PAV VDEV Alias fwd ptr
+     336      150        4 VDEVPREF DS    1A       Addr of PAV Referenced Base or Alias
+     340      154        4 VDEVGCHR DS    1F       Guest Characteristics
+       _        _        _ VDEVBYSZ EQU   *-VDEV   VDEV size in bytes
+       _        _        _ VDEVSIZE EQU   ((*-VDEV)+7)/8  VDEV SIZE IN DOUBLE-WORDS
+     344      158        0 VDEVPOSN DS    0F       VIRTUAL DASD ARM POSITION
+     344      158        2 VDEVCYLN DS    1H       VIRTUAL DASD CYLINDER NUMBER
+       _        _        _ VDEVCYL0 EQU   VDEVCYLN,1    1ST BYTE OF CYLINDER INFORMATION
+       _        _        _ VDEVCYL1 EQU   VDEVCYLN+1,1  2ND BYTE OF CYLINDER INFORMATION
+     346      15A        2 VDEVHEAD DS    1H       VIRTUAL DASD HEAD NUMBER
+       _        _        _ VDEVHED0 EQU   VDEVHEAD,1    1ST BYTE OF HEAD INFORMATION
+       _        _        _ VDEVHED1 EQU   VDEVHEAD+1,1  2ND BYTE OF HEAD INFORMATION
+     348      15C        0 VDEVSEXT DS    0F       Minidisk Start of EXTent.  May be
+     348      15C        2 ........ DS    1H       Filler for beginning cylinder
+     350      15E        2 VDEVBCYL DS    1H       Minidisk beginning cylinder
+     352      160        0 VDEVEEXT DS    0F       Minidisk End of EXTent.  May be
+     352      160        2 ........ DS    1H       Filler for last cylinder
+     354      162        2 VDEVLCYL DS    1H       Minidisk last cylinder
+     356      164        4 VDEVLINK DS    1F       Next VDEV on this MDISK (cf. VDEVLINP)
+     360      168        4 VDEVBIOA DS    1F       BLOCK I/O CONNECT BLOCK
+     364      16C        4 VDEVMDSK DS    1F       MINI-DISK BLOCK FOR RESERVE/RELEASE
+     368      170        4 VDEVHPLK DS    A        Pointer to next hyperpav alias VDEV
+     372      174        1 VDEVMNGT DS    1X       LEVEL OF CONTROL FOR CACHED DASD
+       _        _        _ VDEVCA   EQU   X'80'    CACHING AVAILABLE TO A MINIDISK
+       _        _        _ VDEVCNA  EQU   X'40'    CACHING NOT AVAILABLE TO A MINIDISK
+       _        _        _ VDEVSCTL EQU   X'20'    SYSTEM CONTROL FOR CACHED DASD
+       _        _        _ VDEVDCTL EQU   X'10'    DEVICE CONTROL FOR CACHED DASD
+       _        _        _ VDEVNCTL EQU   X'08'    NO CONTROL FOR CACHED DASD
+     373      175        1 VDEVSFLG DS    1X       DASD SPECIFIC FLAG
+       _        _        _ VDEVRSVD EQU   X'80'    RESERVE DONE TO FBA DASD
+       _        _        _ VDEVSSNT EQU   X'40'    Guest supports PPRC Suspend Summary
+       _        _        _ VDEVPNOS EQU   X'20'    Special Bit used for HYPerswap that is
+       _        _        _ VDEVRFID EQU   X'10'    READ CACHE FASTWRITE ID CCW ISSUED
+       _        _        _ VDEVSCPI EQU   X'08'    REFLECT A STATE-CHANGE INTERRUPT WHEN
+       _        _        _ VDEV1END EQU   X'04'    Device is a 1-END minidisk
+     374      176        2 ........ DS    XL2      RESERVED FOR FUTURE IBM USE
+     376      178        2 VDEVMPCT DS    H        COUNT OF EXTENTS DEFINED FOR THIS
+     378      17A        2 ........ DS    H        RESERVED FOR IBM USE
+     380      17C        4 VDEVLINP DS    1F       Prev VDEV on this MDISK (cf.VDEVLINK)
+     384      180       24 ........ DS    XL24     Reserved for IBM use
+     408      198       36 ........ DS    XL36          RESERVED FOR FUTURE IBM USE
+     444      1BC        4 VDEVDYPT DS    1A            Pointer to Tape Pathing
+     448      1C0       24 ........ DS    XL24     Reserved for IBM use
+     472      1D8        8 VDEVCUSR DS    CL8      RESTRICTED USERID FOR COUPLING
+     480      1E0        4 VDEVCTCA DS    1A       ADDRESS OF CACBK
+     484      1E4        4 VDEVCTCD DS    XL4      CTCA designation
+     488      1E8       24 ........ DS    XL24     Reserved for IBM use
+     512      200       24 ........ DS    XL24     Reserved for IBM use
+       _        _        _ VDEVNIP  EQU   *        Network Interface Properties
+     536      218        4 VDEVNIFT DS    CL4      Interface Type (e.g. cIQDC)
+     540      21C        4 VDEVNIDX DS    F        Index of this NID in the adapter
+     544      220        4 VDEVNIC  DS    A        Host logical address of adapter NICBK
+     548      224        4 VDEVNID  DS    A        Host logical address of  device NIDBK
+     552      228        4 VDEVSIGA DS    A        SIGA Simulation Routine
+     556      22C        4 VDEVQMSK DS    XL4      QDIO Queue Selection Mask
+     560      230        1 VDEVOTSK DS    X        QDIO Output Queue Processing Task
+     561      231        1 ........ DS    X        Reserved for Future IBM Use
+     562      232        1 VDEVSWFL DS    X        VSWITCH Flags
+       _        _        _ VDEVSWDD EQU   X'80'    VSWITCH DATA device
+       _        _        _ VDEVD2A8 EQU   X'01'    QDIO Diagnose 2A8 Device Connection
+     563      233        1 VDEVSBSY DS    XL1      SIGA Busy Counter
+     564      234        4 VDEVCHKQ DS    F        Checking queues (stacked call)
+     568      238        8 ........ DS    XL8      Reserved for IBM Use
+     576      240       24 ........ DS    XL24     Reserved for IBM use
+     600      258        4 ........ DS    1F       RESERVED FOR FUTURE IBM USE
+     604      25C        4 VDEVVSP  DS    1A       ADDRESS OF THE VIRTUAL SPOOL BLOCK
+     608      260        4 VDEVVPX  DS    1A       ADDRESS OF PRT EXTENSION BLOCK
+     612      264        4 VDEVVDS  DS    1A       DEVICE SIMULATION POINTER
+     616      268        1 ........ DS    1XL24    RESERVED FOR FUTURE IBM USE
+     617      269       24 ........ DS    XL24     Reserved for IBM use
+     641      281        4 VDEVMNPT DS    1A       Pointer to Next Message Device
+     645      285        4 VDEVLCF  DS    1A       Address of Lock Facility Data Block
+     649      289        4 VDEVLFIO DS    1A       Address Of Lock Facility IORBK
+     653      28D        8 VDEVMCHP DS    8X       Message Facility CHPIDs
+     661      295        1 ........ DS    1XL20    Reserved for Future IBM Use
+     662      296       24 ........ DS    XL24     Reserved for IBM use
+     686      2AE        0 VDEVPMW0 DS    0F       WORD 0 OF PMCW
+     686      2AE        4 VDEVINTP DS    1F       INTERRUPT PARAMETER
+     690      2B2        0 VDEVPMW1 DS    0F       WORD 1 OF PMCW
+     690      2B2        1 VDEVIRCF DS    1X       SUBCHANNEL INTERUPT REQUEST CODE
+     691      2B3        1 VDEVCTL  DS    1X       SUBCHANNEL STATUS CONTROL
+     692      2B4        1 VDEVDEV  DS    0XL2     INTERNAL DEVICE NUMBER
+     693      2B5        1 VDEVDEVC DS    1X       CHANNEL NUMBER
+     694      2B6        1 VDEVDEVU DS    1X       DEVICE/CONTROL UNIT NUMBER
+     695      2B7        0 VDEVPMW2 DS    0F       WORD 2 OF PMCW
+     695      2B7        1 VDEVLPM  DS    1X       SUBCHANNEL LOGICAL PATH MASK
+     696      2B8        1 VDEVPNOM DS    1X       SUBCHANNEL PATH NOT OPERATIONAL MASK
+     697      2B9        1 VDEVLPUM DS    1X       SUBCHANNEL LAST PATH USED MASK
+     698      2BA        1 VDEVPIM  DS    1X       SUBCHANNEL PATH INSTALLED MASK
+     699      2BB        0 VDEVPMW3 DS    0F       WORD 3 OF PMCW
+     699      2BB        2 VDEVMBI  DS    1H       MEASUREMENT BLOCK INDEX
+     701      2BD        1 VDEVPOM  DS    1X       SUBCHANNEL OPERATIONAL MASK
+     702      2BE        1 VDEVPAM  DS    1X       SUBCHANNEL PATH AVAILABLE MASK
+     703      2BF        8 VDEVCPID DS    8X       CHANNEL PATH IDENTIFIERS 0 - 7
+     711      2C7        0 VDEVPMW6 DS    0F       WORD 6 OF PMCW
+     711      2C7        1 VDEVZONE DS    1X       ZONE
+     712      2C8        1 VDEVVISC DS    1X       GUEST ISC
+       _        _        _ VDEVMSGS EQU   X'40'    Type of Subchannel is Message
+       _        _        _ VDEVDYN  EQU   X'20'    Type of Subchaneel is DYN I/O (ST=1)
+     713      2C9        1 ........ DS    1X       RESERVED
+     714      2CA        1 VDEVECFG DS    1X       EXTENDED CONTROL FLAGS
+     715      2CB        1 VDEVSUBL DS    1X       LEFT DIGIT OF SUBCHANNEL NUMBER
+     716      2CC        1 VDEVSUBR DS    1X       RIGHT DIGIT OF SUBCHANNEL NUMBER

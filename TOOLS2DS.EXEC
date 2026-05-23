@@ -21,20 +21,48 @@
 |                                                                |
 |                                                                |
 +---------------------------------------------------------------*/
-Parse Upper Arg . '(' what .
+Parse Upper Arg what '(' run .
 Parse Source . .  myfn myft .
-Address CMS 'VMLINK TOOLS (QUIET .fm'
+If what='?' Then Do
+            'VMFCLEAR'
+            'PIPE (NAME MANY.XEDIT:215 END ? TOOLS2DS:EXEC:xxxx)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+/*--------------------------------------------------------------------+
+| Access the tools and its backup                                     |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK TOOLS (NOTYPE .fm'
 If rc=0 Then Parse Pull . . ifm .
              Else Call Exit rc 'Tools DIR not accessible'
-Address CMS 'VMLINK TOOLS 400 <* Z-A (NONAMES QUIET WRITE .fm'
+Address CMS 'VMLINK TOOLS_BACKUP (NOTYPE WRITE .fm'
 If rc=0 Then Parse Pull . . ofm .
              Else Call Exit rc 'Tools DISK not accessible'
-If what='RUN' Then cmsout='| cms | cons'
-              Else cmsout=''
-If what='' Then Say 'Running in explorative mode'
-           Else Say 'Executing copy'
- 
-'PIPE (NAME TOOLS2DS.EXEC:35 END ?)',
+/*--------------------------------------------------------------------+
+| Do we execute or just display                                       |
++--------------------------------------------------------------------*/
+If run='GO' Then cmsout='| cms | cons'
+            Else cmsout=''
+If run=''   Then Say TimeStamp() 'Running in explorative mode'
+            Else Say TimeStamp() 'Executing copy'
+/*--------------------------------------------------------------------+
+| Are we cleaning up or not                                           |
++--------------------------------------------------------------------*/
+If what='CLEAN' Then clean='? l:',
+                           '| specs ~ERASE~ 1 w1.2 nw.17 ~'ofm'~ nw',
+                           '| stem eras.'
+                Else clean=''
+/*--------------------------------------------------------------------+
+| Setting some stuff                                                  |
++--------------------------------------------------------------------*/
+eras.0=0
+copy.0=0
+/*--------------------------------------------------------------------+
+| Compare the content of tools and backup                             |
++--------------------------------------------------------------------*/
+'PIPE ( NAME TOOLS2DS.EXEC:57 END ?)',
     'cms LISTFILE * * 'ifm' (NOH ISODATE',
     '| specs w1.2 1.17 w4;* nw w3.1 nw',
     '| l: lookup 1.72 1.72',
@@ -47,24 +75,28 @@ If what='' Then Say 'Running in explorative mode'
     '| l:',
     '| specs ~COPYFILE~ 1 w1.2 nw.17 ~'ifm' = = 'ofm' (REPLACE OLDDATE~ nw',
     '| stem copy.',
-    '? l:',
-    '| specs ~ERASE~ 1 w1.2 nw.17 ~'ofm'~ nw',
-    '| stem eras.'
-If eras.0<>0 Then 'PIPE (NAME TOOLS2DS.EXEC:51 END ?) stem eras. | cons 'cmsout
-If copy.0<>0 Then 'PIPE (NAME TOOLS2DS.EXEC:52 END ?) stem copy. | cons 'cmsout
+    clean
+/*--------------------------------------------------------------------+
+| If any of these are filled we act                                   |
++--------------------------------------------------------------------*/
+If eras.0<>0 Then 'PIPE ( NAME TOOLS2DS.EXEC:74 END ?) stem eras. | cons 'cmsout
+If copy.0<>0 Then 'PIPE ( NAME TOOLS2DS.EXEC:75 END ?) stem copy. | cons 'cmsout
+/*--------------------------------------------------------------------+
+| Access the standard tools & release the backup                      |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK TOOLS (NOTYPE'
+Address CMS 'VMLINK TOOLS_BACKUP <DET  (NOTYPE WRITE'
  
- 
-Address CMS 'VMLINK TOOLS (QUIET'
-Address CMS 'VMLINK TOOLS 400 <DET  (NONAMES QUIET WRITE'
  
 Exit:
+/*--------------------------------------------------------------------+
+| Default way of exiting the code                                     |
++--------------------------------------------------------------------*/
 Parse Arg exrc errmsg
 If \Datatype(exrc,'N') Then exrc=0
 If exrc<>0 Then Say TimeStamp() errmsg
 Exit
  
  
- 
 TimeStamp:
 Return Date(S) Time() myfn
- 

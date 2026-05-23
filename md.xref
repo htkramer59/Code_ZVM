@@ -1,0 +1,973 @@
+RX EXEC : 20260312 20:22:42 
+Cross_Ref for: INF EXEC * 
+ 
+ 
+Source statements: 
+00001 /*---------------------------------------------------------------+                                                   
+00002 | Function : Display a menu of MDISK, Virtual DASD & filepool    |                                                   
+00003 |            directories                                         |                                                   
+00004 |                                                                |                                                   
+00005 | File     : MD       EXEC                                       |                                                   
+00006 +----------------------------------------------------------------+                                                   
+00007 | Version  : 1.1.0                                               |                                                   
+00008 |                                                                |                                                   
+00009 | Files    : VMLINK   EXEC                                       |                                                   
+00010 |            FILELIST EXEC                                       |                                                   
+00011 |            cms ACCESS  cmd                                     |                                                   
+00012 |            cms RELEASE cmd                                     |                                                   
+00013 |            cms HELP    cmd                                     |                                                   
+00014 |            cp  DETACH  cmd                                     |                                                   
+00015 |                                                                |                                                   
+00016 | Called   : MD       .                                          |                                                   
+00017 |                                                                |                                                   
+00018 | Comments : .                                                   |                                                   
+00019 |                                                                |                                                   
+00020 | Author   : H.T.Kramer, ,                                       |                                                   
+00021 | Created  : 20200513 07:42:03                                   |                                                   
+00022 | Changes  : .                                                   |                                                   
+00023 |            20260207 H.T.Kramer : Added percentage 4 sfs dirs   |                                                   
+00024 |            20250526 H.T.Kramer : Fixed problem with accessing  |                                                   
+00025 |                                  filepool directory            |                                                   
+00026 |            20250526 H.T.Kramer : Added no of blocks for        |                                                   
+00027 |                                  filepool directories.         |                                                   
+00028 |                                  Add owner for fp directories. |                                                   
+00029 |            20200514 H.T.Kramer : Fixed some typos and minor    |                                                   
+00030 |                            errors                              |                                                   
+00031 |                                                                |                                                   
+00032 |                                                                |                                                   
+00033 +---------------------------------------------------------------*/                                                   
+00034 Parse Upper Arg what .                                                                                               
+00035 Parse Source . . myfn myft .                                                                                         
+00036 If what='?' Then Do                                                                                                  
+00037                  'VMFCLEAR'                                                                                          
+00038                  'PIPE (NAME MD.EXEC:00038 END ?)',                                                                  
+00039                                     '< 'myfn' EXEC *',                                                               
+00040                                     '| tolabel Parse',                                                               
+00041                                     '| cons'                                                                         
+00042                  Call Exit                                                                                           
+00043                  End                                                                                                 
+00044 If what<>'' Then Call Exit                                                                                           
+00045 Select                                                                                                               
+00046 When myft='EXEC'  Then Call RunExec                                                                                  
+00047 When myft='XEDIT' Then Call RunXedit                                                                                 
+00048 Otherwise Call Exit 99                                                                                               
+00049 End                                                                                                                  
+00050                                                                                                                      
+00051                                                                                                                      
+00052 Exit:                                                                                                                
+00053 Parse Upper Arg exrc .                                                                                               
+00054 If exrc='' | exrc='EXRC' Then exrc=0                                                                                 
+00055 Exit exrc                                                                                                            
+00056                                                                                                                      
+00057                                                                                                                      
+00058 RunXedit:                                                                                                            
+00059 /*---------------------------------------------------------------+                                                   
+00060 | The xedit part of the code                                     |                                                   
+00061 +---------------------------------------------------------------*/                                                   
+00062 Call XeditSettings                                                                                                   
+00063 Call SetHeader                                                                                                       
+00064 pfk='1=Help, 2=, 3=Quit, 4=Release, 5=, 6=Detach, 7=, 8=, 9=Link, 10=Access, 11=Filelist, 12=Quit'                   
+00065 Call SetPFKeys                                                                                                       
+00066 Call Collect_Info                                                                                                    
+00067 Call Display                                                                                                         
+00068 Do x=1                                                                                                               
+00069   'READ ALL NUMBER'                             /* Get from XEDIT   */                                               
+00070   'EXTRACT /CURSOR'                             /* Where is cursor  */                                               
+00071   sel=cursor.1                                  /* This is selctd   */                                               
+00072   lineno=sel-firstline                          /* Which rsrvd line */                                               
+00073   wfm=Substr(input.lineno,14,1)                 /* Take this        */                                               
+00074   cuu=Substr(input.lineno,8,4)                  /* ...& this        */                                               
+00075   dir=Substr(input.lineno,105)                  /* ....& this       */                                               
+00076   If cuu='FILC' | cuu='DIRC' Then dirhandle=1    /* Is it a DIR?     */                                              
+00077                              Else dirhandle=0    /* .                */                                              
+00078   refresh=0                                     /* Initialise this  */                                               
+00079  Address CMS 'PIPE (NAME MD.EXEC:00079 END ?)',                                                                      
+00080      'stack',                                   /* Read from stack  */                                               
+00081      '| xlate upper',                           /* Uppercase        */                                               
+00082      '| strip',                                 /* Remove spaces    */                                               
+00083      '| join * x40',                            /* Make 1 rec       */                                               
+00084      '| f: fanout',                             /* Duplicate rec    */                                               
+00085      '| specs w1.1',                            /* Keep this        */                                               
+00086      '| var cmd',                               /* Store as         */                                               
+00087      '? f:',                                    /* Conn 2 fanout    */                                               
+00088      '| specs w2;*',                            /* Keep this        */                                               
+00089      '| strip ~_~',                             /* Remove these     */                                               
+00090      '| var parms'                              /* Store as         */                                               
+00091 /*---------------------------------------------------------------+                                                   
+00092 | S & Y are skipped because changing them breaks CMS for you     |                                                   
+00093 +---------------------------------------------------------------*/                                                   
+00094   usablemodes='ABCDEFGHIJKLMNOPQRTUVWXZ'                                                                             
+00095   If (Length(cmd)=1 &,                                                                                               
+00096      Pos(cmd,usablemodes)<>0) |,                                                                                     
+00097      (Length(cmd)=1 &,                                                                                               
+00098      cmd='.') |,                                                                                                     
+00099      (Length(cmd)=3  &,                                                                                              
+00100      Pos('/',cmd)=2 &,                                                                                               
+00101      Pos(Substr(cmd,1,1),usablemodes)<>0 &,                                                                          
+00102      Pos(Substr(cmd,3,1),usablemodes)<>0) Then Do                                                                    
+00103                                                wfm=cmd                                                               
+00104                                                cmd='ACCESSWM'                                                        
+00105  Address CMS 'PIPE (NAME MD.EXEC:00105 END ?)',                                                                      
+00106                                                   'cms RELEASE 'cuu,                                                 
+00107                                                   '| hole'                                                           
+00108                                                End                                                                   
+00109 /*---------------------------------------------------------------+                                                   
+00110 | What to do when we hit these commands                          |                                                   
+00111 +---------------------------------------------------------------*/                                                   
+00112   Select                                                                                                             
+00113   When cmd='ENTER'    Then refresh=1                                                                                 
+00114   When cmd='FILELIST' Then Do                                                                                        
+00115                            If wfm='.' Then Do                                                                        
+00116                                       If dirhandle then targ='.DIR 'dir                                              
+00117                                                    Else targ=' * 'cuu                                                
+00118                                       Address CMS 'VMLINK 'targ' (NONAMES QUIET FILELIST'                            
+00119                                       End                                                                            
+00120                                       Else Do                                                                        
+00121                                       If dirhandle Then targ=dir                                                     
+00122                                                    Else targ=wfm                                                     
+00123                                       Address CMS 'FILELIST * * 'targ                                                
+00124                                       End                                                                            
+00125                            End                                                                                       
+00126   When cmd='DETACH'   Then Do                                                                                        
+00127  If \dirhandle Then Address CMS 'PIPE (NAME MD.EXEC:00127 END ?)',                                                   
+00128                                                              'cp DETACH 'cuu,                                        
+00129                                                              '| HOLE'                                                
+00130                                          Else 'EMSG Can not DETACH directory: 'Strip(dir)                            
+00131                            refresh=1                                                                                 
+00132                            End                                                                                       
+00133   When cmd='RELEASE'  Then Do                                                                                        
+00134                            If wfm<>'.' Then Address CMS 'RELEASE 'wfm                                                
+00135                                        Else 'EMSG Can not RELEASE 'wfm' item is not ACCESSed'                        
+00136                            refresh=1                                                                                 
+00137                            End                                                                                       
+00138   When cmd='ACCESS'   Then Do                                                                                        
+00139                            'GETFMADR'                                                                                
+00140                            Address CMS 'PIPE (NAME MD.EXEC:00140 END ?)',                                            
+00141                                           'stack',                                                                   
+00142                                           '| specs w2.1',                                                            
+00143                                           '| var wfm'                                                                
+00144                            If dirhandle Then what=dir                                                                
+00145                                         Else what=cuu                                                                
+00146                            Address CMS 'PIPE (NAME MD.EXEC:00146 END ?)',                                            
+00147                                           'CMS ACCESS 'what wfm,                                                     
+00148                                           '| hole'                                                                   
+00149                            refresh=1                                                                                 
+00150                            End                                                                                       
+00151   When cmd='ACCESSWM' Then Do                                                                                        
+00152                            If dirhandle Then what=dir                                                                
+00153                                        Else what=cuu                                                                 
+00154                            Address CMS 'PIPE (NAME MD.EXEC:00154 END ?)',                                            
+00155                                           'CMS ACCESS 'what wfm,                                                     
+00156                                           '| hole'                                                                   
+00157                            refresh=1                                                                                 
+00158                            End                                                                                       
+00159   When cmd='LINK'     Then Do                                                                                        
+00160                            If Pos(':',parms)<>0 Then parms='.DIR 'parms                                              
+00161                            Address CMS 'VMLINK 'parms' (NONAMES QUIET'                                               
+00162                            refresh=1                                                                                 
+00163                            End                                                                                       
+00164   When cmd='HELP'     Then Address CMS 'HELP 'myfn                                                                   
+00165   When cmd='QUIT'     Then Do                                                                                        
+00166                            Queue 'QQUIT'                                                                             
+00167                            Leave x                                                                                   
+00168                            End                                                                                       
+00169   Otherwise Nop                                                                                                      
+00170   End                                                                                                                
+00171   If refresh Then Do                                                                                                 
+00172                   Call Collect_Info                                                                                  
+00173                   Call Display                                                                                       
+00174                   End                                                                                                
+00175 End x                                                                                                                
+00176 Return                                                                                                               
+00177                                                                                                                      
+00178                                                                                                                      
+00179 Display:                                                                                                             
+00180 /*---------------------------------------------------------------+                                                   
+00181 | Set up the display                                             |                                                   
+00182 +---------------------------------------------------------------*/                                                   
+00183 'SET RESERVED 3 WHITE NON NOH 'inf                                                                                   
+00184 'SET RESERVED 4 WHITE NON NOH 'hdr                                                                                   
+00185 'SET RESERVED 5 WHITE NON NOH 'seprtr                                                                                
+00186 /*---------------------------------------------------------------+                                                   
+00187 | Set up the filled lines                                        |                                                   
+00188 +---------------------------------------------------------------*/                                                   
+00189 Do i=1 To input.0                                                                                                    
+00190     'SET RESERVED 'firstline+i' YELLOW NON NOH 'input.i                                                              
+00191 End i                                                                                                                
+00192 /*---------------------------------------------------------------+                                                   
+00193 | Clear the rest of the lines                                    |                                                   
+00194 +---------------------------------------------------------------*/                                                   
+00195 Do m=firstline+input.0+1 To maxlines                                                                                 
+00196     'SET RESERVED 'm' YELLOW NON NOH '                                                                               
+00197 End m                                                                                                                
+00198 'SET RESERVED 'lastline' WHITE NON NOH 'pfk                                                                          
+00199 Return                                                                                                               
+00200                                                                                                                      
+00201                                                                                                                      
+00202 Collect_Info:                                                                                                        
+00203 /*---------------------------------------------------------------+                                                   
+00204 | Collect the info                                               |                                                   
+00205 +---------------------------------------------------------------*/                                                   
+00206 Address CMS 'PIPE (NAME MD.EXEC:00206 END ?)',                                                                       
+00207    'cms QUERY DISK',                            /* Ask cms          */                                               
+00208    '| drop first 1',                            /* Drop header      */                                               
+00209    '| p: pick substr 1.3 of w2.1 \== ~DIR~',    /* Select these     */                                               
+00210    '| specs pad 0 w1.1 1',                      /* Adjus cuu        */                                               
+00211    '              w2.1 nw.4 right',             /* .                */                                               
+00212    '              w3;* nw',                     /* .                */                                               
+00213    '| specs w2.1 1',                            /* Prefix w cuu     */                                               
+00214    '        ~1~ nw',                            /* .                */                                               
+00215    '        w1;* nw ',                          /* .                */                                               
+00216    '        ~;~n',                              /* .                */                                               
+00217    '| fi1: faninany',                           /* Take in other    */                                               
+00218    '| sort w1.2',                               /* Sort...          */                                               
+00219    '| join keylen 4',                           /* Join recs        */                                               
+00220    '| specs w2;*',                              /* Keep this        */                                               
+00221    '| if2: if pick w1.1 \== ~1~',               /* If we do not     */                                               
+00222    '|   specs ~1 . ~ 1',                        /* .have this info  */                                               
+00223    '          w2.1 nw',                         /* ...we adjust     */                                               
+00224    '          ~. . . . . . . . .;~ nw ',        /* .... the record  */                                               
+00225    '          w1;* nw',                         /* .                */                                               
+00226    '| if2:',                                    /* Conn 2 if        */                                               
+00227    '| specs w4.1 1.4 w2;* nw',                  /* Adjust record    */                                               
+00228    '| fi3: faninany',                           /* Take in others   */                                               
+00229    '| sort 1.3',                                /* Sort on filemode */                                               
+00230    '| change ~ FB ~ >>> ~',                     /* Replace this     */                                               
+00231    '| change w8.1 ~4096~4K~',                   /* Replace these    */                                               
+00232    '| change w8.1 ~2048~2K~',                   /* .                */                                               
+00233    '| change w8.1 ~1024~1K~',                   /* .                */                                               
+00234    '| specs w2.1 1.6',                          /* Rework layout    */                                               
+00235    '        w3.1 nw.4',                         /* .                */                                               
+00236    '        ~%g~ n',                            /* .                */                                               
+00237    '        w4.1 n.4',                          /* .                */                                               
+00238    '        ~%Y~ n',                            /* .                */                                               
+00239    '        w5.1 n.3',                          /* .                */                                               
+00240    '        w6.1 nw.6 right',                   /* .                */                                               
+00241    '        w8.1 nw.3 right',                   /* .                */                                               
+00242    '        w9.1 nw.5 right',                   /* .                */                                               
+00243    '        w10.1 nw.13 right',                 /* .                */                                               
+00244    '        w11.1 nw.10 right',                 /* .                */                                               
+00245    '        w12.1 nw.10 right',                 /* .                */                                               
+00246    '        w15.1 nw.4 right',                  /* .                */                                               
+00247    '        w16.1 nw.10 right',                 /* .                */                                               
+00248    '        w18.1 nw.8',                        /* .                */                                               
+00249    '        w19.1 nw.4',                        /* .                */                                               
+00250    '        w21;* nw',                          /* .                */                                               
+00251    '| change ~;~~',                             /* Remove thse      */                                               
+00252    '| if1: if pick 1.1 == ~.~',                 /* To get these     */                                               
+00253    '|   specs ~2~ 1 1;* nw',                    /* ..at the bottom  */                                               
+00254    '| if1:',                                    /* Conn 2 if        */                                               
+00255    '|   specs ~1~ 1 1;* nw',                    /* Adjust these     */                                               
+00256    '| if1:',                                    /* Conn 2 if        */                                               
+00257    '| sort 1.1',                                /* Rearrange        */                                               
+00258    '| specs w2;* 1',                            /* Remove key       */                                               
+00259    '| buffer',                                  /* Prevent stall    */                                               
+00260    '| change ~DIR ~FILC~',                      /* Replace this     */                                               
+00261    '| if3: if pick 89.1 == ~ ~',                /* If this is empty */                                               
+00262    '|      change 89.1 x40 xE1',                /* Replace with..   */                                               
+00263    '| if3:',                                    /* Conn 2 if        */                                               
+00264    '| if4: if pick anycase substr 1.4 of w2.1 == ~FILC~ or',   /* Select these     */                                
+00265    '                       substr 1.4 of w2.1 == ~DIRC~',      /* .                */                                
+00266    '|   specs w1.11 1 fs . substr f1 of w-1;-1 nw w13;* nw',   /* Add owner        */                                
+00267    '|   specs w1.11 1 fs : substr f2 of w12 nw.8 w13;* nw',    /* Remove fp name   */                                
+00268    '| if4:',                                    /* Conn 2 if        */                                               
+00269    '| stem input.',                             /* Store as         */                                               
+00270    '? p:',                                      /* Conn 2 pick      */                                               
+00271    '| specs w3.1 1.3',                          /* Adjust layout    */                                               
+00272    '        w1;* nw ',                          /* .                */                                               
+00273    '        ~; 2 . . ; 3 . . ;~ n',             /* .                */                                               
+00274    '| fi2: faninany',                           /* Take in others   */                                               
+00275    '| sort w1.1',                               /* Sort them        */                                               
+00276    '| join keylen 3',                           /* Join them        */                                               
+00277    '| fi4: faninany',                           /* Take in others   */                                               
+00278    '| fi3:',                                    /* Conn 2 faninany  */                                               
+00279    '?',                                         /* 2nd pipe         */                                               
+00280    'cms QUERY ACCESSED',                        /* Ask cms          */                                               
+00281    '| pick substr 1.3 of w-2;-2 == ~DIR~',      /* Keep these       */                                               
+00282    '| specs w1.1 1.3',                          /* Adjust layout    */                                               
+00283    '        w-1;-1 nw',                         /* .                */                                               
+00284    '| fi2:',                                    /* Conn 2 faninany  */                                               
+00285    '?',                                         /* 3rd pipe         */                                               
+00286    'cp QUERY VIRTUAL DASD',                     /* Ask cp           */                                               
+00287    '| specs w2.1 1',                            /* Adjust layout    */                                               
+00288    '        ~2~ nw',                            /* .                */                                               
+00289    '        w2.2 nw',                           /* .                */                                               
+00290    '        w6.1 nw',                           /* .                */                                               
+00291    '        w7.1 n',                            /* .                */                                               
+00292    '        ~;~ n',                             /* .                */                                               
+00293    '| fi1:',                                    /* Conn 2 faninany  */                                               
+00294    '?',                                         /* 4th pipe         */                                               
+00295    'cp QUERY MDISK 0-FFFF',                     /* Ask CP           */                                               
+00296    '| drop first 1',                            /* Remove header    */                                               
+00297    '| specs w2.1 1',                            /* Adjust layout    */                                               
+00298    '        ~3~ nw',                            /* .                */                                               
+00299    '        w3;* nw ',                          /* .                */                                               
+00300    '        ~;~n',                              /* .                */                                               
+00301    '| fi1:',                                    /* Conn 2 faninany  */                                               
+00302    '?',                                         /* 5th pipe         */                                               
+00303    'cms LISTDIR .',                             /* Ask cms          */                                               
+00304    '| drop first 1',                            /* Remove header    */                                               
+00305    '| pick 1.1 == ~-~',                         /* Only non-accessed*/                                               
+00306    '| specs w2.1 1',                            /* Remove -         */                                               
+00307    '| f2: fanout',                              /* Duplicate recs   */                                               
+00308    '| specs ~QUERY DIRATTR~  1 w1.1 nw',        /* Compose cmds     */                                               
+00309    '| cms',                                     /* Hand 2 cms       */                                               
+00310    '| specs w1.1 1 x40 n',                      /* Add a spaces     */                                               
+00311    '| j1: juxtapose',                           /* Join them        */                                               
+00312    '| change ~DIRCONTROL~DIRC~',                /* Replace these    */                                               
+00313    '| change ~FILECONTROL~FILC~',               /* ...& these       */                                               
+00314    '| specs ~.  .~ 1',                          /* Complete layout  */                                               
+00315            'w1.1 nw ~. . . . . . . . .; 2 . . ; 3 . . ;~ nw ',  /* .                */                               
+00316            'w2.1 nw',                           /* .                */                                               
+00317    '| fi4:',                                    /* Conn 2 faninany  */                                               
+00318    '? f2:',                                     /* Conn 2 fanout    */                                               
+00319    '| j1:'                                      /* Conn 2 juxtapose */                                               
+00320 /*---------------------------------------------------------------+                                                   
+00321 | Add the nr of blocks per directory                             |                                                   
+00322 +---------------------------------------------------------------*/                                                   
+00323 Do i=1 To input.0                                                                                                    
+00324    If Substr(Word(input.i,2),1,4) = 'FILC' |,                                                                        
+00325       Substr(Word(input.i,2),1,4) = 'DIRC' Then Do                                                                   
+00326            dir=Reverse(Word(Reverse(input.i),1))                                                                     
+00327            Parse Value dir With fpname ':' fspace '.' .                                                              
+00328  Address CMS 'PIPE (NAME MD.EXEC:00328 END ?)',                                                                      
+00329               'sfsdir 'dir' isodate',            /* Get block        */                                              
+00330               '| pick w3.1 \== ~D~',             /* Ignore these     */                                              
+00331               '| specs',                         /* Summ blocks      */                                              
+00332                       'printonly eof',           /* .                */                                              
+00333                       'a: w7.1 .',               /* .                */                                              
+00334                       'set #0+=a',               /* .                */                                              
+00335                       'eof',                     /* .                */                                              
+00336                       'print #0 1',              /* Print total      */                                              
+00337               '| var used',                      /* Hand 2 rexx      */                                              
+00338               '?',                                    /* 2nd pipe         */                                         
+00339               'cms QUERY LIMITS FOR 'fspace fpname,   /* Ask cms          */                                         
+00340               '| drop first 1',                       /* Remove hdr       */                                         
+00341               '| specs w3.1',                         /* Keep max availabl*/                                         
+00342               '| var maxblk'                          /* Hand 2 rexx      */                                         
+00343            perc=Format((used/maxblk)*100,2,0)                                                                        
+00344            perc=Right(Strip(perc),2,'0')                                                                             
+00345            used=used'-'perc                                                                                          
+00346            input.i=Subword(input.i,1,6)||Right(Strip(used),14),                                                      
+00347                    Right(Word(input.i,7),10),                                                                        
+00348                    Right(Word(input.i,8),9),                                                                         
+00349                    Right(Word(input.i,9),4),                                                                         
+00350                    Right(Word(input.i,11),9),                                                                        
+00351                    Left(Word(input.i,12),8),                                                                         
+00352                    Right(Word(input.i,13),4),                                                                        
+00353                          Word(input.i,14)                                                                            
+00354            End                                                                                                       
+00355 End i                                                                                                                
+00356 Return                                                                                                               
+00357                                                                                                                      
+00358                                                                                                                      
+00359 RunExec:                                                                                                             
+00360 /*---------------------------------------------------------------+                                                   
+00361 | .                                                              |                                                   
+00362 +---------------------------------------------------------------*/                                                   
+00363 'PIPE (NAME MD.EXEC:00363 END ?)',                                                                                   
+00364    'cms EXECMAP 'myfn' XEDIT',             /* Ask CMS          */                                                    
+00365    '| drop first 1',                      /* Ignore header    */                                                     
+00366    '| count lines',                       /* Count findings   */                                                     
+00367    '| if: if pick 1.1 == ~1~',            /* Check this       */                                                     
+00368    '|     specs ~EXECDROP 'myfn' XEDIT~ 1', /* Compose cmd    */                                                     
+00369    '|     cms',                           /* Issue cmd      */                                                       
+00370    '| if:',                               /* Comm 2 if        */                                                     
+00371    '| var exldd'                          /* Hand 2 rexx      */                                                     
+00372 Address CMS 'EXECLOAD 'myfn' EXEC * = XEDIT'                                                                         
+00373 /*---------------------------------------------------------------+                                                   
+00374 | Some initial settings and invoke myself as XEDIT macro         |                                                   
+00375 +---------------------------------------------------------------*/                                                   
+00376 Queue 'SET PREFIX OFF'                                                                                               
+00377 Queue 'SET RECFM V'                                                                                                  
+00378 Queue 'SET LRECL 500'                                                                                                
+00379 Queue 'SET TRUNC *'                                                                                                  
+00380 Queue myfn                                                                                                           
+00381 Queue ':1'                                                                                                           
+00382 Address CMS 'XEDIT 'myfn' OVERVIEW A3 (WIDTH 500'                                                                    
+00383 If \exldd Then Address CMS 'EXECDROP 'myfn' XEDIT'                                                                   
+00384 Return                                                                                                               
+00385                                                                                                                      
+00386                                                                                                                      
+00387 XeditSettings:                                                                                                       
+00388 /*---------------------------------------------------------------+                                                   
+00389 | Initial XEDIT settings                                         |                                                   
+00390 +---------------------------------------------------------------*/                                                   
+00391 'RECFM V'                                                                                                            
+00392 'LRECL 500'                                                                                                          
+00393 'TRUNC *'                                                                                                            
+00394 'VERIFY 1 *'                                                                                                         
+00395 'CURLINE ON 4'                                                                                                       
+00396 'PREFIX OFF'                                                                                                         
+00397 'TOFEOF OFF'                                                                                                         
+00398 'SCALE  OFF'                                                                                                         
+00399 'EXTRACT /SCREEN'                                                                                                    
+00400 'SET ENTER IGNORE'                                                                                                   
+00401 lastline=Word(screen.1,2)                       /* This is the last */                                               
+00402 maxlines=lastline-6                             /* Max no of lines  */                                               
+00403 firstline=5                                     /* First line 2 start*/                                              
+00404 /*---------------------------------------------------------------+                                                   
+00405 | Define the control char and colors we are going to use...      |                                                   
+00406 +---------------------------------------------------------------*/                                                   
+00407 'SET CTLCHAR % ESCAPE'                                                                                               
+00408 'SET CTLCHAR Y PROTECT   YELLOW HIGH'                                                                                
+00409 'SET CTLCHAR y NOPROTECT YELLOW HIGH'                                                                                
+00410 'SET CTLCHAR W PROTECT   WHITE  HIGH'                                                                                
+00411 'SET CTLCHAR w NOPROTECT WHITE  HIGH'                                                                                
+00412 'SET CTLCHAR B PROTECT   BLUE   HIGH'                                                                                
+00413 'SET CTLCHAR b NOPROTECT BLUE   HIGH'                                                                                
+00414 'SET CTLCHAR G PROTECT   GREEN  HIGH'                                                                                
+00415 'SET CTLCHAR g NOPROTECT GREEN  HIGH'                                                                                
+00416 'SET CTLCHAR $ OFF'                                                                                                  
+00417 Return                                                                                                               
+00418                                                                                                                      
+00419                                                                                                                      
+00420 SetHeader:                                                                                                           
+00421 /*---------------------------------------------------------------+                                                   
+00422 | Set the header, separator and input line                       |                                                   
+00423 +---------------------------------------------------------------*/                                                   
+00424 hdr='Label  VDev Mod  Stat   Cyl Blk Files  Blk_Used-(%)   Blk_Left Blk_Total Type R_Blk/Cyl Owner    VDev Directory'
+00425 inf='%GLink this: Owner%g________%GVDev%g____%G  or  Directory %g'Copies('_',30)'%G  and%Bpress PF9'                 
+00426 Address CMS 'PIPE (NAME MD.EXEC:00426 END ?)',                                                                       
+00427     'var hdr',                                                                                                       
+00428     '| deblock 1',                                                                                                   
+00429     '| if: if pick 1.1 \== ~ ~',                                                                                     
+00430     '|   spec ~-~ 1',                                                                                                
+00431     '| if:',                                                                                                         
+00432     '| join *',                                                                                                      
+00433     '| var seprtr'                                                                                                   
+00434 Return                                                                                                               
+00435                                                                                                                      
+00436                                                                                                                      
+00437 SetPFKeys:                                                                                                           
+00438 /*---------------------------------------------------------------+                                                   
+00439 | Disable all PF keys and set the ones we need                   |                                                   
+00440 +---------------------------------------------------------------*/                                                   
+00441 Address CMS 'PIPE (NAME MD.EXEC:00441 END ?)',                                                                       
+00442     'var pfk',                                  /* Take this        */                                               
+00443     '| split at ,',                             /* Split here       */                                               
+00444     '| strip',                                  /* Remove spaces    */                                               
+00445     '| specs fs = ~SET PF~ 1 f1 n f2 nw',       /* Compose cmd      */                                               
+00446     '| stem setpf.'                             /* Store as         */                                               
+00447 /*---------------------------------------------------------------+                                                   
+00448 | Reset all PF keys                                              |                                                   
+00449 +---------------------------------------------------------------*/                                                   
+00450 Do s=1 To 24                                                                                                         
+00451    'SET PF's                                                                                                         
+00452 End s                                                                                                                
+00453 /*---------------------------------------------------------------+                                                   
+00454 | Set the new values                                             |                                                   
+00455 +---------------------------------------------------------------*/                                                   
+00456 Do s=1 To setpf.0                                                                                                    
+00457    setpf.s                                                                                                           
+00458 End                                                                                                                  
+00459 Return                                                                                                               
+ 
+ 
+ Empty lines found on the following line-nos:
+    50 51 56 57 177 178 200 201 357 358 385
+    386 418 419 435 436
+ 
+ 
+Single line comments on lines:
+       69 /* Get from XEDIT   */
+       70 /* Where is cursor  */
+       71 /* This is selctd   */
+       72 /* Which rsrvd line */
+       73 /* Take this        */
+       74 /* ...& this        */
+       75 /* ....& this       */
+       76 /* Is it a DIR?     */
+       77 /* .                */
+       78 /* Initialise this  */
+       80 /* Read from stack  */
+       81 /* Uppercase        */
+       82 /* Remove spaces    */
+       83 /* Make 1 rec       */
+       84 /* Duplicate rec    */
+       85 /* Keep this        */
+       86 /* Store as         */
+       87 /* Conn 2 fanout    */
+       88 /* Keep this        */
+       89 /* Remove these     */
+       90 /* Store as         */
+      207 /* Ask cms          */
+      208 /* Drop header      */
+      209 /* Select these     */
+      210 /* Adjus cuu        */
+      211 /* .                */
+      212 /* .                */
+      213 /* Prefix w cuu     */
+      214 /* .                */
+      215 /* .                */
+      216 /* .                */
+      217 /* Take in other    */
+      218 /* Sort...          */
+      219 /* Join recs        */
+      220 /* Keep this        */
+      221 /* If we do not     */
+      222 /* .have this info  */
+      223 /* ...we adjust     */
+      224 /* .... the record  */
+      225 /* .                */
+      226 /* Conn 2 if        */
+      227 /* Adjust record    */
+      228 /* Take in others   */
+      229 /* Sort on filemode */
+      230 /* Replace this     */
+      231 /* Replace these    */
+      232 /* .                */
+      233 /* .                */
+      234 /* Rework layout    */
+      235 /* .                */
+      236 /* .                */
+      237 /* .                */
+      238 /* .                */
+      239 /* .                */
+      240 /* .                */
+      241 /* .                */
+      242 /* .                */
+      243 /* .                */
+      244 /* .                */
+      245 /* .                */
+      246 /* .                */
+      247 /* .                */
+      248 /* .                */
+      249 /* .                */
+      250 /* .                */
+      251 /* Remove thse      */
+      252 /* To get these     */
+      253 /* ..at the bottom  */
+      254 /* Conn 2 if        */
+      255 /* Adjust these     */
+      256 /* Conn 2 if        */
+      257 /* Rearrange        */
+      258 /* Remove key       */
+      259 /* Prevent stall    */
+      260 /* Replace this     */
+      261 /* If this is empty */
+      262 /* Replace with..   */
+      263 /* Conn 2 if        */
+      264 /* Select these     */
+      265 /* .                */
+      266 /* Add owner        */
+      267 /* Remove fp name   */
+      268 /* Conn 2 if        */
+      269 /* Store as         */
+      270 /* Conn 2 pick      */
+      271 /* Adjust layout    */
+      272 /* .                */
+      273 /* .                */
+      274 /* Take in others   */
+      275 /* Sort them        */
+      276 /* Join them        */
+      277 /* Take in others   */
+      278 /* Conn 2 faninany  */
+      279 /* 2nd pipe         */
+      280 /* Ask cms          */
+      281 /* Keep these       */
+      282 /* Adjust layout    */
+      283 /* .                */
+      284 /* Conn 2 faninany  */
+      285 /* 3rd pipe         */
+      286 /* Ask cp           */
+      287 /* Adjust layout    */
+      288 /* .                */
+      289 /* .                */
+      290 /* .                */
+      291 /* .                */
+      292 /* .                */
+      293 /* Conn 2 faninany  */
+      294 /* 4th pipe         */
+      295 /* Ask CP           */
+      296 /* Remove header    */
+      297 /* Adjust layout    */
+      298 /* .                */
+      299 /* .                */
+      300 /* .                */
+      301 /* Conn 2 faninany  */
+      302 /* 5th pipe         */
+      303 /* Ask cms          */
+      304 /* Remove header    */
+      305 /* Only non-accessed*/
+      306 /* Remove -         */
+      307 /* Duplicate recs   */
+      308 /* Compose cmds     */
+      309 /* Hand 2 cms       */
+      310 /* Add a spaces     */
+      311 /* Join them        */
+      312 /* Replace these    */
+      313 /* ...& these       */
+      314 /* Complete layout  */
+      315 /* .                */
+      316 /* .                */
+      317 /* Conn 2 faninany  */
+      318 /* Conn 2 fanout    */
+      319 /* Conn 2 juxtapose */
+      329 /* Get block        */
+      330 /* Ignore these     */
+      331 /* Summ blocks      */
+      332 /* .                */
+      333 /* .                */
+      334 /* .                */
+      335 /* .                */
+      336 /* Print total      */
+      337 /* Hand 2 rexx      */
+      338 /* 2nd pipe         */
+      339 /* Ask cms          */
+      340 /* Remove hdr       */
+      341 /* Keep max availabl*/
+      342 /* Hand 2 rexx      */
+      364 /* Ask CMS          */
+      365 /* Ignore header    */
+      366 /* Count findings   */
+      367 /* Check this       */
+      368 /* Compose cmd    */
+      369 /* Issue cmd      */
+      370 /* Comm 2 if        */
+      371 /* Hand 2 rexx      */
+      401 /* This is the last */
+      402 /* Max no of lines  */
+      403 /* First line 2 start*/
+      442 /* Take this        */
+      443 /* Split here       */
+      444 /* Remove spaces    */
+      445 /* Compose cmd      */
+      446 /* Store as         */
+ 
+ 
+Comments over multiple lines:
+    00001-00033 00091-00093 00180-00182 00192-00194 00320-00322 00373-00375 00404-00406 00438-00440 00453-00455 
+    00059-00061 00109-00111 00186-00188 00203-00205 00360-00362 00388-00390 00421-00423 00447-00449 
+ 
+ 
+NO HEX-strings found
+ 
+ 
+Literals found on the following lines:
+    '                       substr 1.4 of w2.1 == ~DIRC~'                                      265 
+    '              w2.1 nw.4 right'                                                            211 
+    '              w3;* nw'                                                                    212 
+    '          ~. . . . . . . . .;~ nw '                                                       224 
+    '          w1;* nw'                                                                        225 
+    '          w2.1 nw'                                                                        223 
+    '        ~; 2 . . ; 3 . . ;~ n'                                                            273 
+    '        ~;~ n'                                                                            292 
+    '        ~;~n'                                                                             216  300 
+    '        ~%g~ n'                                                                           236 
+    '        ~%Y~ n'                                                                           238 
+    '        ~1~ nw'                                                                           214 
+    '        ~2~ nw'                                                                           288 
+    '        ~3~ nw'                                                                           298 
+    '        w-1;-1 nw'                                                                        283 
+    '        w1;* nw '                                                                         215  272 
+    '        w10.1 nw.13 right'                                                                243 
+    '        w11.1 nw.10 right'                                                                244 
+    '        w12.1 nw.10 right'                                                                245 
+    '        w15.1 nw.4 right'                                                                 246 
+    '        w16.1 nw.10 right'                                                                247 
+    '        w18.1 nw.8'                                                                       248 
+    '        w19.1 nw.4'                                                                       249 
+    '        w2.2 nw'                                                                          289 
+    '        w21;* nw'                                                                         250 
+    '        w3.1 nw.4'                                                                        235 
+    '        w3;* nw '                                                                         299 
+    '        w4.1 n.4'                                                                         237 
+    '        w5.1 n.3'                                                                         239 
+    '        w6.1 nw.6 right'                                                                  240 
+    '        w6.1 nw'                                                                          290 
+    '        w7.1 n'                                                                           291 
+    '        w8.1 nw.3 right'                                                                  241 
+    '        w9.1 nw.5 right'                                                                  242 
+    ' (NONAMES QUIET FILELIST'                                                                 118 
+    ' (NONAMES QUIET'                                                                          161 
+    ' * '                                                                                      117 
+    ' isodate'                                                                                 329 
+    ' item is not ACCESSed'                                                                    135 
+    ' EXEC * = XEDIT'                                                                          372 
+    ' EXEC *'                                                                                  39 
+    ' OVERVIEW A3 (WIDTH 500'                                                                  382 
+    ' WHITE NON NOH '                                                                          198 
+    ' XEDIT'                                                                                   364  383 
+    ' XEDIT~ 1'                                                                                368 
+    ' YELLOW NON NOH '                                                                         190  196 
+    '.'                                                                                        98  115  134  327 
+    '.DIR '                                                                                    116  160 
+    '< '                                                                                       39 
+    '|      change 89.1 x40 xE1'                                                               262 
+    '|     cms'                                                                                369 
+    '|     specs ~EXECDROP '                                                                   368 
+    '|   spec ~-~ 1'                                                                           430 
+    '|   specs ~1 . ~ 1'                                                                       222 
+    '|   specs ~1~ 1 1;* nw'                                                                   255 
+    '|   specs ~2~ 1 1;* nw'                                                                   253 
+    '|   specs w1.11 1 fs . substr f1 of w-1;-1 nw w13;* nw'                                   266 
+    '|   specs w1.11 1 fs : substr f2 of w12 nw.8 w13;* nw'                                    267 
+    '| buffer'                                                                                 259 
+    '| change ~ FB ~ >>> ~'                                                                    230 
+    '| change ~;~~'                                                                            251 
+    '| change ~DIR ~FILC~'                                                                     260 
+    '| change ~DIRCONTROL~DIRC~'                                                               312 
+    '| change ~FILECONTROL~FILC~'                                                              313 
+    '| change w8.1 ~1024~1K~'                                                                  233 
+    '| change w8.1 ~2048~2K~'                                                                  232 
+    '| change w8.1 ~4096~4K~'                                                                  231 
+    '| cms'                                                                                    309 
+    '| cons'                                                                                   41 
+    '| count lines'                                                                            366 
+    '| deblock 1'                                                                              428 
+    '| drop first 1'                                                                           208  296  304  340  365 
+    '| f: fanout'                                                                              84 
+    '| fi1: faninany'                                                                          217 
+    '| fi1:'                                                                                   293  301 
+    '| fi2: faninany'                                                                          274 
+    '| fi2:'                                                                                   284 
+    '| fi3: faninany'                                                                          228 
+    '| fi3:'                                                                                   278 
+    '| fi4: faninany'                                                                          277 
+    '| fi4:'                                                                                   317 
+    '| f2: fanout'                                                                             307 
+    '| hole'                                                                                   107  148  156 
+    '| if: if pick 1.1 == ~1~'                                                                 367 
+    '| if: if pick 1.1 \== ~ ~'                                                                429 
+    '| if:'                                                                                    370  431 
+    '| if1: if pick 1.1 == ~.~'                                                                252 
+    '| if1:'                                                                                   254  256 
+    '| if2: if pick w1.1 \== ~1~'                                                              221 
+    '| if2:'                                                                                   226 
+    '| if3: if pick 89.1 == ~ ~'                                                               261 
+    '| if3:'                                                                                   263 
+    '| if4: if pick anycase substr 1.4 of w2.1 == ~FILC~ or'                                   264 
+    '| if4:'                                                                                   268 
+    '| join * x40'                                                                             83 
+    '| join *'                                                                                 432 
+    '| join keylen 3'                                                                          276 
+    '| join keylen 4'                                                                          219 
+    '| j1: juxtapose'                                                                          311 
+    '| j1:'                                                                                    319 
+    '| p: pick substr 1.3 of w2.1 \== ~DIR~'                                                   209 
+    '| pick substr 1.3 of w-2;-2 == ~DIR~'                                                     281 
+    '| pick w3.1 \== ~D~'                                                                      330 
+    '| pick 1.1 == ~-~'                                                                        305 
+    '| sort w1.1'                                                                              275 
+    '| sort w1.2'                                                                              218 
+    '| sort 1.1'                                                                               257 
+    '| sort 1.3'                                                                               229 
+    '| specs fs = ~SET PF~ 1 f1 n f2 nw'                                                       445 
+    '| specs pad 0 w1.1 1'                                                                     210 
+    '| specs ~.  .~ 1'                                                                         314 
+    '| specs ~QUERY DIRATTR~  1 w1.1 nw'                                                       308 
+    '| specs w1.1 1 x40 n'                                                                     310 
+    '| specs w1.1 1.3'                                                                         282 
+    '| specs w1.1'                                                                             85 
+    '| specs w2.1 1.6'                                                                         234 
+    '| specs w2.1 1'                                                                           213  287  297  306 
+    '| specs w2.1'                                                                             142 
+    '| specs w2;* 1'                                                                           258 
+    '| specs w2;*'                                                                             88  220 
+    '| specs w3.1 1.3'                                                                         271 
+    '| specs w3.1'                                                                             341 
+    '| specs w4.1 1.4 w2;* nw'                                                                 227 
+    '| specs'                                                                                  331 
+    '| split at ,'                                                                             443 
+    '| stem input.'                                                                            269 
+    '| stem setpf.'                                                                            446 
+    '| strip ~_~'                                                                              89 
+    '| strip'                                                                                  82  444 
+    '| tolabel Parse'                                                                          40 
+    '| var cmd'                                                                                86 
+    '| var exldd'                                                                              371 
+    '| var maxblk'                                                                             342 
+    '| var parms'                                                                              90 
+    '| var seprtr'                                                                             433 
+    '| var used'                                                                               337 
+    '| var wfm'                                                                                143 
+    '| xlate upper'                                                                            81 
+    '| HOLE'                                                                                   129 
+    '-'                                                                                        345 
+    '/'                                                                                        100 
+    '%G  and%Bpress PF9'                                                                       425 
+    '%GLink this: Owner%g________%GVDev%g____%G  or  Directory %g'                             425 
+    '_'                                                                                        425 
+    '? f:'                                                                                     87 
+    '? f2:'                                                                                    318 
+    '? p:'                                                                                     270 
+    '?'                                                                                        36  279  285  294  302
+                                                                                                    338 
+    ':'                                                                                        160  327 
+    ':1'                                                                                       381 
+    ''                                                                                         44  54 
+    'a: w7.1 .'                                                                                333 
+    'cms EXECMAP '                                                                             364 
+    'cms LISTDIR .'                                                                            303 
+    'cms QUERY ACCESSED'                                                                       280 
+    'cms QUERY DISK'                                                                           207 
+    'cms QUERY LIMITS FOR '                                                                    339 
+    'cms RELEASE '                                                                             106 
+    'cp DETACH '                                                                               128 
+    'cp QUERY MDISK 0-FFFF'                                                                    295 
+    'cp QUERY VIRTUAL DASD'                                                                    286 
+    'eof'                                                                                      335 
+    'print #0 1'                                                                               336 
+    'printonly eof'                                                                            332 
+    'set #0+=a'                                                                                334 
+    'sfsdir '                                                                                  329 
+    'stack'                                                                                    80  141 
+    'var hdr'                                                                                  427 
+    'var pfk'                                                                                  442 
+    'w1.1 nw ~. . . . . . . . .; 2 . . ; 3 . . ;~ nw '                                         315 
+    'w2.1 nw'                                                                                  316 
+    'ABCDEFGHIJKLMNOPQRTUVWXZ'                                                                 94 
+    'ACCESS'                                                                                   138 
+    'ACCESSWM'                                                                                 104  151 
+    'CMS ACCESS '                                                                              147  155 
+    'CURLINE ON 4'                                                                             395 
+    'DETACH'                                                                                   126 
+    'DIRC'                                                                                     76  325 
+    'EMSG Can not DETACH directory: '                                                          130 
+    'EMSG Can not RELEASE '                                                                    135 
+    'ENTER'                                                                                    113 
+    'EXEC'                                                                                     46 
+    'EXECDROP '                                                                                383 
+    'EXECLOAD '                                                                                372 
+    'EXRC'                                                                                     54 
+    'EXTRACT /CURSOR'                                                                          70 
+    'EXTRACT /SCREEN'                                                                          399 
+    'FILC'                                                                                     76  324 
+    'FILELIST * * '                                                                            123 
+    'FILELIST'                                                                                 114 
+    'GETFMADR'                                                                                 139 
+    'HELP '                                                                                    164 
+    'HELP'                                                                                     164 
+    'Label  VDev Mod  Stat   Cyl Blk Files  Blk_Used-(%)   Blk_Left Blk_Total Type R_Blk/Cyl O 424 
+    'LINK'                                                                                     159 
+    'LRECL 500'                                                                                392 
+    'PIPE (NAME MD.EXEC:00038 END ?)'                                                          38 
+    'PIPE (NAME MD.EXEC:00079 END ?)'                                                          79 
+    'PIPE (NAME MD.EXEC:00105 END ?)'                                                          105 
+    'PIPE (NAME MD.EXEC:00127 END ?)'                                                          127 
+    'PIPE (NAME MD.EXEC:00140 END ?)'                                                          140 
+    'PIPE (NAME MD.EXEC:00146 END ?)'                                                          146 
+    'PIPE (NAME MD.EXEC:00154 END ?)'                                                          154 
+    'PIPE (NAME MD.EXEC:00206 END ?)'                                                          206 
+    'PIPE (NAME MD.EXEC:00328 END ?)'                                                          328 
+    'PIPE (NAME MD.EXEC:00363 END ?)'                                                          363 
+    'PIPE (NAME MD.EXEC:00426 END ?)'                                                          426 
+    'PIPE (NAME MD.EXEC:00441 END ?)'                                                          441 
+    'PREFIX OFF'                                                                               396 
+    'QQUIT'                                                                                    166 
+    'QUIT'                                                                                     165 
+    'READ ALL NUMBER'                                                                          69 
+    'RECFM V'                                                                                  391 
+    'RELEASE '                                                                                 134 
+    'RELEASE'                                                                                  133 
+    'SCALE  OFF'                                                                               398 
+    'SET CTLCHAR $ OFF'                                                                        416 
+    'SET CTLCHAR % ESCAPE'                                                                     407 
+    'SET CTLCHAR b NOPROTECT BLUE   HIGH'                                                      413 
+    'SET CTLCHAR g NOPROTECT GREEN  HIGH'                                                      415 
+    'SET CTLCHAR w NOPROTECT WHITE  HIGH'                                                      411 
+    'SET CTLCHAR y NOPROTECT YELLOW HIGH'                                                      409 
+    'SET CTLCHAR B PROTECT   BLUE   HIGH'                                                      412 
+    'SET CTLCHAR G PROTECT   GREEN  HIGH'                                                      414 
+    'SET CTLCHAR W PROTECT   WHITE  HIGH'                                                      410 
+    'SET CTLCHAR Y PROTECT   YELLOW HIGH'                                                      408 
+    'SET ENTER IGNORE'                                                                         400 
+    'SET LRECL 500'                                                                            378 
+    'SET PF'                                                                                   451 
+    'SET PREFIX OFF'                                                                           376 
+    'SET RECFM V'                                                                              377 
+    'SET RESERVED '                                                                            190  196  198 
+    'SET RESERVED 3 WHITE NON NOH '                                                            183 
+    'SET RESERVED 4 WHITE NON NOH '                                                            184 
+    'SET RESERVED 5 WHITE NON NOH '                                                            185 
+    'SET TRUNC *'                                                                              379 
+    'TOFEOF OFF'                                                                               397 
+    'TRUNC *'                                                                                  393 
+    'VERIFY 1 *'                                                                               394 
+    'VMFCLEAR'                                                                                 37 
+    'VMLINK '                                                                                  118  161 
+    'XEDIT '                                                                                   382 
+    'XEDIT'                                                                                    47 
+    '0'                                                                                        344 
+    '1=Help, 2=, 3=Quit, 4=Release, 5=, 6=Detach, 7=, 8=, 9=Link, 10=Access, 11=Filelist, 12=Q 64 
+ 
+ 
+SUB-routines called/signaled from lineno:
+    Collect_Info                                       00066 00172
+    Display                                            00067 00173
+    Exit                                               00042 00044 00048
+    RunExec                                            00046
+    RunXedit                                           00047
+    SetHeader                                          00063
+    SetPFKeys                                          00065
+    XeditSettings                                      00062
+ 
+ 
+SUB-routines (I=Intern/E=Extern) found on lines:
+    I Collect_Info:                                    202-460
+    I Display:                                         179-460
+    I Exit:                                            52-460
+    I RunExec:                                         359-460
+    I RunXedit:                                        58-460
+    I SetHeader:                                       420-460
+    I SetPFKeys:                                       437-460
+    I XeditSettings:                                   387-460
+ 
+ 
+REXX-statements on line:column:
+    .                    34:22 35:14 35:16 35:28 53:22 327:49 
+    then                 116:52 
+    Arg                  34:13 53:13 
+    Call                 42:18 44:16 46:18 47:17 48:11 62:1 63:1 65:1 66:1 67:1 172:19 173:19 
+    Do                   36:15 102:48 115:41 126:20 138:20 159:22 171:19 195:1 325:43 456:1 
+                         68:1 114:18 120:44 133:19 151:18 165:22 189:1 323:1 450:1 
+    Else                 77:30 117:52 120:39 122:52 130:42 135:40 145:41 153:40 
+    End                  43:18 108:48 124:39 132:28 150:28 163:28 170:3 175:1 197:1 355:1 458:1 
+                         49:1 119:39 125:28 137:28 158:28 168:28 174:19 191:1 354:12 452:1 
+    Exit                 42:23 44:21 48:16 55:1 
+    If                   36:1 54:1 95:3 116:39 127:2 144:28 160:28 324:4 
+                         44:1 76:3 115:28 121:39 134:28 152:28 171:3 383:1 
+    Leave                167:28 
+    Nop                  169:13 
+    Otherwise            48:1 169:3 
+    Parse                34:1 35:1 53:1 327:12 
+    Queue                166:28 376:1 377:1 378:1 379:1 380:1 381:1 
+    Return               176:1 199:1 356:1 384:1 417:1 434:1 459:1 
+    Select               45:1 112:3 
+    Source               35:7 
+    Then                 36:10 46:13 54:18 102:43 114:13 121:52 127:16 134:37 144:41 152:41 160:46 165:17 325:38 
+                         44:11 47:12 76:18 113:16 115:36 126:15 133:14 138:15 151:13 159:17 164:17 171:14 383:11 
+    Upper                34:7 53:7 
+    Value                327:18 
+    When                 46:1 47:1 113:3 114:3 126:3 133:3 138:3 151:3 159:3 164:3 165:3 
+    With                 327:28 
+ 
+ 
+Variables found on lines:
+    cmd                  98 104 113 114 126 133 138 151 159 164 165
+    cuu                  74 76 76
+    dir                  75 326
+    dirhandle            76 77
+    exrc                 54 54 54
+    firstline            403
+    hdr                  424
+    i                    189 323
+    inf                  425
+    lastline             401
+    lineno               72
+    m                    195
+    maxlines             402
+    myft                 46 47
+    parms                160
+    perc                 343 344
+    pfk                  64
+    refresh              78 113 131 136 149 157 162
+    s                    450 456
+    sel                  71
+    t                    116 117 121 122
+    usablemodes          94
+    used                 345
+    wfm                  73 103 115
+    what                 36 144 145 152 153
+    x                    68

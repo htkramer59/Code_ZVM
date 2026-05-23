@@ -1,0 +1,5 @@
+/**/
+Parse Upper Arg wr_ro
+If wr_ro<>'' Then option='WRITE'
+             Else option=''
+address cms 'L .DIR VMUSERS:DMSERVER.WORK. ('option

@@ -1,0 +1,11 @@
+/**/
+numeric digits 64
+'PIPE (NAME II.EXEC:3 END ?)',
+    'cp LOCATE VDEV HERMAN 121',
+    '| cons',
+    '| drop first 1',
+    '| specs w3.1 1',
+    '| cons',
+    '| var vdev'
+next=d2x(x2d(vdev)+x2d(14))
+Say next

@@ -1,0 +1,11 @@
+/**/
+Parse Upper Arg fn ft fm .
+If fn='' Then Exit 28
+If ft='' Then ft='*'
+If fm='' Then fm='*'
+'PIPE (end ?)',
+   'cms LISTFILE 'fn ft fm' (NOH',
+   '| count lines',
+   '| var multi'
+If multi > 1 Then Address CMS 'FILELIST 'fn ft fm
+             Else Address CMS 'XEDIT 'fn ft fm

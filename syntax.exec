@@ -1,0 +1,8 @@
+/**/
+Parse Upper Arg ifn ift ifm .
+Parse Source . . myfn .
+If ifn='' Then Exit 28
+If ift='' Then ift='EXEC'
+If ifm='' Then ifm='*'
+Queue myfn
+Address CMS 'XEDIT 'ifn ift ifm

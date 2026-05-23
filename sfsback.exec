@@ -1,0 +1,91 @@
+/*--------------------------------------------------------------------+
+| Function : Create filespace backups for an entire filepool          |
+|                                                                     |
+| File     : SFSBACK  EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : SFSBACK  <id> <filepoolid> ( <run>                       |
+|                                                                     |
+|            <id>           user id to backup, * means all ids        |
+|            <filepoolid>   name of the filepool                      |
+|            <run>          if empty only displays else will          |
+|                           run the commands                          |
+|                                                                     |
+| Comments : Need admin authority for the filepool                    |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20251210 15:10:43                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg id fpid . '(' run .
+Parse Source . . myfn myft .
+If id='?' Then Do
+            'VMFCLEAR'
+             'PIPE (NAME SFSBACK.EXEC:28 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+/*--------------------------------------------------------------------+
+| Set a default                                                       |
++--------------------------------------------------------------------*/
+If id=''   Then Call Exit '28 No input given'
+If fpid='' Then fpid='VMUSERS'
+If run=''  Then run=0
+           Else run=1
+/*--------------------------------------------------------------------+
+| Find the filespaces                                                 |
++--------------------------------------------------------------------*/
+Say TimeStamp()' Running user backups for filepool 'fpid
+Say
+If id='*' Then 'PIPE (NAME SFSBACK.EXEC:46 END ?)',
+    'cms QUERY ENROLL USER FOR ALL 'fpid,
+    '| drop first 1',
+    '| pick w1.1 \== ~<PUBLIC>~',
+    '| stem fs.'
+    Else 'PIPE (NAME SFSBACK.EXEC:51 END ?)',
+    'var id',
+    '| stem fs.'
+/*--------------------------------------------------------------------+
+| Access the disk                                                     |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK 'fpid'_BACKUP (NOTYPE WRITE .fm'
+If rc=0 Then Parse Pull . . wfm .
+        Else Call Exit rc' VMLINK of 'fpid' 800 failed'
+/*--------------------------------------------------------------------+
+| Create the backups                                                  |
++--------------------------------------------------------------------*/
+Do f=1 To fs.0
+   Say TimeStamp()' Creating backup file: 'fs.f fpid' for 'fs.f
+   Address CMS 'FILEDEF UNLOAD DISK 'fs.f fpid wfm
+   If run Then Address CMS 'FILEPOOL UNLOAD FILESPACE 'fs.f fpid': (ALL'
+          Else Say 'FILEPOOL UNLOAD FILESPACE 'fs.f fpid': (ALL'
+   unrc=rc
+   Address CMS 'FILEDEF UNLOAD CLEAR'
+   If unrc<>0 Then Call Exit unrc' Problem in FILEPOOL UNLOAD for 'fs.f fpid
+   Say
+End f
+/*--------------------------------------------------------------------+
+| Release the disk                                                    |
++--------------------------------------------------------------------*/
+Address CMS 'VMLINK 'fpid'_BACKUP <DET (NOTYPE WRITE'
+ 
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
+ 
+TimeStamp:
+Return Date('S') Time() myfn
+ 

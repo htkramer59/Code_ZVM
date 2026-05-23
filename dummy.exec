@@ -1,0 +1,58 @@
+/*--------------------------------------------------------------------+
+| Function : Create a dummy file on an empty disk, filespace or       |
+|            directory                                                |
+|                                                                     |
+| File     : DUMMY    EXEC                                            |
++---------------------------------------------------------------------+
+| Version  : 1.1.0                                                    |
+|                                                                     |
+| Files    : .                                                        |
+|                                                                     |
+| Called   : DUMMY    <uid> <cuu>                                     |
+|                     <uid> Can be userid, filespace or directory     |
+|                     <cuu> A mdisk address or empty when             |
+|                           filespace or directory is used            |
+|                                                                     |
+| Comments : .                                                        |
+|                                                                     |
+| Author   : H.T.Kramer, At_home,                                     |
+| Created  : 20260522 15:33:28                                        |
+| Changes  : .                                                        |
+|                                                                     |
++--------------------------------------------------------------------*/
+Parse Upper Arg uid cuu .
+Parse Source . . myfn myft .
+If uid='?' Then Do
+            'VMFCLEAR'
+            'PIPE ( NAME DUMMY.EXEC:26 END ?)',
+               '< 'myfn myft' *',            /* Read myself */
+               '| tolabel Parse',            /* Up to here  */
+               '| cons'                      /* Show        */
+             Call Exit
+             End
+If uid='' Then Call Exit '28 No USERID specified'
+If Pos(':',uid)<>0 | Pos('.',uid)<>0 Then Do
+                                          cuu=uid
+                                          uid='.DIR'
+                                          End
+If cuu='' Then Call Exit '128 No CUU specified'
+ 
+Address CMS 'VMLINK 'uid cuu' (NONAMES NOTYPE WRITE .fm'
+If rc=0 Then Parse Upper Pull . . tfm .
+        Else Call Exit rc' Problem VMLINK of 'uid cuu
+'PIPE (NAME DUMMY.EXEC:42 end ?)',
+    'literal ',
+    '| timestamp isodate',
+    '| specs 1;* 1 ~'Userid()'~ nw',
+    '| > dummy file 'tfm
+Address CMS 'VMLINK 'uid cuu' <DET (NONAMES NOTYPE WRITE'
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
+ 
