@@ -1,0 +1,3 @@
+banr=Center(' 'myfn' ',80,'-')
+   '| preface var banr',
+   '| append var banr',

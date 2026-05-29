@@ -101,12 +101,15 @@ Call DASD_Map
 /*---------------------------------------------------------------+
 | Get all the data and send it to....                            |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSDASD.EXEC:104 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSDASD.EXEC:105 END ?)',
    'stem work.',                                 /* Add header       */
+   '| preface var banr',
    '| preface var dasd_header',                  /* ...and           */
    '| preface literal ',                         /* ....return to    */
    '| preface literal ',                         /* .....caller      */
    '| split at ;',                               /* .                */
+   '| append var banr',
    output                                        /* .                */
 Exit
  
@@ -119,7 +122,7 @@ DASD_Map:
 /*---------------------------------------------------------------+
 | Create a map per dasd                                          |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSDASD.EXEC:122 END ?)',
+'PIPE (NAME QSDASD.EXEC:125 END ?)',
    'stem qdasd.',                                /* Take these       */
    '| specs w2.1',                               /* Keep this        */
    '| f: fanout',                                /* Dupl. records    */
@@ -141,7 +144,7 @@ DASD_Map:
 temp.0=0
 Do d=1 To det.0
    work=det.d
-   'PIPE (NAME QSDASD.EXEC:144 END ?)',
+   'PIPE (NAME QSDASD.EXEC:147 END ?)',
       'var work',                                /* Take these       */
       '| f: fanout',                             /* Dupl records     */
       '| specs w1.7 1',                          /* Keep these       */
@@ -161,7 +164,7 @@ Do d=1 To det.0
       '| join keylen 8',                         /* Join on id       */
       '| j:'                                     /* Conn 2 juxtapose */
 End d
-'PIPE (NAME QSDASD.EXEC:164 END ?)',
+'PIPE (NAME QSDASD.EXEC:167 END ?)',
     'stem temp.',                                /* Take these       */
     '| sort',                                    /* Sort them        */
     '| f: fanout',                               /* Duplicate recs   */
@@ -190,7 +193,7 @@ Edev_Details:
 +---------------------------------------------------------------*/
 singlepath.0=0
 multipath.0=0
-'PIPE (NAME QSDASD.EXEC:193 END ?)',
+'PIPE (NAME QSDASD.EXEC:196 END ?)',
    'stem edev.',                                 /* Take these       */
    '| f: fanout',                                /* Duplicate records*/
    '| specs w1.1 1.4 x40 n',                     /* Add a space      */
@@ -222,7 +225,7 @@ pavno.0=0
 pav.0=0
 dasdfw.0=0
 hyp.0=0
-'PIPE (NAME QSDASD.EXEC:225 END ?)',
+'PIPE (NAME QSDASD.EXEC:228 END ?)',
     'cp QUERY PAV',                              /* Ask cp           */
     '| l: locate anycase ~NO~',                  /* Select these     */
     '| stem pavno.',                             /* Store as         */
@@ -230,14 +233,14 @@ hyp.0=0
     '| stem pav.'                                /* Hand 2 rexx      */
 If pavno.0<>0 Then Call Add2Output 'pavno.,No PAV devices'
 If pav.0<>0 Then Call Add2Output 'pav.,Devices for which PAV is set'
-'PIPE (NAME QSDASD.EXEC:233 END ?)',
-    'stem eckd.'                                 /* Take these       */
+'PIPE (NAME QSDASD.EXEC:236 END ?)',
+    'stem eckd.',                                /* Take these       */
     '| specs ~QUERY DASDFW~ 1 w1.1 nw',          /* compose cmds     */
     '| cp',                                      /* Issue them       */
     '| stem dasdfw.'                             /* Store output     */
 If dasdfw.0<>0 Then Call Add2Output 'dasdfw.,DASDFW settings'
-'PIPE (NAME QSDASD.EXEC:239 END ?)',
-    'stem eckd.'                                 /* Take these       */
+'PIPE (NAME QSDASD.EXEC:242 END ?)',
+    'stem eckd.',                                /* Take these       */
     '| specs ~QUERY HYPERSWAP~ 1 w1.1 nw',       /* Compose cmds     */
     '| cp',                                      /* Issue them       */
     '| stem hyp.'                                /* Store output     */
@@ -252,7 +255,7 @@ Add2Output:
 Parse Arg input','header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSDASD.EXEC:255 END ?)',
+'PIPE (NAME QSDASD.EXEC:258 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| split at ;',                             /* .                */

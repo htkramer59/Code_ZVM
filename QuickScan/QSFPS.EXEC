@@ -27,6 +27,7 @@ Parse Source . . myfn myft .
 recomm.0=0                                       /* Init some stems  */
 work.0=0                                         /* .                */
 vdisk.0=0                                        /* .                */
+fplog.0=0
 /*---------------------------------------------------------------+
 | Decide depending on the input where the output goes            |
 +---------------------------------------------------------------*/
@@ -38,7 +39,7 @@ When how='CONS' Then output='| cons'
 When how='FILE' Then output='| > 'myfn' REPORT A'
 When how='PIPE' Then output='| stem 'stemname' 1 append'
 When how='?'    Then Do
-                     'PIPE (NAME QSFPS.EXEC:41 END ?)',
+                     'PIPE (NAME QSFPS.EXEC:42 END ?)',
                         '< 'myfn myft' *',
                         '| tolabel Parse',
                         '| cons'
@@ -49,7 +50,7 @@ End
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSFPS.EXEC:52 END ?)',
+'PIPE (NAME QSFPS.EXEC:53 END ?)',
    'literal 'TimeStamp(),                        /* Get some         */
    '| append var filepool_header 1',             /* ..variables      */
    '| join * x40',                               /* ...from          */
@@ -70,7 +71,7 @@ If rc<>0 Then Exit rc
 /*---------------------------------------------------------------+
 | Checking FILEPOOL admins, users and filling                    |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSFPS.EXEC:73 END ?)',
+'PIPE (NAME QSFPS.EXEC:74 END ?)',
    'cp Q RESOURCE ALL',                          /* Ask cp           */
    '| pick anycase w1.1 == ~RESOURCE:~',         /* Select these     */
    '| pick anycase w-1;-1 \== ~PERFSVM~ and',    /* Ignore these     */
@@ -83,7 +84,7 @@ Do f=1 To fp.0
    Call GetFPInfo 'USER' fp.f
    Call GetFPUsage fp.f
 End f
-'PIPE (NAME QSFPS.EXEC:86 END ?)',
+'PIPE (NAME QSFPS.EXEC:87 END ?)',
     'stem fpdata.',                              /* Take this        */
     '| buffer',                                  /* Prevent loop     */
     '| sort 1.8',                                /* Sort on          */
@@ -92,7 +93,7 @@ End f
     '| specs w1.1',                              /* Keep this        */
     '| stem fpid.'                               /* Store as         */
 Call Check_Userids 'fpid. novalid.'
-'PIPE (NAME QSFPS.EXEC:95 END ?)',
+'PIPE (NAME QSFPS.EXEC:96 END ?)',
     'stem fpdata.',                              /* Take this        */
     '| l: lookup w1.1 w1.1 details',             /* Compare          */
     '| stem noidfp.',                            /* Store as         */
@@ -102,7 +103,7 @@ Call Check_Userids 'fpid. novalid.'
 If noidfp.0<>0 Then Call Add2Output 'noidfp.,IDs enrolled on filepool, NOT in CP directory'
 If stgrp1.0<>0 Then Call Add2Output 'stgrp1.,Storage Group 1 over 'storgrp1'% filled'
 If stgrpn.0<>0 Then Call Add2Output 'stgrpn.,Storage Group 2 (and higher) over 'storgrp2'% filled'
-If fplog.0<>0  Then Call Add2Output 'fplog.,Filepool log disks over over 80% filled'
+If fplog.0<>0  Then Call Add2Output 'fplog.,Filepool users/admins, logspace occupation and control data backups'
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
@@ -110,14 +111,17 @@ If work.0=0 Then Do
             work.0=1
             work.1='No findings'
             End
-'PIPE (NAME QSFPS.EXEC:113 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSFPS.EXEC:115 END ?)',
    'stem fp.',                                   /* Take this        */
    '| preface literal Checked the following filepools:',   /* Add header       */
+   '| preface var banr',
    '| append literal ',                          /* Spacing          */
    '| append stem work.',                        /* Add these        */
    '| preface var filepool_header',              /* Add header       */
    '| preface literal ',                         /* Add 2 empties    */
    '| preface literal ',                         /* .                */
+   '| append var banr',
    output                                        /* Hand back        */
 Return
  
@@ -127,13 +131,13 @@ GetFPInfo:
 | Do Q QUERY ENROLL USER/ADMIN                                   |
 +---------------------------------------------------------------*/
 Parse Upper Arg usrtype fpname .
-'PIPE (NAME QSFPS.EXEC:130 END ?)',
+'PIPE (NAME QSFPS.EXEC:134 END ?)',
    'cms Q ENROLL 'usrtype' FOR ALL 'fpname,      /* Ask filepool     */
    '| drop first 1',                             /* Remove header    */
    '| nlocate anycase ~<PUBLIC>~',               /* Ignore this      */
    '| specs w1.1 1.8',                           /* Keep this        */
            '~'Substr(usrtype,1,5) fpname'~ nw',  /* .                */
-   '| stem fpdata. append'                       /* Add 2 stem       */
+   '| stem fplog. append'                       /* Add 2 stem       */
 Return
  
  
@@ -142,10 +146,9 @@ GetFPUsage:
 | Get Usage statistics from the filepool                         |
 +---------------------------------------------------------------*/
 Parse Upper Arg fpname .
-fplog.0=0
 stgrp1.0=0
 stgrpn.0=0
-'PIPE (NAME QSFPS.EXEC:148 END ?)',
+'PIPE (NAME QSFPS.EXEC:151 END ?)',
     'cms QUERY FILEPOOL STORGRP 'fpname,         /* Ask filepool     */
     '| inside / Group/ /====/',                  /* Select this part */
     '| specs ~'fpname'~ 1.8',                    /* Compose info     */
@@ -160,15 +163,35 @@ stgrpn.0=0
     '| specs w1;-2',                             /* Keep this        */
     '| stem stgrpn. append',                     /* Add 2 stem       */
     '?',                                         /* 2nd pipe         */
-    'cms QUERY FILEPOOL LOG 'fpname,             /* Ask filepool     */
-    '| take last 3',                             /* Keep these       */
-    '| take first 1',                            /* Now keep this    */
-    '| specs ~'fpname'~ 1.8',                    /* Compose info     */
-            '1;* nw ',                           /* .                */
-            'substr 1;-2 of w1.1 nw',            /* .                */
-    '| pick w-1;-1 > ~'logspace'~',              /* Compare 2...     */
-    '| specs w1;-2',                             /* Keep this        */
-    '| stem fplog. append'                       /* Add 2 stem       */
+    'cms QUERY FILEPOOL LOG 'fpname,
+    '| n: nlocate w2.2 ~Date of~',
+    '| pick substr 1.7 of w2.1 == ~Percent~',
+    '| specs w1.1',
+    '| change ~%~~',
+    '| if1: if pick w1.1 >> ~'logspace'~',
+    '|     specs ~'Substr(fpname,1,8)' Logspace filled for~ 1 w1.1 nw ~% Over the safe limit: 'logspace'%~ n',
+    '| if1:',
+    '|     specs ~'Substr(fpname,1,8)' Logspace filled for~ 1 w1.1 nw ~% Safe limit: 'logspace'%~ n',
+    '| if1:',
+    '| fi: faninany',
+    '| take first 2',
+    '| split at ;',
+    '| stem fplog. append',
+    '? n:',
+    '| pick w2.2 == ~Date of~',
+    '| if2: if pick w2.2 == ~Date of~',
+    '|      specs ~'Substr(fpname,1,8)'~ 1 w1;* nw w1.1 nw ~'Date('B')'~ nw',
+    '|      dateconv w-2;-2 short rb',
+    '|      specs w1;-3 1',
+    '             a: w-1;-1 .',
+    '             b: w-2;-2 .',
+    '             set #0:=a-b',
+    '             print #0 nw',
+    '             ~days ago; ;~ nw',
+    '| if2:',
+    '|      append literal 'Substr(fpname,1,8)' No evidence of recent CONTROL DATA backup!!; ;',
+    '| if2:',
+    '|  fi:'
 Return
  
  
@@ -177,7 +200,7 @@ Check_Userids:
 | Check if user ids do  exist                                    |
 +---------------------------------------------------------------*/
 Parse Upper Arg in_stem out_stem
-'PIPE (NAME QSFPS.EXEC:180 END ?)',
+'PIPE (NAME QSFPS.EXEC:203 END ?)',
     'stem 'in_stem,                              /* Take these       */
     '| f: fanout',                               /* Dupl. records    */
     '| specs w1.1 1.10',                         /* Rework           */
@@ -205,7 +228,7 @@ Add2Output:
 Parse Arg input','header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSFPS.EXEC:208 END ?)',
+'PIPE (NAME QSFPS.EXEC:231 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| preface literal ',                       /* Add header       */

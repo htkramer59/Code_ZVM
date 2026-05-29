@@ -38,7 +38,7 @@ When how='CONS' Then output='| cons'
 When how='FILE' Then output='| > 'myfn' REPORT A'
 When how='PIPE' Then output='| stem 'stemname' 1 append'
 When how='?'    Then Do
-                     'PIPE (NAME QSSPOOL.EXEC:41 END ? .EXEC:41)',
+                     'PIPE (NAME QSSPOOL.EXEC:41 END ?)',
                         '< 'myfn myft' *',
                         '| tolabel Parse',
                         '| cons'
@@ -59,7 +59,7 @@ End
 +---------------------------------------------------------------*/
 'PIPE (NAME QSSPOOL.EXEC:60 END ?)',
    'cp QUERY DUMP',                              /* Ask cp           */
-   '| specs w-1;-1 1',                           /* Keep this        */
+   '| specs w8.1 1',                             /* Keep this        */
    '| var dump',                                 /* Store as         */
    '?',                                          /* 2nd PIPE         */
    'cp QUERY ALLOC *',                           /* Ask cp           */
@@ -145,11 +145,14 @@ End q
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSSPOOL.EXEC:148 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSSPOOL.EXEC:149 END ?)',
     'stem work.',                                /* Take these       */
+    '| preface var banr',
     '| preface var spool_header',                /* Add header       */
     '| preface literal ',                        /* Add 2 empties    */
     '| preface literal ',                        /* .                */
+    '| append var banr',
     output                                       /* Hand 2 caller    */
 Return
  
@@ -161,7 +164,7 @@ Add2Output:
 Parse Arg input','header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSSPOOL.EXEC:164 END ?)',
+'PIPE (NAME QSSPOOL.EXEC:167 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| split at ;',                             /* .                */

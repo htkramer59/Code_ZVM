@@ -36,7 +36,7 @@ When how='CONS' Then output='| cons'
 When how='FILE' Then output='| > 'myfn' REPORT A'
 When how='PIPE' Then output='| stem 'stemname' 1 append'
 When how='?'    Then Do
-                     'PIPE (NAME QSDIRM.EXEC:39 END ? .EXEC:39)',
+                     'PIPE (NAME QSDIRM.EXEC:39 END ? .EXEC
                         '< 'myfn myft' *',
                         '| tolabel Parse',
                         '| cons'
@@ -44,10 +44,18 @@ When how='?'    Then Do
                      End
 Otherwise Exit 28
 End
+'PIPE (NAME QSDIRM.EXEC: 47 end ?)',
+   'cp QUERY DIRMAINT',
+   '| hole'
+If rc<>0 Then Do
+              work.0=1
+              work.1='DIRMAINT is not running!! Checking canceled'
+              Call End_Of_Code
+              End
 /*---------------------------------------------------------------+
 | Compose header and get some variables                          |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSDIRM.EXEC:50 END ?)',
+'PIPE (NAME QSDIRM.EXEC:58 END ?)',
    'literal 'TimeStamp(),                        /* Compose header   */
    '| append var dirmaint_header 1',             /* .                */
    '| join * x40',                               /* .                */
@@ -58,7 +66,7 @@ End
    '?',                                          /* .                */
    'var racfvm 1',                               /* .                */
    '| var racfvm'                                /* .                */
-If rc<>0 Then Exit rc
+If rc<>0 Then Exit rc 'Can not obtain variables from caller'
 /*---------------------------------------------------------------+
 | Do all DIRM  AINT checking here                                  |
 +---------------------------------------------------------------*/
@@ -76,13 +84,25 @@ Call Check_Volid_Xlink
 /*---------------------------------------------------------------+
 | Hand output to caller                                          |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSDIRM.EXEC:79 END ?)',
+End_Of_Code:
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSDIRM.EXEC:89 END ?)',
     'stem work.',                                /* Take these       */
+    '| preface var banr',
     '| preface var dirmaint_header',             /* Add header       */
     '| preface literal ',                        /* Add 2 empties    */
     '| preface literal ',                        /* .                */
+    '| append var banr',
     output                                       /* Hand 2 caller    */
-Exit
+ 
+Exit:
+/*---------------------------------------------------------------+
+| General Exit routine                                           |
++---------------------------------------------------------------*/
+Parse Arg exrc errmsg
+If Datatype(exrc,'NUM') Then Say errmsg exrc
+                        Else exrc=0
+Exit exrc
  
  
 Collect_Dirm_Info:
@@ -93,7 +113,7 @@ Say TimeStamp()' Collecting DIRMAINT info'
 Address CMS 'VMLINK DIRM1DF ('vmlinkquiet' ONLY(QSCAN) .fm'
 If rc<>0 Then Call Exit rc 'Problem linking DIRMAINT 1DF'
          Else Parse Upper Pull . . wfm .
-'PIPE (NAME QSDIRM.EXEC:96 END ?)',
+'PIPE (NAME QSDIRM.EXEC:116 END ?)',
     'cms LISTFILE * CLUSTER 'wfm' (NOHEADER',    /* Select these     */
     '| getfiles',                                /* Read them        */
     '| specs 1.72 1',                            /* Remove aft col 72*/
@@ -129,7 +149,7 @@ Check_CP_Classes:
 | Checking CP classes other than G (general users)               |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Checking CP classes set'
-'PIPE (NAME QSDIRM.EXEC:132 END ?)',
+'PIPE (NAME QSDIRM.EXEC:152 END ?)',
     '| stem dir.',                               /* Take these       */
     '| pick anycase w1.1 == ~USER~ or',          /* Select these     */
            'w1.1 == ~IDENTITY~',                 /* .                */
@@ -167,7 +187,7 @@ Say TimeStamp()' Checking CP classes set'
 temp.0=0
 Do c=1 To cpclass.0
    work=cpclass.c
-   'PIPE (NAME QSDIRM.EXEC:170 END ?)',
+   'PIPE (NAME QSDIRM.EXEC:190 END ?)',
       'var work',                                /* Take these       */
       '| split at ;',                            /* Split here       */
       '| t: take first 1',                       /* Take 1           */
@@ -191,7 +211,7 @@ Check_Volid_Xlink:
 | Check label and xlink areas                                    |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Checking VOLUME label/XLINK protection'
-'PIPE (NAME QSDIRM.EXEC:194 END ?)',
+'PIPE (NAME QSDIRM.EXEC:214 END ?)',
      'stem diskmap.',                            /* Take these       */
      '| pick anycase w1.1 \== ~$$$$$$~ and',     /* Ignore these     */
                     'w1.1 \== ~$$LNX1~',         /* .                */
@@ -224,7 +244,7 @@ Do d=1 To dasd.0
      When arch='CKD' Then lblarea=ckd-1
      Otherwise Call Exit '99 Architecture is neither FBA or CKD'
      End
-     'PIPE (NAME QSDIRM.EXEC:227 END ?)',
+     'PIPE (NAME QSDIRM.EXEC:247 END ?)',
           'var work',                            /* Take these       */
           '| strip',                             /* Remove spaces    */
           '| split before string ~ENTRY= ~',     /* Split here       */
@@ -259,7 +279,7 @@ Address CMS 'VMLINK RPWLIST ('vmlinkquiet' ONLY(QSCAN) .fm'
 If rc<>0 Then Call Exit rc 'Problem linking RPWLIST'
          Else Parse Pull . . wfm .
 Parse Value rpw_list With . '.'rpw_list
-'PIPE (NAME QSDIRM.EXEC:262 END ?)',
+'PIPE (NAME QSDIRM.EXEC:282 END ?)',
     'stem user.',                                /* Take this        */
     '| specs w1.1 1.8',                          /* Adjust           */
             'w2.1 nw.8',                         /* .                */
@@ -288,7 +308,7 @@ Check_Mdisk_Pws:
 | Check the mdisk pws against RPWLIST DATA & some others         |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Checking Minidisk passwords'
-'PIPE (NAME QSDIRM.EXEC:291 END ?)',
+'PIPE (NAME QSDIRM.EXEC:311 END ?)',
   'stem dir.',                                   /* Take these       */
   '| pick anycase w1.1 == ~USER~ or',            /* Select these     */
                  'w1.1 == ~IDENTITY~ or',        /* .                */
@@ -327,7 +347,7 @@ Check_Options:
 | Check the directory options                                    |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Checking CP Directory OPTION statements'
-'PIPE (NAME QSDIRM.EXEC:330 END ?)',
+'PIPE (NAME QSDIRM.EXEC:350 END ?)',
   'stem dir.',                                   /* Take these       */
   '| pick anycase w1.1 == ~USER~ or',            /* Select these     */
                  'w1.1 == ~IDENTITY~ or',        /* .                */
@@ -357,7 +377,7 @@ Say TimeStamp()' Checking CP Directory OPTION statements'
 temp.0=0
 Do d=1 To diropt.0
   work=diropt.d
-  'PIPE (NAME QSDIRM.EXEC:360 END ?)',
+  'PIPE (NAME QSDIRM.EXEC:380 END ?)',
       'var work',                                /* Take these       */
       '| f: fanout',                             /* Dupl. records    */
       '| specs w1.1 1 ~:~ n',                    /* Rework           */
@@ -382,7 +402,7 @@ Check_Workunits:
 | Check for FAILED or ACTIVE workunits                           |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Checking DIRMAINT workunits'
-'PIPE (NAME QSDIRM.EXEC:385 END ?)',
+'PIPE (NAME QSDIRM.EXEC:405 END ?)',
     'cms LISTFILE * * 'wfm' (ISODATE',           /* Look 4 these     */
     '| p: pick anycase w2.1 == ~WUCFFAIL~',      /* Are these fnd    */
     '| stem wucffail.',                          /* Store as         */
@@ -402,7 +422,7 @@ dupentries.0=0
 missingdasd.0=0
 faultyentries.0=0
 Say TimeStamp()' Checking DIRMAINT EXTENT CONTROL'
-'PIPE (NAME QSDIRM.EXEC:405 END ?)',
+'PIPE (NAME QSDIRM.EXEC:425 END ?)',
     'stem extcont.',                             /* Take these       */
     '| s: sort unique w2.1',                     /* Remove dups      */
     '| l: lookup w2.1 w5.1',                     /* Compare          */
@@ -443,7 +463,7 @@ Add2Output:
 Parse Arg input','header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSDIRM.EXEC:446 END ?)',
+'PIPE (NAME QSDIRM.EXEC:466 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| preface literal ',                       /* Add header       */
@@ -459,7 +479,7 @@ Check_Userids:
 | Check if user ids do  exist                                    |
 +---------------------------------------------------------------*/
 Parse Upper Arg in_stem out_stem
-'PIPE (NAME QSDIRM.EXEC:462 END ?)',
+'PIPE (NAME QSDIRM.EXEC:482 END ?)',
     'stem 'in_stem,                              /* Take these       */
     '| f: fanout',                               /* Dupl. records    */
     '| specs w1.1 1.10',                         /* Rework           */

@@ -1,0 +1,33 @@
+/**/
+Arg fpname .
+logspace=50
+If fpname='' Then fpname='VMUSERS'
+'PIPE (end ?)',
+  'cms QUERY FILEPOOL LOG 'fpname,
+  '| n: nlocate w2.2 ~Date of~',
+  '| pick substr 1.7 of w2.1 == ~Percent~',
+  '| specs w1.1',
+  '| change ~%~~',
+  '| if1: if pick w1.1 >> ~'logspace'~',
+  '|     specs ~'Substr(fpname,1,8)' Logspace filled for~ 1 w1.1 nw ~% Over the safe limit: 'logspace'%~ n',
+  '| if1:',
+  '|     specs ~'Substr(fpname,1,8)' Logspace filled for~ 1 w1.1 nw ~% Safe limit: 'logspace'%~ n',
+  '| if1:',
+  '| fi: faninany',
+  '| take first 2',
+  '| cons',
+  '? n:',
+  '| pick w2.2 == ~Date of~',
+  '| if2: if pick w2.2 == ~Date of~',
+  '|      specs ~'Substr(fpname,1,8)'~ 1 w1;* nw w1.1 nw ~'Date('B')'~ nw',
+  '|      dateconv w-2;-2 short rb',
+  '|      specs w1;-3 1',
+  '             a: w-1;-1 .',
+  '             b: w-2;-2 .',
+  '             set #0:=a-b',
+  '             print #0 nw',
+  '             ~days ago~ nw',
+  '| if2:',
+  '|      append literal 'Substr(fpname,1,8)' No evidence of recent CONTROL DATA backup!!',
+  '| if2:',
+  '|  fi:'

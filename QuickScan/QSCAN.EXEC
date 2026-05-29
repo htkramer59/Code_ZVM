@@ -62,6 +62,7 @@ If dirmaint Then Address CMS dirmaint_exec reportsw
 If nodirm   Then Address CMS nodirm_exec   reportsw
 If filepool Then Address CMS filepool_exec reportsw
 If tcp      Then Address CMS tcp_exec      reportsw
+If telnet   Then Address CMS telnet_exec   reportsw
 If rscs     Then Address CMS rscs_exec     reportsw
 If nfs      Then Address CMS nfs_exec      reportsw
 If smtp     Then Address CMS smtp_exec     reportsw
@@ -76,6 +77,7 @@ If racfvm   Then Address CMS racf_exec     reportsw
 +---------------------------------------------------------------*/
 Call WriteReport
 Call UnloadCode
+Say TimeStamp()' Results are available in 'myfn node' A'
 Exit:
 /*---------------------------------------------------------------+
 | Only way to the exit                                           |
@@ -92,7 +94,7 @@ ReadNames:
 | Read the control file                                          |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Reading 'myfn' NAMES (control file)'
-'PIPE (NAME QSCAN.EXEC:95 END ?)',
+'PIPE (NAME QSCAN.EXEC:97 END ?)',
     '< 'filename,                                /* Read this file   */
     '| pick 1.1 \== ~~ and 1.1 \== ~*~',         /* Ignore these     */
     '| strip',                                   /* Remove spaces    */
@@ -141,7 +143,7 @@ Add2Output:
 | Add stuff to the output array                                  |
 +---------------------------------------------------------------*/
 Parse Arg what','header
-'PIPE (NAME QSCAN.EXEC:144 END ?)',
+'PIPE (NAME QSCAN.EXEC:146 END ?)',
       'var what',                                /* Take this        */
       '| specs -1;-1',                           /* Keep this        */
       '| pick 1.1 == ~.~',                       /* Select this      */
@@ -150,7 +152,7 @@ Parse Arg what','header
 If stemvar Then what='stem 'what
            Else what='var 'what
 If header<>'' Then header='| preface literal 'TimeStamp() header
-'PIPE (NAME QSCAN.EXEC:153 END ?)',
+'PIPE (NAME QSCAN.EXEC:155 END ?)',
       what,                                      /* Take this        */
       header,                                    /* ....and this     */
       '| append literal ',                       /* Add empty line   */
@@ -164,7 +166,7 @@ WriteReport:
 | Create the report                                              |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Writing output to disk'
-'PIPE (NAME QSCAN.EXEC:167 END ?)',
+'PIPE (NAME QSCAN.EXEC:169 END ?)',
    'stem report.',                               /* Take stem        */
    '| > 'outputfile                              /* Write 2 file     */
 Return
@@ -175,7 +177,7 @@ CheckFile:
 | Check If the input file exists                                 |
 +---------------------------------------------------------------*/
 Parse Upper Arg filename
-'PIPE (NAME QSCAN.EXEC:178 END ?)',
+'PIPE (NAME QSCAN.EXEC:180 END ?)',
     'var filename',                              /* Take from rexx   */
     '| strip',                                   /* Remove spaces    */
     '| statew isodate',                          /* Check if exists  */
@@ -200,7 +202,7 @@ Address COMMAND 'CP SET EMSG ON'
 Address COMMAND 'CP SET IMSG ON'
 report.0=0
 rcpuid=c2x(diag(218))
-'PIPE (NAME QSCAN.EXEC:203 END ?)',
+'PIPE (NAME QSCAN.EXEC:205 END ?)',
     'query version',                             /* Ask myself       */
     '| var pipeversion',                         /* Store as         */
     '?',                                         /* 2nd pipe         */
@@ -215,7 +217,7 @@ LoadCode:
 | Execload the items from the NAMES file                         |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Loading additional code'
-'PIPE (NAME QSCAN.EXEC:218 END ?)',
+'PIPE (NAME QSCAN.EXEC:220 END ?)',
     'var loadcode',                              /* Take from rexx   */
     '| specs fs . f2;*',                         /* Keep this        */
     '| split at ;',                              /* Split here       */
@@ -229,7 +231,7 @@ Unloadcode:
 | Execdrop the items from the NAMES file                         |
 +---------------------------------------------------------------*/
 Say TimeStamp()' Removing additional code'
-'PIPE (NAME QSCAN.EXEC:232 END ?)',
+'PIPE (NAME QSCAN.EXEC:234 END ?)',
     'var loadcode',                              /* Take from rexx   */
     '| specs fs . f2;*',                         /* Keep this        */
     '| split at ;',                              /* Split here       */

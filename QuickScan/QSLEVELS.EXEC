@@ -77,10 +77,13 @@ End c
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSLEVELS.EXEC:80 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSLEVELS.EXEC:81 END ?)',
     'stem work.',                                /* Take this        */
+    '| preface var banr',
     '| preface var levels_header',               /* Add header       */
     '| append var pipeversion 1',                /* Add this         */
+    '| append var banr',
     output                                       /* Hand back        */
 Exit
  

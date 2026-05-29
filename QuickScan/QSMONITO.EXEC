@@ -37,7 +37,7 @@ When how='CONS' Then output='| cons'
 When how='FILE' Then output='| > 'myfn' REPORT A'
 When how='PIPE' Then output='| stem 'stemname' 1 append'
 When how='?'    Then Do
-                     'PIPE (NAME QSMONITO.EXEC:40 END ? .EXEC:41)',
+                     'PIPE (NAME QSMONITO.EXEC:40 END ?)',
                         '< 'myfn myft' *',
                         '| tolabel Parse',
                         '| cons'
@@ -90,54 +90,46 @@ If monint < 60 | monint > 60  Then Do
        msg='; ;Monitoring interval is best at 60 seconds: 'monint
        Call Add2Output 'msg'
        End
-/*---------------------------------------------------------------+
-| Checking some of the monitor settings                          |
-+---------------------------------------------------------------*/
-Call CheckSwitches pcif event_pcif
-If ena<>'' Then Do
-   If ena Then msg='; ;Need to Enable EVENT PCIF CLASS'
-          Else msg='; ;Need to Disable EVENT PCIF CLASS'
-   Call Add2Output 'msg'
-End
-Call CheckSwitches isfc event_isfc
-If ena<>'' Then Do
-  If ena Then msg='Need to Enable EVENT ISCF DOMAIN'
-         Else msg='Need to Disable EVENT ISFC DOMAIN'
-   Call Add2Output 'msg'
-End
-Call CheckSwitches ssi  event_ssi
-If ena<>'' Then Do
-  If ena Then msg='Need to Enable EVENT SSI  DOMAIN'
-         Else msg='Need to Disable EVENT SSI  DOMAIN'
-   Call Add2Output 'msg'
-End
- 
-Call CheckSwitches pcif sample_pcif
-If ena<>'' Then Do
-   If ena Then msg='Need to Enable SAMPLE PCIF CLASS'
-       Else msg='Need to Disable SAMPLE PCIF CLASS'
-   Call Add2Output 'msg'
-End
-Call CheckSwitches isfc sample_isfc
-If ena<>'' Then Do
-  If ena Then msg='Need to Enable SAMPLE ISCF DOMAIN'
-         Else msg='Need to Disable SAMPLE ISFC DOMAIN'
-   Call Add2Output 'msg'
-End
-Call CheckSwitches ssi  sample_ssi
-If ena<>'' Then Do
-  If ena Then msg='Need to Enable SAMPLE SSI  DOMAIN'
-         Else msg='Need to Disable SAMPLE SSI  DOMAIN'
-   Call Add2Output 'msg'
+msg='; ;Monitor settings that have been checked; ;'
+       Call Add2Output 'msg'
+Do m=1 To monset.0
+   Parse Value monset.m With . dom . sw .
+   displ=Subword(monset.m,1,3)
+   Select
+   When dom='MONITOR'   & \sw Then recomm='ENABLE MONITORING'
+   When dom='SYSTEM'    & \sw Then recomm='ENABLE SYSTEM for monitoring'
+   when dom='APPLDATA'  & \sw Then recomm='ENABLE when cms applications are going haywire, lots of data!!'
+   when dom='APPLDATA'  &  sw Then recomm='DISABLE when there are no problems'
+   when dom='COMMAND'   & \sw Then recomm='ENABLE if you need your commands monitored'
+   when dom='I/O'       & \sw Then recomm='If there are I/O constraints ENABLE this'
+   when dom='I/O'       &  sw Then recomm='DISABLE if you do not have problematic I/O'
+   when dom='ISFC'      & \sw Then recomm='If ISFC is playing up ENABLE this'
+   when dom='ISFC'      &  sw Then recomm='DISABLE when no ISFC problems found'
+   when dom='NETWORK'   & \sw Then recomm='If NETWORK is troublesome ENABLE this'
+   when dom='PROCESSOR' & \sw Then recomm='ENABLE when CPU thruput is a problem'
+   when dom='SCHEDULER' & \sw Then recomm='ENABLE this when tasks are incomplete'
+   when dom='SEEKS'     & \sw Then recomm='When DASD is giving delays ENABLE this'
+   when dom='SEEKS'     &  sw Then recomm='DISABLE when you do not have DASD problems'
+   when dom='SSI'       & \sw Then recomm='When SSI is troubling you ENABLE SSI'
+   when dom='STORAGE'   & \sw Then recomm='If STORAGE is a constraint ENABLE this'
+   when dom='USER'      & \sw Then recomm='When USERs have high resource consumption ENABLE this '
+   when dom='USER'      &  sw Then recomm='DISABLE if USERs do not have problems'
+   Otherwise recomm=''
+   End
+   msg=displ' :  'recomm
+   Call Add2OutPut 'msg'
 End
 /*---------------------------------------------------------------+
 | Here we return output to our caller                            |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSMONITO.EXEC:136 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSMONITO.EXEC:126 END ?)',
     'stem work.',                                /* Take these       */
+    '| preface var banr',
     '| preface var monitor_header',              /* Add header       */
     '| preface literal ',                        /* Add 2 empties    */
     '| preface literal ',                        /* .                */
+    '| append var banr',                         /* Add 2 stem       */
     output                                       /* Hand back        */
 Exit
  
@@ -153,11 +145,11 @@ Add2Output:
 Parse Arg input','header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSMONITO.EXEC:156 END ?)',
+'PIPE (NAME QSMONITO.EXEC:148 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| split at ;',                             /* Split here       */
-     '| stem work. append'                       /* Add 2 stem       */
+     '| stem work. append'
 Return
  
  
@@ -182,7 +174,7 @@ GetInfo:
 +---------------------------------------------------------------*/
 perfids='PERFSVM PERSMAPI'
 perfid.0=0
-'PIPE (NAME QSMONITO.EXEC:185 END ?)',
+'PIPE (NAME QSMONITO.EXEC:177 END ?)',
     'var perfids',                               /* Take these       */
     '| split',                                   /* Split            */
     '| specs ~QUERY~ 1 w1.1 nw',                 /* Compose cmds     */
@@ -235,21 +227,19 @@ perfid.0=0
     '| strip',                                   /* Remove spaces    */
     '| var monint',                              /* Set var          */
     '?',                                         /* 6th pipe         */
-    'cp QUERY MONITOR EVENT',                    /* Ask cp           */
-    '| pick w1.1 == ~ISFC~ or',                  /* Select these     */
-           'w1.1 == ~PCIF~ or',                  /* .                */
-           'w1.1 == ~SSI~',                      /* .                */
-    '| strip',                                   /* Remove spaces    */
-    '| specs ~/EVENT_~ 1 1;* n',                 /* Compose varname  */
-    '| specs w1.1 1 ~/~ n w2;* n',               /* Prep 4 varload   */
-    '| varload',                                 /* Hand 2 rexx      */
-    '?',                                         /* 7th pipe         */
-    'cp QUERY MONITOR SAMPLE',                   /* Ask cp           */
-    '| pick w1.1 == ~ISFC~ or',                  /* Select these     */
-           'w1.1 == ~PCIF~ or',                  /* .                */
-           'w1.1 == ~SSI~',                      /* .                */
-    '| strip',                                   /* Remove spaces    */
-    '| specs ~/SAMPLE_~ 1 1;* n',                /* Compose varname  */
-    '| specs w1.1 1 ~/~ n w2;* n',               /* Prep 4 varload   */
-    '| varload'                                  /* Hand 2 rexx      */
+    'cp QUERY MONITOR SAMPLE',
+    '| drop first 7',
+    '| specs ~SAMPLE~ 1 w1.1 nw.9 w3.1 nw',
+    '| fi: fanin',
+    '| if: if pick w3.1 == ~ENABLED~',
+    '|       specs 1;* 1 ~ 1~ nw',
+    '| if:',
+    '|       specs 1;* 1 ~0~ nw',
+    '| if:',
+    '| stem monset.',
+    '?',
+    'cp QUERY MONITOR EVENT',
+    '| drop first 5',
+    '| specs ~EVENT ~ 1 w1.1 nw.9 w3.1 nw',
+    '| fi:'
 Return

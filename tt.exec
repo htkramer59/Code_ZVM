@@ -1,0 +1,44 @@
+/**/
+'PIPE (end ?)',
+   'cp Q MON SAMPLE',
+   '| drop first 7',
+   '| specs ~SAMPLE~ 1 w1.1 nw.9 w3.1 nw',
+   '| fi: fanin',
+   '| if: if pick w3.1 == ~ENABLED~',
+   '|       specs 1;* 1 ~ 1~ nw',
+   '| if:',
+   '|       specs 1;* 1 ~0~ nw',
+   '| if:',
+   '| stem monset.',
+   '?',
+   'cp Q MON EVENT',
+   '| drop first 5',
+   '| specs ~EVENT ~ 1 w1.1 nw.9 w3.1 nw',
+   '| fi:'
+Do m=1 To monset.0
+   Parse Value monset.m With . dom . sw .
+   displ=Subword(monset.m,1,3)
+   Select
+   When dom='MONITOR'   & \sw Then recomm='ENABLE MONITORING'
+   When dom='SYSTEM'    & \sw Then recomm='ENABLE SYSTEM for monitoring'
+   when dom='APPLDATA'  & \sw Then recomm='ENABLE when cms applications are going haywire, lots of data!!'
+   when dom='APPLDATA'  &  sw Then recomm='DISABLE when there are no problems'
+   when dom='COMMAND'   & \sw Then recomm='ENABLE if you need your commands monitored'
+   when dom='I/O'       & \sw Then recomm='If there are I/O constraints ENABLE this'
+   when dom='I/O'       &  sw Then recomm='DISABLE if you do not have problematic I/O'
+   when dom='ISFC'      & \sw Then recomm='If ISFC is playing up ENABLE this'
+   when dom='ISFC'      &  sw Then recomm='DISABLE when no ISFC problems found'
+   when dom='NETWORK'   & \sw Then recomm='If NETWORK is troublesome ENABLE this'
+   when dom='PROCESSOR' & \sw Then recomm='ENABLE when CPU thruput is a problem'
+   when dom='SCHEDULER' & \sw Then recomm='ENABLE this when tasks are incomplete'
+   when dom='SEEKS'     & \sw Then recomm='When DASD is giving delays ENABLE this'
+   when dom='SEEKS'     &  sw Then recomm='DISABLE when you do not have DASD problems'
+   when dom='SSI'       & \sw Then recomm='When SSI is troubling you ENABLE SSI'
+   when dom='STORAGE'   & \sw Then recomm='If STORAGE is a constraint ENABLE this'
+   when dom='USER'      & \sw Then recomm='When USERs have high resource consumption ENABLE this '
+   when dom='USER'      &  sw Then recomm='DISABLE if USERs do not have problems'
+   Otherwise recomm=''
+   End
+   Say displ' :  'recomm
+ 
+End

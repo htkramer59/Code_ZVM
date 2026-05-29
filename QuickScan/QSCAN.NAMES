@@ -73,13 +73,14 @@
 :nick.storgrp2  :limit.50
 :nick.logspace  :limit.50
  
-:check.nodirm   :switch.no
+:check.nodirm   :switch.yes
                 :exec.QSNODIRM
                 :header.Directory check
-                :fn.USER BACKUP
+*               :fn.USER BACKUP
+                :fn.USER DIRECT
                 :type.security
  
-:check.dirmaint :switch.yes
+:check.dirmaint :switch.no
                 :exec.QSDIRM
                 :header.Dirmaint status & checks
                 :type.security
@@ -173,4 +174,5 @@
 :nick.RPWLIST   :product.MAINT 2CC    :title.Access RPWLIST DATA
 :nick.TCPCODE   :product.TCPMAINT 592 :title.Access the TCPIP Netstat code, etc.
 :nick.TCPFILES  :product.TCPMAINT 198 :title.TCPIP related control files
-:nick.USERDIR   :product.DIRMAINT 1DB :title.Monolithic USER DIRECTORY not using DIRMAINT!
+*:nick.USERDIR   :product.DIRMAINT 1DB :title.Monolithic USER DIRECTORY not using DIRMAINT!
+:nick.USERDIR   :product.MAINT 2CC :title.Monolithic USER DIRECTORY not using DIRMAINT!

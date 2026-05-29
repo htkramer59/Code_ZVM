@@ -55,12 +55,15 @@ If rc<>0 Then Exit rc
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSNAMES.EXEC:58 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSNAMES.EXEC:59 END ?)',
    'qn',                                         /* Run this         */
    '| f: fanout',                                /* Duplicate records*/
+   '| preface var banr',
    '| preface var qnames_header',                /* Add header       */
    '| preface literal ',                         /* ..and 2 empties  */
    '| preface literal ',                         /* .                */
+   '| append var banr',
    output,                                       /* Hand back        */
    '? f:',                                       /* Conn 2 fanout    */
    '| deblock 25',                               /* Deblock          */

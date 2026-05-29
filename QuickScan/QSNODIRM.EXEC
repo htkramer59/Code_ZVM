@@ -37,7 +37,7 @@ When how='CONS' Then output='| cons'
 When how='FILE' Then output='| > 'myfn' REPORT A'
 When how='PIPE' Then output='| stem 'stemname' 1 append'
 When how='?'    Then Do
-                     'PIPE (NAME QSNODIRM.EXEC:40 END ? .EXEC:41)',
+                     'PIPE (NAME QSNODIRM.EXEC:40 END ?)',
                         '< 'myfn myft' *',
                         '| tolabel Parse',
                         '| cons'
@@ -224,7 +224,7 @@ Do o=1 To opt.0
       '| snake 6',                               /* Make 6 columns   */
       '| fi:'                                    /* Conn 2 faninany  */
 End o
-Call Add2Output 'temp.,CP Directory options:'
+Call Add2Output 'temp.,; ;CP Directory options:'
 Return
  
  
@@ -320,7 +320,7 @@ Parse Value labxlink With ':' . '.' . fbasize ';' . eckdsize ':' . '.' ignore
    '| if:',                                      /* Conn 2 if        */
    '| locate anycase ~WARNING~',                 /* Keep these       */
    '| stem xllab.'                               /* Store them       */
-If xllab.0<>0 Then Call Add2Output 'xllab.,; ;Overlay ofXLINK/Label area'
+If xllab.0<>0 Then Call Add2Output 'xllab.,; ;Overlay of XLINK/Label area'
 Return
  
  

@@ -76,12 +76,15 @@ End c
 /*---------------------------------------------------------------+
 | .                                                              |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSHARDWA.EXEC:79 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSHARDWA.EXEC:80 END ?)',
    'stem work.',                                 /* Take stem        */
    '| preface literal Real cpuid: 'rcpuid,       /* Add this         */
+   '| preface var banr',
    '| preface var hardware_header',              /* ...and this      */
    '| preface literal ',                         /* ...and 2 emtpties*/
    '| preface literal ',                         /* .                */
+   '| append var banr',
    output                                        /* Hand back        */
 Exit
  

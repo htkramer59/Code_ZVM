@@ -1,0 +1,83 @@
+/*****************************/
+/* Profile Exec for          */
+/*    EREP                   */
+/*    DISKACNT               */
+/*    OPERSYMP               */
+/*****************************/
+ 
+Signal on NOVALUE
+Trace Value ''
+Address COMMAND 'CP SPOOL CONS CONPARK START'
+Address CMS 'VMLINK .DIR VMUSERS:TOOLS. <* Q (NON'
+Address CMS 'ACNTCLN 30 (CLEANUP'
+/* ******************************* */
+/*   FIND OUT WHO I AM */
+'IDENTIFY ( STACK'
+Parse Upper Pull userid .
+old_size = queued()
+/* ******************************* */
+/*   FIND OUT WHAT I AM AUTHORIZED TO RECEIVE */
+ret = ''
+'EXECIO * CP ( STRING QUERY RECORDING'
+Do while queued() > old_size
+   Parse Upper Pull rec dum cnt lmt usr comm .
+   If userid = usr then Do
+      ret = rec
+   End
+End
+If ret = '' then Exit 9
+/* ******************************* */
+/*   FIND OUT HOW MANY RECORDING FILES I HAVE */
+fil = 0
+rcd = 0
+'SET CMSTYPE HT'
+'LISTFILE XAEREPIO * A (E L'
+'LISTFILE ACCOUNT * A (AP L'
+'LISTFILE * *SYM A (AP L'
+'STATE CMS EXEC A'
+saverc = rc
+'SET CMSTYPE RT'
+If saverc <= 0 then Do
+/* ******************************* */
+/*   FIND OUT HOW MANY RECORDING RECORDS I HAVE */
+   eof = 0
+   Do WHILE eof = 0
+      'EXECIO 1 DISKR CMS EXEC A'
+      eof = rc
+      If rc = 0 then Do
+         Parse Upper Pull dum dum fn ft fm dum dum rec .
+         fil = fil + 1
+         rcd = rcd + rec
+      End
+   End
+/* ******************************* */
+/*   FIND OUT HOW FULL MY A DISK IS */
+End
+'DESBUF'
+'Q DISK A ( STACK'
+Parse Upper Pull dum dum dum dum dum dum dum dum dum ful .
+Parse Upper Pull dum dum dum dum dum dum dum dum dum ful .
+f.1 = "INDEX"(dum,'-')
+f.1 = f.1 + 1
+f.2 = "LENGTH"(dum)
+If f.1 <= f.2 then Do
+   ful = "SUBSTR"(dum,f.1)
+End
+/* ******************************* */
+/*   INFORM THE OPERATOR WHAT I HAVE FOUND OUT */
+'CP M OPERATOR' fil 'RECORDING FILE(S),' rcd 'RECORDS, A DISK' ful,
+'% FULL'
+'CP SET EMSG ON'
+/* ******************************* */
+/*   CLOSE ALL OPEN FILES AND      */
+/*   START RECORDING FOR WHAT I AM ALLOWED TO RETREIVE */
+/* ******************************* */
+'FINIS * *'
+'RETRIEVE' ret
+Exit 0  /* end of program */
+ 
+NOVALUE: /* Report undefined variable and exit */
+Parse source . . fn ft fm .
+Say "Undefined variable referenced on line" sigl "of" fn ft fm
+Exit 99
+/*  */

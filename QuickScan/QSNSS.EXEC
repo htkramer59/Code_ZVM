@@ -84,11 +84,14 @@ If pending.0<>0 Then Do
                 Call Add2Output 'recomm'
                 End
  
-'PIPE (NAME QSNSS.EXEC:87 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSNSS.EXEC:88 END ?)',
    'stem work.',                                 /* Take this        */
+   '| preface var banr',
    '| preface var nss_header',                   /* Add header       */
    '| preface literal  ',                        /* Add 2 empties    */
    '| preface literal  ',                        /* .                */
+   '| append var banr',
    output                                        /* Hand back        */
 Exit
  
@@ -104,7 +107,7 @@ Add2Output:
 Parse Arg input','header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSNSS.EXEC:107 END ?)',
+'PIPE (NAME QSNSS.EXEC:110 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| preface literal ',                       /* Add header       */

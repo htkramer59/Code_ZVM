@@ -152,7 +152,7 @@ If rc<>0 Then Exit rc
    '| specs w1.1 1.8 fs = f2 nw',                /* More adjustment  */
    '| sort w2.1 d',                              /* Sort             */
    '| if1: if pick substr 1.1 of  w2.1 == ~0~',  /* If this          */
-   '|     specs 1;* 1 ~ Candidate for replacement with NSS~ nw',   /* Add this         */
+   '|     specs 1;* 1 ~ Candidate for replacement with NSS CMS or ZCMS~ nw',   /* Add this         */
    '| if1:',                                     /* Conn 2 if        */
    '| if2: if pick w2.1 == ~CMS~',               /* If we find this  */
    '|     specs 1;* 1 ~      Check if zCMS can be used~ nw',   /* Add this         */
@@ -214,12 +214,15 @@ If recomm.0<>0 Then Call Add2Output 'recomm.,Userid   IPL   Remarks',
 /*---------------------------------------------------------------+
 | Get all the data and send it to....                            |
 +---------------------------------------------------------------*/
-'PIPE (NAME QSMEMORY.EXEC:217 END ?)',
+banr=Center(' 'myfn' ',80,'-')
+'PIPE (NAME QSMEMORY.EXEC:218 END ?)',
    'stem work.',                                 /* .                */
    '| split at ;',                               /* .                */
+   '| preface var banr',
    '| preface var memory_header',                /* .                */
    '| preface literal ',                         /* .                */
    '| preface literal ',                         /* .                */
+   '| append var banr',
    output                                        /* .                */
 Exit
  
@@ -235,7 +238,7 @@ Add2Output:
 Parse Arg input ',' header
 If LastPos('.',input)<>0 Then input='stem 'input
                          Else input='var 'input
-'PIPE (NAME QSMEMORY.EXEC:238 END ?)',
+'PIPE (NAME QSMEMORY.EXEC:241 END ?)',
      input,                                      /* Use input        */
      '| preface var header',                     /* Add header       */
      '| stem work. append'                       /* Add 2 stem       */
