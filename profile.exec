@@ -66,7 +66,7 @@ If post_exit<>''    Then Do
                          Address CMS post_exit
                          End
 If disc &,
-   servercode<>''   Then Address serverenv servercode
+   servercode<>''   Then Queue servercode
                     Else If servercode<>'' Then Say TimeStamp()' To start servercode 'servercode' type: 'servercode
  
 Exit:

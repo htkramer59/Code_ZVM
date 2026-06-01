@@ -50,7 +50,7 @@
 127.0.0.1     localhost loopback
 192.168.0.178 laptop1 lt1 i1
 192.168.0.200 laptop2 lt2 i2
-192.168.0.135 laptop3 lt3 i3
+192.168.0.131 laptop3 lt3 i3
  
 192.168.0.167 t5701 t1
 192.168.0.243 t5702 t2

@@ -75,10 +75,10 @@ Exit:
 | General Exit routine                                           |
 +---------------------------------------------------------------*/
 Parse Arg exrc errmsg
-If Datatype(exrc,'NUM') Then Say errmsg exrc
+If Datatype(exrc,'NUM') Then Say TimeStamp() errmsg exrc
                         Else exrc=0
 elapsed=Time('E')
-Say 'Elapsed time: 'elapsed
+Say TimeStamp()' Elapsed time: 'elapsed
 Exit exrc
  
  
@@ -86,19 +86,19 @@ Label_Do:
 /*--------------------------------------------------------------------+
 | Label all DO constructs                                             |
 +--------------------------------------------------------------------*/
-Say 'Labeling DO-Constructs'
+Say TimeStamp()' Labeling DO-Constructs'
 'PIPE (NAME RX.EXEC:90 end 'ec' sep 'ss')',
-    'stem source.',                                   /* .                */
-    ss' casei all 'dl'do 'dl ! dl'end 'dl,            /* .                */
-    ss' nlocate anycase 'dl'pipe'dl,                  /* .                */
-    ss' nlocate anycase 'dl'{sel'dl,                  /* .                */
-    ss' pad right 100',                               /* .                */
-    ss' if: if locate anycase /do/',                  /* .                */
+    'stem source.',                                   /* Take these       */
+    ss' casei all 'dl'do 'dl ! dl'end 'dl,            /* Select these     */
+    ss' nlocate anycase 'dl'pipe'dl,                  /* Ignore           */
+    ss' nlocate anycase 'dl'{sel'dl,                  /* .ignore          */
+    ss' pad right 100',                               /* Adjus length     */
+    ss' if: if locate anycase /do/',                  /* Update this      */
     ss'     specs /DO/ 1.3 1;* nw',                   /* .                */
     ss' if:',                                         /* .                */
     ss'     specs /END/ 1.3 1;* nw',                  /* .                */
     ss' if:',                                         /* .                */
-    ss' stem do_end.'                                 /* .                */
+    ss' stem do_end.'                                 /* Hand 2 rexx      */
 dolvl=0
 endlvl=0
 oldrec=''
@@ -125,27 +125,27 @@ Label_Select:
 /*--------------------------------------------------------------------+
 | Label all Select constructs                                         |
 +--------------------------------------------------------------------*/
-Say 'Labeling SELECT-Constructs'
+Say TimeStamp()' Labeling SELECT-Constructs'
 'PIPE (NAME RX.EXEC:129 end 'ec' sep 'ss')',
-    'stem rx.',                                       /* .                */
-    ss' pick anycase w1.1 == 'dl'select'dl,           /* .                */
-    ss' specs w2;* 1',                                /* .                */
-    ss' split',                                       /* .                */
-    ss' specs fs : f1 1 'dl'{SEL'dl' nw recno n.1 'dl'-Start}'dl' n',   /* .                */
-    ss' stem selstrt.'                                /* .                */
+    'stem rx.',                                       /* Take these       */
+    ss' pick anycase w1.1 == 'dl'select'dl,           /* Select these     */
+    ss' specs w2;* 1',                                /* Keep this        */
+    ss' split',                                       /* Into words       */
+    ss' specs fs : f1 1 'dl'{SEL'dl' nw recno n.1 'dl'-Start}'dl' n',   /* Add this         */
+    ss' stem selstrt.'                                /* Hand 2 rexx      */
 /*--------------------------------------------------------------------+
-| .                                                                   |
+| Find out where to add the labels                                    |
 +--------------------------------------------------------------------*/
 'PIPE (NAME RX.EXEC:139 end 'ec' sep 'ss')',
-    'stem source.',                                   /* .                */
-    ss' pick anycase w2.1 == 'dl'select'dl' or',      /* .                */
-                    'w2.1 == 'dl'when'dl' or',        /* .                */
-                    'w2.1 == 'dl'otherwise'dl' or',   /* .                */
-                    'w2.1 == 'dl'end'dl,              /* .                */
-    ss' frtarget locate anycase 'dl'select'dl,        /* .                */
-    ss' stem work.'                                   /* .                */
+    'stem source.',                                   /* Take these       */
+    ss' pick anycase w2.1 == 'dl'select'dl' or',      /* Select           */
+                    'w2.1 == 'dl'when'dl' or',        /* . any            */
+                    'w2.1 == 'dl'otherwise'dl' or',   /* .  of            */
+                    'w2.1 == 'dl'end'dl,              /* .   these        */
+    ss' frtarget locate anycase 'dl'select'dl,        /* Select this part */
+    ss' stem work.'                                   /* Hand 2 rexx      */
 /*--------------------------------------------------------------------+
-| .                                                                   |
+| Add labels                                                          |
 +--------------------------------------------------------------------*/
 oldline=0
 selno=0
@@ -162,7 +162,7 @@ Do w=1 To work.0
    oldline=lineno
 End w
 /*--------------------------------------------------------------------+
-| .                                                                   |
+| And more labels                                                     |
 +--------------------------------------------------------------------*/
 Do s=1 To selstrt.0
    Parse Value selstrt.s With subloc lbl
@@ -175,7 +175,7 @@ Label_Subroutines:
 /*--------------------------------------------------------------------+
 | Label all subroutines, calls and start-return constructs            |
 +--------------------------------------------------------------------*/
-Say 'Labeling SUB-routines'
+Say TimeStamp()' Labeling SUB-routines'
 'PIPE (NAME RX.EXEC:179 end 'ec' sep 'ss')',
     'stem subr.',                                     /* .                */
     ss' specs 'dl'[SUB'dl' 1 recno n.1 'dl']'dl' n w2;* nw',   /* .                */
@@ -187,7 +187,7 @@ Say 'Labeling SUB-routines'
     ss' sort 1.20',                                   /* .                */
     ss' stem labelloc.'                               /* .                */
 /*--------------------------------------------------------------------+
-| .                                                                   |
+| Add the labels                                                      |
 +--------------------------------------------------------------------*/
 Do l=1 To labelloc.0
    Parse Value labelloc.l With . subloc'-'sublocend lbl . calloc
@@ -242,7 +242,7 @@ Find_Vars:
 /*--------------------------------------------------------------------+
 | Find any variables                                                  |
 +--------------------------------------------------------------------*/
-Say 'Processing Variables'
+Say TimeStamp()' Processing Variables'
 f1='5F'x
 f2='61'x
 f3='E0'x
@@ -308,7 +308,7 @@ Find_Rexx:
 /*--------------------------------------------------------------------+
 | Find the valid rexx statements                                      |
 +--------------------------------------------------------------------*/
-Say 'Processing REXX-statements'
+Say TimeStamp()' Processing REXX-statements'
 'PIPE (NAME RX.EXEC:312 end 'ec' stagesep 'ss')',
     'stem input.',                                    /* .                */
     ss' not all 'dl'PIPE'dl' & 'dl'END'dl,            /* .                */
@@ -395,7 +395,7 @@ Find_Subroutines:
 /*--------------------------------------------------------------------+
 | Locate all the subroutines and where they were called               |
 +--------------------------------------------------------------------*/
-Say 'Processing SUB-routines'
+Say TimeStamp()' Processing SUB-routines'
 /*--------------------------------------------------------------------+
 | .                                                                   |
 +--------------------------------------------------------------------*/
@@ -468,7 +468,7 @@ Find_Hex_Strings:
 /*--------------------------------------------------------------------+
 | Locate the places where we use hexadecimal strings                  |
 +--------------------------------------------------------------------*/
-Say 'Processing HEX-strings'
+Say TimeStamp()' Processing HEX-strings'
 hexstr.0=0
 'PIPE (NAME RX.EXEC:473 END 'ec'  SEP 'ss')',
    'stem input.',                                      /* .                */
@@ -510,7 +510,7 @@ Find_Literals:
 /*--------------------------------------------------------------------+
 | Find literals in the code                                           |
 +--------------------------------------------------------------------*/
-Say 'Processing Literals'
+Say TimeStamp()' Processing Literals'
 liter.0=0
 'PIPE (NAME RX.EXEC:515 END 'ec' SEP 'ss')',
     'stem input.',                                     /* .                */
@@ -598,7 +598,7 @@ Find_Single_Line_Comments:
 /*--------------------------------------------------------------------+
 | Find and the single line comments                                   |
 +--------------------------------------------------------------------*/
-Say 'Processing Singe-Line comments'
+Say TimeStamp()' Processing Singe-Line comments'
 singlecom.0=0
 'PIPE (NAME RX.EXEC:603 END 'ec' SEP 'ss')',
     'stem input.',                                    /* .                */
@@ -630,7 +630,7 @@ Find_Multi_Line_Comments:
 /*--------------------------------------------------------------------+
 | Find comments which run multiple lines                              |
 +--------------------------------------------------------------------*/
-Say 'Processing Multi-Line comments'
+Say TimeStamp()' Processing Multi-Line comments'
 multicom.0=0
 'PIPE (NAME RX.EXEC:635 END 'ec'  SEP 'ss')',
     'stem input.',                                     /* .                */
@@ -677,7 +677,7 @@ Find_Empty_Lines:
 /*--------------------------------------------------------------------+
 | Find the empty lines                                                |
 +--------------------------------------------------------------------*/
-Say 'Processing Empty lines'
+Say TimeStamp()' Processing Empty lines'
 empties.0=0
 'PIPE (NAME RX.EXEC:682 END 'ec' SEP 'ss')',
     'stem input.',                                     /* .                */
@@ -700,7 +700,7 @@ Read_File:
 /*--------------------------------------------------------------------+
 | Read the file and add line numbers                                  |
 +--------------------------------------------------------------------*/
-Say 'Reading file: 'ifn ift ifm
+Say TimeStamp()' Reading file: 'ifn ift ifm
 'PIPE (NAME RX.EXEC:704 END 'ec' SEP 'ss')',
    '< 'ifn ift ifm,                                    /* .                */
    ss' specs pad 0 recno 1.5 right pad space 1;* nw.'reclen,   /* .                */
@@ -733,7 +733,7 @@ Write_File:
 /*--------------------------------------------------------------------+
 | Write the file to the A disk                                        |
 +--------------------------------------------------------------------*/
-Say 'Writing cross reference'
+Say TimeStamp()' Writing cross reference'
 'PIPE (NAME RX.EXEC:737 END 'ec' SEP 'ss')',
    'stem output.',                                     /* Take these       */
    ss' preface stem source.',                          /* Add source       */
@@ -749,7 +749,7 @@ Init:
 /*--------------------------------------------------------------------+
 | Initialise some items                                               |
 +--------------------------------------------------------------------*/
-Say 'Initialising'
+Say TimeStamp()' Initialising'
 /*--------------------------------------------------------------------+
 | Setting some default values                                         |
 +--------------------------------------------------------------------*/
